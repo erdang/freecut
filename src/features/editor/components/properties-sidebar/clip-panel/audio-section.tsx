@@ -108,21 +108,21 @@ export function AudioSection({ items }: AudioSectionProps) {
   // Commit volume (on mouse up, with auto-keyframe support)
   const handleVolumeChange = useCallback(
     (value: number) => {
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = autoKeyframeVolume(itemId, value);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        itemIds.forEach((id) => updateItem(id, { volume: value }));
+      if (fallbackItemIds.length > 0) {
+        fallbackItemIds.forEach((id) => updateItem(id, { volume: value }));
       }
       // Defer preview clear to next microtask so store update propagates first
       queueMicrotask(() => clearPreview());
@@ -294,4 +294,3 @@ export function AudioSection({ items }: AudioSectionProps) {
     </PropertySection>
   );
 }
-

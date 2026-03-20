@@ -323,7 +323,8 @@ export function GizmoOverlay({
       const autoKeyframedProps = new Set<TransformAnimatableProperty>();
       const autoOps: AutoKeyframeOperation[] = [];
 
-      // Auto-keyframe properties that have existing keyframes
+      // Auto-keyframe properties that already have a key at this frame
+      // or have been explicitly armed from the dopesheet.
       for (const prop of GIZMO_ANIMATABLE_PROPS) {
         const operation = getAutoKeyframeOperation(
           item,

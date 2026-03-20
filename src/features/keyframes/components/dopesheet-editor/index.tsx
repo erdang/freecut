@@ -28,6 +28,7 @@ import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { getVisibleKeyframeX } from './layout';
 import { getDopesheetRowControlState } from './row-controls';
 import { PROPERTY_VALUE_RANGES } from '@/features/keyframes/property-value-ranges';
+import { useAutoKeyframeStore } from '../../stores/auto-keyframe-store';
 
 interface DopesheetEditorProps {
   /** Shared time viewport when split mode needs synchronized frame zoom/pan */
@@ -133,6 +134,7 @@ const ZOOM_OUT_FACTOR = 1.25;
 const DRAG_THRESHOLD = 2;
 const MARQUEE_SCROLL_EDGE_PX = 24;
 const MARQUEE_SCROLL_MAX_SPEED = 16;
+const EMPTY_AUTO_KEY_ENABLED_BY_PROPERTY: Partial<Record<AnimatableProperty, boolean>> = {};
 
 function clampFrame(frame: number, totalFrames: number): number {
   if (totalFrames <= 0) return 0;
@@ -224,7 +226,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const [marqueeRect, setMarqueeRect] = useState<KeyframeMarqueeRect | null>(null);
   const [valueDrafts, setValueDrafts] = useState<Partial<Record<AnimatableProperty, string>>>({});
   const [editingValueProperty, setEditingValueProperty] = useState<AnimatableProperty | null>(null);
-  const [autoKeyEnabledByProperty, setAutoKeyEnabledByProperty] = useState<Partial<Record<AnimatableProperty, boolean>>>({});
+  const autoKeyEnabledByProperty = useAutoKeyframeStore(
+    useCallback(
+      (state) => state.enabledByItem[itemId] ?? EMPTY_AUTO_KEY_ENABLED_BY_PROPERTY,
+      [itemId]
+    )
+  );
+  const toggleAutoKeyframeEnabled = useAutoKeyframeStore((state) => state.toggleAutoKeyframeEnabled);
   const [localFrameInputValue, setLocalFrameInputValue] = useState('');
   const [globalFrameInputValue, setGlobalFrameInputValue] = useState('');
   const skipNextBlurCommitPropertyRef = useRef<AnimatableProperty | null>(null);
@@ -903,11 +911,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const handleRowAutoKeyToggle = useCallback((property: AnimatableProperty) => {
     onActivePropertyChange?.(property);
-    setAutoKeyEnabledByProperty((prev) => ({
-      ...prev,
-      [property]: !prev[property],
-    }));
-  }, [onActivePropertyChange]);
+    toggleAutoKeyframeEnabled(itemId, property);
+  }, [itemId, onActivePropertyChange, toggleAutoKeyframeEnabled]);
 
   const handleRowValueCommit = useCallback(
     (property: AnimatableProperty, options?: { allowCreate?: boolean }) => {

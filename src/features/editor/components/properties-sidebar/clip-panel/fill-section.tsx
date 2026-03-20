@@ -144,21 +144,21 @@ export const FillSection = memo(function FillSection({
     (value: number) => {
       const opacityValue = value / 100; // Convert from 0-100 to 0-1
 
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = autoKeyframeOpacity(itemId, opacityValue);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        onTransformChange(itemIds, { opacity: opacityValue });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { opacity: opacityValue });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -180,21 +180,21 @@ export const FillSection = memo(function FillSection({
   // Commit corner radius (on mouse up, with auto-keyframe support)
   const handleCornerRadiusChange = useCallback(
     (value: number) => {
-      let allHandled = true;
       const autoOps: AutoKeyframeOperation[] = [];
+      const fallbackItemIds: string[] = [];
       for (const itemId of itemIds) {
         const operation = autoKeyframeCornerRadius(itemId, value);
         if (operation) {
           autoOps.push(operation);
         } else {
-          allHandled = false;
+          fallbackItemIds.push(itemId);
         }
       }
       if (autoOps.length > 0) {
         applyAutoKeyframeOperations(autoOps);
       }
-      if (!allHandled) {
-        onTransformChange(itemIds, { cornerRadius: value });
+      if (fallbackItemIds.length > 0) {
+        onTransformChange(fallbackItemIds, { cornerRadius: value });
       }
       queueMicrotask(() => clearPreview());
     },
@@ -333,4 +333,3 @@ export const FillSection = memo(function FillSection({
     </PropertySection>
   );
 });
-
