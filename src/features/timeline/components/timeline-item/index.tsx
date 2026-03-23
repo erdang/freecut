@@ -1904,28 +1904,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                     strokeLinecap="round"
                   />
                   {audioFadeInPixels > 0 && (
-                    <>
-                      <path
-                        d={`M 0 100 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} ${audioFadeInPixels} 0 L ${audioFadeInPixels} 100 Z`}
-                        fill="rgba(0,0,0,0.18)"
-                      />
-                      <path
-                        d={`M 0 0 L ${audioFadeInPixels} 0 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} 0 100 Z`}
-                        fill="rgba(255,255,255,0.08)"
-                      />
-                    </>
+                    <path
+                      d={`M 0 0 L ${audioFadeInPixels} 0 Q ${audioFadeInCurvePoint.x} ${audioFadeInCurvePoint.y} 0 100 Z`}
+                      fill="rgba(0,0,0,0.5)"
+                    />
                   )}
                   {audioFadeOutPixels > 0 && (
-                    <>
-                      <path
-                        d={`M ${Math.max(0, visualWidth - audioFadeOutPixels)} 100 L ${visualWidth} 100 Q ${audioFadeOutCurvePoint.x} ${audioFadeOutCurvePoint.y} ${Math.max(0, visualWidth - audioFadeOutPixels)} 0 Z`}
-                        fill="rgba(0,0,0,0.18)"
-                      />
-                      <path
-                        d={`M ${Math.max(0, visualWidth - audioFadeOutPixels)} 0 Q ${audioFadeOutCurvePoint.x} ${audioFadeOutCurvePoint.y} ${visualWidth} 100 L ${visualWidth} 0 Z`}
-                        fill="rgba(255,255,255,0.08)"
-                      />
-                    </>
+                    <path
+                      d={`M ${Math.max(0, visualWidth - audioFadeOutPixels)} 0 Q ${audioFadeOutCurvePoint.x} ${audioFadeOutCurvePoint.y} ${visualWidth} 100 L ${visualWidth} 0 Z`}
+                      fill="rgba(0,0,0,0.5)"
+                    />
                   )}
                 </svg>
               </div>

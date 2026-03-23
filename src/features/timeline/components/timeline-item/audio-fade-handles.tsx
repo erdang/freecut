@@ -74,14 +74,10 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
     ? fadeOutCurveDot
     : null;
 
-  const getHandleClassName = (handle: 'in' | 'out') => {
-    const isActive = editingHandle === handle;
-
+  const getHandleClassName = () => {
     return cn(
       'absolute h-2.5 w-2.5 -translate-x-1/2 rounded-[2px] border pointer-events-auto transition-opacity cursor-ew-resize touch-none before:absolute before:-inset-[9px] before:content-[""] after:absolute after:left-1/2 after:top-full after:-translate-x-1/2 after:border-l-[3px] after:border-r-[3px] after:border-t-[4px] after:border-l-transparent after:border-r-transparent focus-visible:outline-none',
-      isActive
-        ? 'border-primary bg-primary after:border-t-primary shadow-[0_0_0_2px_rgba(249,115,22,0.18)]'
-        : 'border-slate-950/70 bg-white after:border-t-white/90 shadow-[0_0_0_1px_rgba(15,23,42,0.25)]',
+      'border-slate-950/70 bg-white after:border-t-white/90 shadow-[0_0_0_1px_rgba(15,23,42,0.25)]',
       handleVisibilityClass,
     );
   };
@@ -99,7 +95,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
     <div className="absolute inset-x-0 top-0 h-8 pointer-events-none z-40">
       <button
         type="button"
-        className={getHandleClassName('in')}
+        className={getHandleClassName()}
         style={{ left: `${fadeInLeft}px`, top: handleTop }}
         onMouseDown={(e) => onFadeHandleMouseDown(e, 'in')}
         onDoubleClick={(e) => {
@@ -113,7 +109,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
       />
       <button
         type="button"
-        className={getHandleClassName('out')}
+        className={getHandleClassName()}
         style={{ left: `${fadeOutLeft}px`, top: handleTop }}
         onMouseDown={(e) => onFadeHandleMouseDown(e, 'out')}
         onDoubleClick={(e) => {
