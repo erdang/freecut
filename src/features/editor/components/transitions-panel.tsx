@@ -137,6 +137,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
   }, [selectedId, items, transitions]);
 
   const setDraggedTransition = useTransitionDragStore((s) => s.setDraggedTransition);
+  const setInvalidHint = useTransitionDragStore((s) => s.setInvalidHint);
   const clearTransitionDrag = useTransitionDragStore((s) => s.clearDrag);
 
   const handleDragStart = useCallback((event: React.DragEvent<HTMLButtonElement>, configIndex: number) => {
@@ -151,7 +152,8 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
     event.dataTransfer.effectAllowed = 'copy';
     event.dataTransfer.setData(TRANSITION_DRAG_MIME, JSON.stringify(dragDescriptor));
     setDraggedTransition(dragDescriptor);
-  }, [setDraggedTransition]);
+    setInvalidHint(null);
+  }, [setDraggedTransition, setInvalidHint]);
 
   const handleDragEnd = useCallback(() => {
     clearTransitionDrag();

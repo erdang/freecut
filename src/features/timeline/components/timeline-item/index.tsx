@@ -590,15 +590,20 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     );
     const leftPx = Math.round(frameToPixels(bridge.leftFrame));
     const rightPx = Math.round(frameToPixels(bridge.rightFrame));
+    const cutPx = Math.round(frameToPixels(transitionDragPreviewRightClip.from));
     const naturalWidth = rightPx - leftPx;
     const minWidth = 32;
+    const left = naturalWidth >= minWidth ? leftPx : leftPx - (minWidth - naturalWidth) / 2;
 
     return {
-      left: naturalWidth >= minWidth ? leftPx : leftPx - (minWidth - naturalWidth) / 2,
+      left,
       width: Math.max(naturalWidth, minWidth),
+      cutOffset: cutPx - left,
+      durationLabel: `${(transitionDragPreview.durationInFrames / fps).toFixed(1)}s`,
     };
   }, [
     frameToPixels,
+    fps,
     item.durationInFrames,
     item.from,
     transitionDragPreview,
@@ -1848,6 +1853,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     const dragDescriptor = readDraggedTransitionDescriptor(e);
     if (!dragDescriptor || trackLocked || !draggedTransition) return;
 
+    const dragState = useTransitionDragStore.getState();
+
     const target = resolveTransitionTargetForEdge({
       itemId: item.id,
       edge,
@@ -1855,15 +1862,41 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       transitions: useTransitionsStore.getState().transitions,
     });
 
-    if (!target || target.hasExisting || !target.canApply) {
-      useTransitionDragStore.getState().clearPreview();
+    if (!target) {
+      dragState.clearPreview();
+      dragState.setInvalidHint({
+        x: e.clientX,
+        y: e.clientY,
+        message: 'No adjacent clip on this edge',
+      });
+      return;
+    }
+
+    if (target.hasExisting) {
+      dragState.clearPreview();
+      dragState.setInvalidHint({
+        x: e.clientX,
+        y: e.clientY,
+        message: 'Drop on the existing transition bridge to replace it',
+      });
+      return;
+    }
+
+    if (!target.canApply) {
+      dragState.clearPreview();
+      dragState.setInvalidHint({
+        x: e.clientX,
+        y: e.clientY,
+        message: target.reason ?? 'This cut cannot accept a transition',
+      });
       return;
     }
 
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
-    useTransitionDragStore.getState().setPreview({
+    dragState.setInvalidHint(null);
+    dragState.setPreview({
       leftClipId: target.leftClipId,
       rightClipId: target.rightClipId,
       durationInFrames: target.suggestedDurationInFrames,
@@ -1872,11 +1905,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   }, [draggedTransition, item.id, trackLocked]);
 
   const handleTransitionCutDragLeave = useCallback(() => {
-    const preview = useTransitionDragStore.getState().preview;
+    const dragState = useTransitionDragStore.getState();
+    const preview = dragState.preview;
     if (!preview || preview.existingTransitionId) return;
     if (preview.leftClipId === item.id || preview.rightClipId === item.id) {
-      useTransitionDragStore.getState().clearPreview();
+      dragState.clearPreview();
     }
+    dragState.setInvalidHint(null);
   }, [item.id]);
 
   const handleTransitionCutDrop = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
@@ -2165,15 +2200,50 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
       {transitionDropGhost && (
         <div
-          className="absolute inset-y-0 pointer-events-none rounded-sm border border-amber-300/70"
+          className="absolute inset-y-0 pointer-events-none overflow-hidden rounded-sm border border-slate-200/70 shadow-[0_8px_20px_rgba(15,23,42,0.22)]"
           style={{
             left: `${transitionDropGhost.left}px`,
             width: `${transitionDropGhost.width}px`,
             zIndex: 35,
-            background: 'linear-gradient(90deg, rgba(251,191,36,0.18), rgba(251,191,36,0.34), rgba(251,191,36,0.18))',
-            boxShadow: '0 0 0 1px rgba(251,191,36,0.12) inset',
+            background: 'linear-gradient(180deg, rgba(248,250,252,0.18), rgba(148,163,184,0.18))',
+            backdropFilter: 'blur(2px)',
           }}
-        />
+        >
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(226,232,240,0.16),rgba(148,163,184,0.1)_48%,rgba(148,163,184,0.1)_52%,rgba(226,232,240,0.16))]" />
+          <div
+            className="absolute inset-y-0 bg-[linear-gradient(90deg,rgba(226,232,240,0.22),rgba(148,163,184,0.05))]"
+            style={{ width: `${Math.max(0, transitionDropGhost.cutOffset)}px` }}
+          />
+          <div
+            className="absolute inset-y-0 right-0 bg-[linear-gradient(270deg,rgba(226,232,240,0.22),rgba(148,163,184,0.05))]"
+            style={{ width: `${Math.max(0, transitionDropGhost.width - transitionDropGhost.cutOffset)}px` }}
+          />
+          <div
+            className="absolute top-0 bottom-0 w-px bg-slate-50/90"
+            style={{ left: `${transitionDropGhost.cutOffset}px` }}
+          />
+          <div className="absolute inset-x-0 top-0 h-px bg-white/60" />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-slate-900/20" />
+          {transitionDropGhost.width >= 38 && (
+            <div
+              className="absolute top-1/2 -translate-y-1/2"
+              style={{ left: `${Math.max(6, transitionDropGhost.cutOffset - 8)}px` }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" className="h-3.5 w-3.5 text-slate-50/90 drop-shadow">
+                <path d="M4 6 L12 12 L4 18 Z" fill="currentColor" />
+                <path d="M20 6 L12 12 L20 18 Z" fill="currentColor" />
+              </svg>
+            </div>
+          )}
+          {transitionDropGhost.width >= 58 && (
+            <div
+              className="absolute top-1/2 -translate-y-1/2 rounded-sm border border-slate-100/40 bg-slate-900/45 px-1.5 py-0.5 text-[10px] font-medium text-slate-50/95"
+              style={{ left: `${Math.max(6, transitionDropGhost.cutOffset + 8)}px` }}
+            >
+              {transitionDropGhost.durationLabel}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Transition resize ghost overlays â€” show overlap zones during resize */}

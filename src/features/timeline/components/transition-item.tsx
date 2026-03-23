@@ -390,7 +390,9 @@ export const TransitionItem = memo(function TransitionItem({
     e.preventDefault();
     e.stopPropagation();
     e.dataTransfer.dropEffect = 'copy';
-    useTransitionDragStore.getState().setPreview({
+    const dragState = useTransitionDragStore.getState();
+    dragState.setInvalidHint(null);
+    dragState.setPreview({
       leftClipId: transition.leftClipId,
       rightClipId: transition.rightClipId,
       durationInFrames: transition.durationInFrames,
@@ -400,9 +402,11 @@ export const TransitionItem = memo(function TransitionItem({
   }, [draggedTransition, transition]);
 
   const handleDragLeave = useCallback(() => {
-    if (useTransitionDragStore.getState().preview?.existingTransitionId === transition.id) {
-      useTransitionDragStore.getState().clearPreview();
+    const dragState = useTransitionDragStore.getState();
+    if (dragState.preview?.existingTransitionId === transition.id) {
+      dragState.clearPreview();
     }
+    dragState.setInvalidHint(null);
   }, [transition.id]);
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {

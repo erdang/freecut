@@ -4,6 +4,7 @@ import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
 import { TimelineNavigator } from './timeline-navigator';
 import { TrackHeader } from './track-header';
+import { TransitionDragTooltip } from './transition-drag-tooltip';
 import { KeyframeGraphPanel } from './keyframe-graph-panel';
 import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
@@ -712,6 +713,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           />
         </div>
       </div>
+      <TransitionDragTooltip />
     </div>
 
   );
