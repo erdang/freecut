@@ -1,0 +1,370 @@
+import type { TimelineItem } from '@/types/timeline';
+import type { Transition } from '@/types/transition';
+import { getDurationLimits, resolveDurationAndSpeed } from '../../hooks/use-rate-stretch';
+import {
+  getSourceProperties,
+  sourceToTimelineFrames,
+  timelineToSourceFrames,
+} from '../../utils/source-calculations';
+import { computeClampedSlipDelta } from '../../utils/slip-utils';
+import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../../utils/trim-utils';
+import { findHandleNeighborWithTransitions } from '../../utils/transition-linked-neighbors';
+
+const LARGE_OPERATION_DELTA = 1_000_000_000;
+const MAX_BOX_WIDTH_PX = 12000;
+
+export interface OperationBoundsVisual {
+  boxLeftPx: number | null;
+  boxWidthPx: number | null;
+  edgePositionsPx: number[];
+  constrained: boolean;
+}
+
+interface TrimBoundsOptions {
+  item: TimelineItem;
+  items: TimelineItem[];
+  transitions: Transition[];
+  fps: number;
+  frameToPixels: (frames: number) => number;
+  handle: TrimHandle;
+  isRollingEdit: boolean;
+  isRippleEdit: boolean;
+  constrained: boolean;
+  currentLeftPx: number;
+  currentRightPx: number;
+}
+
+interface StretchBoundsOptions {
+  item: TimelineItem;
+  fps: number;
+  frameToPixels: (frames: number) => number;
+  handle: 'start' | 'end';
+  constrained: boolean;
+  currentLeftPx: number;
+  currentRightPx: number;
+}
+
+interface SlideBoundsOptions {
+  item: TimelineItem;
+  fps: number;
+  frameToPixels: (frames: number) => number;
+  leftNeighbor: TimelineItem | null;
+  rightNeighbor: TimelineItem | null;
+  constrained: boolean;
+  currentLeftPx: number;
+  currentRightPx: number;
+}
+
+interface SlipBoundsOptions {
+  item: TimelineItem;
+  fps: number;
+  frameToPixels: (frames: number) => number;
+  constrained: boolean;
+  currentLeftPx: number;
+  currentRightPx: number;
+}
+
+function toBoxPixels(
+  leftFrame: number,
+  rightFrame: number,
+  frameToPixels: (frames: number) => number,
+): { boxLeftPx: number | null; boxWidthPx: number | null } {
+  if (!Number.isFinite(leftFrame) || !Number.isFinite(rightFrame)) {
+    return { boxLeftPx: null, boxWidthPx: null };
+  }
+
+  const leftPx = Math.round(frameToPixels(leftFrame));
+  const rightPx = Math.round(frameToPixels(rightFrame));
+  const widthPx = rightPx - leftPx;
+
+  if (!Number.isFinite(leftPx) || !Number.isFinite(widthPx) || widthPx <= 0 || widthPx > MAX_BOX_WIDTH_PX) {
+    return { boxLeftPx: null, boxWidthPx: null };
+  }
+
+  return {
+    boxLeftPx: leftPx,
+    boxWidthPx: widthPx,
+  };
+}
+
+function buildTrimLinkedIds(
+  itemId: string,
+  transitions: Transition[],
+  rollingNeighborId: string | null,
+): Set<string> {
+  const linkedIds = new Set<string>();
+
+  for (const transition of transitions) {
+    if (transition.leftClipId === itemId) linkedIds.add(transition.rightClipId);
+    if (transition.rightClipId === itemId) linkedIds.add(transition.leftClipId);
+  }
+
+  if (rollingNeighborId) {
+    linkedIds.add(rollingNeighborId);
+  }
+
+  return linkedIds;
+}
+
+function clampTrimDeltaForBounds(
+  item: TimelineItem,
+  items: TimelineItem[],
+  transitions: Transition[],
+  fps: number,
+  handle: TrimHandle,
+  delta: number,
+  isRollingEdit: boolean,
+  isRippleEdit: boolean,
+): number {
+  let clamped = clampTrimAmount(item, handle, delta, fps).clampedAmount;
+  const rollingNeighbor = isRollingEdit
+    ? findHandleNeighborWithTransitions(item, handle, items, transitions)
+    : null;
+
+  if (!isRippleEdit) {
+    clamped = clampToAdjacentItems(
+      item,
+      handle,
+      clamped,
+      items,
+      buildTrimLinkedIds(item.id, transitions, isRollingEdit ? rollingNeighbor?.id ?? null : null),
+    );
+  }
+
+  if (isRollingEdit && rollingNeighbor) {
+    const neighborHandle: TrimHandle = handle === 'end' ? 'start' : 'end';
+    const neighborClamped = clampTrimAmount(rollingNeighbor, neighborHandle, clamped, fps).clampedAmount;
+    if (Math.abs(neighborClamped) < Math.abs(clamped)) {
+      clamped = neighborClamped;
+    }
+  }
+
+  return clamped;
+}
+
+function getStretchSourceSpan(item: TimelineItem, fps: number) {
+  const isGifImage = item.type === 'image' && item.label?.toLowerCase().endsWith('.gif');
+  if (item.type !== 'video' && item.type !== 'audio' && !isGifImage) {
+    return null;
+  }
+
+  const speed = item.speed ?? 1;
+  const sourceFps = item.sourceFps ?? fps;
+  const sourceStart = item.sourceStart ?? 0;
+  const isLoopingMedia = item.type === 'image';
+
+  let sourceDuration: number;
+  if (item.sourceEnd !== undefined) {
+    sourceDuration = Math.max(1, item.sourceEnd - sourceStart);
+  } else if (item.sourceDuration !== undefined) {
+    sourceDuration = Math.max(1, item.sourceDuration - sourceStart);
+  } else {
+    sourceDuration = Math.max(1, timelineToSourceFrames(item.durationInFrames, speed, fps, sourceFps));
+  }
+
+  return {
+    sourceDuration,
+    sourceFps,
+    isLoopingMedia,
+  };
+}
+
+function clampSlideDeltaForBounds(
+  item: TimelineItem,
+  delta: number,
+  leftNeighbor: TimelineItem | null,
+  rightNeighbor: TimelineItem | null,
+  fps: number,
+): number {
+  let clamped = delta;
+
+  if (item.from + clamped < 0) {
+    clamped = -item.from;
+  }
+
+  if (leftNeighbor) {
+    const leftNeighborClamped = clampTrimAmount(leftNeighbor, 'end', clamped, fps).clampedAmount;
+    if (Math.abs(leftNeighborClamped) < Math.abs(clamped)) {
+      clamped = leftNeighborClamped;
+    }
+  }
+
+  if (rightNeighbor) {
+    const rightNeighborClamped = clampTrimAmount(rightNeighbor, 'start', clamped, fps).clampedAmount;
+    if (Math.abs(rightNeighborClamped) < Math.abs(clamped)) {
+      clamped = rightNeighborClamped;
+    }
+  }
+
+  return clamped;
+}
+
+export function getTrimOperationBoundsVisual({
+  item,
+  items,
+  transitions,
+  fps,
+  frameToPixels,
+  handle,
+  isRollingEdit,
+  isRippleEdit,
+  constrained,
+  currentLeftPx,
+  currentRightPx,
+}: TrimBoundsOptions): OperationBoundsVisual {
+  const itemStart = item.from;
+  const itemEnd = item.from + item.durationInFrames;
+
+  const minDelta = clampTrimDeltaForBounds(
+    item,
+    items,
+    transitions,
+    fps,
+    handle,
+    -LARGE_OPERATION_DELTA,
+    isRollingEdit,
+    isRippleEdit,
+  );
+  const maxDelta = clampTrimDeltaForBounds(
+    item,
+    items,
+    transitions,
+    fps,
+    handle,
+    LARGE_OPERATION_DELTA,
+    isRollingEdit,
+    isRippleEdit,
+  );
+
+  const bounds = handle === 'start'
+    ? toBoxPixels(Math.min(itemStart, itemStart + minDelta), itemEnd, frameToPixels)
+    : toBoxPixels(itemStart, Math.max(itemEnd, itemEnd + maxDelta), frameToPixels);
+
+  return {
+    ...bounds,
+    edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
+    constrained,
+  };
+}
+
+export function getStretchOperationBoundsVisual({
+  item,
+  fps,
+  frameToPixels,
+  handle,
+  constrained,
+  currentLeftPx,
+  currentRightPx,
+}: StretchBoundsOptions): OperationBoundsVisual {
+  const sourceSpan = getStretchSourceSpan(item, fps);
+  if (!sourceSpan || sourceSpan.isLoopingMedia) {
+    return {
+      boxLeftPx: null,
+      boxWidthPx: null,
+      edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
+      constrained,
+    };
+  }
+
+  const { sourceDuration, sourceFps } = sourceSpan;
+  const limits = getDurationLimits(sourceDuration, false, sourceFps, fps);
+  const maxDuration = resolveDurationAndSpeed(sourceDuration, limits.max, sourceFps, fps).duration;
+  const itemStart = item.from;
+  const itemEnd = item.from + item.durationInFrames;
+
+  const bounds = handle === 'start'
+    ? toBoxPixels(Math.min(itemStart, itemEnd - maxDuration), itemEnd, frameToPixels)
+    : toBoxPixels(itemStart, Math.max(itemEnd, itemStart + maxDuration), frameToPixels);
+
+  return {
+    ...bounds,
+    edgePositionsPx: [handle === 'start' ? currentLeftPx : currentRightPx],
+    constrained,
+  };
+}
+
+export function getSlideOperationBoundsVisual({
+  item,
+  fps,
+  frameToPixels,
+  leftNeighbor,
+  rightNeighbor,
+  constrained,
+  currentLeftPx,
+  currentRightPx,
+}: SlideBoundsOptions): OperationBoundsVisual {
+  const itemStart = item.from;
+  const itemEnd = item.from + item.durationInFrames;
+  const minDelta = clampSlideDeltaForBounds(item, -LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+  const maxDelta = clampSlideDeltaForBounds(item, LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+  const bounds = toBoxPixels(
+    Math.min(itemStart, itemStart + minDelta),
+    Math.max(itemEnd, itemEnd + maxDelta),
+    frameToPixels,
+  );
+
+  return {
+    ...bounds,
+    edgePositionsPx: [currentLeftPx, currentRightPx],
+    constrained,
+  };
+}
+
+export function getSlipOperationBoundsVisual({
+  item,
+  fps,
+  frameToPixels,
+  constrained,
+  currentLeftPx,
+  currentRightPx,
+}: SlipBoundsOptions): OperationBoundsVisual {
+  if (item.type !== 'video' && item.type !== 'audio') {
+    return {
+      boxLeftPx: null,
+      boxWidthPx: null,
+      edgePositionsPx: [currentLeftPx, currentRightPx],
+      constrained,
+    };
+  }
+
+  const { sourceStart, sourceEnd, sourceDuration, sourceFps, speed } = getSourceProperties(item);
+  if (sourceEnd === undefined || sourceDuration === undefined) {
+    return {
+      boxLeftPx: null,
+      boxWidthPx: null,
+      edgePositionsPx: [currentLeftPx, currentRightPx],
+      constrained,
+    };
+  }
+
+  const effectiveSourceFps = sourceFps ?? fps;
+  const minSlipDelta = computeClampedSlipDelta(
+    sourceStart,
+    sourceEnd,
+    sourceDuration,
+    -LARGE_OPERATION_DELTA,
+  );
+  const maxSlipDelta = computeClampedSlipDelta(
+    sourceStart,
+    sourceEnd,
+    sourceDuration,
+    LARGE_OPERATION_DELTA,
+  );
+  const extendLeftFrames = minSlipDelta < 0
+    ? sourceToTimelineFrames(-minSlipDelta, speed, effectiveSourceFps, fps)
+    : 0;
+  const extendRightFrames = maxSlipDelta > 0
+    ? sourceToTimelineFrames(maxSlipDelta, speed, effectiveSourceFps, fps)
+    : 0;
+  const bounds = toBoxPixels(
+    item.from - extendLeftFrames,
+    item.from + item.durationInFrames + extendRightFrames,
+    frameToPixels,
+  );
+
+  return {
+    ...bounds,
+    edgePositionsPx: [currentLeftPx, currentRightPx],
+    constrained,
+  };
+}

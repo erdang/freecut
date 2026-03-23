@@ -454,6 +454,13 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
       e.preventDefault();
       usePlaybackStore.getState().setPreviewFrame(null);
 
+      setDragState({
+        isDragging: true,
+        draggedItemIds: [item.id],
+        offset: { x: 0, y: 0 },
+        activeSnapTarget: null,
+      });
+
       const currentSpeed = currentItem.speed || 1;
       const isLoopingMedia = currentItem.type === 'image'; // GIFs (images) can loop infinitely
 

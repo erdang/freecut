@@ -638,6 +638,13 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         }
       }
 
+      setDragState({
+        isDragging: true,
+        draggedItemIds: [item.id],
+        offset: { x: 0, y: 0 },
+        activeSnapTarget: null,
+      });
+
       setTrimState({
         isTrimming: true,
         handle,

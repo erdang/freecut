@@ -43,6 +43,13 @@ import { AudioFadeHandles } from './audio-fade-handles';
 import { AudioVolumeControl } from './audio-volume-control';
 import { JoinIndicators } from './join-indicators';
 import { SegmentStatusOverlays } from './segment-status-overlays';
+import { ToolOperationOverlay } from './tool-operation-overlay';
+import {
+  getSlideOperationBoundsVisual,
+  getSlipOperationBoundsVisual,
+  getStretchOperationBoundsVisual,
+  getTrimOperationBoundsVisual,
+} from './tool-operation-overlay-utils';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
@@ -260,13 +267,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const { isDragging, dragOffset, handleDragStart } = useTimelineDrag(item, timelineDuration, trackLocked, transformRef);
 
   // Trim functionality - disabled if track is locked
-  const { isTrimming, trimHandle, trimDelta, isRollingEdit, trimConstrained, trimConstraintLabel, handleTrimStart } = useTimelineTrim(item, timelineDuration, trackLocked);
+  const { isTrimming, trimHandle, trimDelta, isRollingEdit, isRippleEdit, trimConstrained, handleTrimStart } = useTimelineTrim(item, timelineDuration, trackLocked);
 
   // Rate stretch functionality - disabled if track is locked
-  const { isStretching, stretchHandle, stretchConstrained, stretchConstraintLabel, handleStretchStart, getVisualFeedback } = useRateStretch(item, timelineDuration, trackLocked);
+  const { isStretching, stretchHandle, stretchConstrained, handleStretchStart, getVisualFeedback } = useRateStretch(item, timelineDuration, trackLocked);
 
   // Slip/Slide functionality - disabled if track is locked
-  const { isSlipSlideActive, slipSlideMode, slipSlideConstrained, slipSlideConstraintLabel, handleSlipSlideStart } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
+  const { isSlipSlideActive, slipSlideMode, slipSlideConstrained, handleSlipSlideStart } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
 
   const activeGlobalCursorClass = useMemo(() => {
     if (isTrimming) {
@@ -301,33 +308,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       document.body.classList.remove(...ACTIVE_CURSOR_CLASSES);
     };
   }, [activeGlobalCursorClass]);
-
-  useEffect(() => {
-    const activeMessage = isTrimming
-      ? trimConstraintLabel
-      : isStretching
-      ? stretchConstraintLabel
-      : isSlipSlideActive
-      ? slipSlideConstraintLabel
-      : null;
-
-    if (!activeMessage) {
-      setPointerHint((current) => (current?.tone === 'danger' ? null : current));
-      return;
-    }
-
-    const handleMouseMove = (event: MouseEvent) => {
-      setPointerHint({
-        x: event.clientX,
-        y: event.clientY,
-        message: activeMessage,
-        tone: 'danger',
-      });
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
-  }, [isSlipSlideActive, isStretching, isTrimming, slipSlideConstraintLabel, stretchConstraintLabel, trimConstraintLabel]);
 
   const wasDraggingRef = useRef(false);
 
@@ -930,6 +910,89 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     canExtendInfinitely, currentSourceStart, currentSpeed, effectiveSourceFps, previewBaseItem.from, previewBaseItem.durationInFrames,
     timeToPixels, fps, minWidthPixels, trimDeltaPixels, sourceDuration, currentSourceEnd,
     subCompDuration, rollingEditDelta, rollingEditHandle, rippleEdgeDelta
+  ]);
+
+  const toolOperationOverlay = useMemo(() => {
+    if (visualWidth <= 0) return null;
+
+    const currentLeftPx = visualLeft;
+    const currentRightPx = visualLeft + visualWidth;
+
+    if (isTrimming && trimHandle) {
+      const { items } = useTimelineStore.getState();
+      const { transitions } = useTransitionsStore.getState();
+
+      return getTrimOperationBoundsVisual({
+        item,
+        items,
+        transitions,
+        fps,
+        frameToPixels,
+        handle: trimHandle,
+        isRollingEdit,
+        isRippleEdit,
+        constrained: trimConstrained,
+        currentLeftPx,
+        currentRightPx,
+      });
+    }
+
+    if (isStretching && stretchHandle) {
+      return getStretchOperationBoundsVisual({
+        item,
+        fps,
+        frameToPixels,
+        handle: stretchHandle,
+        constrained: stretchConstrained,
+        currentLeftPx,
+        currentRightPx,
+      });
+    }
+
+    if (isSlipSlideActive && slipSlideMode === 'slide') {
+      return getSlideOperationBoundsVisual({
+        item,
+        fps,
+        frameToPixels,
+        leftNeighbor: slideLeftNeighborForSlidItem,
+        rightNeighbor: slideRightNeighborForSlidItem,
+        constrained: slipSlideConstrained,
+        currentLeftPx,
+        currentRightPx,
+      });
+    }
+
+    if (isSlipSlideActive && slipSlideMode === 'slip') {
+      return getSlipOperationBoundsVisual({
+        item,
+        fps,
+        frameToPixels,
+        constrained: slipSlideConstrained,
+        currentLeftPx,
+        currentRightPx,
+      });
+    }
+
+    return null;
+  }, [
+    fps,
+    frameToPixels,
+    isRollingEdit,
+    isRippleEdit,
+    isSlipSlideActive,
+    isStretching,
+    isTrimming,
+    item,
+    slideLeftNeighborForSlidItem,
+    slideRightNeighborForSlidItem,
+    slipSlideConstrained,
+    slipSlideMode,
+    stretchConstrained,
+    stretchHandle,
+    trimConstrained,
+    trimHandle,
+    visualLeft,
+    visualWidth,
   ]);
 
   // Visibility detection for lazy filmstrip loading (shared viewport state)
@@ -2185,20 +2248,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
             <SegmentStatusOverlays overlays={segmentOverlays} />
 
-            {isSlipSlideActive && slipSlideConstrained && slipSlideMode === 'slide' && (
-              <div
-                className="absolute inset-x-0 top-0 z-30 pointer-events-none border-b border-red-300/85 bg-red-500/12"
-                style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-              />
-            )}
-
-            {isSlipSlideActive && slipSlideConstrained && slipSlideMode === 'slip' && (
-              <div
-                className="absolute inset-x-0 bottom-0 z-30 pointer-events-none border-t border-red-300/85 bg-red-500/10"
-                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-              />
-            )}
-
             {item.type === 'audio' && (
               <div
                 ref={audioControlsRef}
@@ -2361,6 +2410,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           )}
         </div>
       </ItemContextMenu>
+
+      <ToolOperationOverlay visual={toolOperationOverlay} />
 
       {transitionDropGhost && (
         <div
