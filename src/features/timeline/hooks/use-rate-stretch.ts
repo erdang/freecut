@@ -446,12 +446,9 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
       // Get fresh item from store to ensure we have latest values after previous operations
       const currentItem = getItemFromStore();
 
-      // Only works on video/audio/gif items. Compound wrappers still need
-      // runtime/export speed support before rate stretch can be enabled.
+      // Only works on source-bounded items and GIFs.
       const isGifImage = currentItem.type === 'image' && currentItem.label?.toLowerCase().endsWith('.gif');
-      const isCompoundWrapper = currentItem.type === 'composition' || (currentItem.type === 'audio' && !!currentItem.compositionId);
-      if (isCompoundWrapper) return;
-      if (currentItem.type !== 'video' && currentItem.type !== 'audio' && !isGifImage) return;
+      if (currentItem.type !== 'video' && currentItem.type !== 'audio' && currentItem.type !== 'composition' && !isGifImage) return;
 
       e.stopPropagation();
       e.preventDefault();

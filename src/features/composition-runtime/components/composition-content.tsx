@@ -8,6 +8,7 @@ import { VideoConfigProvider } from '@/features/composition-runtime/deps/player'
 import { useVideoConfig } from '../hooks/use-player-compat';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
+import { sourceToTimelineFrames, timelineToSourceFrames } from '@/features/composition-runtime/deps/timeline';
 import { resolveTransform, getSourceDimensions } from '../utils/transform-resolver';
 import { resolveAnimatedTransform, hasKeyframeAnimation } from '@/features/composition-runtime/deps/keyframes';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
@@ -51,6 +52,57 @@ function resolveSubCompItem(subItem: TimelineItem): TimelineItem {
   return subItem;
 }
 
+function mapSubCompItemToWrapperWindow(params: {
+  subItem: TimelineItem;
+  wrapper: CompositionItemType;
+  parentFps: number;
+  subCompFps: number;
+}): TimelineItem | null {
+  const { subItem, wrapper, parentFps, subCompFps } = params;
+  const wrapperSpeed = wrapper.speed ?? 1;
+  const wrapperSourceFps = wrapper.sourceFps ?? subCompFps;
+  const wrapperSourceStart = wrapper.sourceStart ?? wrapper.trimStart ?? 0;
+  const wrapperSourceEnd = wrapper.sourceEnd
+    ?? (wrapperSourceStart + timelineToSourceFrames(wrapper.durationInFrames, wrapperSpeed, parentFps, wrapperSourceFps));
+  const subItemStart = subItem.from;
+  const subItemEnd = subItem.from + subItem.durationInFrames;
+  const overlapStart = Math.max(subItemStart, wrapperSourceStart);
+  const overlapEnd = Math.min(subItemEnd, wrapperSourceEnd);
+
+  if (overlapEnd <= overlapStart) {
+    return null;
+  }
+
+  const mappedFrom = sourceToTimelineFrames(overlapStart - wrapperSourceStart, wrapperSpeed, wrapperSourceFps, parentFps);
+  const mappedEnd = sourceToTimelineFrames(overlapEnd - wrapperSourceStart, wrapperSpeed, wrapperSourceFps, parentFps);
+  const mappedDuration = Math.max(1, mappedEnd - mappedFrom);
+  const effectiveSpeed = (subItem.speed ?? 1) * wrapperSpeed;
+  const clippedStartFrames = overlapStart - subItemStart;
+  const clippedEndFrames = subItemEnd - overlapEnd;
+
+  const mappedItem: TimelineItem = {
+    ...subItem,
+    from: mappedFrom,
+    durationInFrames: mappedDuration,
+    speed: effectiveSpeed,
+  };
+
+  if (subItem.type === 'video' || subItem.type === 'audio' || subItem.type === 'composition') {
+    const childSourceFps = subItem.sourceFps ?? subCompFps;
+    const childSpeed = subItem.speed ?? 1;
+    const sourceStartDelta = timelineToSourceFrames(clippedStartFrames, childSpeed, subCompFps, childSourceFps);
+    const sourceEndDelta = timelineToSourceFrames(clippedEndFrames, childSpeed, subCompFps, childSourceFps);
+    const nextSourceStart = (subItem.sourceStart ?? 0) + sourceStartDelta;
+
+    mappedItem.sourceStart = nextSourceStart;
+    if (subItem.sourceEnd !== undefined) {
+      mappedItem.sourceEnd = Math.max(nextSourceStart + 1, subItem.sourceEnd - sourceEndDelta);
+    }
+  }
+
+  return mappedItem;
+}
+
 /**
  * Renders the contents of a sub-composition inline within the main preview.
  *
@@ -77,8 +129,18 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   // Resolve media URLs for sub-comp items so they can render in preview
   const resolvedItems = useMemo(() => {
     if (!subComp) return [];
-    return subComp.items.map(resolveSubCompItem);
-  }, [subComp, blobUrlVersion]);
+    return subComp.items
+      .map(resolveSubCompItem)
+      .flatMap((subItem) => {
+        const mapped = mapSubCompItemToWrapperWindow({
+          subItem,
+          wrapper: item,
+          parentFps: mainFps,
+          subCompFps: subComp.fps,
+        });
+        return mapped ? [mapped] : [];
+      });
+  }, [blobUrlVersion, item, mainFps, subComp]);
 
   // === Compute parent container dimensions ===
   // Replicates the same priority chain as useItemVisualState:
@@ -113,7 +175,12 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
   const frame = sequenceContext?.localFrame ?? 0;
   const relativeFrame = frame - ((item as TimelineItem & { _sequenceFrameOffset?: number })._sequenceFrameOffset ?? 0);
   const sourceOffset = item.sourceStart ?? item.trimStart ?? 0;
-  const subCompFrame = relativeFrame + sourceOffset;
+  const subCompFrame = sourceOffset + timelineToSourceFrames(
+    relativeFrame,
+    item.speed ?? 1,
+    mainFps,
+    item.sourceFps ?? subComp?.fps ?? mainFps,
+  );
 
   // Only include relativeFrame as a dependency when keyframes are actually animated.
   // This prevents per-frame recomputation during playback for non-animated sub-comps.

@@ -388,7 +388,11 @@ function appendCompositionAudioSegments(params: {
   const { segments, track, compositionItem, subComp, fps } = params;
   const linkedSubCompVideoIds = getLinkedVideoIdsWithAudio(subComp.items);
   const compFrom = compositionItem.from;
+  const wrapperSpeed = compositionItem.speed ?? 1;
+  const wrapperSourceFps = compositionItem.sourceFps ?? fps;
   const sourceOffset = compositionItem.sourceStart ?? compositionItem.trimStart ?? 0;
+  const wrapperSourceEnd = compositionItem.sourceEnd
+    ?? (sourceOffset + timelineToSourceFrames(compositionItem.durationInFrames, wrapperSpeed, fps, wrapperSourceFps));
   const trackMuted = track.muted ?? false;
 
   for (const subItem of subComp.items) {
@@ -403,27 +407,29 @@ function appendCompositionAudioSegments(params: {
 
     const subItemKeyframes = subComp.keyframes?.find((keyframe) => keyframe.itemId === subItem.id);
     const subVolumeKfs = getPropertyKeyframes(subItemKeyframes, 'volume');
-    const startFrame = compFrom + subItem.from - sourceOffset;
-    const compEnd = compFrom + compositionItem.durationInFrames;
-    const effectiveStart = Math.max(startFrame, compFrom);
-    const effectiveEnd = Math.min(startFrame + subItem.durationInFrames, compEnd);
-    const effectiveDuration = effectiveEnd - effectiveStart;
+    const overlapStart = Math.max(subItem.from, sourceOffset);
+    const overlapEnd = Math.min(subItem.from + subItem.durationInFrames, wrapperSourceEnd);
+    if (overlapEnd <= overlapStart) continue;
+
+    const effectiveStart = compFrom + sourceToTimelineFrames(overlapStart - sourceOffset, wrapperSpeed, wrapperSourceFps, fps);
+    const effectiveEnd = compFrom + sourceToTimelineFrames(overlapEnd - sourceOffset, wrapperSpeed, wrapperSourceFps, fps);
+    const effectiveDuration = Math.max(1, effectiveEnd - effectiveStart);
     if (effectiveDuration <= 0) continue;
 
-    const subItemClipStart = effectiveStart - startFrame;
+    const subItemClipStart = overlapStart - subItem.from;
     const baseSourceStart = subItem.sourceStart ?? subItem.trimStart ?? 0;
-    const speed = subItem.speed ?? 1;
+    const speed = (subItem.speed ?? 1) * wrapperSpeed;
     const effectiveSourceStart = baseSourceStart + timelineToSourceFrames(
       subItemClipStart,
-      speed,
-      fps,
-      subItem.sourceFps ?? fps,
+      subItem.speed ?? 1,
+      wrapperSourceFps,
+      subItem.sourceFps ?? wrapperSourceFps,
     );
 
-    const rawFadeInFrames = (subItem.audioFadeIn ?? 0) * fps;
-    const rawFadeOutFrames = (subItem.audioFadeOut ?? 0) * fps;
-    const clippedStartFrames = effectiveStart - startFrame;
-    const clippedEndFrames = (startFrame + subItem.durationInFrames) - effectiveEnd;
+    const rawFadeInFrames = sourceToTimelineFrames((subItem.audioFadeIn ?? 0) * wrapperSourceFps, wrapperSpeed, wrapperSourceFps, fps);
+    const rawFadeOutFrames = sourceToTimelineFrames((subItem.audioFadeOut ?? 0) * wrapperSourceFps, wrapperSpeed, wrapperSourceFps, fps);
+    const clippedStartFrames = sourceToTimelineFrames(overlapStart - subItem.from, wrapperSpeed, wrapperSourceFps, fps);
+    const clippedEndFrames = sourceToTimelineFrames((subItem.from + subItem.durationInFrames) - overlapEnd, wrapperSpeed, wrapperSourceFps, fps);
     const adjustedFadeInFrames = Math.max(0, rawFadeInFrames - clippedStartFrames);
     const adjustedFadeOutFrames = Math.max(0, rawFadeOutFrames - clippedEndFrames);
 
@@ -448,7 +454,7 @@ function appendCompositionAudioSegments(params: {
       type: subItem.type as 'video' | 'audio',
       audioCodec: getMediaAudioCodecById(subItem.mediaId),
       volumeKeyframes: subVolumeKfs.length > 0 ? subVolumeKfs : undefined,
-      itemFrom: startFrame,
+      itemFrom: effectiveStart,
     });
   }
 }

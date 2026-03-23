@@ -159,6 +159,19 @@ describe('linked edit tools', () => {
     expect(itemById['comp-audio-1']).toMatchObject({ from: 0, durationInFrames: 60, sourceStart: 22, sourceEnd: 82 });
   });
 
+  it('rate stretches synchronized compound wrappers together', () => {
+    useItemsStore.getState().setItems([
+      makeCompositionItem({ sourceStart: 10, sourceEnd: 70, sourceDuration: 120 }),
+      makeAudioItem({ id: 'comp-audio-1', mediaId: undefined, src: '', label: 'Compound 1', compositionId: 'composition-1', sourceStart: 10, sourceEnd: 70, sourceDuration: 120 }),
+    ]);
+
+    rateStretchItem('comp-1', 0, 120, 0.5);
+
+    const itemById = useItemsStore.getState().itemById;
+    expect(itemById['comp-1']).toMatchObject({ from: 0, durationInFrames: 120, speed: 0.5, sourceStart: 10, sourceEnd: 70 });
+    expect(itemById['comp-audio-1']).toMatchObject({ from: 0, durationInFrames: 120, speed: 0.5, sourceStart: 10, sourceEnd: 70 });
+  });
+
   it('rolls linked companions with the transitioned clip pair', () => {
     useItemsStore.getState().setItems([
       makeVideoItem({ id: 'video-1', sourceEnd: 80, sourceDuration: 120, linkedGroupId: 'group-1' }),
