@@ -77,18 +77,20 @@ describe('repairLegacyAvTrackLayout', () => {
 
     expect(result.changed).toBe(true);
     expect(result.tracks.map((track) => `${track.name}:${track.kind}`)).toEqual([
-      'V1:video',
       'V2:video',
+      'V1:video',
       'A1:audio',
       'A2:audio',
       'A3:audio',
     ]);
     expect(result.items.filter((item) => item.type === 'audio')).toHaveLength(2);
 
+    const a2Track = result.tracks.find((track) => track.name === 'A2');
+    const a3Track = result.tracks.find((track) => track.name === 'A3');
     const generatedAudio = result.items.find((item) => item.type === 'audio' && item.mediaId === 'media-1') as AudioItem | undefined;
     const music = result.items.find((item) => item.id === 'music-1') as AudioItem | undefined;
-    expect(generatedAudio?.trackId).toBe(result.tracks[2]?.id);
-    expect(music?.trackId).toBe(result.tracks[4]?.id);
+    expect(generatedAudio?.trackId).toBe(a2Track?.id);
+    expect(music?.trackId).toBe(a3Track?.id);
     expect(result.items.find((item) => item.id === 'video-1')).toMatchObject({ linkedGroupId: generatedAudio?.linkedGroupId });
   });
 
@@ -133,14 +135,16 @@ describe('repairLegacyAvTrackLayout', () => {
       })(),
     });
 
-    const v2Track = result.tracks.find((track) => track.name === 'V2');
+    const v1Track = result.tracks.find((track) => track.name === 'V1');
+    const a1Track = result.tracks.find((track) => track.name === 'A1');
     const a2Track = result.tracks.find((track) => track.name === 'A2');
     const existingAudio = result.items.find((item) => item.id === 'audio-1') as AudioItem | undefined;
     const generatedAudio = result.items.find((item) => item.type === 'audio' && item.id !== 'audio-1') as AudioItem | undefined;
 
-    expect(result.items.find((item) => item.id === 'video-1')?.trackId).toBe(v2Track?.id);
-    expect(existingAudio?.trackId).toBe(a2Track?.id);
+    expect(result.items.find((item) => item.id === 'video-1')?.trackId).toBe(v1Track?.id);
+    expect(existingAudio?.trackId).toBe(a1Track?.id);
     expect(generatedAudio).toBeDefined();
+    expect(generatedAudio?.trackId).toBe(a2Track?.id);
     expect(result.keyframes.some((entry) => entry.itemId === generatedAudio?.id)).toBe(true);
   });
 });

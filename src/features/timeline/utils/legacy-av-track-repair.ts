@@ -31,6 +31,10 @@ function sortTracksByOrder(tracks: TimelineTrack[]): TimelineTrack[] {
   return [...tracks].sort((left, right) => (left.order ?? 0) - (right.order ?? 0));
 }
 
+function getVideoLaneIndex(trackIndex: number, totalVideoTracks: number): number {
+  return Math.max(0, totalVideoTracks - trackIndex - 1);
+}
+
 function isVisualItem(item: TimelineItem): boolean {
   return item.type !== 'audio';
 }
@@ -194,7 +198,11 @@ export function repairLegacyAvTrackLayout(params: LegacyAvRepairParams): LegacyA
   const kindsByTrackId = inferTrackKinds(sortedTracks, itemsByTrackId);
   const videoTrackSourceIds = sortedTracks.filter((track) => kindsByTrackId.get(track.id) === 'video').map((track) => track.id);
   const audioTrackSourceIds = sortedTracks.filter((track) => kindsByTrackId.get(track.id) === 'audio').map((track) => track.id);
-  const videoTrackLaneIndex = new Map(videoTrackSourceIds.map((trackId, index) => [trackId, index]));
+  const videoTrackLaneIndex = new Map(videoTrackSourceIds.map((trackId, index) => [
+    trackId,
+    getVideoLaneIndex(index, videoTrackSourceIds.length),
+  ]));
+  const videoTrackSourceIdsByLane = [...videoTrackSourceIds].reverse();
   const trackOrderMap = new Map(sortedTracks.map((track) => [track.id, track.order ?? 0]));
 
   const existingAudioPairs = findExistingAudioPairs({
@@ -218,13 +226,13 @@ export function repairLegacyAvTrackLayout(params: LegacyAvRepairParams): LegacyA
   for (let laneIndex = 0; laneIndex < pairedAudioLaneCount; laneIndex += 1) {
     const sourceTrackId = pairedAudioTrackSourceIdByLane.get(laneIndex)
       ?? emptyAudioTrackSourceIds.shift()
-      ?? videoTrackSourceIds[laneIndex]
+      ?? videoTrackSourceIdsByLane[laneIndex]
       ?? null;
     if (sourceTrackId) {
       pairedAudioSourceIds.push(sourceTrackId);
       consumedAudioSourceIds.add(sourceTrackId);
     } else {
-      pairedAudioSourceIds.push(videoTrackSourceIds[laneIndex] ?? `generated-audio-source-${laneIndex}`);
+      pairedAudioSourceIds.push(videoTrackSourceIdsByLane[laneIndex] ?? `generated-audio-source-${laneIndex}`);
     }
   }
 
@@ -253,12 +261,13 @@ export function repairLegacyAvTrackLayout(params: LegacyAvRepairParams): LegacyA
   const repairedAudioTrackIdsByLane = new Map<number, string>();
   const repairedStandaloneAudioTrackIdsBySource = new Map<string, string>();
 
-  videoTrackSourceIds.forEach((sourceTrackId, laneIndex) => {
+  videoTrackSourceIds.forEach((sourceTrackId, trackIndex) => {
+    const laneIndex = videoTrackLaneIndex.get(sourceTrackId) ?? 0;
     const nextTrack = buildTrackClone({
       sourceTrack: trackById.get(sourceTrackId) ?? null,
       kind: 'video',
       name: `V${laneIndex + 1}`,
-      order: laneIndex,
+      order: trackIndex,
       usedTrackIds,
       createId,
     });
