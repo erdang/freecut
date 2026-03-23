@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, memo } from 'react';
+import { useRef, useEffect, useCallback, memo, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import {
@@ -21,13 +21,19 @@ import {
   FlagOff,
   LineChart,
   Activity,
+  Link2,
+  Unlink2,
 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { formatHotkeyBinding } from '@/config/hotkeys';
 import { useTimelineZoom } from '../hooks/use-timeline-zoom';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTimelineCommandStore } from '../stores/timeline-command-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useEditorStore } from '@/shared/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
+import { canLinkItems, hasLinkedItems } from '@/features/timeline/utils/linked-items';
+import { linkItems, unlinkItems } from '../stores/actions/item-actions';
 import {
   ZOOM_FRICTION,
   ZOOM_MIN_VELOCITY,
@@ -35,6 +41,7 @@ import {
   ZOOM_MAX,
 } from '../constants';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
+import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
 interface TimelineHeaderProps {
   onZoomChange?: (newZoom: number) => void;
@@ -70,6 +77,7 @@ export const TimelineHeader = memo(function TimelineHeader({
   isScopesPanelOpen,
   onToggleScopesPanel,
 }: TimelineHeaderProps) {
+  const hotkeys = useResolvedHotkeys();
   const { zoomLevel, zoomIn, zoomOut, setZoom } = useTimelineZoom();
   const snapEnabled = useTimelineStore((s) => s.snapEnabled);
   const toggleSnap = useTimelineStore((s) => s.toggleSnap);
@@ -89,10 +97,32 @@ export const TimelineHeader = memo(function TimelineHeader({
   const setActiveTool = useSelectionStore((s) => s.setActiveTool);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const clearSelection = useSelectionStore((s) => s.clearSelection);
+  const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
+  const sourcePatchVideoEnabled = useEditorStore((s) => s.sourcePatchVideoEnabled);
+  const sourcePatchAudioEnabled = useEditorStore((s) => s.sourcePatchAudioEnabled);
+  const toggleSourcePatchVideoEnabled = useEditorStore((s) => s.toggleSourcePatchVideoEnabled);
+  const toggleSourcePatchAudioEnabled = useEditorStore((s) => s.toggleSourcePatchAudioEnabled);
   const canUndo = useTimelineCommandStore((s) => s.canUndo);
   const canRedo = useTimelineCommandStore((s) => s.canRedo);
   const undoLabel = useTimelineCommandStore((s) => s.getUndoLabel());
   const redoLabel = useTimelineCommandStore((s) => s.getRedoLabel());
+  const items = useTimelineStore((s) => s.items);
+
+  const canLinkSelected = useMemo(() => {
+    if (selectedItemIds.length !== 2) return false;
+
+    const selectedItems = selectedItemIds
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is NonNullable<typeof item> => item !== undefined);
+
+    return selectedItems.length === 2
+      && canLinkItems(selectedItems)
+      && selectedItems.every((item) => !hasLinkedItems(items, item.id));
+  }, [items, selectedItemIds]);
+
+  const canUnlinkSelected = useMemo(() => (
+    selectedItemIds.length > 0 && selectedItemIds.some((id) => hasLinkedItems(items, id))
+  ), [items, selectedItemIds]);
 
 
   // Momentum state for zoom slider
@@ -493,6 +523,60 @@ export const TimelineHeader = memo(function TimelineHeader({
         >
           <Activity className="w-3.5 h-3.5" />
         </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => void linkItems(selectedItemIds)}
+          disabled={!canLinkSelected}
+          aria-label="Link selected audio and video clips"
+          data-tooltip={`Link Audio/Video (${formatHotkeyBinding(hotkeys.LINK_AUDIO_VIDEO)})`}
+        >
+          <Link2 className="w-3.5 h-3.5" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          onClick={() => unlinkItems(selectedItemIds)}
+          disabled={!canUnlinkSelected}
+          aria-label="Unlink selected audio and video clips"
+          data-tooltip={`Unlink Audio/Video (${formatHotkeyBinding(hotkeys.UNLINK_AUDIO_VIDEO)})`}
+        >
+          <Unlink2 className="w-3.5 h-3.5" />
+        </Button>
+
+        <Separator orientation="vertical" className="h-5 mx-1.5" />
+
+        <div className="flex items-center gap-1 rounded-md border border-border bg-secondary/50 px-1.5 py-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-7 min-w-7 px-2 font-mono text-[11px] ${
+              sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+            }`}
+            onClick={toggleSourcePatchVideoEnabled}
+            aria-label={sourcePatchVideoEnabled ? 'Disable video source patch target' : 'Enable video source patch target'}
+            data-tooltip={sourcePatchVideoEnabled ? 'Video Source Patch On' : 'Video Source Patch Off'}
+          >
+            V
+          </Button>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`h-7 min-w-7 px-2 font-mono text-[11px] ${
+              sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
+            }`}
+            onClick={toggleSourcePatchAudioEnabled}
+            aria-label={sourcePatchAudioEnabled ? 'Disable audio source patch target' : 'Enable audio source patch target'}
+            data-tooltip={sourcePatchAudioEnabled ? 'Audio Source Patch On' : 'Audio Source Patch Off'}
+          >
+            A
+          </Button>
+        </div>
       </div>
 
       {/* Right: Zoom Controls */}

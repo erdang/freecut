@@ -17,7 +17,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
-import { useTimelineDrag, dragOffsetRef } from '../../hooks/use-timeline-drag';
+import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useRateStretch } from '../../hooks/use-rate-stretch';
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
@@ -41,11 +41,12 @@ import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
 import { getRazorSplitPosition } from '../../utils/razor-snap';
 import type { RazorSnapTarget } from '../../utils/razor-snap';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
+import { canLinkItems, expandSelectionWithLinkedItems, getLinkedItemIds, hasLinkedItems } from '../../utils/linked-items';
 import { getVisibleTrackIds } from '../../utils/group-utils';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
-import { insertFreezeFrame } from '../../stores/actions/item-actions';
+import { insertFreezeFrame, linkItems, unlinkItems } from '../../stores/actions/item-actions';
 import {
   createPreComp,
   dissolvePreComp,
@@ -135,6 +136,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     )
   );
   const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
+  const isLinked = useItemsStore(
+    useCallback((s) => hasLinkedItems(s.items, item.id), [item.id])
+  );
   const segmentOverlays = useTimelineItemOverlayStore(
     useCallback((s) => s.overlaysByItemId[item.id] ?? EMPTY_SEGMENT_OVERLAYS, [item.id])
   );
@@ -234,7 +238,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const isAltDrag = participation === 2;
 
       if (isPartOfDrag) {
-        const offset = dragOffsetRef.current;
+        const offset = dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current;
 
         if (isAltDrag) {
           // Alt-drag: keep item in place, move ghost
@@ -856,20 +860,25 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       useTimelineStore.getState().splitItem(item.id, splitFrame);
       // Keep selection focused on the split clip so downstream panels
       // (like transitions) immediately evaluate the new adjacency.
-      useSelectionStore.getState().selectItems([item.id]);
+      const items = useTimelineStore.getState().items;
+      useSelectionStore.getState().selectItems(getLinkedItemIds(items, item.id));
       return;
     }
 
     // Selection tool: handle item selection
     const { selectedItemIds, selectItems } = useSelectionStore.getState();
+    const items = useTimelineStore.getState().items;
+    const linkedIds = getLinkedItemIds(items, item.id);
     if (e.metaKey || e.ctrlKey) {
-      if (selectedItemIds.includes(item.id)) {
-        selectItems(selectedItemIds.filter((id) => id !== item.id));
+      const isLinkedSelectionActive = linkedIds.some((id) => selectedItemIds.includes(id));
+      if (isLinkedSelectionActive) {
+        const linkedIdSet = new Set(linkedIds);
+        selectItems(selectedItemIds.filter((id) => !linkedIdSet.has(id)));
       } else {
-        selectItems([...selectedItemIds, item.id]);
+        selectItems(expandSelectionWithLinkedItems(items, [...selectedItemIds, ...linkedIds]));
       }
     } else {
-      selectItems([item.id]);
+      selectItems(linkedIds);
     }
   }, [trackLocked, frameToPixels, pixelsToFrame, item.from, item.id]);
 
@@ -957,6 +966,28 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       .map((id) => items.find((i) => i.id === id))
       .filter((i): i is NonNullable<typeof i> => i !== undefined);
     return canJoinMultipleItems(selectedItems);
+  }, [item.id]);
+
+  const getCanLinkSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    if (selectedItemIds.length !== 2) return false;
+
+    const items = useTimelineStore.getState().items;
+    const selectedItems = selectedItemIds
+      .map((id) => items.find((timelineItem) => timelineItem.id === id))
+      .filter((timelineItem): timelineItem is NonNullable<typeof timelineItem> => timelineItem !== undefined);
+
+    return selectedItems.length === 2
+      && canLinkItems(selectedItems)
+      && selectedItems.every((selectedItem) => !hasLinkedItems(items, selectedItem.id));
+  }, [item.id]);
+
+  const getCanUnlinkSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    if (selectedItemIds.length === 0) return false;
+
+    const items = useTimelineStore.getState().items;
+    return selectedItemIds.some((id) => hasLinkedItems(items, id));
   }, []);
 
   // Reactive neighbor detection: recompute join indicators when adjacent items
@@ -1044,6 +1075,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (selectedItemIds.length > 0) {
       useTimelineStore.getState().rippleDeleteItems(selectedItemIds);
     }
+  }, []);
+
+  const handleLinkSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    void linkItems(selectedItemIds);
+  }, []);
+
+  const handleUnlinkSelected = useCallback(() => {
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+    unlinkItems(selectedItemIds);
   }, []);
 
   const handleClearAllKeyframes = useCallback(() => {
@@ -1237,12 +1278,29 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item.type]);
 
   // Track which edge is closer when right-clicking for context menu
+  const handleMouseLeave = useCallback(() => {
+    setHoveredEdge(null);
+  }, []);
+
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const midpoint = rect.width / 2;
     setCloserEdge(x < midpoint ? 'left' : 'right');
-  }, []);
+
+    const { selectedItemIds, selectItems } = useSelectionStore.getState();
+    const items = useTimelineStore.getState().items;
+    const linkedIds = getLinkedItemIds(items, item.id);
+    const isCurrentSelection = linkedIds.some((id) => selectedItemIds.includes(id));
+
+    if (!isCurrentSelection) {
+      if (selectedItemIds.length === 1 && linkedIds.length === 1 && !selectedItemIds.includes(item.id)) {
+        selectItems(expandSelectionWithLinkedItems(items, [...selectedItemIds, item.id]));
+      } else {
+        selectItems(linkedIds);
+      }
+    }
+  }, [item.id]);
 
   return (
     <>
@@ -1254,9 +1312,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         hasJoinableRight={hasJoinableRight}
         closerEdge={closerEdge}
         keyframedProperties={keyframedProperties}
+        canLinkSelected={getCanLinkSelected()}
+        canUnlinkSelected={getCanUnlinkSelected()}
         onJoinSelected={handleJoinSelected}
         onJoinLeft={handleJoinLeft}
         onJoinRight={handleJoinRight}
+        onLinkSelected={handleLinkSelected}
+        onUnlinkSelected={handleUnlinkSelected}
         onRippleDelete={handleRippleDelete}
         onDelete={handleDelete}
         onClearAllKeyframes={handleClearAllKeyframes}
@@ -1284,7 +1346,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           ref={transformRef}
           data-item-id={item.id}
           className={cn(
-            "absolute inset-y-0 rounded overflow-hidden",
+            "absolute inset-y-px rounded overflow-visible",
             itemColorClasses,
             cursorClass,
             !isBeingDragged && !isStretching && !trackLocked && 'hover:brightness-110'
@@ -1293,7 +1355,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             left: `${visualLeft}px`,
             width: `${visualWidth}px`,
             transform: isBeingDragged && !isAltDrag
-              ? `translate(${(isDragging ? dragOffset : dragOffsetRef.current).x}px, ${(isDragging ? dragOffset : dragOffsetRef.current).y}px)`
+              ? `translate(${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).x}px, ${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).y}px)`
               : undefined,
             opacity: isBeingDragged && !isAltDrag ? DRAG_OPACITY : trackHidden ? 0.3 : trackLocked ? 0.6 : 1,
             pointerEvents: isBeingDragged ? 'none' : 'auto',
@@ -1307,22 +1369,35 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
-          onMouseLeave={() => setHoveredEdge(null)}
+          onMouseLeave={handleMouseLeave}
           onContextMenu={handleContextMenu}
         >
           {/* Selection indicator */}
           {isSelected && !trackLocked && (
-            <div className="absolute inset-0 rounded pointer-events-none z-20 ring-2 ring-inset ring-primary" />
+            <div className="absolute inset-0 rounded pointer-events-none z-20 border border-primary" />
           )}
 
-          <SegmentStatusOverlays overlays={segmentOverlays} />
+          <div className="absolute inset-px rounded-[3px] overflow-hidden">
+            <SegmentStatusOverlays overlays={segmentOverlays} />
 
-          {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
-          {overlapLeftPixels > 0 ? (
-            <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: previewFullWidthPixels }}>
+            {/* Clip visual content â€” offset when left-trimmed so filmstrip aligns correctly */}
+            {overlapLeftPixels > 0 ? (
+              <div className="absolute inset-0" style={{ left: -overlapLeftPixels, width: previewFullWidthPixels }}>
+                <ClipContent
+                  item={contentPreviewItem}
+                  clipWidth={previewFullWidthPixels}
+                  fps={fps}
+                  isClipVisible={clipVisibility.isVisible}
+                  visibleStartRatio={clipVisibility.visibleStartRatio}
+                  visibleEndRatio={clipVisibility.visibleEndRatio}
+                  pixelsPerSecond={pixelsPerSecond}
+                  preferImmediateRendering={preferImmediateContentRendering}
+                />
+              </div>
+            ) : (
               <ClipContent
                 item={contentPreviewItem}
-                clipWidth={previewFullWidthPixels}
+                clipWidth={visualWidth}
                 fps={fps}
                 isClipVisible={clipVisibility.isVisible}
                 visibleStartRatio={clipVisibility.visibleStartRatio}
@@ -1330,31 +1405,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 pixelsPerSecond={pixelsPerSecond}
                 preferImmediateRendering={preferImmediateContentRendering}
               />
-            </div>
-          ) : (
-            <ClipContent
-              item={contentPreviewItem}
-              clipWidth={visualWidth}
-              fps={fps}
-              isClipVisible={clipVisibility.isVisible}
-              visibleStartRatio={clipVisibility.visibleStartRatio}
-              visibleEndRatio={clipVisibility.visibleEndRatio}
-              pixelsPerSecond={pixelsPerSecond}
-              preferImmediateRendering={preferImmediateContentRendering}
-            />
-          )}
+            )}
 
-          {/* Status indicators */}
-          <ClipIndicators
-            hasKeyframes={hasKeyframes}
-            currentSpeed={currentSpeed}
-            isStretching={isStretching}
-            stretchFeedback={stretchFeedback}
-            isBroken={isBroken}
-            hasMediaId={!!item.mediaId}
-            isMask={item.type === 'shape' ? item.isMask ?? false : false}
-            isShape={item.type === 'shape'}
-          />
+            {/* Status indicators */}
+            <ClipIndicators
+              hasKeyframes={hasKeyframes}
+              currentSpeed={currentSpeed}
+              isStretching={isStretching}
+              stretchFeedback={stretchFeedback}
+              isBroken={isBroken}
+              hasMediaId={!!item.mediaId}
+              isLinked={isLinked}
+              isMask={item.type === 'shape' ? item.isMask ?? false : false}
+              isShape={item.type === 'shape'}
+            />
+          </div>
 
           {/* Trim handles */}
           <TrimHandles

@@ -145,7 +145,7 @@ export function toTrackFingerprint(tracks: CompositionInputProps['tracks']): str
   const parts: string[] = [];
   for (const track of tracks) {
     parts.push(
-      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}`
+      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}:${track.volume ?? 0}`
     );
     for (const item of track.items) {
       const src = 'src' in item ? (item.src ?? '') : '';

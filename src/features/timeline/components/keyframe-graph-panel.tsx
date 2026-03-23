@@ -1236,10 +1236,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     };
   }, [isSplitResizing, editorWidth]);
 
-  // Don't show panel if no item with keyframes is selected and panel is not explicitly open
-  const hasContent = !!selectedItemForEditor;
-
-  if (!hasContent && !isOpen) {
+  // Only render the docked editor when explicitly opened from the toolbar/hotkey.
+  // Selecting a clip should not surface the docked panel by itself.
+  if (!isOpen) {
     return null;
   }
 

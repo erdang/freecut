@@ -254,6 +254,7 @@ const timelineItemSchema = z.object({
   label: z.string(),
   mediaId: z.string().optional(),
   originId: z.string().optional(),
+  linkedGroupId: z.string().optional(),
   type: itemTypeSchema,
   // Source fields
   src: z.string().optional(),

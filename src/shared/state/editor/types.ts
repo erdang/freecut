@@ -10,6 +10,8 @@ export interface EditorState {
   rightSidebarWidth: number;
   timelineHeight: number;
   sourcePreviewMediaId: string | null;
+  sourcePatchVideoEnabled: boolean;
+  sourcePatchAudioEnabled: boolean;
   colorScopesOpen: boolean;
 }
 
@@ -30,6 +32,10 @@ export interface EditorActions {
   }) => void;
   setTimelineHeight: (height: number) => void;
   setSourcePreviewMediaId: (mediaId: string | null) => void;
+  setSourcePatchVideoEnabled: (enabled: boolean) => void;
+  setSourcePatchAudioEnabled: (enabled: boolean) => void;
+  toggleSourcePatchVideoEnabled: () => void;
+  toggleSourcePatchAudioEnabled: () => void;
   setColorScopesOpen: (open: boolean) => void;
   toggleColorScopesOpen: () => void;
 }

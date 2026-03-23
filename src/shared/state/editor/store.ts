@@ -1,9 +1,7 @@
 import { create } from 'zustand';
 import type { EditorState, EditorActions } from './types';
 import {
-  clampEditorSidebarWidth,
   EDITOR_LAYOUT,
-  type EditorLayout,
 } from '@/shared/ui/editor-layout';
 
 const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320;
@@ -11,7 +9,7 @@ const LEGACY_SIDEBAR_DEFAULT_WIDTH = 320;
 function normalizeSidebarWidth(
   width: number,
   fallback: number,
-  layout: Pick<EditorLayout, 'sidebarMinWidth' | 'sidebarMaxWidth'>
+  layout: { sidebarMinWidth: number; sidebarMaxWidth: number }
 ): number {
   if (!Number.isFinite(width)) return fallback;
   const nextWidth = (
@@ -20,7 +18,7 @@ function normalizeSidebarWidth(
   )
     ? fallback
     : width;
-  return clampEditorSidebarWidth(nextWidth, layout);
+  return Math.min(layout.sidebarMaxWidth, Math.max(layout.sidebarMinWidth, nextWidth));
 }
 
 function loadSidebarWidth(key: string, fallback: number): number {
@@ -45,6 +43,8 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   rightSidebarWidth: loadSidebarWidth('editor:rightSidebarWidth', EDITOR_LAYOUT.sidebarDefaultWidth),
   timelineHeight: 250,
   sourcePreviewMediaId: null,
+  sourcePatchVideoEnabled: true,
+  sourcePatchAudioEnabled: true,
   colorScopesOpen: false,
 
   // Actions
@@ -77,6 +77,10 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
   setSourcePreviewMediaId: (mediaId) => set({ sourcePreviewMediaId: mediaId }),
+  setSourcePatchVideoEnabled: (enabled) => set({ sourcePatchVideoEnabled: enabled }),
+  setSourcePatchAudioEnabled: (enabled) => set({ sourcePatchAudioEnabled: enabled }),
+  toggleSourcePatchVideoEnabled: () => set((state) => ({ sourcePatchVideoEnabled: !state.sourcePatchVideoEnabled })),
+  toggleSourcePatchAudioEnabled: () => set((state) => ({ sourcePatchAudioEnabled: !state.sourcePatchAudioEnabled })),
   setColorScopesOpen: (open) => set({ colorScopesOpen: open }),
   toggleColorScopesOpen: () => set((state) => ({ colorScopesOpen: !state.colorScopesOpen })),
 }));

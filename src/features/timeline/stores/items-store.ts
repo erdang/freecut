@@ -357,6 +357,7 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
       const itemsMap = new Map(state.items.map((i) => [i.id, i]));
       const newItems: TimelineItem[] = [];
       const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
+      const linkedGroupMap = new Map<string, string>();
 
       for (let i = 0; i < itemIds.length; i++) {
         const original = itemsMap.get(itemIds[i]!);
@@ -374,6 +375,10 @@ export const useItemsStore = create<ItemsState & ItemsActions>()(
           // Without this, split clips that are duplicated would be grouped with the originals,
           // causing incorrect sourceStart calculations (can result in negative values).
           originId: crypto.randomUUID(),
+          linkedGroupId: original.linkedGroupId
+            ? (linkedGroupMap.get(original.linkedGroupId)
+              ?? linkedGroupMap.set(original.linkedGroupId, crypto.randomUUID()).get(original.linkedGroupId))
+            : undefined,
         } as TimelineItem;
 
         newItems.push(normalizeFrameFields(duplicate));
@@ -806,4 +811,3 @@ useItemsStore.subscribe((state) => {
     mediaDependencyVersion: state.mediaDependencyVersion + 1,
   });
 });
-

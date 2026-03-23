@@ -16,6 +16,7 @@ describe('audio scene', () => {
         sourceStart: 0,
         sourceFps: 30,
         muted: false,
+        trackVolumeDb: -3,
         trackVisible: true,
       },
       {
@@ -29,6 +30,7 @@ describe('audio scene', () => {
         mediaId: 'media-1',
         sourceFps: 30,
         muted: false,
+        trackVolumeDb: -3,
         trackVisible: true,
       },
     ], 30);
@@ -39,8 +41,29 @@ describe('audio scene', () => {
         from: 0,
         durationInFrames: 50,
         trimBefore: 0,
+        volumeDb: -3,
       }),
     ]);
+  });
+
+  it('adds track gain to clip gain for standalone audio', () => {
+    const segments = buildStandaloneAudioSegments([
+      {
+        id: 'audio-1',
+        type: 'audio',
+        trackId: 'track-1',
+        from: 0,
+        durationInFrames: 30,
+        src: 'audio.mp3',
+        label: 'Audio 1',
+        volume: -6,
+        muted: false,
+        trackVolumeDb: 4,
+        trackVisible: true,
+      },
+    ], 30);
+
+    expect(segments[0]?.volumeDb).toBe(-2);
   });
 
   it('expands transition video audio segments with overlap fades', () => {
@@ -57,6 +80,7 @@ describe('audio scene', () => {
         sourceStart: 0,
         sourceFps: 30,
         muted: false,
+        trackVolumeDb: 2,
         trackVisible: true,
       },
       {
@@ -71,13 +95,16 @@ describe('audio scene', () => {
         sourceStart: 0,
         sourceFps: 30,
         muted: false,
+        trackVolumeDb: 2,
         trackVisible: true,
       },
     ], [
       {
         id: 'transition-1',
+        type: 'crossfade',
         leftClipId: 'video-1',
         rightClipId: 'video-2',
+        trackId: 'track-1',
         durationInFrames: 10,
         timing: 'linear',
         presentation: 'fade',

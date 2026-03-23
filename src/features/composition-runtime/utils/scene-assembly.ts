@@ -38,6 +38,7 @@ export interface AdjustmentLayerWithTrackOrderLike {
 export type VisualTrackItem = (VideoItem | ImageItem) & {
   zIndex: number;
   muted: boolean;
+  trackVolumeDb: number;
   trackOrder: number;
   trackVisible: boolean;
 };
@@ -46,6 +47,7 @@ export type VideoTrackItem = Extract<VisualTrackItem, { type: 'video' }>;
 
 export type AudioTrackItem = AudioItem & {
   muted: boolean;
+  trackVolumeDb: number;
   trackVisible: boolean;
 };
 
@@ -212,6 +214,7 @@ export function collectVisualTrackItems({
         ...item,
         zIndex: (maxOrder - (track.order ?? 0)) * 1000,
         muted: track.muted ?? false,
+        trackVolumeDb: track.volume ?? 0,
         trackOrder: track.order ?? 0,
         trackVisible: visibleTrackIds.has(track.id),
       }))
@@ -231,6 +234,7 @@ export function collectAudioTrackItems({
       .map((item) => ({
         ...item,
         muted: track.muted,
+        trackVolumeDb: track.volume ?? 0,
         trackVisible: visibleTrackIds.has(track.id),
       }))
   );

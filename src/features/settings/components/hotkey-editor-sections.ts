@@ -34,6 +34,8 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
       { label: 'Delete selected items', keys: ['DELETE_SELECTED', 'DELETE_SELECTED_ALT'] },
       { label: 'Ripple delete selected items', keys: ['RIPPLE_DELETE', 'RIPPLE_DELETE_ALT'] },
       { label: 'Insert freeze frame at playhead', keys: ['FREEZE_FRAME'] },
+      { label: 'Link selected audio/video clips', keys: ['LINK_AUDIO_VIDEO'] },
+      { label: 'Unlink selected audio/video clips', keys: ['UNLINK_AUDIO_VIDEO'] },
       { label: 'Nudge (1px)', keys: ['NUDGE_LEFT', 'NUDGE_RIGHT', 'NUDGE_UP', 'NUDGE_DOWN'] },
       { label: 'Nudge (10px)', keys: ['NUDGE_LEFT_LARGE', 'NUDGE_RIGHT_LARGE', 'NUDGE_UP_LARGE', 'NUDGE_DOWN_LARGE'] },
     ],
@@ -64,8 +66,6 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
       { label: 'Zoom to 100%', keys: ['ZOOM_TO_100', 'ZOOM_TO_100_ALT'] },
       { label: 'Toggle snap', keys: ['TOGGLE_SNAP'] },
       { label: 'Toggle keyframe editor panel', keys: ['TOGGLE_KEYFRAME_EDITOR'] },
-      { label: 'Group selected tracks', keys: ['GROUP_TRACKS'] },
-      { label: 'Ungroup selected tracks', keys: ['UNGROUP_TRACKS'] },
     ],
   },
   {

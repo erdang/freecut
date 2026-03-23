@@ -21,11 +21,13 @@ type ContinuousAudioItem = {
 
 type StandaloneAudioItem = AudioItem & {
   muted: boolean;
+  trackVolumeDb: number;
   trackVisible: boolean;
 };
 
 type TransitionAudioItem = VideoItem & {
   muted: boolean;
+  trackVolumeDb: number;
   trackVisible: boolean;
 };
 
@@ -168,7 +170,7 @@ export function buildStandaloneAudioSegments(
       trimBefore: resolvedTrimBeforeById.get(item.id) ?? getTrimBefore(item),
       playbackRate: item.speed ?? 1,
       sourceFps: item.sourceFps,
-      volumeDb: item.volume ?? 0,
+      volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,
       audioFadeIn: item.audioFadeIn ?? 0,
       audioFadeOut: item.audioFadeOut ?? 0,
@@ -322,7 +324,7 @@ export function buildTransitionVideoAudioSegments(
       trimBefore: Math.max(0, baseTrimBefore - timelineToSourceFrames(before, playbackRate, fps, itemSourceFps)),
       playbackRate,
       sourceFps: item.sourceFps,
-      volumeDb: item.volume ?? 0,
+      volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,
       audioFadeIn: crossfadeFadeIn === undefined ? (item.audioFadeIn ?? 0) : 0,
       audioFadeOut: crossfadeFadeOut === undefined ? (item.audioFadeOut ?? 0) : 0,

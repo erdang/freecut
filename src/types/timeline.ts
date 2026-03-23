@@ -11,6 +11,7 @@ type BaseTimelineItem = {
   label: string;
   mediaId?: string;
   originId?: string; // Tracks lineage - items from same split share this for stable React keys
+  linkedGroupId?: string; // Links paired timeline items like synced video/audio companions
   // Trim properties for media items
   trimStart?: number; // Frames trimmed from start of source media
   trimEnd?: number; // Frames trimmed from end of source media
@@ -154,11 +155,13 @@ export type TimelineItem = VideoItem | AudioItem | TextItem | ImageItem | ShapeI
 export interface TimelineTrack {
   id: string;
   name: string;
+  kind?: 'video' | 'audio';
   height: number;
   locked: boolean;
   visible: boolean; // Visual visibility (Eye icon)
   muted: boolean; // Audio muting (Volume icon)
   solo: boolean;
+  volume?: number; // Track gain in dB (default: 0)
   color?: string; // Optional - tracks are generic containers, items have colors
   order: number;
   items: TimelineItem[];

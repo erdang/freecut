@@ -14,6 +14,7 @@ export interface SelectionState {
     draggedTrackIds?: string[]; // For track dragging
     offset: { x: number; y: number };
     activeSnapTarget?: { frame: number; type: 'grid' | 'item-start' | 'item-end' | 'playhead'; itemId?: string } | null;
+    activeLinkedDropTarget?: { trackId: string; zone: 'video' | 'audio'; createNew?: boolean } | null;
     isAltDrag?: boolean; // Whether Alt key is held (triggers duplication)
   } | null;
   // Keyframe lanes expansion state

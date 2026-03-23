@@ -216,9 +216,8 @@ export function dissolvePreComp(compositionItemId: string): boolean {
     trackIdMapping.set(sortedSubTracks[lastIdx]!.id, targetTrackId);
 
     // Candidate tracks above the comp, sorted descending (closest to comp first)
-    // Exclude group tracks — they are headers, not item containers
     const candidatesAbove = [...tracks]
-      .filter((t) => t.id !== targetTrackId && !t.isGroup && (t.order ?? 0) < compTrackOrder)
+      .filter((t) => t.id !== targetTrackId && (t.order ?? 0) < compTrackOrder)
       .sort((a, b) => (b.order ?? 0) - (a.order ?? 0));
 
     const usedTrackIds = new Set<string>([targetTrackId]);
@@ -263,7 +262,6 @@ export function dissolvePreComp(compositionItemId: string): boolean {
           ...subTrack,
           id: newTrackId,
           order: compTrackOrder - distFromBottom * 0.01,
-          parentTrackId: compTrack?.parentTrackId,
         });
       }
     }

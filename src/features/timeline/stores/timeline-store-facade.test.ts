@@ -339,8 +339,10 @@ describe('TimelineStoreFacade', () => {
       await useTimelineStore.getState().loadTimeline('project-1');
 
       const itemsState = useItemsStore.getState();
-      expect(itemsState.tracks).toHaveLength(1);
+      expect(itemsState.tracks).toHaveLength(2);
       expect(itemsState.tracks[0]!.id).toBe('track-1');
+      expect(itemsState.tracks[0]!).toMatchObject({ name: 'V1', kind: 'video' });
+      expect(itemsState.tracks[1]!).toMatchObject({ id: 'track-2', name: 'A1', kind: 'audio' });
       expect(itemsState.items).toHaveLength(0);
     });
 

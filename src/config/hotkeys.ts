@@ -23,6 +23,8 @@ export const HOTKEYS = {
   RIPPLE_DELETE: 'mod+delete',
   RIPPLE_DELETE_ALT: 'mod+backspace',
   FREEZE_FRAME: 'shift+f',
+  LINK_AUDIO_VIDEO: 'shift+l',
+  UNLINK_AUDIO_VIDEO: 'alt+shift+l',
   NUDGE_LEFT: 'shift+left',
   NUDGE_RIGHT: 'shift+right',
   NUDGE_UP: 'shift+up',
@@ -77,10 +79,6 @@ export const HOTKEYS = {
   KEYFRAME_EDITOR_GRAPH: '1',
   KEYFRAME_EDITOR_DOPESHEET: '2',
   KEYFRAME_EDITOR_SPLIT: '3',
-
-  // Track Groups
-  GROUP_TRACKS: 'mod+g',
-  UNGROUP_TRACKS: 'mod+shift+g',
 
   // Source Monitor
   MARK_IN: 'i',
@@ -336,10 +334,8 @@ export const HOTKEY_DESCRIPTIONS: Record<HotkeyKey, string> = {
   KEYFRAME_EDITOR_GRAPH: 'Switch keyframe editor to graph view',
   KEYFRAME_EDITOR_DOPESHEET: 'Switch keyframe editor to dopesheet view',
   KEYFRAME_EDITOR_SPLIT: 'Switch keyframe editor to split view',
-
-  // Track Groups
-  GROUP_TRACKS: 'Group selected tracks',
-  UNGROUP_TRACKS: 'Ungroup selected tracks',
+  LINK_AUDIO_VIDEO: 'Link selected audio and video clips',
+  UNLINK_AUDIO_VIDEO: 'Unlink selected audio and video clips',
 
   // Source Monitor
   MARK_IN: 'Mark In point',

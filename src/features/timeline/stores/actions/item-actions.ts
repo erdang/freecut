@@ -2,7 +2,7 @@
  * Item Actions - Cross-domain operations that affect items, transitions, and keyframes.
  */
 
-import type { TimelineItem, ImageItem } from '@/types/timeline';
+import type { TimelineItem, TimelineTrack, ImageItem } from '@/types/timeline';
 import type { MediaMetadata, ThumbnailData } from '@/types/storage';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
@@ -21,6 +21,7 @@ import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { type CollisionRect } from '../../utils/collision-utils';
+import { canLinkItems, getLinkedItemIds, getLinkedItems } from '../../utils/linked-items';
 
 function findNextAvailableSpaceOnTrack(
   proposedFrom: number,
@@ -92,6 +93,7 @@ function placeItemsWithoutTimelineOverlap(items: TimelineItem[]): TimelineItem[]
 
 export function addItem(item: TimelineItem): void {
   const [placedItem] = placeItemsWithoutTimelineOverlap([item]);
+  if (!placedItem) return;
 
   execute('ADD_ITEM', () => {
     useItemsStore.getState()._addItem(placedItem);
@@ -121,6 +123,60 @@ export function updateItem(id: string, updates: Partial<TimelineItem>): void {
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, updates });
+}
+
+export function unlinkItems(ids: string[]): void {
+  const items = useItemsStore.getState().items;
+  const unlinkIds = new Set<string>();
+
+  for (const id of ids) {
+    for (const linkedId of getLinkedItemIds(items, id)) {
+      unlinkIds.add(linkedId);
+    }
+  }
+
+  const linkedItems = items.filter((item) => unlinkIds.has(item.id) && item.linkedGroupId);
+  if (linkedItems.length === 0) return;
+
+  execute('UNLINK_ITEMS', () => {
+    const store = useItemsStore.getState();
+    for (const item of linkedItems) {
+      store._updateItem(item.id, { linkedGroupId: item.id });
+    }
+    useSelectionStore.getState().selectItems(linkedItems.map((item) => item.id));
+    useTimelineSettingsStore.getState().markDirty();
+  }, { ids: linkedItems.map((item) => item.id) });
+}
+
+export function linkItems(ids: string[]): boolean {
+  const items = useItemsStore.getState().items;
+  const selectedItems = ids
+    .map((id) => items.find((item) => item.id === id))
+    .filter((item): item is TimelineItem => item !== undefined);
+
+  const isAlreadyLinkedPair = selectedItems.length === 2
+    && !!selectedItems[0]?.linkedGroupId
+    && selectedItems[0].linkedGroupId === selectedItems[1]?.linkedGroupId;
+  const canLinkSelection = selectedItems.length === 2
+    && canLinkItems(selectedItems)
+    && selectedItems.every((item) => getLinkedItemIds(items, item.id).length === 1)
+    && !isAlreadyLinkedPair;
+
+  if (!canLinkSelection) {
+    return false;
+  }
+
+  const linkedGroupId = crypto.randomUUID();
+  execute('LINK_ITEMS', () => {
+    const store = useItemsStore.getState();
+    for (const item of selectedItems) {
+      store._updateItem(item.id, { linkedGroupId });
+    }
+    useSelectionStore.getState().selectItems(selectedItems.map((item) => item.id));
+    useTimelineSettingsStore.getState().markDirty();
+  }, { ids: selectedItems.map((item) => item.id) });
+
+  return true;
 }
 
 export function removeItems(ids: string[]): void {
@@ -238,6 +294,39 @@ export function moveItems(updates: Array<{ id: string; from: number; trackId?: s
   }, { count: updates.length });
 }
 
+export function moveItemsWithTrackChanges(
+  tracks: TimelineTrack[],
+  updates: Array<{ id: string; from: number; trackId?: string }>
+): void {
+  execute('MOVE_ITEMS_WITH_TRACKS', () => {
+    useItemsStore.getState().setTracks(tracks);
+    useItemsStore.getState()._moveItems(updates);
+
+    const movedItemIds = new Set(updates.map((u) => u.id));
+    const items = useItemsStore.getState().items;
+    const transitions = useTransitionsStore.getState().transitions;
+
+    const updatedTransitions = transitions.map((t) => {
+      const leftMoved = movedItemIds.has(t.leftClipId);
+      const rightMoved = movedItemIds.has(t.rightClipId);
+
+      if (leftMoved && rightMoved) {
+        const leftClip = items.find((i) => i.id === t.leftClipId);
+        const rightClip = items.find((i) => i.id === t.rightClipId);
+
+        if (leftClip && rightClip && leftClip.trackId === rightClip.trackId) {
+          return { ...t, trackId: leftClip.trackId };
+        }
+      }
+      return t;
+    });
+
+    useTransitionsStore.getState().setTransitions(updatedTransitions);
+    applyTransitionRepairs(updates.map((u) => u.id));
+    useTimelineSettingsStore.getState().markDirty();
+  }, { count: updates.length, trackCount: tracks.length });
+}
+
 export function duplicateItems(
   itemIds: string[],
   positions: Array<{ from: number; trackId: string }>
@@ -247,6 +336,19 @@ export function duplicateItems(
     useTimelineSettingsStore.getState().markDirty();
     return newItems;
   }, { itemIds, count: positions.length });
+}
+
+export function duplicateItemsWithTrackChanges(
+  tracks: TimelineTrack[],
+  itemIds: string[],
+  positions: Array<{ from: number; trackId: string }>
+): TimelineItem[] {
+  return execute('DUPLICATE_ITEMS_WITH_TRACKS', () => {
+    useItemsStore.getState().setTracks(tracks);
+    const newItems = useItemsStore.getState()._duplicateItems(itemIds, positions);
+    useTimelineSettingsStore.getState().markDirty();
+    return newItems;
+  }, { itemIds, count: positions.length, trackCount: tracks.length });
 }
 
 export function trimItemStart(id: string, trimAmount: number): void {
@@ -288,8 +390,13 @@ export function splitItem(
   id: string,
   splitFrame: number
 ): { leftItem: TimelineItem; rightItem: TimelineItem } | null {
-  const item = useItemsStore.getState().items.find((i) => i.id === id);
-  if (item) {
+  const items = useItemsStore.getState().items;
+  const linkedItems = getLinkedItems(items, id);
+  const itemsToSplit = linkedItems.length > 0
+    ? linkedItems
+    : items.filter((item) => item.id === id);
+
+  for (const item of itemsToSplit) {
     // Bounds check first â€” out-of-range splits are a silent no-op (handled by _splitItem),
     // must not fall through to transition zone check which would false-positive.
     if (splitFrame <= item.from || splitFrame >= item.from + item.durationInFrames) {
@@ -303,32 +410,50 @@ export function splitItem(
   }
 
   return execute('SPLIT_ITEM', () => {
-    const result = useItemsStore.getState()._splitItem(id, splitFrame);
-    if (!result) return null;
+    const itemsStore = useItemsStore.getState();
+    const splitResults = itemsToSplit
+      .map((item) => ({
+        originalId: item.id,
+        result: itemsStore._splitItem(item.id, splitFrame),
+      }))
+      .filter((entry): entry is { originalId: string; result: { leftItem: TimelineItem; rightItem: TimelineItem } } => entry.result !== null);
 
-    const { rightItem } = result;
+    const anchorResult = splitResults.find((entry) => entry.originalId === id)?.result ?? null;
+    if (!anchorResult) return null;
 
     // Update transitions pointing to split item
     const transitions = useTransitionsStore.getState().transitions;
-    const updatedTransitions = transitions.map((t) => {
-      if (t.leftClipId === id) {
+    const splitRightByOriginalId = new Map(splitResults.map((entry) => [entry.originalId, entry.result.rightItem.id]));
+    const updatedTransitions = transitions.map((transition) => {
+      const leftReplacementId = splitRightByOriginalId.get(transition.leftClipId);
+      if (leftReplacementId) {
         // Transition was from this clip - now from right half
-        return { ...t, leftClipId: rightItem.id };
+        return { ...transition, leftClipId: leftReplacementId };
       }
-      if (t.rightClipId === id) {
+      if (splitRightByOriginalId.has(transition.rightClipId)) {
         // Transition was to this clip - stays pointing to left half (original ID)
-        return t;
+        return transition;
       }
-      return t;
+      return transition;
     });
     useTransitionsStore.getState().setTransitions(updatedTransitions);
 
+    if (itemsToSplit.some((item) => item.linkedGroupId)) {
+      const leftLinkedGroupId = splitResults.length > 1 ? crypto.randomUUID() : undefined;
+      const rightLinkedGroupId = splitResults.length > 1 ? crypto.randomUUID() : undefined;
+
+      for (const entry of splitResults) {
+        itemsStore._updateItem(entry.result.leftItem.id, { linkedGroupId: leftLinkedGroupId });
+        itemsStore._updateItem(entry.result.rightItem.id, { linkedGroupId: rightLinkedGroupId });
+      }
+    }
+
     // Keep selection anchored to the split clip for immediate downstream
     // adjacency/transition detection across all split entry points.
-    useSelectionStore.getState().selectItems([result.leftItem.id]);
+    useSelectionStore.getState().selectItems(splitResults.map((entry) => entry.result.leftItem.id));
 
     useTimelineSettingsStore.getState().markDirty();
-    return result;
+    return anchorResult;
   }, { id, splitFrame });
 }
 

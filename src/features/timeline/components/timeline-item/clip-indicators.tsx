@@ -1,5 +1,5 @@
 ﻿import { memo } from 'react';
-import { Link2Off, Diamond } from 'lucide-react';
+import { Link2, Link2Off, Diamond } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 
@@ -16,6 +16,8 @@ interface ClipIndicatorsProps {
   isBroken: boolean;
   /** Whether the item has a mediaId */
   hasMediaId: boolean;
+  /** Whether the clip is linked to a synced companion */
+  isLinked: boolean;
   /** Whether the item is a shape configured as a mask */
   isMask: boolean;
   /** Whether the item is a shape */
@@ -36,6 +38,7 @@ export const ClipIndicators = memo(function ClipIndicators({
   stretchFeedback,
   isBroken,
   hasMediaId,
+  isLinked,
   isMask,
   isShape,
 }: ClipIndicatorsProps) {
@@ -44,11 +47,19 @@ export const ClipIndicators = memo(function ClipIndicators({
   return (
     <>
       {/* Label-row badges â€” single container to prevent overlap */}
-      {(hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
+      {(isLinked || hasKeyframes || (isShape && isMask) || showSpeedBadge) && (
         <div
           className="absolute right-1 z-10 pointer-events-none flex items-center gap-1"
           style={{ top: 0, height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
         >
+          {isLinked && (
+            <span
+              className="inline-flex items-center justify-center rounded bg-black/55 p-0.5 text-white/90"
+              title="Linked audio/video pair"
+            >
+              <Link2 className="h-3 w-3" />
+            </span>
+          )}
           {hasKeyframes && (
             <span title="Has keyframe animations">
               <Diamond className="w-3 h-3 text-amber-500 fill-amber-500/50" />

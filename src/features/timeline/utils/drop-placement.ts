@@ -21,7 +21,7 @@ export function findBestCanvasDropPlacement(
 ): CanvasDropPlacement | null {
   const { tracks, items, activeTrackId, proposedFrame, durationInFrames } = params;
   const effectiveTracks = resolveEffectiveTrackStates(tracks).filter(
-    (track) => track.visible !== false && !track.locked && !track.isGroup
+    (track) => track.visible !== false && !track.locked
   );
 
   if (effectiveTracks.length === 0) {

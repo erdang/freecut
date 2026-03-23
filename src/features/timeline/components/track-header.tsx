@@ -1,5 +1,7 @@
 import { memo } from 'react';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Slider } from '@/components/ui/slider';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -7,7 +9,7 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
-import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, ChevronRight, ChevronDown, FoldHorizontal } from 'lucide-react';
+import { Eye, EyeOff, Lock, GripVertical, Volume2, VolumeX, Radio, FoldHorizontal } from 'lucide-react';
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 import { TIMELINE_SIDEBAR_WIDTH } from '../constants';
@@ -16,21 +18,13 @@ interface TrackHeaderProps {
   track: TimelineTrack;
   isActive: boolean;
   isSelected: boolean;
-  /** Whether this group track is a drop target for dragged tracks */
-  isDropTarget?: boolean;
-  groupDepth: number;
-  /** Whether grouping is available for current selection (2+ top-level non-group tracks) */
-  canGroup: boolean;
   onToggleLock: () => void;
   onToggleVisibility: () => void;
   onToggleMute: () => void;
   onToggleSolo: () => void;
-  onToggleCollapse?: () => void;
+  onSetVolume: (volume: number) => void;
   onSelect: (e: React.MouseEvent) => void;
   onCloseGaps?: () => void;
-  onGroup?: () => void;
-  onUngroup?: () => void;
-  onRemoveFromGroup?: () => void;
 }
 
 /**
@@ -40,10 +34,7 @@ function areTrackHeaderPropsEqual(prev: TrackHeaderProps, next: TrackHeaderProps
   return (
     prev.track === next.track &&
     prev.isActive === next.isActive &&
-    prev.isSelected === next.isSelected &&
-    prev.isDropTarget === next.isDropTarget &&
-    prev.groupDepth === next.groupDepth &&
-    prev.canGroup === next.canGroup
+    prev.isSelected === next.isSelected
   );
   // Callbacks (onToggleLock, etc.) are ignored - they're recreated each render but functionality is same
 }
@@ -61,24 +52,18 @@ export const TrackHeader = memo(function TrackHeader({
   track,
   isActive,
   isSelected,
-  isDropTarget,
-  groupDepth,
-  canGroup,
   onToggleLock,
   onToggleVisibility,
   onToggleMute,
   onToggleSolo,
-  onToggleCollapse,
+  onSetVolume,
   onSelect,
   onCloseGaps,
-  onGroup,
-  onUngroup,
-  onRemoveFromGroup,
 }: TrackHeaderProps) {
   // Use track drag hook (visuals handled centrally by timeline.tsx via DOM)
   const { handleDragStart } = useTrackDrag(track);
-  const isGroup = !!track.isGroup;
-  const isInGroup = !!track.parentTrackId;
+  const trackVolume = track.volume ?? 0;
+  const formattedTrackVolume = `${trackVolume > 0 ? '+' : ''}${trackVolume.toFixed(1)} dB`;
 
   return (
     <ContextMenu>
@@ -89,13 +74,10 @@ export const TrackHeader = memo(function TrackHeader({
             cursor-grab active:cursor-grabbing relative
             ${isSelected ? 'bg-primary/10' : 'hover:bg-secondary/50'}
             ${isActive ? 'border-l-3 border-l-primary' : 'border-l-3 border-l-transparent'}
-            ${isDropTarget ? 'ring-2 ring-blue-500/60 bg-blue-500/15' : ''}
             transition-all duration-150
-            ${isGroup && !isDropTarget && !isSelected ? 'bg-secondary/30' : ''}
           `}
           style={{
             height: `${track.height}px`,
-            paddingLeft: `${4 + groupDepth * 14}px`,
             // content-visibility optimization for long track lists (rendering-content-visibility)
             contentVisibility: 'auto',
             containIntrinsicSize: `${TIMELINE_SIDEBAR_WIDTH}px ${track.height}px`,
@@ -104,40 +86,68 @@ export const TrackHeader = memo(function TrackHeader({
           onMouseDown={handleDragStart}
           data-track-id={track.id}
         >
-          {/* Left column: Drag handle + collapse toggle */}
+          {/* Left column: Drag handle */}
           <div className="flex items-center shrink-0 mr-0.5">
             <GripVertical className="w-3.5 h-3.5 text-muted-foreground" aria-hidden="true" />
-            {isGroup && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 shrink-0 p-0 ml-0.5"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onToggleCollapse?.();
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                aria-label={track.isCollapsed ? 'Expand group' : 'Collapse group'}
-              >
-                {track.isCollapsed ? (
-                  <ChevronRight className="w-3 h-3 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="w-3 h-3 text-muted-foreground" />
-                )}
-              </Button>
-            )}
           </div>
 
           {/* Right column: Name row + Icons row, centered as a block */}
           <div className="flex items-center justify-center min-w-0 flex-1">
-          <div className="flex flex-col items-start">
-            {/* Row 1: Name */}
-            <span className="text-xs font-semibold leading-none font-mono truncate">
-              {track.name}
-            </span>
+            <div className="flex flex-col items-start gap-1">
+              {/* Row 1: Name */}
+              <div className="flex items-center gap-1 min-w-0">
+                <span className="text-xs font-semibold leading-none font-mono truncate">
+                  {track.name}
+                </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-4 px-1.5 rounded-sm text-[10px] font-mono text-muted-foreground hover:text-foreground"
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      aria-label={`Track gain ${formattedTrackVolume}`}
+                    >
+                      {formattedTrackVolume}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    className="w-52 p-3"
+                    align="start"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium">Track gain</span>
+                        <span className="text-[11px] font-mono text-muted-foreground">{formattedTrackVolume}</span>
+                      </div>
+                      <Slider
+                        value={[trackVolume]}
+                        min={-60}
+                        max={12}
+                        step={0.1}
+                        onValueChange={(values) => onSetVolume(values[0] ?? 0)}
+                        aria-label="Track gain"
+                      />
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                        <span>-60 dB</span>
+                        <button
+                          type="button"
+                          className="hover:text-foreground transition-colors"
+                          onClick={() => onSetVolume(0)}
+                        >
+                          Reset
+                        </button>
+                        <span>+12 dB</span>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
 
-            {/* Row 2: Control icons */}
-            <div className="flex items-center gap-0.5">
+              {/* Row 2: Control icons */}
+              <div className="flex items-center gap-0.5">
             {/* Visibility Button */}
             <Button
               variant="ghost"
@@ -214,58 +224,30 @@ export const TrackHeader = memo(function TrackHeader({
               />
             </Button>
 
-            {/* Close Gaps Button - only for non-group tracks */}
-            {!isGroup && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 rounded hover:bg-secondary"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCloseGaps?.();
-                }}
-                onMouseDown={(e) => e.stopPropagation()}
-                aria-label="Close all gaps"
-                data-tooltip="Close all gaps"
-              >
-                <FoldHorizontal className="w-3 h-3" />
-              </Button>
-            )}
-          </div>
-          </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-5 w-5 rounded hover:bg-secondary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onCloseGaps?.();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              aria-label="Close all gaps"
+              data-tooltip="Close all gaps"
+            >
+              <FoldHorizontal className="w-3 h-3" />
+            </Button>
+              </div>
+            </div>
           </div>
         </div>
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-52">
-        {/* Group operations */}
-        {canGroup && !isGroup && (
-          <ContextMenuItem onClick={onGroup}>
-            Group Selected Tracks
-            <span className="ml-auto text-xs text-muted-foreground">Ctrl+G</span>
-          </ContextMenuItem>
-        )}
-        {isGroup && (
-          <ContextMenuItem onClick={onUngroup}>
-            Ungroup
-            <span className="ml-auto text-xs text-muted-foreground">Ctrl+Shift+G</span>
-          </ContextMenuItem>
-        )}
-        {isInGroup && !isGroup && (
-          <ContextMenuItem onClick={onRemoveFromGroup}>
-            Remove from Group
-          </ContextMenuItem>
-        )}
-
-        {/* Close gaps - non-group tracks only */}
-        {!isGroup && (
-          <>
-            <ContextMenuSeparator />
-            <ContextMenuItem onClick={onCloseGaps}>
-              Close All Gaps
-            </ContextMenuItem>
-          </>
-        )}
+        <ContextMenuItem onClick={onCloseGaps}>
+          Close All Gaps
+        </ContextMenuItem>
 
         {/* Track controls */}
         <ContextMenuSeparator />
@@ -274,6 +256,9 @@ export const TrackHeader = memo(function TrackHeader({
         </ContextMenuItem>
         <ContextMenuItem onClick={onToggleMute}>
           {track.muted ? 'Unmute Track' : 'Mute Track'}
+        </ContextMenuItem>
+        <ContextMenuItem onClick={() => onSetVolume(0)}>
+          Reset Track Gain
         </ContextMenuItem>
         <ContextMenuItem onClick={onToggleLock}>
           {track.locked ? 'Unlock Track' : 'Lock Track'}

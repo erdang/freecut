@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback, memo } from 'react';
+import { Fragment, useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback, memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 
 // Stores and selectors
@@ -30,23 +30,27 @@ import { TimelineMarkers } from './timeline-markers';
 import { TimelinePlayhead } from './timeline-playhead';
 import { TimelinePreviewScrubber } from './timeline-preview-scrubber';
 import { TimelineTrack } from './timeline-track';
-import { GroupSummaryTrack } from './group-summary-track';
 import { TimelineGuidelines } from './timeline-guidelines';
-import { TrackRowFrame } from './track-row-frame';
+import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 
 // Group utilities
-import { getVisibleTracks, getVisibleTrackIds } from '../utils/group-utils';
+import { getVisibleTrackIds } from '../utils/group-utils';
 import { getRazorSplitPosition } from '../utils/razor-snap';
+import { getTrackKind } from '../utils/classic-tracks';
 import type { RazorSnapTarget } from '../utils/razor-snap';
 import { useMarkersStore } from '../stores/markers-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
+import { expandSelectionWithLinkedItems } from '../utils/linked-items';
 
 
 interface TimelineContentProps {
   duration: number; // Total timeline duration in seconds
   scrollRef?: React.RefObject<HTMLDivElement | null>; // Optional ref for scroll syncing
+  topSectionSpacerHeight?: number;
+  bottomSectionSpacerHeight?: number;
+  onSectionDividerMouseDown?: (event: React.MouseEvent) => void;
   onZoomHandlersReady?: (handlers: {
     handleZoomChange: (newZoom: number) => void;
     handleZoomIn: () => void;
@@ -74,6 +78,9 @@ interface TimelineContentProps {
 export const TimelineContent = memo(function TimelineContent({
   duration,
   scrollRef,
+  topSectionSpacerHeight = 0,
+  bottomSectionSpacerHeight = 0,
+  onSectionDividerMouseDown,
   onZoomHandlersReady,
   onMetricsChange,
 }: TimelineContentProps) {
@@ -87,7 +94,7 @@ export const TimelineContent = memo(function TimelineContent({
   const fps = useTimelineStore((s) => s.fps);
 
   // Derive visible tracks (hides children of collapsed groups)
-  const tracks = useMemo(() => getVisibleTracks(allTracks), [allTracks]);
+  const tracks = allTracks;
 
   // PERFORMANCE: Don't subscribe to items directly - it causes ALL tracks to re-render
   // when ANY item changes. Instead, use derived selectors for specific needs.
@@ -396,7 +403,7 @@ export const TimelineContent = memo(function TimelineContent({
     containerRef: containerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     onSelectionChange: (ids) => {
-      selectItems(ids);
+      selectItems(expandSelectionWithLinkedItems(useTimelineStore.getState().items, ids));
     },
     enabled: true,
     threshold: 5,
@@ -927,17 +934,37 @@ export const TimelineContent = memo(function TimelineContent({
             willChange: 'contents',
           }}
         >
+          {topSectionSpacerHeight > 0 && (
+            <div aria-hidden="true" style={{ height: `${topSectionSpacerHeight}px` }} />
+          )}
+
           {/* Render all visible tracks - virtualization removed as it caused drag lag */}
           {/* Video editors typically have <10 tracks, making virtualization overhead not worth it */}
-          {tracks.map((track) => (
-            <TrackRowFrame key={track.id}>
-              {track.isGroup && track.isCollapsed ? (
-                <GroupSummaryTrack track={track} />
-              ) : (
-                <TimelineTrack track={track} timelineWidth={timelineWidth} />
-              )}
-            </TrackRowFrame>
-          ))}
+          {tracks.map((track, index) => {
+            const previousTrack = index > 0 ? (tracks[index - 1] ?? null) : null;
+            const nextTrack = index < tracks.length - 1 ? (tracks[index + 1] ?? null) : null;
+            const showSectionDivider = previousTrack !== null
+              && getTrackKind(previousTrack) === 'video'
+              && getTrackKind(track) === 'audio';
+            const hideBottomDivider = nextTrack !== null
+              && getTrackKind(track) === 'video'
+              && getTrackKind(nextTrack) === 'audio';
+
+            return (
+              <Fragment key={track.id}>
+                {showSectionDivider && (
+                  <TrackSectionDivider onMouseDown={onSectionDividerMouseDown} />
+                )}
+                <TrackRowFrame showTopDivider={index === 0} hideBottomDivider={hideBottomDivider}>
+                  <TimelineTrack track={track} timelineWidth={timelineWidth} />
+                </TrackRowFrame>
+              </Fragment>
+            );
+          })}
+
+          {bottomSectionSpacerHeight > 0 && (
+            <div aria-hidden="true" style={{ height: `${bottomSectionSpacerHeight}px` }} />
+          )}
 
           {/* Snap guidelines (shown during drag) */}
           {isDragging && (

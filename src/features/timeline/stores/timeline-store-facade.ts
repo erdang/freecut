@@ -19,6 +19,7 @@ import type { Transition } from '@/types/transition';
 
 import { createLogger } from '@/shared/logging/logger';
 import { DEFAULT_TRACK_HEIGHT } from '../constants';
+import { createDefaultClassicTracks } from '../utils/classic-tracks';
 
 const logger = createLogger('TimelineStore');
 
@@ -404,19 +405,7 @@ async function loadTimeline(projectId: string): Promise<void> {
       logger.debug('loadTimeline: initializing new project with default track');
 
       // Initialize with default tracks for new projects
-      useItemsStore.getState().setTracks([
-        {
-          id: 'track-1',
-          name: 'Track 1',
-          height: DEFAULT_TRACK_HEIGHT,
-          locked: false,
-          visible: true,
-          muted: false,
-          solo: false,
-          order: 0,
-          items: [],
-        },
-      ]);
+      useItemsStore.getState().setTracks(createDefaultClassicTracks(DEFAULT_TRACK_HEIGHT));
       useItemsStore.getState().setItems([]);
       useTransitionsStore.getState().setTransitions([]);
       useKeyframesStore.getState().setKeyframes([]);
@@ -536,11 +525,6 @@ function getSnapshot(): TimelineState & TimelineActions {
 
       // Actions (static references, never change)
       setTracks: timelineActions.setTracks,
-      createGroup: timelineActions.createGroup,
-      ungroup: timelineActions.ungroup,
-      toggleGroupCollapse: timelineActions.toggleGroupCollapse,
-      addToGroup: timelineActions.addToGroup,
-      removeFromGroup: timelineActions.removeFromGroup,
       addItem: timelineActions.addItem,
       addItems: timelineActions.addItems,
       updateItem: timelineActions.updateItem,
@@ -552,7 +536,9 @@ function getSnapshot(): TimelineState & TimelineActions {
       setScrollPosition: timelineActions.setScrollPosition,
       moveItem: timelineActions.moveItem,
       moveItems: timelineActions.moveItems,
+      moveItemsWithTrackChanges: timelineActions.moveItemsWithTrackChanges,
       duplicateItems: timelineActions.duplicateItems,
+      duplicateItemsWithTrackChanges: timelineActions.duplicateItemsWithTrackChanges,
       trimItemStart: timelineActions.trimItemStart,
       trimItemEnd: timelineActions.trimItemEnd,
       rollingTrimItems: timelineActions.rollingTrimItems,

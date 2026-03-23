@@ -24,12 +24,19 @@ import {
 import { findNearestAvailableSpace, type CollisionRect } from '../utils/collision-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
-import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import {
-  buildDroppedMediaTimelineItem,
+  buildDroppedMediaTimelineItems,
   getDroppedMediaDurationInFrames,
   type DroppableMediaType,
 } from '../utils/dropped-media';
+import {
+  createClassicTrack,
+  findNearestTrackByKind,
+  getAdjacentTrackOrder,
+  getTrackKind,
+  renameTrackForKind,
+  type TrackKind,
+} from '../utils/classic-tracks';
 import { toast } from 'sonner';
 import {
   ContextMenu,
@@ -67,8 +74,9 @@ interface DroppedMediaEntry {
 
 interface PlannedDroppedMediaItem {
   entry: DroppedMediaEntry;
-  finalPosition: number;
+  placements: Array<{ trackId: string; from: number; durationInFrames: number; mediaType: DroppableMediaType }>;
   itemDuration: number;
+  linkVideoAudio: boolean;
 }
 
 interface ExternalPreviewEntry {
@@ -163,48 +171,193 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     return pixelsToFrame(offsetX);
   }, [pixelsToFrame]);
 
+  const resolveSyncedDropFrame = useCallback((
+    proposedFrom: number,
+    durationInFrames: number,
+    trackIds: string[],
+    itemsToCheck: CollisionRect[]
+  ): number | null => {
+    let candidate = Math.max(0, proposedFrom);
+
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const positions = trackIds.map((trackId) => findNearestAvailableSpace(
+        candidate,
+        durationInFrames,
+        trackId,
+        itemsToCheck
+      ));
+
+      if (positions.some((position) => position === null)) {
+        return null;
+      }
+
+      const normalized = positions as number[];
+      const alignedFrom = Math.max(...normalized);
+      if (normalized.every((position) => position === alignedFrom)) {
+        return alignedFrom;
+      }
+
+      candidate = alignedFrom;
+    }
+
+    return null;
+  }, []);
+
+  const ensureTrackForKind = useCallback((
+    currentTracks: TimelineTrackType[],
+    targetTrack: TimelineTrackType,
+    kind: TrackKind,
+    directionWhenCreating: 'above' | 'below',
+    preferTarget = false
+  ): { tracks: TimelineTrackType[]; trackId: string } => {
+    const targetKind = getTrackKind(targetTrack);
+
+    if (preferTarget || targetKind === kind || targetKind === null) {
+      const upgradedTrack = renameTrackForKind(targetTrack, currentTracks, kind);
+      if (upgradedTrack === targetTrack) {
+        return { tracks: currentTracks, trackId: targetTrack.id };
+      }
+      return {
+        tracks: currentTracks.map((track) => track.id === targetTrack.id ? upgradedTrack : track),
+        trackId: targetTrack.id,
+      };
+    }
+
+    const existingTrack = findNearestTrackByKind({
+      tracks: currentTracks,
+      targetTrack,
+      kind,
+      direction: directionWhenCreating,
+    });
+    if (existingTrack) {
+      return { tracks: currentTracks, trackId: existingTrack.id };
+    }
+
+    const createdTrack = createClassicTrack({
+      tracks: currentTracks,
+      kind,
+      order: getAdjacentTrackOrder(currentTracks, targetTrack, directionWhenCreating),
+    });
+    return { tracks: [...currentTracks, createdTrack], trackId: createdTrack.id };
+  }, []);
+
   const resolveTimelineItemsForEntries = useCallback(async (
     entries: DroppedMediaEntry[],
     dropFrame: number
-  ): Promise<TimelineItemType[]> => {
+  ): Promise<{ items: TimelineItemType[]; tracks: TimelineTrackType[] }> => {
     let currentPosition = Math.max(0, dropFrame);
     const storeItems = useTimelineStore.getState().items;
     const reservedRanges: CollisionRect[] = [];
     const plannedItems: PlannedDroppedMediaItem[] = [];
+    let workingTracks = [...useTimelineStore.getState().tracks];
+    const dropTargetTrackId = track.id;
 
     for (const entry of entries) {
+      const targetTrack = workingTracks.find((candidate) => candidate.id === dropTargetTrackId);
+      if (!targetTrack) {
+        continue;
+      }
+
       const itemDuration = getDroppedMediaDurationInFrames(entry.media, entry.mediaType, fps);
       const itemsToCheck: CollisionRect[] = [...storeItems, ...reservedRanges];
-      const finalPosition = findNearestAvailableSpace(
-        currentPosition,
-        itemDuration,
-        track.id,
-        itemsToCheck
-      );
+      const isVideoWithAudio = entry.mediaType === 'video' && !!entry.media.audioCodec;
+      const isVisualMedia = entry.mediaType === 'video' || entry.mediaType === 'image';
 
-      if (finalPosition === null) {
-        logger.warn('Cannot drop item: no available space on track for', entry.label);
-        continue;
+      let primaryTrackState = ensureTrackForKind(
+        workingTracks,
+        targetTrack,
+        isVisualMedia ? 'video' : 'audio',
+        isVisualMedia ? 'above' : 'below',
+        getTrackKind(targetTrack) === null
+      );
+      workingTracks = primaryTrackState.tracks;
+
+      let placements: PlannedDroppedMediaItem['placements'];
+
+      if (isVideoWithAudio) {
+        const primaryTrack = workingTracks.find((candidate) => candidate.id === primaryTrackState.trackId);
+        if (!primaryTrack) continue;
+        const companionTrackState = ensureTrackForKind(
+          workingTracks,
+          primaryTrack,
+          'audio',
+          'below',
+          false
+        );
+        workingTracks = companionTrackState.tracks;
+
+        const syncFrom = resolveSyncedDropFrame(
+          currentPosition,
+          itemDuration,
+          [primaryTrackState.trackId, companionTrackState.trackId],
+          itemsToCheck,
+        );
+
+        if (syncFrom === null) {
+          logger.warn('Cannot drop linked video/audio item: no synced space available for', entry.label);
+          continue;
+        }
+
+        placements = [
+          {
+            trackId: primaryTrackState.trackId,
+            from: syncFrom,
+            durationInFrames: itemDuration,
+            mediaType: 'video',
+          },
+          {
+            trackId: companionTrackState.trackId,
+            from: syncFrom,
+            durationInFrames: itemDuration,
+            mediaType: 'audio',
+          },
+        ];
+      } else {
+        const finalPosition = findNearestAvailableSpace(
+          currentPosition,
+          itemDuration,
+          primaryTrackState.trackId,
+          itemsToCheck,
+        );
+
+        if (finalPosition === null) {
+          logger.warn('Cannot drop item: no available space on track for', entry.label);
+          continue;
+        }
+
+        placements = [{
+          trackId: primaryTrackState.trackId,
+          from: finalPosition,
+          durationInFrames: itemDuration,
+          mediaType: entry.mediaType,
+        }];
       }
 
       plannedItems.push({
         entry,
-        finalPosition,
+        placements,
         itemDuration,
+        linkVideoAudio: isVideoWithAudio,
       });
-      reservedRanges.push({ from: finalPosition, durationInFrames: itemDuration, trackId: track.id });
-      currentPosition = finalPosition + itemDuration;
+      for (const placement of placements) {
+        reservedRanges.push({
+          from: placement.from,
+          durationInFrames: placement.durationInFrames,
+          trackId: placement.trackId,
+        });
+      }
+      currentPosition = placements[0]!.from + itemDuration;
     }
 
     if (plannedItems.length === 0) {
-      return [];
+      return { items: [], tracks: workingTracks };
     }
 
     const resolvedTimelineItems = await mapWithConcurrency(
       plannedItems,
       MULTI_DROP_METADATA_CONCURRENCY,
-      async (planned): Promise<TimelineItemType | null> => {
-        const { entry, finalPosition, itemDuration } = planned;
+       async (planned): Promise<TimelineItemType[] | null> => {
+        const { entry, placements } = planned;
         const needsThumbnail = entry.mediaType === 'video' || entry.mediaType === 'image';
         const [blobUrl, thumbnailUrl] = await Promise.all([
           resolveMediaUrl(entry.mediaId),
@@ -218,7 +371,10 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           return null;
         }
 
-        return buildDroppedMediaTimelineItem({
+        const primaryPlacement = placements.find((placement) => placement.mediaType !== 'audio') ?? placements[0]!;
+        const linkedAudioPlacement = placements.find((placement) => placement.mediaType === 'audio');
+
+        return buildDroppedMediaTimelineItems({
           media: entry.media,
           mediaId: entry.mediaId,
           mediaType: entry.mediaType,
@@ -229,18 +385,29 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           canvasWidth,
           canvasHeight,
           placement: {
-            trackId: track.id,
-            from: finalPosition,
-            durationInFrames: itemDuration,
+            primary: {
+              trackId: primaryPlacement.trackId,
+              from: primaryPlacement.from,
+              durationInFrames: primaryPlacement.durationInFrames,
+            },
+            linkedAudio: linkedAudioPlacement
+              ? {
+                trackId: linkedAudioPlacement.trackId,
+                from: linkedAudioPlacement.from,
+                durationInFrames: linkedAudioPlacement.durationInFrames,
+              }
+              : undefined,
           },
+          linkVideoAudio: planned.linkVideoAudio,
         });
       }
     );
 
-    return resolvedTimelineItems.filter(
-      (timelineItem): timelineItem is TimelineItemType => timelineItem !== null
-    );
-  }, [canvasHeight, canvasWidth, fps, track.id]);
+    return {
+      items: resolvedTimelineItems.flatMap((timelineItems) => timelineItems ?? []),
+      tracks: workingTracks,
+    };
+  }, [canvasHeight, canvasWidth, ensureTrackForKind, fps, resolveSyncedDropFrame, track.id]);
 
   const buildGhostPreviewsForEntries = useCallback((
     entries: Array<{ label: string; mediaType: DroppableMediaType; duration?: number }>,
@@ -440,7 +607,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
-    if (track.locked || track.isGroup) {
+    if (track.locked) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'none';
       return;
@@ -579,7 +746,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     setGhostPreviews([]);
     clearExternalPreviewSession();
 
-    if (track.locked || track.isGroup) {
+    if (track.locked) {
       return;
     }
 
@@ -684,20 +851,24 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           return;
         }
 
-        const timelineItemsToAdd = await resolveTimelineItemsForEntries(entries, dropFrame);
-        if (timelineItemsToAdd.length === 0) {
+        const dropResult = await resolveTimelineItemsForEntries(entries, dropFrame);
+        if (dropResult.items.length === 0) {
           toast.error('Unable to add dropped media items');
           return;
         }
 
-        if (timelineItemsToAdd.length < entries.length) {
-          toast.warning(`Some dropped media items could not be added: ${entries.length - timelineItemsToAdd.length} failed`);
+        if (dropResult.tracks !== useTimelineStore.getState().tracks) {
+          useTimelineStore.getState().setTracks(dropResult.tracks);
         }
 
-        if (timelineItemsToAdd.length === 1) {
-          addItem(timelineItemsToAdd[0]!);
+        if (dropResult.items.length < entries.length) {
+          toast.warning(`Some dropped media items could not be added: ${entries.length - dropResult.items.length} failed`);
+        }
+
+        if (dropResult.items.length === 1) {
+          addItem(dropResult.items[0]!);
         } else {
-          addItems(timelineItemsToAdd);
+          addItems(dropResult.items);
         }
         return;
       } catch (error) {
@@ -747,20 +918,24 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return;
     }
 
-    const timelineItemsToAdd = await resolveTimelineItemsForEntries(droppedEntries, dropFrame);
-    if (timelineItemsToAdd.length === 0) {
+    const dropResult = await resolveTimelineItemsForEntries(droppedEntries, dropFrame);
+    if (dropResult.items.length === 0) {
       toast.error('Unable to add dropped files to the timeline');
       return;
     }
 
-    if (timelineItemsToAdd.length < droppedEntries.length) {
-      toast.warning(`Some dropped files could not be added: ${droppedEntries.length - timelineItemsToAdd.length} failed`);
+    if (dropResult.tracks !== useTimelineStore.getState().tracks) {
+      useTimelineStore.getState().setTracks(dropResult.tracks);
     }
 
-    if (timelineItemsToAdd.length === 1) {
-      addItem(timelineItemsToAdd[0]!);
+    if (dropResult.items.length < droppedEntries.length) {
+      toast.warning(`Some dropped files could not be added: ${droppedEntries.length - dropResult.items.length} failed`);
+    }
+
+    if (dropResult.items.length === 1) {
+      addItem(dropResult.items[0]!);
     } else {
-      addItems(timelineItemsToAdd);
+      addItems(dropResult.items);
     }
   };
 
@@ -770,7 +945,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         <div
           ref={trackRef}
           data-track-id={track.id}
-          className={`relative${track.isGroup ? ' bg-group-stripes' : ''}`}
+          className="relative"
           style={{
             height: `${track.height}px`,
             // CSS containment tells browser this element's layout is independent
@@ -807,7 +982,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
               style={{
                 left: `${ghost.left}px`,
                 width: `${ghost.width}px`,
-                height: DEFAULT_TRACK_HEIGHT,
               }}
             >
               <span className="text-xs text-foreground/70 truncate">{ghost.label}</span>

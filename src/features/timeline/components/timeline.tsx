@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
+import { Fragment, useEffect, useRef, useState, memo, useCallback, useMemo } from 'react';
 import { useHotkeys } from 'react-hotkeys-hook';
 import { TimelineHeader } from './timeline-header';
 import { TimelineContent } from './timeline-content';
 import { TimelineNavigator } from './timeline-navigator';
 import { TrackHeader } from './track-header';
 import { KeyframeGraphPanel } from './keyframe-graph-panel';
-import { TrackRowFrame } from './track-row-frame';
+import { TrackRowFrame, TrackSectionDivider } from './track-row-frame';
 import { useTimelineTracks } from '../hooks/use-timeline-tracks';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
@@ -19,15 +19,13 @@ import { Plus, Minus } from 'lucide-react';
 import { CompositionBreadcrumbs } from './composition-breadcrumbs';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import type { TimelineTrack } from '@/types/timeline';
-import { trackDropIndexRef, trackDropGroupIdRef, trackDropParentIdRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
-import { getVisibleTracks, getGroupDepth, getChildTrackIds } from '../utils/group-utils';
+import { trackDropIndexRef, trackDragOffsetRef, trackDragJustDroppedRef } from '../hooks/use-track-drag';
+import { createClassicTrack, getTrackKind } from '../utils/classic-tracks';
 import { createLogger } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+import { TRACK_SECTION_DIVIDER_HEIGHT } from '../constants';
 
 const logger = createLogger('Timeline');
-
-// Hoisted RegExp - avoids recreation on every render (js-hoist-regexp)
-const TRACK_NUMBER_REGEX = /^Track (\d+)$/;
 
 interface TimelineProps {
   duration: number; // Total timeline duration in seconds
@@ -58,10 +56,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     toggleTrackVisibility,
     toggleTrackMute,
     toggleTrackSolo,
-    createGroup,
-    ungroup,
-    toggleGroupCollapse,
-    removeFromGroup,
+    setTrackVolume,
   } = useTimelineTracks();
 
   // Selection state - use granular selectors
@@ -72,31 +67,22 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   const selectTracks = useSelectionStore((s) => s.selectTracks);
   const selectedTrackIdsSet = useMemo(() => new Set(selectedTrackIds), [selectedTrackIds]);
 
-  // Can group: 2+ selected, none are groups, none already in a group (1-level nesting only)
-  const canGroupSelection = useMemo(() => {
-    if (selectedTrackIds.length < 2) return false;
-    return selectedTrackIds.every((id) => {
-      const t = tracks.find((tr) => tr.id === id);
-      return t && !t.isGroup && !t.parentTrackId;
-    });
-  }, [selectedTrackIds, tracks]);
-
-  // Derive visible tracks (collapsed group children are hidden)
-  const visibleTracks = useMemo(() => getVisibleTracks(tracks), [tracks]);
-
-  // Pre-compute group depth for each visible track
-  const trackMeta = useMemo(() => {
-    const meta = new Map<string, { depth: number }>();
-    for (const track of visibleTracks) {
-      const depth = getGroupDepth(tracks, track.id);
-      meta.set(track.id, { depth });
-    }
-    return meta;
-  }, [tracks, visibleTracks]);
+  const visibleTracks = tracks;
+  const videoTracks = useMemo(
+    () => visibleTracks.filter((track) => getTrackKind(track) === 'video'),
+    [visibleTracks]
+  );
+  const audioTracks = useMemo(
+    () => visibleTracks.filter((track) => getTrackKind(track) === 'audio'),
+    [visibleTracks]
+  );
+  const hasTrackSections = videoTracks.length > 0 && audioTracks.length > 0;
 
   // Refs for syncing scroll between track headers and timeline content
+  const trackHeadersViewportRef = useRef<HTMLDivElement>(null);
   const trackHeadersContainerRef = useRef<HTMLDivElement>(null);
   const timelineContentRef = useRef<HTMLDivElement>(null);
+  const sectionDividerDragRef = useRef<{ startY: number; startOffset: number } | null>(null);
 
   // Store zoom handlers from TimelineContent
   const [zoomHandlers, setZoomHandlers] = useState<{
@@ -109,6 +95,8 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     actualDuration: Math.max(duration, 10),
     timelineWidth: 0,
   });
+  const [trackRowsViewportHeight, setTrackRowsViewportHeight] = useState(0);
+  const [sectionDividerOffset, setSectionDividerOffset] = useState(0);
 
   // Bottom editor panel state (Keyframes / Scopes)
   const [isEditorPanelOpen, setIsEditorPanelOpen] = useState(false);
@@ -149,44 +137,92 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     [handleToggleKeyframeTab]
   );
 
-  // Keyboard shortcut: Ctrl/Cmd+G to group selected tracks
-  // Needs capture: true to override browser's "Find next" shortcut
-  useHotkeys(
-    hotkeys.GROUP_TRACKS,
-    (event) => {
-      event.preventDefault();
-      if (canGroupSelection) {
-        createGroup(selectedTrackIds);
-      }
-    },
-    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
-    [canGroupSelection, selectedTrackIds, createGroup]
-  );
-
-  // Keyboard shortcut: Ctrl/Cmd+Shift+G to ungroup
-  useHotkeys(
-    hotkeys.UNGROUP_TRACKS,
-    (event) => {
-      event.preventDefault();
-      // If active track is a group, ungroup it
-      const activeTrack = tracks.find((t) => t.id === activeTrackId);
-      if (activeTrack?.isGroup) {
-        ungroup(activeTrack.id);
-      }
-    },
-    { ...HOTKEY_OPTIONS, eventListenerOptions: { capture: true } },
-    [activeTrackId, tracks, ungroup]
-  );
-
-  // State for drop indicator and group drop target (updated via RAF from drag hook)
+  // State for drop indicator (updated via RAF from drag hook)
   const [dropIndicatorIndex, setDropIndicatorIndex] = useState(-1);
-  const [dropTargetGroupId, setDropTargetGroupId] = useState('');
-  const [dropTargetParentId, setDropTargetParentId] = useState('');
 
   // Granular selector: only re-render when track dragging state actually changes
   const isTrackDragging = useSelectionStore(
     (s) => (s.dragState?.isDragging && s.dragState.draggedTrackIds && s.dragState.draggedTrackIds.length > 0) ?? false
   );
+
+  const tracksContentHeight = useMemo(
+    () => visibleTracks.reduce((sum, track) => sum + track.height, 0)
+      + (hasTrackSections ? TRACK_SECTION_DIVIDER_HEIGHT : 0),
+    [hasTrackSections, visibleTracks]
+  );
+  const availableSpacerHeight = Math.max(0, trackRowsViewportHeight - tracksContentHeight);
+  const minimumSectionZoneHeight = hasTrackSections
+    ? Math.min(24, Math.floor(availableSpacerHeight / 2))
+    : 0;
+  const maxSectionDividerOffset = Math.max(0, (availableSpacerHeight / 2) - minimumSectionZoneHeight);
+  const clampedSectionDividerOffset = Math.max(
+    -maxSectionDividerOffset,
+    Math.min(maxSectionDividerOffset, sectionDividerOffset)
+  );
+  const topSectionSpacerHeight = hasTrackSections
+    ? Math.max(0, Math.round((availableSpacerHeight / 2) + clampedSectionDividerOffset))
+    : 0;
+  const bottomSectionSpacerHeight = hasTrackSections
+    ? Math.max(0, Math.round((availableSpacerHeight / 2) - clampedSectionDividerOffset))
+    : 0;
+  const getTrackStackOffset = useCallback((trackCount: number) => {
+    const baseOffset = visibleTracks.slice(0, trackCount).reduce((sum, track) => sum + track.height, 0);
+    const sectionOffset = hasTrackSections && trackCount > videoTracks.length
+      ? TRACK_SECTION_DIVIDER_HEIGHT
+      : 0;
+
+    return baseOffset + sectionOffset;
+  }, [hasTrackSections, videoTracks.length, visibleTracks]);
+
+  useEffect(() => {
+    const element = trackHeadersViewportRef.current;
+    if (!element) return;
+
+    const updateHeight = () => {
+      setTrackRowsViewportHeight(element.clientHeight);
+    };
+
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  const handleSectionDividerMouseDown = useCallback((event: React.MouseEvent) => {
+    if (!hasTrackSections) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    sectionDividerDragRef.current = {
+      startY: event.clientY,
+      startOffset: clampedSectionDividerOffset,
+    };
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'row-resize';
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const dragState = sectionDividerDragRef.current;
+      if (!dragState) return;
+
+      const deltaY = moveEvent.clientY - dragState.startY;
+      const nextOffset = Math.max(
+        -maxSectionDividerOffset,
+        Math.min(maxSectionDividerOffset, dragState.startOffset + deltaY)
+      );
+      setSectionDividerOffset(nextOffset);
+    };
+
+    const handleMouseUp = () => {
+      sectionDividerDragRef.current = null;
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  }, [clampedSectionDividerOffset, hasTrackSections, maxSectionDividerOffset]);
 
   // Set first track as active on mount
   // Use primitive dependencies to avoid re-running on unrelated track changes
@@ -219,13 +255,11 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     };
   }, []);
 
-  // Update drop indicator and group drop target from shared refs (only during drag)
+  // Update drop indicator from shared ref (only during drag)
   // Only runs RAF loop when track dragging is active to avoid unnecessary renders
   useEffect(() => {
     if (!isTrackDragging) {
       setDropIndicatorIndex(-1);
-      setDropTargetGroupId('');
-      setDropTargetParentId('');
       return;
     }
 
@@ -233,10 +267,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     const updateDropIndicator = () => {
       const newIndex = trackDropIndexRef.current;
       setDropIndicatorIndex((prev) => (prev !== newIndex ? newIndex : prev));
-      const newGroupId = trackDropGroupIdRef.current;
-      setDropTargetGroupId((prev) => (prev !== newGroupId ? newGroupId : prev));
-      const newParentId = trackDropParentIdRef.current;
-      setDropTargetParentId((prev) => (prev !== newParentId ? newParentId : prev));
       rafId = requestAnimationFrame(updateDropIndicator);
     };
 
@@ -355,33 +385,21 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
     };
   }, []);
 
-  /**
-   * Generate a unique track name by finding the next available number
-   */
-  const getNextTrackName = useCallback(() => {
-    // Extract existing track numbers from names like "Track 1", "Track 2", etc.
-    // Uses hoisted TRACK_NUMBER_REGEX to avoid RegExp recreation
-    const existingNumbers = new Set<number>();
-    for (const t of tracks) {
-      const match = t.name.match(TRACK_NUMBER_REGEX);
-      if (match?.[1]) {
-        const num = parseInt(match[1], 10);
-        if (num > 0) existingNumbers.add(num);
-      }
+  const nextTrackKind = useMemo(() => {
+    const activeTrack = activeTrackId
+      ? tracks.find((track) => track.id === activeTrackId)
+      : null;
+
+    if (!activeTrack) {
+      return 'video' as const;
     }
 
-    // Find the smallest available number starting from 1
-    let nextNumber = 1;
-    while (existingNumbers.has(nextNumber)) {
-      nextNumber++;
-    }
-    return `Track ${nextNumber}`;
-  }, [tracks]);
+    return getTrackKind(activeTrack) ?? 'video';
+  }, [activeTrackId, tracks]);
 
   /**
    * Handle adding a new track
    * Inserts before the active track (appears above it), or at the top if no active track.
-   * If the active track is inside a group, the new track is added to the same group.
    */
   const handleAddTrack = () => {
     // Find the minimum order value to place new track at the top
@@ -390,49 +408,15 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
       ? Math.min(...tracks.map(t => t.order ?? 0))
       : 0;
 
-    const newTrack: TimelineTrack = {
-      id: `track-${Date.now()}`,
-      name: getNextTrackName(),
+    const newTrack: TimelineTrack = createClassicTrack({
+      tracks,
+      kind: nextTrackKind,
+      order: minOrder - 1,
       height: editorLayout.timelineTrackHeight,
-      locked: false,
-      visible: true,
-      muted: false,
-      solo: false,
-      order: minOrder - 1, // Place above all existing tracks
-      items: [],
-    };
+    });
 
     if (activeTrackId) {
-      const activeTrack = tracks.find((t) => t.id === activeTrackId);
-      if (activeTrack?.isGroup) {
-        // Active track is a group → add inside it as a child
-        newTrack.parentTrackId = activeTrackId;
-        // Find the first child to insert before, or append after group header
-        const firstChild = tracks.find((t) => t.parentTrackId === activeTrackId);
-        insertTrack(newTrack, firstChild?.id ?? null);
-      } else if (activeTrack?.parentTrackId) {
-        // Active track is inside a group → add inside the same group, above the active track
-        newTrack.parentTrackId = activeTrack.parentTrackId;
-        insertTrack(newTrack, activeTrackId);
-      } else {
-        // Top-level track → insert above any group block that sits directly above it
-        const idx = visibleTracks.findIndex((t) => t.id === activeTrackId);
-        let insertBeforeId: string = activeTrackId;
-        if (idx > 0) {
-          // Scan upward: skip over group children and group headers
-          let i = idx - 1;
-          while (i >= 0) {
-            const above = visibleTracks[i]!;
-            if (above.isGroup || above.parentTrackId) {
-              insertBeforeId = above.id;
-              i--;
-            } else {
-              break;
-            }
-          }
-        }
-        insertTrack(newTrack, insertBeforeId);
-      }
+      insertTrack(newTrack, activeTrackId);
     } else {
       // Add at the top (beginning)
       addTrack(newTrack);
@@ -448,7 +432,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
   /**
    * Handle removing selected tracks
    * Removes all selected tracks or the active track if none selected.
-   * When removing a group, also removes its children.
+   * Keeps at least one track in the timeline.
    */
   const handleRemoveTracks = () => {
     let tracksToRemove = selectedTrackIds.length > 0
@@ -458,17 +442,6 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         : [];
 
     if (tracksToRemove.length === 0) return;
-
-    // If any selected track is a group, include its children
-    const additionalIds: string[] = [];
-    for (const id of tracksToRemove) {
-      const track = tracks.find((t) => t.id === id);
-      if (track?.isGroup) {
-        const childIds = getChildTrackIds(tracks, id);
-        additionalIds.push(...childIds);
-      }
-    }
-    tracksToRemove = [...new Set([...tracksToRemove, ...additionalIds])];
 
     // Don't allow removing all tracks
     const tracksToRemoveSet = new Set(tracksToRemove);
@@ -527,8 +500,8 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
                 className="h-6 w-6"
                 onClick={handleAddTrack}
                 title={activeTrackId
-                  ? "Add track (inserts above selected)"
-                  : "Add track at top"}
+                  ? `Add ${nextTrackKind} track above selected`
+                  : `Add ${nextTrackKind} track at top`}
               >
                 <Plus className="w-3 h-3" />
               </Button>
@@ -555,64 +528,77 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
           </div>
 
           {/* Track labels - synced scroll (no scrollbar) */}
-          <div className="flex-1 overflow-hidden relative">
+          <div ref={trackHeadersViewportRef} className="flex-1 overflow-hidden relative">
             <div ref={trackHeadersContainerRef} className="relative">
+              {topSectionSpacerHeight > 0 && (
+                <div aria-hidden="true" style={{ height: `${topSectionSpacerHeight}px` }} />
+              )}
+
               {visibleTracks.map((track) => {
-                const meta = trackMeta.get(track.id);
+                const trackIndex = visibleTracks.findIndex((candidate) => candidate.id === track.id);
+                const previousTrack = trackIndex > 0 ? (visibleTracks[trackIndex - 1] ?? null) : null;
+                const nextTrack = trackIndex < visibleTracks.length - 1 ? (visibleTracks[trackIndex + 1] ?? null) : null;
+                const showSectionDivider = previousTrack !== null
+                  && getTrackKind(previousTrack) === 'video'
+                  && getTrackKind(track) === 'audio';
+                const hideBottomDivider = nextTrack !== null
+                  && getTrackKind(track) === 'video'
+                  && getTrackKind(nextTrack) === 'audio';
                 return (
-                  <TrackRowFrame key={track.id}>
-                    <TrackHeader
-                      track={track}
-                      isActive={activeTrackId === track.id}
-                      isSelected={selectedTrackIdsSet.has(track.id)}
-                      isDropTarget={dropTargetGroupId === track.id}
-                      groupDepth={meta?.depth ?? 0}
-                      canGroup={canGroupSelection}
-                      onToggleLock={() => toggleTrackLock(track.id)}
-                      onToggleVisibility={() => toggleTrackVisibility(track.id)}
-                      onToggleMute={() => toggleTrackMute(track.id)}
-                      onToggleSolo={() => toggleTrackSolo(track.id)}
-                      onToggleCollapse={track.isGroup ? () => toggleGroupCollapse(track.id) : undefined}
-                      onGroup={canGroupSelection ? () => createGroup(selectedTrackIds) : undefined}
-                      onCloseGaps={!track.isGroup ? () => useTimelineStore.getState().closeAllGapsOnTrack(track.id) : undefined}
-                      onUngroup={track.isGroup ? () => ungroup(track.id) : undefined}
-                      onRemoveFromGroup={track.parentTrackId ? () => removeFromGroup([track.id]) : undefined}
-                      onSelect={(e) => {
-                        // After a drag-drop, suppress the click to retain selection
-                        if (trackDragJustDroppedRef.current) return;
-                        if (e.shiftKey && activeTrackId) {
-                          // Range select from active track to clicked track
-                          const startIdx = visibleTracks.findIndex((t) => t.id === activeTrackId);
-                          const endIdx = visibleTracks.findIndex((t) => t.id === track.id);
-                          if (startIdx !== -1 && endIdx !== -1) {
-                            const lo = Math.min(startIdx, endIdx);
-                            const hi = Math.max(startIdx, endIdx);
-                            const rangeIds = visibleTracks.slice(lo, hi + 1).map((t) => t.id);
-                            selectTracks(rangeIds);
+                  <Fragment key={track.id}>
+                    {showSectionDivider && (
+                      <TrackSectionDivider onMouseDown={handleSectionDividerMouseDown} />
+                    )}
+                    <TrackRowFrame showTopDivider={trackIndex === 0} hideBottomDivider={hideBottomDivider}>
+                      <TrackHeader
+                        track={track}
+                        isActive={activeTrackId === track.id}
+                        isSelected={selectedTrackIdsSet.has(track.id)}
+                        onToggleLock={() => toggleTrackLock(track.id)}
+                        onToggleVisibility={() => toggleTrackVisibility(track.id)}
+                        onToggleMute={() => toggleTrackMute(track.id)}
+                        onToggleSolo={() => toggleTrackSolo(track.id)}
+                        onSetVolume={(volume) => setTrackVolume(track.id, volume)}
+                        onCloseGaps={() => useTimelineStore.getState().closeAllGapsOnTrack(track.id)}
+                        onSelect={(e) => {
+                          // After a drag-drop, suppress the click to retain selection
+                          if (trackDragJustDroppedRef.current) return;
+                          if (e.shiftKey && activeTrackId) {
+                            // Range select from active track to clicked track
+                            const startIdx = visibleTracks.findIndex((t) => t.id === activeTrackId);
+                            const endIdx = visibleTracks.findIndex((t) => t.id === track.id);
+                            if (startIdx !== -1 && endIdx !== -1) {
+                              const lo = Math.min(startIdx, endIdx);
+                              const hi = Math.max(startIdx, endIdx);
+                              const rangeIds = visibleTracks.slice(lo, hi + 1).map((t) => t.id);
+                              selectTracks(rangeIds);
+                            }
+                          } else if (e.metaKey || e.ctrlKey) {
+                            // Multi-select with Cmd/Ctrl
+                            toggleTrackSelection(track.id);
+                          } else {
+                            // Single select - set as active
+                            setActiveTrack(track.id);
                           }
-                        } else if (e.metaKey || e.ctrlKey) {
-                          // Multi-select with Cmd/Ctrl
-                          toggleTrackSelection(track.id);
-                        } else {
-                          // Single select - set as active
-                          setActiveTrack(track.id);
-                        }
-                      }}
-                    />
-                  </TrackRowFrame>
+                        }}
+                      />
+                    </TrackRowFrame>
+                  </Fragment>
                 );
               })}
 
-              {/* Drop indicator - shows where tracks will be dropped (hidden when targeting a group header) */}
-              {isTrackDragging && !dropTargetGroupId && dropIndicatorIndex >= 0 && dropIndicatorIndex <= visibleTracks.length && (
+              {bottomSectionSpacerHeight > 0 && (
+                <div aria-hidden="true" style={{ height: `${bottomSectionSpacerHeight}px` }} />
+              )}
+
+              {/* Drop indicator - shows where tracks will be dropped */}
+              {isTrackDragging && dropIndicatorIndex >= 0 && dropIndicatorIndex <= visibleTracks.length && (
                 <div
-                  className={`absolute left-0 right-0 h-0.5 pointer-events-none z-50 shadow-lg ${
-                    dropTargetParentId ? 'bg-blue-500' : 'bg-primary'
-                  }`}
+                  className="absolute left-0 right-0 h-0.5 pointer-events-none z-50 shadow-lg bg-primary"
                   style={{
                     top: dropIndicatorIndex === 0
                       ? 0
-                      : visibleTracks.slice(0, dropIndicatorIndex).reduce((sum, t) => sum + t.height, 0),
+                      : getTrackStackOffset(dropIndicatorIndex),
                   }}
                 />
               )}
@@ -624,6 +610,9 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         <TimelineContent
           duration={duration}
           scrollRef={timelineContentRef}
+          topSectionSpacerHeight={topSectionSpacerHeight}
+          bottomSectionSpacerHeight={bottomSectionSpacerHeight}
+          onSectionDividerMouseDown={hasTrackSections ? handleSectionDividerMouseDown : undefined}
           onZoomHandlersReady={setZoomHandlers}
           onMetricsChange={setTimelineMetrics}
         />

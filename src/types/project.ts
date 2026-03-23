@@ -33,11 +33,13 @@ export interface ProjectTimeline {
   tracks: Array<{
     id: string;
     name: string;
+    kind?: 'video' | 'audio';
     height: number;
     locked: boolean;
     visible: boolean;
     muted: boolean;
     solo: boolean;
+    volume?: number;
     color?: string;
     order: number;
     parentTrackId?: string;
@@ -52,6 +54,7 @@ export interface ProjectTimeline {
     label: string;
     mediaId?: string;
     originId?: string; // Tracks lineage for stable React keys
+    linkedGroupId?: string;
     type: 'video' | 'audio' | 'text' | 'image' | 'shape' | 'composition' | 'adjustment';
     // Type-specific fields stored as optional for flexibility
     src?: string;

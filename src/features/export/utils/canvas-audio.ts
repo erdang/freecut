@@ -97,7 +97,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
   const { tracks = [], transitions = [] } = composition;
   const segments: AudioSegment[] = [];
   const audioOnlySegments: AudioSegment[] = [];
-  const videoById = new Map<string, { item: VideoItem; trackId: string; muted: boolean }>();
+  const videoById = new Map<string, { item: VideoItem; trackId: string; muted: boolean; trackVolume: number }>();
   const extensionByClipId = new Map<string, { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number }>();
 
   const ensureExtension = (clipId: string): { before: number; after: number; overlapFadeOut: number; overlapFadeIn: number } => {
@@ -162,6 +162,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           item: videoItem,
           trackId: track.id,
           muted: track.muted ?? false,
+          trackVolume: track.volume ?? 0,
         });
       } else if (item.type === 'audio') {
         const audioItem = item as AudioItem;
@@ -179,7 +180,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           durationFrames: item.durationInFrames,
           sourceStartFrame: audioItem.sourceStart ?? item.trimStart ?? 0,
           sourceFps: audioItem.sourceFps ?? fps,
-          volume: item.volume ?? 0, // dB
+          volume: (item.volume ?? 0) + (track.volume ?? 0), // dB
           fadeInFrames: (item.audioFadeIn ?? 0) * fps,
           fadeOutFrames: (item.audioFadeOut ?? 0) * fps,
           useEqualPowerFades: false,
@@ -319,7 +320,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
       durationFrames: videoItem.durationInFrames + before + after,
       sourceStartFrame: baseTrimBefore - timelineToSourceFrames(before, speed, fps, sourceFps),
       sourceFps,
-      volume: videoItem.volume ?? 0,
+      volume: (videoItem.volume ?? 0) + entry.trackVolume,
       fadeInFrames: fadeIn,
       fadeOutFrames: fadeOut,
       useEqualPowerFades: before > 0 || after > 0 || hasOverlapFade,
@@ -472,7 +473,7 @@ function extractAudioSegments(composition: CompositionInputProps, fps: number): 
           durationFrames: effectiveDuration,
           sourceStartFrame: effectiveSourceStart,
           sourceFps: subItem.sourceFps ?? fps,
-          volume: subItem.volume ?? 0,
+          volume: (subItem.volume ?? 0) + (track.volume ?? 0) + (subTrack?.volume ?? 0),
           fadeInFrames: adjustedFadeInFrames,
           fadeOutFrames: adjustedFadeOutFrames,
           useEqualPowerFades: false,

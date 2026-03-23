@@ -102,7 +102,10 @@ export { connectedVideoElements, videoAudioContexts };
  * Returns the final volume (0-1) to apply to the video component.
  * Applies master preview volume from playback controls.
  */
-export function useVideoAudioVolume(item: VideoItem & { _sequenceFrameOffset?: number }, muted: boolean): number {
+export function useVideoAudioVolume(
+  item: VideoItem & { _sequenceFrameOffset?: number; trackVolumeDb?: number },
+  muted: boolean
+): number {
   const { fps } = useVideoConfig();
   // Get local frame from Sequence context (0-based within this Sequence)
   const sequenceContext = useSequenceContext();
@@ -136,9 +139,10 @@ export function useVideoAudioVolume(item: VideoItem & { _sequenceFrameOffset?: n
   // Interpolate volume from keyframes if they exist, otherwise use static value
   const volumeKeyframes = getPropertyKeyframes(itemKeyframes, 'volume');
   const staticVolumeDb = preview?.volume ?? item.volume ?? 0;
-  const volumeDb = volumeKeyframes.length > 0
+  const itemVolumeDb = volumeKeyframes.length > 0
     ? interpolatePropertyValue(volumeKeyframes, frame, staticVolumeDb)
     : staticVolumeDb;
+  const volumeDb = itemVolumeDb + (item.trackVolumeDb ?? 0);
 
   // Use preview values if available, otherwise use item's stored values
   const audioFadeIn = preview?.audioFadeIn ?? item.audioFadeIn ?? 0;

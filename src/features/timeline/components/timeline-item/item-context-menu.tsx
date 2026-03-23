@@ -32,9 +32,13 @@ interface ItemContextMenuProps {
   closerEdge: 'left' | 'right' | null;
   /** Keyframed properties for the item (used to build clear submenu) */
   keyframedProperties?: PropertyKeyframes[];
+  canLinkSelected?: boolean;
+  canUnlinkSelected?: boolean;
   onJoinSelected: () => void;
   onJoinLeft: () => void;
   onJoinRight: () => void;
+  onLinkSelected?: () => void;
+  onUnlinkSelected?: () => void;
   onRippleDelete: () => void;
   onDelete: () => void;
   onClearAllKeyframes?: () => void;
@@ -73,9 +77,13 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   hasJoinableRight,
   closerEdge,
   keyframedProperties,
+  canLinkSelected,
+  canUnlinkSelected,
   onJoinSelected,
   onJoinLeft,
   onJoinRight,
+  onLinkSelected,
+  onUnlinkSelected,
   onRippleDelete,
   onDelete,
   onClearAllKeyframes,
@@ -149,6 +157,22 @@ export const ItemContextMenu = memo(function ItemContextMenu({
             </>
           );
         })()}
+
+        {(canLinkSelected || canUnlinkSelected) && (
+          <>
+            {canLinkSelected && onLinkSelected && (
+              <ContextMenuItem onClick={onLinkSelected}>
+                Link Audio/Video
+              </ContextMenuItem>
+            )}
+            {canUnlinkSelected && onUnlinkSelected && (
+              <ContextMenuItem onClick={onUnlinkSelected}>
+                Unlink Audio/Video
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+          </>
+        )}
 
         {/* Clear Keyframes submenu - only show if item has keyframes */}
         {hasKeyframes && (

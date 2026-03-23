@@ -217,6 +217,10 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
     // Get playback rate from speed property
     const playbackRate = item.speed ?? DEFAULT_SPEED;
 
+    const trackVolumeDb = ('trackVolumeDb' in item && typeof item.trackVolumeDb === 'number')
+      ? item.trackVolumeDb
+      : 0;
+
     // Use PitchCorrectedAudio for pitch-preserved playback during preview
     // and toneFrequency correction during rendering
     return (
@@ -224,7 +228,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, masks = [], re
         src={item.src}
         itemId={item.id}
         trimBefore={trimBefore}
-        volume={item.volume ?? 0}
+        volume={(item.volume ?? 0) + trackVolumeDb}
         playbackRate={playbackRate}
         sourceFps={sourceFps}
         muted={muted}

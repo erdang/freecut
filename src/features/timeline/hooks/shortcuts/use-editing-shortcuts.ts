@@ -9,7 +9,8 @@ import { useTimelineStore } from '../../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { insertFreezeFrame } from '../../stores/actions/item-actions';
+import { canLinkItems, hasLinkedItems } from '@/features/timeline/utils/linked-items';
+import { insertFreezeFrame, linkItems, unlinkItems } from '../../stores/actions/item-actions';
 import type { TransformProperties } from '@/types/transform';
 import type { TimelineShortcutCallbacks } from '../use-timeline-shortcuts';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
@@ -244,6 +245,39 @@ export function useEditingShortcuts(callbacks: TimelineShortcutCallbacks) {
     },
     HOTKEY_OPTIONS,
     [selectedItemIds, items, joinItems]
+  );
+
+  useHotkeys(
+    hotkeys.LINK_AUDIO_VIDEO,
+    (event) => {
+      if (selectedItemIds.length !== 2) return;
+
+      const selectedItems = selectedItemIds
+        .map((id) => items.find((item) => item.id === id))
+        .filter((item): item is NonNullable<typeof item> => item !== undefined);
+
+      if (selectedItems.length !== 2) return;
+      if (!canLinkItems(selectedItems)) return;
+      if (selectedItems.some((item) => hasLinkedItems(items, item.id))) return;
+
+      event.preventDefault();
+      linkItems(selectedItemIds);
+    },
+    HOTKEY_OPTIONS,
+    [selectedItemIds, items]
+  );
+
+  useHotkeys(
+    hotkeys.UNLINK_AUDIO_VIDEO,
+    (event) => {
+      if (selectedItemIds.length === 0) return;
+      if (!selectedItemIds.some((id) => hasLinkedItems(items, id))) return;
+
+      event.preventDefault();
+      unlinkItems(selectedItemIds);
+    },
+    HOTKEY_OPTIONS,
+    [selectedItemIds, items]
   );
 
   // Editing: Cmd/Ctrl+K - Split all items at gray playhead (or main playhead)
