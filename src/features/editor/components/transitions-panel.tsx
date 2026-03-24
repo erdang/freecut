@@ -15,9 +15,9 @@ import {
   TRANSITION_ICON_MAP,
   TRANSITION_CATEGORY_INFO,
   TRANSITION_CATEGORY_ORDER,
-  TRANSITION_PRESENTATION_CONFIGS,
-  TRANSITION_CONFIGS_BY_CATEGORY,
-  TRANSITION_CATEGORY_START_INDICES,
+  getTransitionPresentationConfigs,
+  getTransitionConfigsByCategory,
+  getTransitionCategoryStartIndices,
 } from '@/features/editor/utils/transition-ui-config';
 
 interface TransitionCardProps {
@@ -141,7 +141,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
   const clearTransitionDrag = useTransitionDragStore((s) => s.clearDrag);
 
   const handleDragStart = useCallback((event: React.DragEvent<HTMLButtonElement>, configIndex: number) => {
-    const config = TRANSITION_PRESENTATION_CONFIGS[configIndex];
+    const config = getTransitionPresentationConfigs()[configIndex];
     if (!config) return;
 
     const dragDescriptor = {
@@ -162,7 +162,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
   // Apply a transition by config index
   const handleApplyByIndex = useCallback(
     (configIndex: number) => {
-      const config = TRANSITION_PRESENTATION_CONFIGS[configIndex];
+      const config = getTransitionPresentationConfigs()[configIndex];
       if (!config) return;
 
       // Get fresh state at click time
@@ -225,7 +225,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
       {/* Transitions grid by category */}
       <div className="flex-1 overflow-y-auto p-3 space-y-4">
         {TRANSITION_CATEGORY_ORDER.map((category) => {
-          const configs = TRANSITION_CONFIGS_BY_CATEGORY[category];
+          const configs = getTransitionConfigsByCategory()[category];
           if (!configs || configs.length === 0) return null;
 
           return (
@@ -233,7 +233,7 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
               key={category}
               category={category}
               configs={configs}
-              startIndex={TRANSITION_CATEGORY_START_INDICES[category]!}
+              startIndex={getTransitionCategoryStartIndices()[category]!}
               onApply={handleApplyByIndex}
               clickDisabled={!hasValidClickTarget}
               onDragStart={handleDragStart}

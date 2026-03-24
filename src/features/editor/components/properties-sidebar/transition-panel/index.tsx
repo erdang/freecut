@@ -27,7 +27,7 @@ import {
   TRANSITION_ICON_MAP,
   TRANSITION_CATEGORY_INFO,
   TRANSITION_CATEGORY_ORDER,
-  TRANSITION_CONFIGS_BY_CATEGORY,
+  getTransitionConfigsByCategory,
 } from '@/features/editor/utils/transition-ui-config';
 import { getMaxTransitionDurationForHandles } from '@/features/editor/deps/timeline-utils';
 
@@ -97,7 +97,7 @@ const PresentationPicker = memo(function PresentationPicker({
   return (
     <div className="space-y-3">
       {TRANSITION_CATEGORY_ORDER.map((category) => {
-        const configs = TRANSITION_CONFIGS_BY_CATEGORY[category];
+        const configs = getTransitionConfigsByCategory()[category];
         if (!configs || configs.length === 0) return null;
         return (
           <div key={category}>
