@@ -1,3 +1,5 @@
+import type { VisualEffect } from '@/types/effects';
+
 /**
  * Cache for media drag data
  *
@@ -33,9 +35,10 @@ export interface CompositionDragData {
 
 export interface TimelineTemplateDragData {
   type: 'timeline-template';
-  itemType: 'text' | 'shape';
+  itemType: 'text' | 'shape' | 'adjustment';
   label: string;
   shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon' | 'heart' | 'path';
+  effects?: VisualEffect[];
 }
 
 export type DragData = MediaDragData | CompositionDragData | TimelineTemplateDragData;

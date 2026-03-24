@@ -91,6 +91,9 @@ function getGhostHighlightClasses(ghostPreviews: GhostPreviewItem[]): string {
   if (ghostPreviews.some((ghost) => ghost.type === 'shape')) {
     return 'border-timeline-shape/60 bg-timeline-shape/10';
   }
+  if (ghostPreviews.some((ghost) => ghost.type === 'adjustment')) {
+    return 'border-slate-400/60 bg-slate-400/10';
+  }
   if (ghostPreviews.some((ghost) => ghost.type === 'image')) {
     return 'border-timeline-image/60 bg-timeline-image/10';
   }
@@ -955,8 +958,10 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
                   ? 'border-timeline-text bg-timeline-text/20'
                   : ghost.type === 'shape'
                   ? 'border-timeline-shape bg-timeline-shape/20'
+                  : ghost.type === 'adjustment'
+                  ? 'border-slate-400 bg-slate-400/15'
                   : 'border-timeline-image bg-timeline-image/20'
-               }`}
+                }`}
               style={{
                 left: `${ghost.left}px`,
                 width: `${ghost.width}px`,

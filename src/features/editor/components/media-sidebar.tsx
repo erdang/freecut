@@ -309,9 +309,10 @@ export const MediaSidebar = memo(function MediaSidebar() {
   }, []);
 
   const handleTemplateDragStart = useCallback((payload: {
-    itemType: 'text' | 'shape';
+    itemType: 'text' | 'shape' | 'adjustment';
     label: string;
     shapeType?: ShapeType;
+    effects?: VisualEffect[];
   }) => (event: React.DragEvent<HTMLButtonElement>) => {
     event.dataTransfer.effectAllowed = 'copy';
     const dragData = {
@@ -584,7 +585,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div className="space-y-3">
               {/* Blank Adjustment Layer */}
               <button
-                onClick={() => handleAddAdjustmentLayer()}
+                draggable={true}
+                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: 'Adjustment Layer' })}
+                onDragEnd={handleTemplateDragEnd}
+                onClick={() => {
+                  if (shouldSuppressGeneratedItemClick()) return;
+                  handleAddAdjustmentLayer();
+                }}
                 className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
               >
                 <div className="w-8 h-8 rounded-md border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70 flex-shrink-0">
@@ -606,13 +613,24 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   {EFFECT_PRESETS.map((preset) => (
                     <button
                       key={preset.id}
-                      onClick={() => handleAddPreset(preset.id)}
+                      draggable={true}
+                      onDragStart={handleTemplateDragStart({
+                        itemType: 'adjustment',
+                        label: preset.name,
+                        effects: preset.effects,
+                      })}
+                      onDragEnd={handleTemplateDragEnd}
+                      onClick={() => {
+                        if (shouldSuppressGeneratedItemClick()) return;
+                        handleAddPreset(preset.id);
+                      }}
                       className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                     >
                       {effectPreviews.has(`preset:${preset.id}`) ? (
                         <img
                           src={effectPreviews.get(`preset:${preset.id}`)}
                           alt=""
+                          draggable={false}
                           className="w-full aspect-video rounded-sm object-cover"
                         />
                       ) : (
@@ -638,13 +656,28 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     {catEffects.map((def) => (
                       <button
                         key={def.id}
-                        onClick={() => handleAddGpuEffect(def.id)}
+                        draggable={true}
+                        onDragStart={handleTemplateDragStart({
+                          itemType: 'adjustment',
+                          label: def.name,
+                          effects: [{
+                            type: 'gpu-effect',
+                            gpuEffectType: def.id,
+                            params: getGpuEffectDefaultParams(def.id),
+                          }],
+                        })}
+                        onDragEnd={handleTemplateDragEnd}
+                        onClick={() => {
+                          if (shouldSuppressGeneratedItemClick()) return;
+                          handleAddGpuEffect(def.id);
+                        }}
                         className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
                       >
                         {effectPreviews.has(def.id) ? (
                           <img
                             src={effectPreviews.get(def.id)}
                             alt=""
+                            draggable={false}
                             className="w-full aspect-video rounded-sm object-cover"
                           />
                         ) : (

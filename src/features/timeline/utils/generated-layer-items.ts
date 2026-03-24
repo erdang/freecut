@@ -10,9 +10,10 @@ export const DEFAULT_GENERATED_LAYER_DURATION_SECONDS = 60;
 
 export interface TimelineTemplateDragData {
   type: 'timeline-template';
-  itemType: 'text' | 'shape';
+  itemType: 'text' | 'shape' | 'adjustment';
   label: string;
   shapeType?: ShapeType;
+  effects?: VisualEffect[];
 }
 
 interface LayerPlacement {
@@ -31,8 +32,9 @@ export function isTimelineTemplateDragData(value: unknown): value is TimelineTem
 
   const candidate = value as Partial<TimelineTemplateDragData>;
   if (candidate.type !== 'timeline-template') return false;
-  if (candidate.itemType !== 'text' && candidate.itemType !== 'shape') return false;
+  if (candidate.itemType !== 'text' && candidate.itemType !== 'shape' && candidate.itemType !== 'adjustment') return false;
   if (typeof candidate.label !== 'string' || candidate.label.trim().length === 0) return false;
+  if (candidate.effects !== undefined && !Array.isArray(candidate.effects)) return false;
 
   return candidate.itemType !== 'shape'
     || candidate.shapeType === 'rectangle'
@@ -47,6 +49,18 @@ export function isTimelineTemplateDragData(value: unknown): value is TimelineTem
 
 export function getDefaultGeneratedLayerDurationInFrames(fps: number): number {
   return Math.max(1, Math.round(fps * DEFAULT_GENERATED_LAYER_DURATION_SECONDS));
+}
+
+export function getTemplateEffectsForDirectApplication(template: unknown): VisualEffect[] | null {
+  if (!isTimelineTemplateDragData(template)) {
+    return null;
+  }
+
+  if (template.itemType !== 'adjustment' || !Array.isArray(template.effects) || template.effects.length === 0) {
+    return null;
+  }
+
+  return template.effects;
 }
 
 export function createDefaultTextItem(params: VisualLayerPlacement): TextItem {
@@ -136,11 +150,21 @@ export function createDefaultAdjustmentItem(params: LayerPlacement & {
 export function createTimelineTemplateItem(params: {
   template: TimelineTemplateDragData;
   placement: VisualLayerPlacement;
-}): TextItem | ShapeItem {
+}): TextItem | ShapeItem | AdjustmentItem {
   const { template, placement } = params;
 
   if (template.itemType === 'text') {
     return createDefaultTextItem(placement);
+  }
+
+  if (template.itemType === 'adjustment') {
+    return createDefaultAdjustmentItem({
+      trackId: placement.trackId,
+      from: placement.from,
+      durationInFrames: placement.durationInFrames,
+      label: template.label,
+      effects: template.effects,
+    });
   }
 
   return createDefaultShapeItem({

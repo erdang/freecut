@@ -5,7 +5,7 @@ export interface NewTrackZoneGhostPreview {
   left: number;
   width: number;
   label: string;
-  type: 'composition' | DroppableMediaType | 'external-file' | 'text' | 'shape';
+  type: 'composition' | DroppableMediaType | 'external-file' | 'text' | 'shape' | 'adjustment';
   targetZone: 'video' | 'audio';
 }
 

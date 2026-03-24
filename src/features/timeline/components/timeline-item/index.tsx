@@ -6,6 +6,8 @@ import { useItemsStore } from '../../stores/items-store';
 import { useKeyframesStore } from '../../stores/keyframes-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useTransitionResizePreviewStore } from '../../stores/transition-resize-preview-store';
+import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store';
+import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store';
 import { useLinkedEditPreviewStore } from '../../stores/linked-edit-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
@@ -22,6 +24,7 @@ import {
 } from '@/shared/state/transition-drag';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
+import { getMediaDragData } from '@/features/timeline/deps/media-library-resolver';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
@@ -53,6 +56,7 @@ import {
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
+import { toast } from 'sonner';
 import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
 import type { AnimatableProperty } from '@/types/keyframe';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
@@ -61,6 +65,11 @@ import type { RazorSnapTarget } from '../../utils/razor-snap';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import { canLinkItems, expandSelectionWithLinkedItems, getLinkedItemIds, hasLinkedItems } from '../../utils/linked-items';
 import { getVisibleTrackIds } from '../../utils/group-utils';
+import {
+  isDragPointInsideElement,
+  resolveEffectDropTargetIds,
+} from '../../utils/effect-drop';
+import { getTemplateEffectsForDirectApplication } from '../../utils/generated-layer-items';
 import {
   resolveSmartBodyIntent,
   resolveSmartTrimIntent,
@@ -235,6 +244,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const [hoveredEdge, setHoveredEdge] = useState<'start' | 'end' | null>(null);
   const [smartTrimIntent, setSmartTrimIntent] = useState<SmartTrimIntent>(null);
   const [smartBodyIntent, setSmartBodyIntent] = useState<SmartBodyIntent>(null);
+  const isSingleEffectDropTarget = useEffectDropPreviewStore(
+    useCallback((state) => state.targetItemIds.length === 1 && state.targetItemIds[0] === item.id, [item.id])
+  );
+  const isMultiEffectDropTarget = useEffectDropPreviewStore(
+    useCallback((state) => state.targetItemIds.length > 1 && state.targetItemIds.includes(item.id), [item.id])
+  );
+  const multiEffectDropTargetCount = useEffectDropPreviewStore(
+    useCallback(
+      (state) => state.hoveredItemId === item.id && state.targetItemIds.length > 1
+        ? state.targetItemIds.length
+        : 0,
+      [item.id]
+    )
+  );
+  const isEffectDropTarget = isSingleEffectDropTarget || isMultiEffectDropTarget;
 
   // Track which edge was closer when context menu was triggered
   const [closerEdge, setCloserEdge] = useState<'left' | 'right' | null>(null);
@@ -249,6 +273,19 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     window.addEventListener('mouseup', handleMouseUp);
     return () => window.removeEventListener('mouseup', handleMouseUp);
   }, [pointerHint]);
+
+  useEffect(() => {
+    if (!isEffectDropTarget) return;
+
+    const clearEffectDropTarget = () => useEffectDropPreviewStore.getState().clearPreview();
+    window.addEventListener('dragend', clearEffectDropTarget);
+    window.addEventListener('drop', clearEffectDropTarget);
+
+    return () => {
+      window.removeEventListener('dragend', clearEffectDropTarget);
+      window.removeEventListener('drop', clearEffectDropTarget);
+    };
+  }, [isEffectDropTarget]);
 
   // Track if this item or neighbors are being dragged (for join indicators)
   const [dragAffectsJoin, setDragAffectsJoin] = useState<{ left: boolean; right: boolean }>({ left: false, right: false });
@@ -505,6 +542,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Get FPS for frame-to-time conversion
   const fps = useTimelineStore((s) => s.fps);
+  const addEffects = useTimelineStore((s) => s.addEffects);
   const updateTimelineItem = useTimelineStore((s) => s.updateItem);
 
   // Smart per-concern selectors for transition resize preview.
@@ -2199,6 +2237,113 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     useTransitionDragStore.getState().clearDrag();
   }, [item.id, trackLocked]);
 
+  const resolveDirectEffectDropTemplate = useCallback((payload: unknown) => {
+    const effects = getTemplateEffectsForDirectApplication(payload);
+    if (!effects || trackLocked || item.type === 'audio') {
+      return null;
+    }
+
+    return effects;
+  }, [item.type, trackLocked]);
+
+  const resolveEffectDropTargets = useCallback((payload: unknown): string[] => {
+    const effects = resolveDirectEffectDropTemplate(payload);
+    if (!effects) {
+      return [];
+    }
+
+    const items = useItemsStore.getState().items;
+    const itemById = new Map(items.map((timelineItem) => [timelineItem.id, timelineItem]));
+    const lockedTrackIds = new Set(
+      useTimelineStore.getState().tracks
+        .filter((track) => track.locked)
+        .map((track) => track.id)
+    );
+    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
+
+    return resolveEffectDropTargetIds({
+      hoveredItemId: item.id,
+      items,
+      selectedItemIds,
+    }).filter((itemId) => !lockedTrackIds.has(itemById.get(itemId)?.trackId ?? ''));
+  }, [item.id, resolveDirectEffectDropTemplate]);
+
+  const setEffectDropPreview = useCallback((targetItemIds: string[]) => {
+    if (targetItemIds.length === 0) {
+      useEffectDropPreviewStore.getState().clearPreview();
+      return;
+    }
+
+    useEffectDropPreviewStore.getState().setPreview(targetItemIds, item.id);
+  }, [item.id]);
+
+  const handleEffectDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const targetItemIds = resolveEffectDropTargets(getMediaDragData());
+    if (targetItemIds.length === 0) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    setEffectDropPreview(targetItemIds);
+    useTrackDropPreviewStore.getState().clearGhostPreviews();
+  }, [resolveEffectDropTargets, setEffectDropPreview]);
+
+  const handleEffectDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const targetItemIds = resolveEffectDropTargets(getMediaDragData());
+    if (targetItemIds.length === 0) {
+      useEffectDropPreviewStore.getState().clearPreview();
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    setEffectDropPreview(targetItemIds);
+    useTrackDropPreviewStore.getState().clearGhostPreviews();
+  }, [resolveEffectDropTargets, setEffectDropPreview]);
+
+  const handleEffectDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (isDragPointInsideElement(e, e.currentTarget)) {
+      return;
+    }
+
+    if (useEffectDropPreviewStore.getState().hoveredItemId !== item.id) {
+      return;
+    }
+
+    useEffectDropPreviewStore.getState().clearPreview();
+  }, [item.id]);
+
+  const handleEffectDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const rawPayload = e.dataTransfer.getData('application/json');
+    let parsedPayload: unknown = getMediaDragData();
+
+    if (rawPayload) {
+      try {
+        parsedPayload = JSON.parse(rawPayload);
+      } catch {
+        parsedPayload = getMediaDragData();
+      }
+    }
+
+    const effects = resolveDirectEffectDropTemplate(parsedPayload);
+    const targetItemIds = resolveEffectDropTargets(parsedPayload);
+    useEffectDropPreviewStore.getState().clearPreview();
+
+    if (!effects || targetItemIds.length === 0) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    useTrackDropPreviewStore.getState().clearGhostPreviews();
+    addEffects(targetItemIds.map((itemId) => ({ itemId, effects })));
+    if (targetItemIds.length > 1) {
+      toast.success(`Applied effect to ${targetItemIds.length} clips`);
+    }
+  }, [addEffects, resolveDirectEffectDropTemplate, resolveEffectDropTargets]);
+
   return (
     <>
       <ItemContextMenu
@@ -2268,10 +2413,26 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           onMouseMove={handleMouseMove}
           onMouseLeave={handleMouseLeave}
           onContextMenu={handleContextMenu}
+          onDragEnter={handleEffectDragEnter}
+          onDragOver={handleEffectDragOver}
+          onDragLeave={handleEffectDragLeave}
+          onDrop={handleEffectDrop}
         >
           {/* Selection indicator */}
           {isSelected && !trackLocked && (
             <div className="absolute inset-0 rounded pointer-events-none z-20 border border-primary" />
+          )}
+
+          {isEffectDropTarget && (
+            <div
+              className="absolute inset-0 rounded pointer-events-none z-20 border border-dashed border-sky-300/90 bg-sky-400/15 shadow-[inset_0_0_0_1px_rgba(125,211,252,0.35)]"
+            >
+              {multiEffectDropTargetCount > 1 && (
+                <div className="absolute top-1 right-1 rounded-full bg-sky-300/90 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-slate-950">
+                  {multiEffectDropTargetCount} clips
+                </div>
+              )}
+            </div>
           )}
 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
@@ -2533,6 +2694,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     prevItem.trimStart === nextItem.trimStart &&
     prevItem.speed === nextItem.speed &&
     prevItem.volume === nextItem.volume &&
+    prevItem.effects === nextItem.effects &&
     prevItem.audioFadeIn === nextItem.audioFadeIn &&
     prevItem.audioFadeOut === nextItem.audioFadeOut &&
     prevItem.audioFadeInCurve === nextItem.audioFadeInCurve &&
