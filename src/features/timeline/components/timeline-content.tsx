@@ -44,6 +44,7 @@ import { useMarkersStore } from '../stores/markers-store';
 import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
 import { expandSelectionWithLinkedItems } from '../utils/linked-items';
+import { getTimelineWidth, getZoomToFitLevel } from '../utils/timeline-layout';
 
 const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
   'timeline-cursor-trim-left',
@@ -624,19 +625,20 @@ export const TimelineContent = memo(function TimelineContent({
     // Use actual content end, with minimum of 10 seconds for empty timelines
     const contentDuration = Math.max(furthestItemEnd, 10);
 
-    // Calculate width: content width + buffer only when content exceeds viewport
+    // Keep the visible fit behavior, but leave extra space after the project end
+    // so the user can still scroll a bit farther to the right when needed.
     const effectiveContainerWidth = containerWidth > 0 ? containerWidth : 1920;
     const contentWidth = timeToPixels(contentDuration);
 
-    // Only add buffer when content is wider than viewport
-    // When content fits, use exact viewport width to avoid unnecessary scrollbar
-    const baseWidth = contentWidth > effectiveContainerWidth
-      ? contentWidth + 50
-      : effectiveContainerWidth;
-
     // Timeline width is based on content only - don't depend on scroll position
     // This prevents feedback loops during zoom where scroll->width->scroll causes gradual shifts
-    return { actualDuration: contentDuration, timelineWidth: baseWidth };
+    return {
+      actualDuration: contentDuration,
+      timelineWidth: getTimelineWidth({
+        contentWidth,
+        viewportWidth: effectiveContainerWidth,
+      }),
+    };
   }, [furthestItemEndFrame, fps, timeToPixels, containerWidth]);
 
   actualDurationRef.current = actualDuration;
@@ -727,14 +729,7 @@ export const TimelineContent = memo(function TimelineContent({
     // Use actualDurationRef which is kept in sync with timeline content
     const contentDuration = actualDurationRef.current;
 
-    // Calculate zoom level needed to fit content in viewport
-    // pixelsPerSecond = zoomLevel * 100
-    // contentWidth = contentDuration * pixelsPerSecond = contentDuration * zoomLevel * 100
-    // We want: contentWidth = effectiveContainerWidth (with some padding)
-    // So: zoomLevel = effectiveContainerWidth / (contentDuration * 100)
-    const padding = 50; // Leave some padding on the right
-    const targetWidth = effectiveContainerWidth - padding;
-    const newZoomLevel = Math.max(0.01, Math.min(2, targetWidth / (contentDuration * 100)));
+    const newZoomLevel = getZoomToFitLevel(effectiveContainerWidth, contentDuration);
 
     // Apply zoom and reset scroll to start
     setZoom(newZoomLevel);
