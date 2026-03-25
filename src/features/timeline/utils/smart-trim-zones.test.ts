@@ -174,11 +174,21 @@ describe('smart-trim-zones', () => {
     })).toBe('slide-body');
 
     expect(resolveSmartBodyIntent({
-      y: 9,
+      y: 12,
       height: 40,
       labelRowHeight: 14,
       isMediaItem: true,
       currentIntent: 'slip-body',
     })).toBe('slip-body');
+  });
+
+  it('switches from slip to slide soon after re-entering the title row', () => {
+    expect(resolveSmartBodyIntent({
+      y: 11,
+      height: 40,
+      labelRowHeight: 14,
+      isMediaItem: true,
+      currentIntent: 'slip-body',
+    })).toBe('slide-body');
   });
 });

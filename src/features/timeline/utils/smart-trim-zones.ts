@@ -110,7 +110,8 @@ interface ResolveSmartBodyIntentParams {
   labelRowHeight: number;
   isMediaItem: boolean;
   currentIntent?: SmartBodyIntent;
-  switchBufferPx?: number;
+  slideToSlipBufferPx?: number;
+  slipToSlideBufferPx?: number;
 }
 
 export function resolveSmartBodyIntent({
@@ -119,7 +120,8 @@ export function resolveSmartBodyIntent({
   labelRowHeight,
   isMediaItem,
   currentIntent = null,
-  switchBufferPx = 8,
+  slideToSlipBufferPx = 8,
+  slipToSlideBufferPx = 2,
 }: ResolveSmartBodyIntentParams): SmartBodyIntent {
   if (!isMediaItem || height <= 0) return null;
   if (y < 0 || y > height) return null;
@@ -128,11 +130,11 @@ export function resolveSmartBodyIntent({
   if (safeLabelRowHeight <= 0 || safeLabelRowHeight >= height) return null;
 
   if (currentIntent === 'slide-body') {
-    return y <= safeLabelRowHeight + switchBufferPx ? 'slide-body' : 'slip-body';
+    return y <= safeLabelRowHeight + slideToSlipBufferPx ? 'slide-body' : 'slip-body';
   }
 
   if (currentIntent === 'slip-body') {
-    return y >= safeLabelRowHeight - switchBufferPx ? 'slip-body' : 'slide-body';
+    return y >= safeLabelRowHeight - slipToSlideBufferPx ? 'slip-body' : 'slide-body';
   }
 
   return y <= safeLabelRowHeight ? 'slide-body' : 'slip-body';
