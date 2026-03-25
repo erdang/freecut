@@ -49,6 +49,11 @@ import { JoinIndicators } from './join-indicators';
 import { SegmentStatusOverlays } from './segment-status-overlays';
 import { ToolOperationOverlay } from './tool-operation-overlay';
 import {
+  getTimelineItemDragParticipation,
+  getTimelineItemGestureMode,
+  shouldDimTimelineItemForDrag,
+} from './drag-visual-mode';
+import {
   getSlideOperationBoundsVisual,
   getSlipOperationBoundsVisual,
   getStretchOperationBoundsVisual,
@@ -338,6 +343,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     return null;
   }, [isRollingEdit, isRippleEdit, isSlipSlideActive, isStretching, isTrimming, slipSlideMode, trimHandle]);
 
+  const gestureMode = useMemo(() => getTimelineItemGestureMode({
+    isTrimming,
+    isRollingEdit,
+    isRippleEdit,
+    isStretching,
+    isSlipSlideActive,
+    slipSlideMode,
+  }), [isRollingEdit, isRippleEdit, isSlipSlideActive, isStretching, isTrimming, slipSlideMode]);
+
   useEffect(() => {
     document.body.classList.remove(...ACTIVE_CURSOR_CLASSES);
     if (activeGlobalCursorClass) {
@@ -471,14 +485,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         }, 100);
       }
 
-      // Slip/slide use dragState as a gesture lifecycle signal, but should not
-      // enter visual "drag ghost + dimmed opacity" mode.
-      const isSlipOrSlideEdit = state.activeTool === 'slip' || state.activeTool === 'slide' || isSlipSlideActive;
-      const isParticipating = !isSlipOrSlideEdit
-        && state.dragState?.isDragging
-        && state.dragState.draggedItemIds.includes(item.id);
-      const isAlt = isParticipating && state.dragState?.isAltDrag;
-      const newParticipation = isParticipating ? (isAlt ? 2 : 1) : 0;
+      // Trim/stretch/slip/slide use dragState as a gesture lifecycle signal for
+      // snap indicators and overlays, but they should never enter move-drag
+      // visual mode (dimmed opacity / drag ghost transform).
+      const newParticipation = getTimelineItemDragParticipation({
+        itemId: item.id,
+        dragState: state.dragState,
+        gestureMode,
+      });
       const oldParticipation = dragParticipationRef.current;
 
       dragParticipationRef.current = newParticipation;
@@ -499,7 +513,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       cleanupDragStyles();
       if (dragWasActiveTimeout) clearTimeout(dragWasActiveTimeout);
     };
-  }, [item.id, isDragging]); // Only re-create when item identity or drag anchor status changes
+  }, [gestureMode, item.id, isDragging]);
 
   // Computed values from refs for rendering
   const isPartOfMultiDrag = dragParticipationRef.current > 0;
@@ -521,6 +535,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Determine if this item is being dragged (anchor or follower)
   const isBeingDragged = isDragging || isPartOfDrag;
+  const shouldDimForDrag = shouldDimTimelineItemForDrag({
+    isBeingDragged,
+    isAltDrag,
+    gestureMode,
+  });
 
   const linkedEditPreviewUpdate = useLinkedEditPreviewStore(
     useCallback((s) => s.updatesById[item.id] ?? null, [item.id])
@@ -2393,7 +2412,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             transform: isBeingDragged && !isAltDrag
               ? `translate(${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).x}px, ${(isDragging ? dragOffset : (dragPreviewOffsetByItemRef.current[item.id] ?? dragOffsetRef.current)).y}px)`
               : undefined,
-            opacity: isBeingDragged && !isAltDrag ? DRAG_OPACITY : trackHidden ? 0.3 : trackLocked ? 0.6 : 1,
+            opacity: shouldDimForDrag ? DRAG_OPACITY : trackHidden ? 0.3 : trackLocked ? 0.6 : 1,
             pointerEvents: isBeingDragged ? 'none' : 'auto',
             zIndex: isBeingDragged ? 50 : undefined,
             transition: isBeingDragged ? 'none' : undefined,
