@@ -7,9 +7,7 @@ interface StretchHandlesProps {
   isStretching: boolean;
   stretchHandle: 'start' | 'end' | null;
   stretchConstrained: boolean;
-  activeTool: string;
-  hoveredEdge: 'start' | 'end' | null;
-  isMediaItem: boolean;
+  isRateStretchItem: boolean;
   onStretchStart: (e: React.MouseEvent, handle: 'start' | 'end') => void;
 }
 
@@ -23,22 +21,20 @@ export const StretchHandles = memo(function StretchHandles({
   isStretching,
   stretchHandle,
   stretchConstrained,
-  activeTool,
-  hoveredEdge,
-  isMediaItem,
+  isRateStretchItem,
   onStretchStart,
 }: StretchHandlesProps) {
   const showLeftHandle = !trackLocked &&
     (!isAnyDragActive || isStretching) &&
-    activeTool === 'rate-stretch' &&
-    isMediaItem &&
-    (hoveredEdge === 'start' || (isStretching && stretchHandle === 'start'));
+    isRateStretchItem &&
+    isStretching &&
+    stretchHandle === 'start';
 
   const showRightHandle = !trackLocked &&
     (!isAnyDragActive || isStretching) &&
-    activeTool === 'rate-stretch' &&
-    isMediaItem &&
-    (hoveredEdge === 'end' || (isStretching && stretchHandle === 'end'));
+    isRateStretchItem &&
+    isStretching &&
+    stretchHandle === 'end';
 
   return (
     <>

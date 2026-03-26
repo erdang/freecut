@@ -24,6 +24,16 @@ type StretchHandle = 'start' | 'end';
 // For GIFs/images that loop, use generous duration limits (1 frame to ~10 minutes at 30fps)
 const LOOPING_MEDIA_MAX_DURATION = 30 * 60 * 10; // 10 minutes at 30fps
 
+export function isRateStretchableItem(item: Pick<TimelineItem, 'type' | 'label'>): boolean {
+  const isGifImage = item.type === 'image' && item.label?.toLowerCase().endsWith('.gif');
+  return item.type === 'video' || item.type === 'audio' || item.type === 'composition' || isGifImage;
+}
+
+export function getLoopingMediaStretchPreviewSpeed(initialSpeed: number, deltaFrames: number): number {
+  const speedDelta = -(deltaFrames / 30) * 0.1;
+  return Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, initialSpeed + speedDelta)) * 100) / 100;
+}
+
 interface StretchState {
   isStretching: boolean;
   handle: StretchHandle | null;
@@ -232,12 +242,12 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
 
     const { handle, initialFrom, initialDuration, sourceDuration, sourceFps, initialSpeed, isLoopingMedia } = stretchStateRef.current;
 
-    // For looping media (GIFs): don't change duration, only track delta for speed calculation
-    // Dragging right = faster (positive delta), dragging left = slower (negative delta)
+    // For looping media (GIFs): don't change duration, only track delta for speed calculation.
+    // Directional rate stretch keeps body drags consistent: left = faster, right = slower.
     if (isLoopingMedia) {
-      const speedDelta = deltaFrames / 30 * 0.1;
+      const speedDelta = -(deltaFrames / 30) * 0.1;
       const unconstrainedSpeed = initialSpeed + speedDelta;
-      const previewSpeed = Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, unconstrainedSpeed)) * 100) / 100;
+      const previewSpeed = getLoopingMediaStretchPreviewSpeed(initialSpeed, deltaFrames);
       const isConstrained = Math.abs(previewSpeed - unconstrainedSpeed) > 0.0001;
       // Update local state for speed calculation (duration stays same)
       if (deltaFrames !== stretchStateRef.current.currentDelta || isConstrained !== stretchStateRef.current.isConstrained) {
@@ -360,18 +370,15 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
       let newFrom: number;
       let newSpeed: number;
 
-      // For looping media (GIFs): only change speed, keep duration the same
-      // Drag right = faster (positive delta increases speed)
-      // Drag left = slower (negative delta decreases speed)
+      // For looping media (GIFs): only change speed, keep duration the same.
+      // Directional rate stretch keeps body drags consistent: left = faster, right = slower.
       if (isLoopingMedia) {
         newDuration = initialDuration; // Duration stays the same
         newFrom = initialFrom; // Position stays the same
 
-        // Calculate speed change based on drag distance
-        // Use a sensitivity factor: ~30 pixels per 0.1x speed change
-        const speedDelta = currentDelta / 30 * 0.1;
-        // Round to 2 decimal places for consistent precision
-        newSpeed = Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, initialSpeed + speedDelta)) * 100) / 100;
+        // Calculate speed change based on drag distance.
+        // Use a sensitivity factor: ~30 pixels per 0.1x speed change.
+        newSpeed = getLoopingMediaStretchPreviewSpeed(initialSpeed, currentDelta);
 
         // Only update if speed actually changed
         if (Math.abs(newSpeed - initialSpeed) > 0.01) {
@@ -454,8 +461,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
       const currentItem = getItemFromStore();
 
       // Only works on source-bounded items and GIFs.
-      const isGifImage = currentItem.type === 'image' && currentItem.label?.toLowerCase().endsWith('.gif');
-      if (currentItem.type !== 'video' && currentItem.type !== 'audio' && currentItem.type !== 'composition' && !isGifImage) return;
+      if (!isRateStretchableItem(currentItem)) return;
 
       e.stopPropagation();
       e.preventDefault();
@@ -517,9 +523,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
 
     // For looping media (GIFs): duration and position stay the same, only speed changes
     if (isLoopingMedia) {
-      const speedDelta = currentDelta / 30 * 0.1;
-      // Round to 2 decimal places for consistent precision
-      const previewSpeed = Math.round(Math.max(MIN_SPEED, Math.min(MAX_SPEED, initialSpeed + speedDelta)) * 100) / 100;
+      const previewSpeed = getLoopingMediaStretchPreviewSpeed(initialSpeed, currentDelta);
 
       return {
         from: initialFrom,

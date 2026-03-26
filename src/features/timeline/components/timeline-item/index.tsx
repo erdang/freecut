@@ -29,7 +29,7 @@ import { getMediaDragData } from '@/features/timeline/deps/media-library-resolve
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
-import { useRateStretch } from '../../hooks/use-rate-stretch';
+import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stretch';
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
@@ -132,7 +132,7 @@ const ACTIVE_CURSOR_CLASSES = [
   'timeline-cursor-gauge',
 ] as const;
 
-// Width in pixels for edge hover detection (trim/rate-stretch handles)
+// Width in pixels for trim edge hover detection
 const EDGE_HOVER_ZONE = SMART_TRIM_EDGE_ZONE_PX;
 const AUDIO_FADE_EPSILON = 0.0001;
 const AUDIO_VOLUME_EPSILON = 0.05;
@@ -579,9 +579,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Get visual feedback for rate stretch
   const stretchFeedback = isStretching ? getVisualFeedback() : null;
 
-  // Check if this is a media item (video/audio/gif) that supports rate stretch
-  const isGifImage = previewBaseItem.type === 'image' && previewBaseItem.label?.toLowerCase().endsWith('.gif');
-  const isMediaItem = previewBaseItem.type === 'video' || previewBaseItem.type === 'audio' || isGifImage;
+  // Check if this clip supports rate stretch (video/audio/composition/GIF)
+  const isRateStretchItem = isRateStretchableItem(previewBaseItem);
 
   // Current speed for badge display
   const currentSpeed = previewBaseItem.speed || 1;
@@ -1281,6 +1280,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (smartTrimIntentRef.current !== null) syncSmartTrimIntent(null);
     if (smartBodyIntentRef.current !== null) syncSmartBodyIntent(null);
 
+    if (activeToolRef.current === 'rate-stretch') {
+      if (hoveredEdgeRef.current !== null) syncHoveredEdge(null);
+      return;
+    }
+
     if (x <= EDGE_HOVER_ZONE) {
       if (hoveredEdgeRef.current !== 'start') syncHoveredEdge('start');
     } else if (x >= itemWidth - EDGE_HOVER_ZONE) {
@@ -1313,7 +1317,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-slip-smart'
     : activeTool === 'trim-edit' && smartBodyIntent !== null
     ? 'cursor-ew-resize'
-    : hoveredEdge !== null && (activeTool === 'trim-edit' || activeTool === 'rate-stretch')
+    : hoveredEdge !== null && activeTool === 'trim-edit'
     ? 'cursor-ew-resize'
     : activeTool === 'rate-stretch'
     ? 'cursor-gauge'
@@ -2252,17 +2256,19 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       }
       return;
     }
-    // Show blocked tooltip when trying to drag in rate-stretch mode
     if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
-      const isOnEdge = x <= EDGE_HOVER_ZONE || x >= rect.width - EDGE_HOVER_ZONE;
-      if (!isOnEdge) {
-        setPointerHint({ x: e.clientX, y: e.clientY, message: "Can't move clips in rate stretch mode", tone: 'warning' });
+      if (!isRateStretchableItem(item)) {
+        setPointerHint({ x: e.clientX, y: e.clientY, message: "This clip can't be rate stretched", tone: 'warning' });
         return;
       }
+
+      // Directional rate stretch anchors the clip start so left = faster and right = slower.
+      handleStretchStart(e, 'end');
+      return;
     }
     if (trackLocked || isTrimming || isStretching || isSlipSlideActive || activeTool === 'razor' || activeTool === 'rate-stretch' || activeTool === 'slip' || activeTool === 'slide' || hoveredEdge !== null) return;
     handleDragStart(e);
-  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, item]);
+  }, [activeTool, trackLocked, isStretching, isTrimming, isSlipSlideActive, hoveredEdge, handleDragStart, handleSlipSlideStart, handleStretchStart, item]);
 
   // Track which edge is closer when right-clicking for context menu
   const handleMouseLeave = useCallback(() => {
@@ -2746,9 +2752,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             isStretching={isStretching}
             stretchHandle={stretchHandle}
             stretchConstrained={stretchConstrained}
-            activeTool={activeTool}
-            hoveredEdge={hoveredEdge}
-            isMediaItem={isMediaItem}
+            isRateStretchItem={isRateStretchItem}
             onStretchStart={handleStretchStart}
           />
 
