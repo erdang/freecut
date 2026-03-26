@@ -103,7 +103,7 @@ async function getExtractor(src: string, blob?: Blob): Promise<ExtractorState | 
         return null;
       }
 
-      const sink = await videoTrack.createVideoSampleSink();
+      const sink = new mediabunny.VideoSampleSink(videoTrack);
       const canvas = new OffscreenCanvas(1, 1);
       const ctx = canvas.getContext('2d');
       if (!ctx) {
