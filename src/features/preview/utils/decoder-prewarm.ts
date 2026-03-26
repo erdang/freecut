@@ -13,6 +13,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { getKeyframeTimestamps } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('DecoderPrewarm');
 const MAX_CACHED_BITMAPS_PER_SOURCE = 6;
@@ -225,6 +226,9 @@ function removeInflightPreseek(src: string, entry: InflightPreseek): void {
 /** Cache of fetched blobs to avoid re-fetching for the same source. */
 const blobByUrl = new Map<string, Blob>();
 
+/** Track sources whose keyframe index has been sent to at least one worker */
+const keyframesSentForSrc = new Set<string>();
+
 export function backgroundPreseek(src: string, timestamp: number): Promise<ImageBitmap | null> {
   const pw = acquireWorker();
   if (!pw) return Promise.resolve(null);
@@ -278,20 +282,29 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
     // Blobs are transferred via structured clone — fast and avoids re-fetch.
     decoderPrewarmMetrics.workerPosts += 1;
     const w = pw.worker;
+
+    // Include keyframe index on first preseek per source so worker can
+    // do adaptive backtracking instead of fixed 1-second backtrack
+    let keyframeTimestamps: number[] | undefined;
+    if (!keyframesSentForSrc.has(src)) {
+      keyframeTimestamps = getKeyframeTimestamps(src);
+      if (keyframeTimestamps) keyframesSentForSrc.add(src);
+    }
+
     const cachedBlob = blobByUrl.get(src);
     if (cachedBlob) {
-      w.postMessage({ type: 'preseek', id, src, timestamp, blob: cachedBlob });
+      w.postMessage({ type: 'preseek', id, src, timestamp, blob: cachedBlob, keyframeTimestamps });
     } else if (src.startsWith('blob:')) {
       // Fetch the blob URL to get the actual Blob, then send it
       void fetch(src).then((r) => r.blob()).then((blob) => {
         blobByUrl.set(src, blob);
-        w.postMessage({ type: 'preseek', id, src, timestamp, blob });
+        w.postMessage({ type: 'preseek', id, src, timestamp, blob, keyframeTimestamps });
       }).catch(() => {
         // Fallback to UrlSource
-        w.postMessage({ type: 'preseek', id, src, timestamp });
+        w.postMessage({ type: 'preseek', id, src, timestamp, keyframeTimestamps });
       });
     } else {
-      w.postMessage({ type: 'preseek', id, src, timestamp });
+      w.postMessage({ type: 'preseek', id, src, timestamp, keyframeTimestamps });
     }
   });
   const inflightEntry: InflightPreseek = { timestamp, promise };
@@ -376,12 +389,14 @@ export function clearPredecodedCache(src?: string): void {
     }
     bitmapCache.delete(src);
     blobByUrl.delete(src);
+    keyframesSentForSrc.delete(src);
   } else {
     for (const entries of bitmapCache.values()) {
       for (const entry of entries) entry.bitmap.close();
     }
     bitmapCache.clear();
     blobByUrl.clear();
+    keyframesSentForSrc.clear();
   }
   decoderPrewarmMetrics.cacheSources = bitmapCache.size;
   decoderPrewarmMetrics.cacheBitmaps = [...bitmapCache.values()].reduce((sum, sourceEntries) => sum + sourceEntries.length, 0);

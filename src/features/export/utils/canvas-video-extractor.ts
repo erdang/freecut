@@ -9,6 +9,7 @@
  */
 
 import { createLogger } from '@/shared/logging/logger';
+import { getAdaptiveStreamStart } from '@/shared/utils/keyframe-index-registry';
 
 const log = createLogger('VideoFrameExtractor');
 
@@ -285,13 +286,16 @@ export class VideoFrameExtractor {
     this.closeStreamState();
     if (!this.sink) return;
 
-    const streamStart = Math.max(0, startTimestamp - VideoFrameExtractor.STREAM_BACKTRACK_SECONDS);
+    // Use keyframe index for precise backtrack; fall back to fixed 1.0s
+    const adaptiveStart = getAdaptiveStreamStart(this.src, startTimestamp);
+    const streamStart = adaptiveStart ?? Math.max(0, startTimestamp - VideoFrameExtractor.STREAM_BACKTRACK_SECONDS);
     if (reason === 'recover') {
       log.debug('Restarting mediabunny sample stream', {
         itemId: this.itemId,
         reason,
         startTimestamp,
         streamStart,
+        adaptive: adaptiveStart !== null,
       });
     }
 

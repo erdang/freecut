@@ -44,11 +44,23 @@ interface MediabunnyCanvasSink {
   dispose?(): void;
 }
 
+interface MediabunnyEncodedPacket {
+  type: 'key' | 'delta';
+  timestamp: number;
+  close?(): void;
+}
+
+interface MediabunnyEncodedPacketSink {
+  packets(): AsyncIterable<MediabunnyEncodedPacket>;
+  dispose?(): void;
+}
+
 interface MediabunnyModule {
   Input: new (config: { formats: unknown; source: unknown }) => MediabunnyInput;
   ALL_FORMATS: unknown;
   BlobSource: new (blob: Blob) => unknown;
   CanvasSink: new (track: MediabunnyVideoTrack, options: { width: number; height: number; fit: string }) => MediabunnyCanvasSink;
+  EncodedPacketSink: new (track: MediabunnyVideoTrack) => MediabunnyEncodedPacketSink;
 }
 
 // Message types
@@ -82,6 +94,8 @@ export interface VideoMetadata {
   bitrate: number;
   audioCodec?: string;
   audioCodecSupported: boolean;
+  /** Sorted keyframe timestamps in seconds (null if all-intra or extraction failed) */
+  keyframeTimestamps?: number[];
 }
 
 export interface AudioMetadata {
@@ -130,6 +144,43 @@ async function getMediabunny(): Promise<MediabunnyModule> {
 }
 
 /**
+ * Extract keyframe timestamps using mediabunny's EncodedPacketSink.
+ * Iterates compressed packets (no decode) to find sync samples.
+ * Returns null if extraction fails or all frames are keyframes.
+ */
+async function extractKeyframeTimestamps(
+  mb: MediabunnyModule,
+  videoTrack: MediabunnyVideoTrack,
+): Promise<number[] | undefined> {
+  let sink: MediabunnyEncodedPacketSink | null = null;
+  try {
+    sink = new mb.EncodedPacketSink(videoTrack);
+    const timestamps: number[] = [];
+    let totalPackets = 0;
+
+    for await (const packet of sink.packets()) {
+      totalPackets++;
+      if (packet.type === 'key') {
+        timestamps.push(packet.timestamp);
+      }
+      packet.close?.();
+    }
+
+    // If every frame is a keyframe (all-intra), no optimization needed
+    if (timestamps.length === totalPackets || timestamps.length === 0) {
+      return undefined;
+    }
+
+    return timestamps;
+  } catch (error) {
+    logger.warn('Keyframe extraction failed (non-fatal):', error);
+    return undefined;
+  } finally {
+    sink?.dispose?.();
+  }
+}
+
+/**
  * Extract video metadata using mediabunny
  */
 async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
@@ -152,8 +203,11 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       throw new Error('No video track found in file');
     }
 
-    // Get FPS from packet stats
-    const packetStats = await videoTrack.computePacketStats(50);
+    // Get FPS and keyframe index in parallel with packet stats
+    const [packetStats, keyframeTimestamps] = await Promise.all([
+      videoTrack.computePacketStats(50),
+      extractKeyframeTimestamps(mb, videoTrack),
+    ]);
 
     const audioCodec = audioTrack?.codec;
     const audioCodecSupported = isAudioCodecSupported(audioCodec);
@@ -168,6 +222,7 @@ async function extractVideoMetadata(file: File): Promise<VideoMetadata> {
       bitrate: 0,
       audioCodec,
       audioCodecSupported,
+      keyframeTimestamps,
     };
   } finally {
     input.dispose();
