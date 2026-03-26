@@ -24,7 +24,10 @@ const bitmapCache = new Map<string, Array<{ bitmap: ImageBitmap; timestamp: numb
 
 /** In-flight preseek promises keyed by source URL — lets the render engine await
  *  a pending worker decode instead of falling through to a blocking main-thread decode. */
-const inflightPreseekBySrc = new Map<string, Promise<ImageBitmap | null>>();
+const inflightPreseekBySrc = new Map<string, {
+  timestamp: number;
+  promise: Promise<ImageBitmap | null>;
+}>();
 
 // Dev: expose cache for debugging
 if (import.meta.env.DEV) {
@@ -119,9 +122,9 @@ export function backgroundPreseek(src: string, timestamp: number): Promise<Image
       w.postMessage({ type: 'preseek', id, src, timestamp });
     }
   });
-  inflightPreseekBySrc.set(src, promise);
+  inflightPreseekBySrc.set(src, { timestamp, promise });
   void promise.finally(() => {
-    if (inflightPreseekBySrc.get(src) === promise) {
+    if (inflightPreseekBySrc.get(src)?.promise === promise) {
       inflightPreseekBySrc.delete(src);
     }
   });
@@ -154,7 +157,43 @@ export function getCachedPredecodedBitmap(src: string, timestamp: number, tolera
  * main-thread mediabunny decode — the worker is already doing the work.
  */
 export function getInflightPreseek(src: string): Promise<ImageBitmap | null> | null {
-  return inflightPreseekBySrc.get(src) ?? null;
+  return inflightPreseekBySrc.get(src)?.promise ?? null;
+}
+
+export async function waitForInflightPredecodedBitmap(
+  src: string,
+  timestamp: number,
+  toleranceSeconds = 0.5,
+  maxWaitMs = 12,
+): Promise<ImageBitmap | null> {
+  const inflight = inflightPreseekBySrc.get(src);
+  if (!inflight) return null;
+  if (Math.abs(inflight.timestamp - timestamp) > toleranceSeconds) return null;
+
+  let resolved: ImageBitmap | null = null;
+  if (maxWaitMs <= 0) {
+    resolved = await inflight.promise;
+  } else {
+    resolved = await new Promise<ImageBitmap | null>((resolve) => {
+      const timeoutId = setTimeout(() => {
+        resolve(null);
+      }, maxWaitMs);
+
+      void inflight.promise.then((bitmap) => {
+        clearTimeout(timeoutId);
+        resolve(bitmap);
+      }).catch(() => {
+        clearTimeout(timeoutId);
+        resolve(null);
+      });
+    });
+  }
+
+  if (!resolved) {
+    return getCachedPredecodedBitmap(src, timestamp, toleranceSeconds);
+  }
+
+  return getCachedPredecodedBitmap(src, timestamp, toleranceSeconds) ?? resolved;
 }
 
 /**

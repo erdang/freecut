@@ -275,6 +275,7 @@ export async function createCompositionRenderer(
   const videoExtractors = new Map<string, VideoFrameSource>();
   const videoSourceByItemId = new Map<string, string>();
   const videoItemIdsBySource = new Map<string, Set<string>>();
+  const videoItemsById = new Map<string, VideoItem>();
   // Keep video elements as fallback if mediabunny fails
   const videoElements = new Map<string, HTMLVideoElement>();
   const fallbackVideoPool = hasDom && !previewStrictDecode ? new VideoSourcePool() : null;
@@ -332,6 +333,7 @@ export async function createCompositionRenderer(
     for (const item of track.items ?? []) {
       if (item.type === 'video') {
         const videoItem = item as VideoItem;
+        videoItemsById.set(item.id, videoItem);
         if (videoItem.src) {
           getLog().debug('Registering shared video extractor', {
             itemId: item.id,
@@ -591,8 +593,12 @@ export async function createCompositionRenderer(
   // Wire up pre-decoded bitmap cache from the decoder prewarm worker.
   // Import eagerly so it's available before the first render.
   if (renderMode === 'preview') {
-    void import('@/features/export/deps/preview-contract').then(({ getCachedPredecodedBitmap }) => {
+    void import('@/features/export/deps/preview-contract').then(({
+      getCachedPredecodedBitmap,
+      waitForInflightPredecodedBitmap,
+    }) => {
       itemRenderContext.getCachedPredecodedBitmap = getCachedPredecodedBitmap;
+      itemRenderContext.waitForInflightPredecodedBitmap = waitForInflightPredecodedBitmap;
     }).catch(() => {});
   }
 
@@ -1636,7 +1642,7 @@ export async function createCompositionRenderer(
           if (isDisposed) return;
           const extractor = videoExtractors.get(itemId);
           if (!extractor || !useMediabunny.has(itemId)) return;
-          const item = sortedTracks.flatMap((t) => t.items ?? []).find((i) => i.id === itemId);
+          const item = videoItemsById.get(itemId);
           if (!item || item.type !== 'video') return;
           const localFrame = targetFrame - item.from;
           if (localFrame < 0 || localFrame >= item.durationInFrames) return;
@@ -1695,6 +1701,7 @@ export async function createCompositionRenderer(
       videoExtractors.clear();
       videoSourceByItemId.clear();
       videoItemIdsBySource.clear();
+      videoItemsById.clear();
       useMediabunny.clear();
       mediabunnyFailureCountByItem.clear();
       mediabunnyInitFailureCountByItem.clear();
