@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AUDIO_FADE_CURVE_X_MAX, AUDIO_FADE_CURVE_X_MIN, evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
+import { AUDIO_FADE_CURVE_X_MIN, evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve } from '@/shared/utils/audio-fade-curve';
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset } from './audio-fade-curve';
 
 describe('timeline audio-fade-curve', () => {
