@@ -30,6 +30,7 @@ interface SectionDividerPositionParams {
   viewportHeight: number;
   tracks: TimelineTrack[];
   requestedDividerPosition: number;
+  trackTitleBarHeight: number;
 }
 
 export function clampTrackHeight(height: number): number {
@@ -106,20 +107,58 @@ function getTrackSectionHeights(tracks: TimelineTrack[]) {
   };
 }
 
+function getSectionDividerBounds(
+  viewportHeight: number,
+  tracks: TimelineTrack[],
+  trackTitleBarHeight: number
+) {
+  const { hasTrackSections } = getTrackSectionHeights(tracks);
+
+  if (!hasTrackSections) {
+    return {
+      hasTrackSections,
+      availablePaneHeight: 0,
+      minimumSectionDividerPosition: 0,
+      maximumSectionDividerPosition: 0,
+    };
+  }
+
+  const availablePaneHeight = Math.max(0, viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
+  const minimumSpacerHeight = Math.min(
+    getMinimumTrackSectionSpacerHeight(trackTitleBarHeight),
+    Math.floor(availablePaneHeight / 2)
+  );
+
+  return {
+    hasTrackSections,
+    availablePaneHeight,
+    minimumSectionDividerPosition: minimumSpacerHeight,
+    maximumSectionDividerPosition: Math.max(
+      minimumSpacerHeight,
+      availablePaneHeight - minimumSpacerHeight
+    ),
+  };
+}
+
 export function clampSectionDividerPosition({
   viewportHeight,
   tracks,
   requestedDividerPosition,
+  trackTitleBarHeight,
 }: SectionDividerPositionParams): number {
-  const { hasTrackSections } = getTrackSectionHeights(tracks);
+  const {
+    hasTrackSections,
+    minimumSectionDividerPosition,
+    maximumSectionDividerPosition,
+  } = getSectionDividerBounds(viewportHeight, tracks, trackTitleBarHeight);
 
   if (!hasTrackSections) {
     return 0;
   }
 
   return Math.max(
-    0,
-    Math.min(Math.max(0, viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT), requestedDividerPosition),
+    minimumSectionDividerPosition,
+    Math.min(maximumSectionDividerPosition, requestedDividerPosition),
   );
 }
 
@@ -129,14 +168,12 @@ export function getTrackSectionLayout({
   sectionDividerPosition,
   trackTitleBarHeight,
 }: TrackSectionLayoutParams): TrackSectionLayout {
-  void trackTitleBarHeight;
   const { videoSectionHeight, audioSectionHeight, hasTrackSections } = getTrackSectionHeights(tracks);
-  const availablePaneHeight = Math.max(
-    0,
-    viewportHeight - (hasTrackSections ? TRACK_SECTION_DIVIDER_HEIGHT : 0),
-  );
-  const minimumSectionDividerPosition = 0;
-  const maximumSectionDividerPosition = availablePaneHeight;
+  const {
+    availablePaneHeight,
+    minimumSectionDividerPosition,
+    maximumSectionDividerPosition,
+  } = getSectionDividerBounds(viewportHeight, tracks, trackTitleBarHeight);
   const defaultSectionDividerPosition = hasTrackSections
     ? videoSectionHeight + ((availablePaneHeight - videoSectionHeight - audioSectionHeight) / 2)
     : videoSectionHeight > 0
@@ -147,6 +184,7 @@ export function getTrackSectionLayout({
       viewportHeight,
       tracks,
       requestedDividerPosition: sectionDividerPosition ?? defaultSectionDividerPosition,
+      trackTitleBarHeight,
     })
     : 0;
   const videoPaneHeight = hasTrackSections

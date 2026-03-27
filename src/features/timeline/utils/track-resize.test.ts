@@ -78,7 +78,7 @@ describe('track-resize', () => {
     expect(getMinimumTrackSectionSpacerHeight(26)).toBe(39);
   });
 
-  it('lets manual divider drags fully collapse either spacer', () => {
+  it('keeps a buffer when manual divider drags reach either edge', () => {
     const viewportHeight = 420;
     const trackTitleBarHeight = 24;
     const tracks = [
@@ -99,10 +99,10 @@ describe('track-resize', () => {
       trackTitleBarHeight,
     });
 
-    expect(topCollapsedLayout.videoPaneHeight).toBe(0);
-    expect(topCollapsedLayout.audioPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
-    expect(bottomCollapsedLayout.videoPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
-    expect(bottomCollapsedLayout.audioPaneHeight).toBe(0);
+    expect(topCollapsedLayout.videoPaneHeight).toBe(36);
+    expect(topCollapsedLayout.audioPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT - 36);
+    expect(bottomCollapsedLayout.videoPaneHeight).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT - 36);
+    expect(bottomCollapsedLayout.audioPaneHeight).toBe(36);
   });
 
   it('defaults the split around the section content heights', () => {
@@ -155,11 +155,13 @@ describe('track-resize', () => {
       viewportHeight,
       tracks,
       requestedDividerPosition: -20,
-    })).toBe(0);
+      trackTitleBarHeight: 24,
+    })).toBe(36);
     expect(clampSectionDividerPosition({
       viewportHeight,
       tracks,
       requestedDividerPosition: viewportHeight,
-    })).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT);
+      trackTitleBarHeight: 24,
+    })).toBe(viewportHeight - TRACK_SECTION_DIVIDER_HEIGHT - 36);
   });
 });

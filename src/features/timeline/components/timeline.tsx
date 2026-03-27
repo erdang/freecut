@@ -233,6 +233,7 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
         viewportHeight: trackRowsViewportHeight,
         tracks: visibleTracks,
         requestedDividerPosition: dragState.startDividerPosition + deltaY,
+        trackTitleBarHeight: editorLayout.timelineClipLabelRowHeight,
       }));
     };
 
@@ -246,7 +247,13 @@ export const Timeline = memo(function Timeline({ duration, onGraphPanelOpenChang
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-  }, [clampedSectionDividerPosition, hasTrackSections, trackRowsViewportHeight, visibleTracks]);
+  }, [
+    clampedSectionDividerPosition,
+    editorLayout.timelineClipLabelRowHeight,
+    hasTrackSections,
+    trackRowsViewportHeight,
+    visibleTracks,
+  ]);
 
   // Set first track as active on mount
   // Use primitive dependencies to avoid re-running on unrelated track changes
