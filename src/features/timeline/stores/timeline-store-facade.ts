@@ -124,6 +124,14 @@ function collectVideoMediaIds(project: Project): string[] {
   return [...mediaIds];
 }
 
+function cloneTransitionForProject(transition: Transition): Transition {
+  return {
+    ...transition,
+    ...(transition.bezierPoints && { bezierPoints: { ...transition.bezierPoints } }),
+    ...(transition.properties && { properties: { ...transition.properties } }),
+  };
+}
+
 async function buildVideoHasAudioMap(mediaIds: string[]): Promise<Record<string, boolean | undefined>> {
   const mediaById = useMediaLibraryStore.getState().mediaById;
   const entries = await Promise.all(mediaIds.map(async (mediaId) => {
@@ -562,17 +570,7 @@ async function saveTimeline(projectId: string): Promise<void> {
         })),
       }),
       ...(transitionsState.transitions.length > 0 && {
-        transitions: transitionsState.transitions.map((t) => ({
-          id: t.id,
-          type: t.type,
-          leftClipId: t.leftClipId,
-          rightClipId: t.rightClipId,
-          trackId: t.trackId,
-          durationInFrames: t.durationInFrames,
-          presentation: t.presentation,
-          ...(t.timing && { timing: t.timing }),
-          ...(t.direction && { direction: t.direction }),
-        })),
+        transitions: transitionsState.transitions.map(cloneTransitionForProject),
       }),
       ...(keyframesState.keyframes.length > 0 && {
         keyframes: keyframesState.keyframes.map((ik) => ({
@@ -599,7 +597,9 @@ async function saveTimeline(projectId: string): Promise<void> {
             name: c.name,
             items: c.items as ProjectTimeline['items'],
             tracks: c.tracks as ProjectTimeline['tracks'],
-            ...(c.transitions?.length && { transitions: c.transitions as ProjectTimeline['transitions'] }),
+            ...(c.transitions?.length && {
+              transitions: c.transitions.map(cloneTransitionForProject) as ProjectTimeline['transitions'],
+            }),
             ...(c.keyframes?.length && { keyframes: c.keyframes as ProjectTimeline['keyframes'] }),
             fps: c.fps,
             width: c.width,

@@ -93,6 +93,8 @@ import { useTimelineStore } from './timeline-store-facade';
 describe('TimelineStoreFacade', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    playbackMocks.currentFrame = 0;
+    zoomMocks.level = 1;
     // Reset all domain stores
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
@@ -365,6 +367,79 @@ describe('TimelineStoreFacade', () => {
       expect(typeof state.clearTimeline).toBe('function');
       expect(typeof state.markDirty).toBe('function');
       expect(typeof state.markClean).toBe('function');
+    });
+  });
+
+  describe('saveTimeline', () => {
+    it('persists full transition metadata', async () => {
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30, width: 1920, height: 1080 },
+      });
+
+      useItemsStore.getState().setTracks([
+        {
+          id: 'track-1',
+          name: 'Video',
+          height: 80,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: 0,
+          items: [],
+        },
+      ]);
+
+      useTransitionsStore.getState().setTransitions([
+        {
+          id: 'transition-1',
+          type: 'crossfade',
+          leftClipId: 'clip-1',
+          rightClipId: 'clip-2',
+          trackId: 'track-1',
+          durationInFrames: 24,
+          presentation: 'wipe',
+          timing: 'cubic-bezier',
+          direction: 'from-left',
+          alignment: 0.25,
+          bezierPoints: { x1: 0.1, y1: 0.2, x2: 0.9, y2: 0.8 },
+          presetId: 'preset-1',
+          properties: { softness: 0.7, customMode: 'smooth' },
+          createdAt: 1000,
+          lastModifiedAt: 2000,
+        },
+      ]);
+
+      await useTimelineStore.getState().saveTimeline('project-1');
+
+      expect(indexedDbMocks.updateProject).toHaveBeenCalledWith(
+        'project-1',
+        expect.objectContaining({
+          timeline: expect.objectContaining({
+            transitions: [
+              expect.objectContaining({
+                id: 'transition-1',
+                type: 'crossfade',
+                leftClipId: 'clip-1',
+                rightClipId: 'clip-2',
+                trackId: 'track-1',
+                durationInFrames: 24,
+                presentation: 'wipe',
+                timing: 'cubic-bezier',
+                direction: 'from-left',
+                alignment: 0.25,
+                bezierPoints: { x1: 0.1, y1: 0.2, x2: 0.9, y2: 0.8 },
+                presetId: 'preset-1',
+                properties: { softness: 0.7, customMode: 'smooth' },
+                createdAt: 1000,
+                lastModifiedAt: 2000,
+              }),
+            ],
+          }),
+          updatedAt: expect.any(Number),
+        })
+      );
     });
   });
 

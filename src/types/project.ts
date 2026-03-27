@@ -1,4 +1,5 @@
 import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
+import type { Transition } from './transition';
 
 export interface Project {
   id: string;
@@ -128,20 +129,7 @@ export interface ProjectTimeline {
     color: string;
   }>;
   // Transitions between clips
-  transitions?: Array<{
-    id: string;
-    type: 'crossfade';
-    leftClipId: string;
-    rightClipId: string;
-    trackId: string;
-    durationInFrames: number;
-    presentation?: string;
-    timing?: string;
-    direction?: string;
-    alignment?: number;
-    bezierPoints?: { x1: number; y1: number; x2: number; y2: number };
-    presetId?: string;
-  }>;
+  transitions?: Transition[];
   // Sub-compositions (pre-comps)
   compositions?: Array<{
     id: string;
