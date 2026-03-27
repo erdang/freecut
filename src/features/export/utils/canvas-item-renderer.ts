@@ -42,6 +42,13 @@ import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/time
 import type { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import type { VideoFrameSource } from './shared-video-extractor';
 import {
+  resolvePreviewDomVideoDrawDecision,
+  resolvePreviewMediabunnyInitAction,
+  shouldAllowPreviewVideoElementFallback,
+  shouldTryPreviewWorkerBitmap,
+  shouldUsePreviewStrictWaitingFallback,
+} from './frame-source-policy';
+import {
   applyPreviewPathVerticesToItem,
   applyPreviewPathVerticesToShape,
   hasCornerPin,
@@ -480,7 +487,13 @@ async function renderVideoItem(
   const domVideo = isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0
     ? rctx.domVideoElementProvider(item.id)
     : null;
-  const hasDomVideo = !!domVideo && domVideo.readyState >= 2 && domVideo.videoWidth > 0;
+  const domVideoDecision = resolvePreviewDomVideoDrawDecision({
+    domVideo,
+    sourceTime,
+    speed,
+    isRenderingTransition: !!rctx.isRenderingTransition,
+  });
+  const hasDomVideo = domVideoDecision.hasReadyDomVideo;
 
   // === TRY DOM VIDEO ELEMENT (zero-copy playback path) ===
   // During playback, the Player's <video> elements are already playing
@@ -491,13 +504,10 @@ async function renderVideoItem(
   // warmed, use DOM video as a one-shot fallback to avoid a 300-500ms keyframe
   // seek stall — mediabunny init runs async in the background so subsequent
   // frames switch to frame-accurate decode.
-  const isVariableSpeed = Math.abs(speed - 1) >= 0.01;
-
   // Always try DOM video for variable-speed clips during playback. Mediabunny's
   // keyframe seek (400ms+) is worse than DOM video's timing drift. Only skip DOM
   // video for 1x speed clips when mediabunny is available (frame-accurate, fast).
-  if (hasDomVideo && domVideo) {
-    const drift = Math.abs(domVideo.currentTime - sourceTime);
+  if (domVideo && domVideoDecision.shouldDraw) {
     // Variable-speed clips naturally drift from their DOM video element
     // because the browser plays at 1x while sourceTime advances at speed.
     // Use a wider threshold proportional to speed to avoid falling back
@@ -511,49 +521,48 @@ async function renderVideoItem(
     // is ramping up.  Accept very high drift (1s) to prefer a stale
     // zero-copy frame (~1ms) over a mediabunny decode (~170ms stall).
     // A 1-2 frame-old frame is invisible; a 170ms freeze is not.
-    const inTransition = rctx.isRenderingTransition || domVideo.dataset.transitionHold === '1';
-    const baseDriftThreshold = inTransition ? 1.0 : 0.2;
-    const driftThreshold = Math.abs(speed) > 1.01 ? Math.max(baseDriftThreshold, 0.5 * Math.abs(speed)) : baseDriftThreshold;
-    if (drift <= driftThreshold) {
-      const drawDimensions = calculateMediaDrawDimensions(
-        domVideo.videoWidth,
-        domVideo.videoHeight,
-        transform,
-        canvasSettings,
-      );
-      ctx.drawImage(
-        domVideo,
-        drawDimensions.x,
-        drawDimensions.y,
-        drawDimensions.width,
-        drawDimensions.height,
-      );
-      // For variable-speed clips using DOM fallback during playback,
-      // DON'T kick off mediabunny init — keep using DOM video for the
-      // entire playback session. Mediabunny init + keyframe seek takes
-      // 400-500ms on the main thread, causing visible frame drops.
-      // DOM video has slight timing drift at speed != 1, but no freezes.
-      return;
-    }
+    const drawDimensions = calculateMediaDrawDimensions(
+      domVideo.videoWidth,
+      domVideo.videoHeight,
+      transform,
+      canvasSettings,
+    );
+    ctx.drawImage(
+      domVideo,
+      drawDimensions.x,
+      drawDimensions.y,
+      drawDimensions.width,
+      drawDimensions.height,
+    );
+    // For variable-speed clips using DOM fallback during playback,
+    // DON'T kick off mediabunny init — keep using DOM video for the
+    // entire playback session. Mediabunny init + keyframe seek takes
+    // 400-500ms on the main thread, causing visible frame drops.
+    // DOM video has slight timing drift at speed != 1, but no freezes.
+    return;
   }
 
-  if (
-    isPreviewMode
-    && !useMediabunny.has(item.id)
-    && !mediabunnyDisabledItems.has(item.id)
-    && rctx.ensureVideoItemReady
-  ) {
+  const mediabunnyInitAction = resolvePreviewMediabunnyInitAction({
+    renderMode: rctx.renderMode,
+    hasMediabunny: useMediabunny.has(item.id),
+    isMediabunnyDisabled: mediabunnyDisabledItems.has(item.id),
+    hasEnsureVideoItemReady: !!rctx.ensureVideoItemReady,
+    speed,
+  });
+  if (mediabunnyInitAction !== 'none' && rctx.ensureVideoItemReady) {
     // For variable-speed clips during playback, don't block on mediabunny init.
     // The init triggers a keyframe seek that blocks the main thread for 400ms+.
     // Instead, skip this frame (DOM video already drew it or it's invisible).
-    if (isVariableSpeed) {
+    if (mediabunnyInitAction === 'warm-background-and-skip') {
       void rctx.ensureVideoItemReady(item.id);
       return;
     }
-    try {
-      await rctx.ensureVideoItemReady(item.id);
-    } catch {
-      // Best effort in preview path; fallback behavior handled below.
+    if (mediabunnyInitAction === 'await-ready') {
+      try {
+        await rctx.ensureVideoItemReady(item.id);
+      } catch {
+        // Best effort in preview path; fallback behavior handled below.
+      }
     }
   }
 
@@ -561,7 +570,11 @@ async function renderVideoItem(
   // During startup/resolution races, mediabunny may not be ready for this frame yet.
   // In that window, skip drawing this item for the frame instead of logging a
   // misleading "Video element not found" warning.
-  if (isPreviewMode && !useMediabunny.has(item.id) && !hasFallbackVideoElement) {
+  if (shouldUsePreviewStrictWaitingFallback({
+    renderMode: rctx.renderMode,
+    hasMediabunny: useMediabunny.has(item.id),
+    hasFallbackVideoElement,
+  })) {
     if (scrubbingCache && extractor) {
       const dims = extractor.getDimensions();
       const drawDimensions = calculateMediaDrawDimensions(
@@ -576,7 +589,7 @@ async function renderVideoItem(
       }
     }
 
-    if (!hasDomVideo) {
+    if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode, hasReadyDomVideo: hasDomVideo })) {
       const drewWorkerBitmap = await tryDrawWorkerPredecodedBitmap(
         ctx,
         item,
@@ -601,7 +614,7 @@ async function renderVideoItem(
   // Prefer a worker-decoded exact frame before a cold main-thread extractor draw.
   // This keeps large-jump and transition-entry stalls off the main thread while
   // preserving the same exact-frame preview path once the extractor is warm.
-  if (isPreviewMode && !hasDomVideo) {
+  if (shouldTryPreviewWorkerBitmap({ renderMode: rctx.renderMode, hasReadyDomVideo: hasDomVideo })) {
     const drewWorkerBitmap = await tryDrawWorkerPredecodedBitmap(
       ctx,
       item,
@@ -723,9 +736,13 @@ async function renderVideoItem(
   }
 
   // === FALLBACK TO HTML5 VIDEO ELEMENT (slower, seeks required) ===
-  const allowPreviewFallback = isPreviewMode
-    && hasFallbackVideoElement
-    && (mediabunnyFailedThisFrame || !useMediabunny.has(item.id) || mediabunnyDisabledItems.has(item.id));
+  const allowPreviewFallback = shouldAllowPreviewVideoElementFallback({
+    renderMode: rctx.renderMode,
+    hasFallbackVideoElement,
+    hasMediabunny: useMediabunny.has(item.id),
+    isMediabunnyDisabled: mediabunnyDisabledItems.has(item.id),
+    mediabunnyFailedThisFrame,
+  });
   if (!allowVideoElementFallback && !allowPreviewFallback) {
     return;
   }

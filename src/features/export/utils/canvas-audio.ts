@@ -24,9 +24,9 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
 import { getMediaAudioCodecById, resolveMediaUrl } from '@/features/export/deps/media-library';
 import { ensureAc3DecoderRegistered, isAc3AudioCodec } from '@/shared/media/ac3-decoder';
 import {
+  getLinkedAudioCompanion,
   getLinkedCompositionAudioCompanion,
   getLinkedVideoIdsWithAudio,
-  getManagedLinkedAudioTransitions,
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
 import { evaluateAudioFadeInCurve, evaluateAudioFadeOutCurve, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
@@ -95,6 +95,76 @@ interface TransitionAudioEntry<TItem extends TransitionAudioItem> {
   audioCodec?: string;
   volumeKeyframes?: VolumeKeyframe[];
   itemFrom: number;
+}
+
+function isMediaPair(left: TimelineItem, right: TimelineItem): boolean {
+  return (left.type === 'video' && right.type === 'audio')
+    || (left.type === 'audio' && right.type === 'video');
+}
+
+function getHeuristicTrimStart(item: TimelineItem): number | null {
+  const timelineItem = item as TimelineItem & { offset?: number };
+  return timelineItem.sourceStart ?? timelineItem.trimStart ?? timelineItem.offset ?? null;
+}
+
+function isImportedLegacyLinkedPair(anchor: TimelineItem, candidate: TimelineItem): boolean {
+  if (!isMediaPair(anchor, candidate)) return false;
+  if (anchor.linkedGroupId || candidate.linkedGroupId) return false;
+  if (anchor.originId || candidate.originId) return false;
+  if (!anchor.mediaId || anchor.mediaId !== candidate.mediaId) return false;
+  if (anchor.from !== candidate.from) return false;
+  if (anchor.durationInFrames !== candidate.durationInFrames) return false;
+  if (getHeuristicTrimStart(anchor) !== getHeuristicTrimStart(candidate)) return false;
+  if ((anchor.sourceEnd ?? null) !== (candidate.sourceEnd ?? null)) return false;
+  return (anchor.speed ?? 1) === (candidate.speed ?? 1);
+}
+
+function getLinkedAudioCompanionForExport(items: TimelineItem[], anchor: TimelineItem): AudioItem | null {
+  const linked = getLinkedAudioCompanion(items, anchor);
+  if (linked) return linked;
+  if (anchor.type !== 'video') return null;
+  return (items.find((candidate) => (
+    candidate.type === 'audio'
+    && isImportedLegacyLinkedPair(anchor, candidate)
+  )) as AudioItem | undefined) ?? null;
+}
+
+function getLinkedVideoIdsWithAudioForExport(items: TimelineItem[]): Set<string> {
+  const linkedVideoIds = new Set<string>();
+
+  for (const item of items) {
+    if (item.type !== 'video') continue;
+    if (getLinkedAudioCompanionForExport(items, item)) {
+      linkedVideoIds.add(item.id);
+    }
+  }
+
+  return linkedVideoIds;
+}
+
+function getManagedLinkedAudioTransitionsForExport(
+  items: TimelineItem[],
+  transitions: Transition[],
+): Array<{ transition: Transition; leftAudio: AudioItem; rightAudio: AudioItem }> {
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const managed: Array<{ transition: Transition; leftAudio: AudioItem; rightAudio: AudioItem }> = [];
+
+  for (const transition of transitions) {
+    const leftClip = itemById.get(transition.leftClipId);
+    const rightClip = itemById.get(transition.rightClipId);
+    if (leftClip?.type !== 'video' || rightClip?.type !== 'video') continue;
+
+    const leftAudio = getLinkedAudioCompanionForExport(items, leftClip);
+    const rightAudio = getLinkedAudioCompanionForExport(items, rightClip);
+    if (!leftAudio || !rightAudio) continue;
+    if (leftAudio.trackId !== rightAudio.trackId) continue;
+    if (leftAudio.from !== leftClip.from || rightAudio.from !== rightClip.from) continue;
+    if (leftAudio.durationInFrames !== leftClip.durationInFrames || rightAudio.durationInFrames !== rightClip.durationInFrames) continue;
+
+    managed.push({ transition, leftAudio, rightAudio });
+  }
+
+  return managed;
 }
 
 function buildClipFadeSpan(params: {
@@ -540,10 +610,11 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
   const segments: AudioSegment[] = [];
   const audioOnlySegments: AudioSegment[] = [];
   const videoById = new Map<string, TransitionAudioEntry<VideoItem>>();
+  const audioById = new Map<string, TransitionAudioEntry<AudioItem>>();
   const managedLinkedAudioById = new Map<string, TransitionAudioEntry<AudioItem>>();
   const timelineItems = tracks.flatMap((track) => track.items);
-  const linkedRootVideoIds = getLinkedVideoIdsWithAudio(timelineItems);
-  const managedLinkedAudioTransitions = getManagedLinkedAudioTransitions(timelineItems, transitions);
+  const linkedRootVideoIds = getLinkedVideoIdsWithAudioForExport(timelineItems);
+  const managedLinkedAudioTransitions = getManagedLinkedAudioTransitionsForExport(timelineItems, transitions);
   const managedLinkedAudioIds = new Set<string>();
   for (const managed of managedLinkedAudioTransitions) {
     managedLinkedAudioIds.add(managed.leftAudio.id);
@@ -557,6 +628,20 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
       trackId: leftAudio.trackId,
     }),
   );
+  const audioTransitionItemIds = new Set<string>();
+  const audioTransitionDefs: Transition[] = transitions.filter((transition) => {
+    const leftItem = timelineItems.find((item) => item.id === transition.leftClipId);
+    const rightItem = timelineItems.find((item) => item.id === transition.rightClipId);
+    if (leftItem?.type !== 'audio' || rightItem?.type !== 'audio') {
+      return false;
+    }
+    if (isCompositionAudioItem(leftItem) || isCompositionAudioItem(rightItem)) {
+      return false;
+    }
+    audioTransitionItemIds.add(leftItem.id);
+    audioTransitionItemIds.add(rightItem.id);
+    return true;
+  });
 
   for (const track of tracks) {
     if (track.visible === false) continue;
@@ -616,6 +701,11 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
           continue;
         }
 
+        if (audioTransitionItemIds.has(item.id)) {
+          audioById.set(item.id, audioEntry);
+          continue;
+        }
+
         audioOnlySegments.push({
           itemId: item.id,
           trackId: track.id,
@@ -657,13 +747,14 @@ export function extractAudioSegments(composition: CompositionInputProps, fps: nu
   }
 
   const managedVideoSegments = buildManagedTransitionAudioSegments(videoById, transitions, fps);
+  const managedAudioSegments = buildManagedTransitionAudioSegments(audioById, audioTransitionDefs, fps);
   const managedLinkedAudioSegments = buildManagedTransitionAudioSegments(
     managedLinkedAudioById,
     managedLinkedAudioTransitionDefs,
     fps,
   );
 
-  segments.push(...managedVideoSegments, ...managedLinkedAudioSegments, ...audioOnlySegments);
+  segments.push(...managedVideoSegments, ...managedAudioSegments, ...managedLinkedAudioSegments, ...audioOnlySegments);
 
   // === Extract audio from sub-compositions (pre-comps) ===
   // Composition items reference sub-comps that may contain video/audio items with audio.

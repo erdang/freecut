@@ -1,8 +1,62 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CompositionInputProps } from '@/types/export';
 import type { AudioItem, CompositionItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import { useCompositionsStore } from '@/features/export/deps/timeline';
-import { extractAudioSegments } from './canvas-audio';
+
+vi.mock('mediabunny', () => {
+  class UrlSource {
+    constructor(public readonly url: string) {}
+  }
+
+  class Input {
+    readonly source: UrlSource;
+
+    constructor(params: { source: UrlSource }) {
+      this.source = params.source;
+    }
+
+    async getPrimaryAudioTrack() {
+      return { src: this.source.url };
+    }
+
+    async computeDuration() {
+      return 10;
+    }
+
+    dispose() {}
+  }
+
+  class AudioSampleSink {
+    constructor(private readonly track: { src: string }) {}
+
+    async *samples(startTime = 0, endTime = 0) {
+      const sampleRate = 48000;
+      const frameCount = Math.max(1, Math.round((endTime - startTime) * sampleRate));
+      const makePlane = () => new Float32Array(frameCount).fill(0.1);
+      const planes = [makePlane(), makePlane()];
+
+      yield {
+        numberOfFrames: frameCount,
+        numberOfChannels: 2,
+        sampleRate,
+        copyTo(destination: Float32Array, options: { planeIndex: number }) {
+          destination.set(planes[options.planeIndex] ?? planes[0]!);
+        },
+        close() {},
+        trackSrc: this.track.src,
+      };
+    }
+  }
+
+  return {
+    ALL_FORMATS: [],
+    Input,
+    UrlSource,
+    AudioSampleSink,
+  };
+});
+
+import { extractAudioSegments, processAudio } from './canvas-audio';
 
 function makeTrack(params: {
   id: string;
@@ -185,5 +239,490 @@ describe('extractAudioSegments', () => {
       fadeInFrames: 0,
       crossfadeFadeInFrames: 10,
     });
+  });
+
+  it('expands standalone audio clips around an audio transition', () => {
+    const leftAudio = makeAudioItem({
+      id: 'audio-1',
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightAudio = makeAudioItem({
+      id: 'audio-2',
+      trackId: 'track-a1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:audio-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-a1', order: 0, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [{
+        id: 'transition-1',
+        type: 'crossfade',
+        leftClipId: 'audio-1',
+        rightClipId: 'audio-2',
+        trackId: 'track-a1',
+        durationInFrames: 10,
+        timing: 'linear',
+        presentation: 'fade',
+      }],
+      keyframes: [],
+    };
+
+    const segments = extractAudioSegments(composition, composition.fps);
+
+    expect(segments).toHaveLength(2);
+    expect(segments[0]).toMatchObject({
+      itemId: 'audio-1',
+      type: 'audio',
+      startFrame: 0,
+      durationFrames: 35,
+      fadeOutFrames: 0,
+      crossfadeFadeOutFrames: 10,
+    });
+    expect(segments[1]).toMatchObject({
+      itemId: 'audio-2',
+      type: 'audio',
+      startFrame: 25,
+      durationFrames: 35,
+      fadeInFrames: 0,
+      crossfadeFadeInFrames: 10,
+    });
+  });
+
+  it('uses only linked audio companions for linked clips with an explicit audio transition', () => {
+    const leftVideo = makeVideoItem({
+      id: 'video-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const leftAudio = makeAudioItem({
+      id: 'audio-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightVideo = makeVideoItem({
+      id: 'video-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-v1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:video-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightAudio = makeAudioItem({
+      id: 'audio-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-a1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:audio-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [{
+        id: 'audio-transition-1',
+        type: 'crossfade',
+        leftClipId: 'audio-1',
+        rightClipId: 'audio-2',
+        trackId: 'track-a1',
+        durationInFrames: 10,
+        timing: 'linear',
+        presentation: 'fade',
+      }],
+      keyframes: [],
+    };
+
+    const segments = extractAudioSegments(composition, composition.fps);
+
+    expect(segments).toHaveLength(2);
+    expect(segments.every((segment) => segment.type === 'audio')).toBe(true);
+    expect(segments.map((segment) => segment.itemId)).toEqual(['audio-1', 'audio-2']);
+  });
+
+  it('does not duplicate linked audio when video and audio transitions coexist', () => {
+    const leftVideo = makeVideoItem({
+      id: 'video-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const leftAudio = makeAudioItem({
+      id: 'audio-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightVideo = makeVideoItem({
+      id: 'video-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-v1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:video-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightAudio = makeAudioItem({
+      id: 'audio-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-a1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:audio-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [
+        {
+          id: 'video-transition-1',
+          type: 'crossfade',
+          leftClipId: 'video-1',
+          rightClipId: 'video-2',
+          trackId: 'track-v1',
+          durationInFrames: 10,
+          timing: 'linear',
+          presentation: 'fade',
+        },
+        {
+          id: 'audio-transition-1',
+          type: 'crossfade',
+          leftClipId: 'audio-1',
+          rightClipId: 'audio-2',
+          trackId: 'track-a1',
+          durationInFrames: 10,
+          timing: 'linear',
+          presentation: 'fade',
+        },
+      ],
+      keyframes: [],
+    };
+
+    const segments = extractAudioSegments(composition, composition.fps);
+
+    expect(segments).toHaveLength(2);
+    expect(segments.every((segment) => segment.type === 'audio')).toBe(true);
+    expect(segments.map((segment) => segment.itemId)).toEqual(['audio-1', 'audio-2']);
+  });
+
+  it('crossfades linked audio companions during export without doubling them', async () => {
+    const leftVideo = makeVideoItem({
+      id: 'video-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const leftAudio = makeAudioItem({
+      id: 'audio-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightVideo = makeVideoItem({
+      id: 'video-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-v1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:video-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightAudio = makeAudioItem({
+      id: 'audio-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-a1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:audio-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [{
+        id: 'audio-transition-1',
+        type: 'crossfade',
+        leftClipId: 'audio-1',
+        rightClipId: 'audio-2',
+        trackId: 'track-a1',
+        durationInFrames: 10,
+        timing: 'linear',
+        presentation: 'fade',
+      }],
+      keyframes: [],
+    };
+
+    const audio = await processAudio(composition);
+
+    expect(audio).not.toBeNull();
+
+    const mixed = audio!.samples[0]!;
+    const sampleRate = audio!.sampleRate;
+    const startOnlyIndex = Math.floor((10 / composition.fps) * sampleRate);
+    const overlapMidIndex = Math.floor((30 / composition.fps) * sampleRate);
+    const endOnlyIndex = Math.floor((50 / composition.fps) * sampleRate);
+
+    expect(mixed[startOnlyIndex]!).toBeCloseTo(0.1, 2);
+    expect(mixed[endOnlyIndex]!).toBeCloseTo(0.1, 2);
+    expect(mixed[overlapMidIndex]!).toBeLessThan(0.15);
+  });
+
+  it('does not double linked audio export when video and audio transitions coexist', async () => {
+    const leftVideo = makeVideoItem({
+      id: 'video-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const leftAudio = makeAudioItem({
+      id: 'audio-1',
+      linkedGroupId: 'group-1',
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightVideo = makeVideoItem({
+      id: 'video-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-v1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:video-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const rightAudio = makeAudioItem({
+      id: 'audio-2',
+      linkedGroupId: 'group-2',
+      trackId: 'track-a1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:audio-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+    });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [
+        {
+          id: 'video-transition-1',
+          type: 'crossfade',
+          leftClipId: 'video-1',
+          rightClipId: 'video-2',
+          trackId: 'track-v1',
+          durationInFrames: 10,
+          timing: 'linear',
+          presentation: 'fade',
+        },
+        {
+          id: 'audio-transition-1',
+          type: 'crossfade',
+          leftClipId: 'audio-1',
+          rightClipId: 'audio-2',
+          trackId: 'track-a1',
+          durationInFrames: 10,
+          timing: 'linear',
+          presentation: 'fade',
+        },
+      ],
+      keyframes: [],
+    };
+
+    const audio = await processAudio(composition);
+
+    expect(audio).not.toBeNull();
+
+    const mixed = audio!.samples[0]!;
+    const sampleRate = audio!.sampleRate;
+    const steadyStateIndex = Math.floor((10 / composition.fps) * sampleRate);
+    const overlapMidIndex = Math.floor((30 / composition.fps) * sampleRate);
+
+    expect(mixed[steadyStateIndex]!).toBeCloseTo(0.1, 2);
+    expect(mixed[overlapMidIndex]!).toBeLessThan(0.15);
+  });
+
+  it('treats imported legacy synced video/audio pairs as linked during audio export', async () => {
+    const leftVideo = makeVideoItem({
+      id: 'video-1',
+      trackId: 'track-v1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+      linkedGroupId: undefined,
+      originId: undefined,
+    });
+    const leftAudio = makeAudioItem({
+      id: 'audio-1',
+      trackId: 'track-a1',
+      from: 0,
+      durationInFrames: 30,
+      sourceStart: 0,
+      sourceEnd: 35,
+      sourceDuration: 120,
+      linkedGroupId: undefined,
+      originId: undefined,
+    });
+    const rightVideo = makeVideoItem({
+      id: 'video-2',
+      trackId: 'track-v1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:video-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+      linkedGroupId: undefined,
+      originId: undefined,
+    });
+    const rightAudio = makeAudioItem({
+      id: 'audio-2',
+      trackId: 'track-a1',
+      from: 30,
+      durationInFrames: 30,
+      mediaId: 'media-2',
+      src: 'blob:audio-2',
+      sourceStart: 5,
+      sourceEnd: 35,
+      sourceDuration: 120,
+      linkedGroupId: undefined,
+      originId: undefined,
+    });
+    const composition: CompositionInputProps = {
+      fps: 30,
+      durationInFrames: 60,
+      width: 1920,
+      height: 1080,
+      tracks: [
+        makeTrack({ id: 'track-v1', order: 0, kind: 'video', items: [leftVideo, rightVideo] }),
+        makeTrack({ id: 'track-a1', order: 1, kind: 'audio', items: [leftAudio, rightAudio] }),
+      ],
+      transitions: [{
+        id: 'audio-transition-1',
+        type: 'crossfade',
+        leftClipId: 'audio-1',
+        rightClipId: 'audio-2',
+        trackId: 'track-a1',
+        durationInFrames: 10,
+        timing: 'linear',
+        presentation: 'fade',
+      }],
+      keyframes: [],
+    };
+
+    const segments = extractAudioSegments(composition, composition.fps);
+    expect(segments).toHaveLength(2);
+    expect(segments.every((segment) => segment.type === 'audio')).toBe(true);
+
+    const audio = await processAudio(composition);
+
+    expect(audio).not.toBeNull();
+
+    const mixed = audio!.samples[0]!;
+    const sampleRate = audio!.sampleRate;
+    const steadyStateIndex = Math.floor((10 / composition.fps) * sampleRate);
+    const overlapMidIndex = Math.floor((30 / composition.fps) * sampleRate);
+
+    expect(mixed[steadyStateIndex]!).toBeCloseTo(0.1, 2);
+    expect(mixed[overlapMidIndex]!).toBeLessThan(0.15);
   });
 });
