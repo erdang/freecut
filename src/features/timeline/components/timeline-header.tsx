@@ -17,7 +17,6 @@ import {
   Gauge,
   ArrowRightLeft,
   BetweenHorizontalEnd,
-  BetweenHorizontalStart,
   ChevronDown,
   X,
   MousePointer2,
@@ -59,6 +58,21 @@ interface TimelineHeaderProps {
   isScopesPanelOpen?: boolean;
   /** Callback to toggle/open the color scopes tab */
   onToggleScopesPanel?: () => void;
+}
+
+function TrimEditIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
+      <rect x="10.6" y="4" width="2.8" height="16" rx="0.75" fill="currentColor" opacity="0.72" />
+      <path d="m9 7-6 5 6 5z" fill="currentColor" stroke="none" />
+      <path d="m15 7 6 5-6 5z" fill="currentColor" stroke="none" />
+    </svg>
+  );
 }
 
 /**
@@ -262,7 +276,7 @@ export const TimelineHeader = memo(function TimelineHeader({
       <div className="min-w-0 overflow-x-auto overflow-y-hidden">
         <div className="flex w-max min-w-full items-center justify-center gap-2.5">
         {/* Timeline Tools */}
-        <div className="flex items-center gap-1 px-1.5 py-1 bg-secondary/50 rounded-md border border-border">
+        <div className="flex items-center gap-1">
           <Button
             variant="ghost"
             size="icon"
@@ -286,7 +300,7 @@ export const TimelineHeader = memo(function TimelineHeader({
             aria-label="Trim edit tool"
             data-tooltip="Trim Edit Tool (T)"
           >
-            <BetweenHorizontalStart className="w-3.5 h-3.5" />
+            <TrimEditIcon className="w-3.5 h-3.5" />
           </Button>
 
           <Button
