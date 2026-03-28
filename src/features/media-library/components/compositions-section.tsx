@@ -59,8 +59,6 @@ export function CompositionsSection() {
   const renameCancelledRef = useRef(false);
   const lastSelectedCompositionIdRef = useRef<string | null>(null);
 
-  if (compositions.length === 0) return null;
-
   const handleEnter = (comp: SubComposition) => {
     enterComposition(comp.id, comp.name);
   };
@@ -144,6 +142,8 @@ export function CompositionsSection() {
         (i) => i.type === 'composition' && i.compositionId === deleteTarget.id
       )
     : [];
+
+  if (compositions.length === 0) return null;
 
   return (
     <>
