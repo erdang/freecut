@@ -48,11 +48,16 @@ export function CompositionsSection() {
 
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
+  const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
+  const selectedCompositionIds = useMediaLibraryStore((s) => s.selectedCompositionIds);
+  const toggleCompositionSelection = useMediaLibraryStore((s) => s.toggleCompositionSelection);
+  const setSelection = useMediaLibraryStore((s) => s.setSelection);
   const [open, setOpen] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<SubComposition | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const renameCancelledRef = useRef(false);
+  const lastSelectedCompositionIdRef = useRef<string | null>(null);
 
   if (compositions.length === 0) return null;
 
@@ -64,6 +69,41 @@ export function CompositionsSection() {
     setDeleteTarget(comp);
   };
 
+  const handleCompositionSelect = useCallback(
+    (compositionId: string, event?: React.MouseEvent) => {
+      if (event?.shiftKey && lastSelectedCompositionIdRef.current) {
+        const lastIndex = compositions.findIndex((item) => item.id === lastSelectedCompositionIdRef.current);
+        const currentIndex = compositions.findIndex((item) => item.id === compositionId);
+
+        if (lastIndex !== -1 && currentIndex !== -1) {
+          const startIndex = Math.min(lastIndex, currentIndex);
+          const endIndex = Math.max(lastIndex, currentIndex);
+          const rangeIds = compositions.slice(startIndex, endIndex + 1).map((item) => item.id);
+
+          if (event.ctrlKey || event.metaKey) {
+            setSelection({
+              mediaIds: selectedMediaIds,
+              compositionIds: [...new Set([...selectedCompositionIds, ...rangeIds])],
+            });
+          } else {
+            setSelection({ mediaIds: [], compositionIds: rangeIds });
+          }
+          return;
+        }
+      }
+
+      if (event?.ctrlKey || event?.metaKey) {
+        toggleCompositionSelection(compositionId);
+        lastSelectedCompositionIdRef.current = compositionId;
+        return;
+      }
+
+      setSelection({ mediaIds: [], compositionIds: [compositionId] });
+      lastSelectedCompositionIdRef.current = compositionId;
+    },
+    [compositions, selectedCompositionIds, selectedMediaIds, setSelection, toggleCompositionSelection]
+  );
+
   const handleConfirmDelete = () => {
     if (!deleteTarget) return;
     const items = useItemsStore.getState().items;
@@ -74,6 +114,10 @@ export function CompositionsSection() {
       removeItems(refsOnTimeline.map((i) => i.id));
     }
     removeComposition(deleteTarget.id);
+    setSelection({
+      mediaIds: selectedMediaIds,
+      compositionIds: selectedCompositionIds.filter((id) => id !== deleteTarget.id),
+    });
     setDeleteTarget(null);
   };
 
@@ -128,10 +172,12 @@ export function CompositionsSection() {
               key={comp.id}
               composition={comp}
               viewMode={viewMode}
+              selected={selectedCompositionIds.includes(comp.id)}
               isInsideSubComp={activeCompositionId !== null}
               isEditing={editingId === comp.id}
               editValue={editValue}
               onEditValueChange={setEditValue}
+              onSelect={(event) => handleCompositionSelect(comp.id, event)}
               onEnter={handleEnter}
               onDelete={handleDeleteRequest}
               onStartRename={handleStartRename}
@@ -190,10 +236,12 @@ export function CompositionsSection() {
 interface CompositionCardProps {
   composition: SubComposition;
   viewMode: 'grid' | 'list';
+  selected: boolean;
   isInsideSubComp: boolean;
   isEditing: boolean;
   editValue: string;
   onEditValueChange: (value: string) => void;
+  onSelect: (event: React.MouseEvent) => void;
   onEnter: (comp: SubComposition) => void;
   onDelete: (comp: SubComposition) => void;
   onStartRename: (comp: SubComposition) => void;
@@ -204,10 +252,12 @@ interface CompositionCardProps {
 function CompositionCard({
   composition,
   viewMode,
+  selected,
   isInsideSubComp,
   isEditing,
   editValue,
   onEditValueChange,
+  onSelect,
   onEnter,
   onDelete,
   onStartRename,
@@ -263,6 +313,14 @@ function CompositionCard({
     [composition.id, onCommitRename, onCancelRename]
   );
 
+  const handleClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (isEditing) return;
+      onSelect(e);
+    },
+    [isEditing, onSelect]
+  );
+
   const itemCount = composition.items.length;
   const fps = composition.fps || 30;
   const durationSecs = composition.durationInFrames / fps;
@@ -276,12 +334,15 @@ function CompositionCard({
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
+            data-composition-id={composition.id}
             draggable={!isInsideSubComp && !isEditing}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onClick={handleClick}
             onDoubleClick={handleDoubleClick}
             className={cn(
               CARD_GRID_BASE,
+              selected && 'border-violet-500 ring-2 ring-violet-500/20 shadow-lg shadow-violet-500/10',
               isInsideSubComp
                 ? 'opacity-50 cursor-not-allowed border-border'
                 : 'cursor-grab border-border hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10'
@@ -353,12 +414,15 @@ function CompositionCard({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
+          data-composition-id={composition.id}
           draggable={!isInsideSubComp && !isEditing}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           className={cn(
             CARD_LIST_BASE,
+            selected && 'border-violet-500 ring-1 ring-violet-500/20',
             isInsideSubComp
               ? 'opacity-50 cursor-not-allowed border-border'
               : 'cursor-grab border-border hover:border-violet-500/50'
@@ -415,4 +479,3 @@ function CompositionCard({
     </ContextMenu>
   );
 }
-

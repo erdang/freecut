@@ -6,6 +6,11 @@ export interface MediaLibraryNotification {
   message: string;
 }
 
+export interface MediaLibrarySelection {
+  mediaIds: string[];
+  compositionIds: string[];
+}
+
 export type MediaTranscriptStatus = 'idle' | 'transcribing' | 'ready' | 'error';
 
 export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
@@ -57,6 +62,7 @@ export interface MediaLibraryState {
   errorLink: string | null;
   notification: MediaLibraryNotification | null;
   selectedMediaIds: string[];
+  selectedCompositionIds: string[];
   searchQuery: string;
   filterByType: 'video' | 'audio' | 'image' | null;
   sortBy: 'name' | 'date' | 'size';
@@ -113,8 +119,11 @@ export interface MediaLibraryActions {
   deleteMediaBatch: (ids: string[]) => Promise<void>;
 
   // Selection
+  setSelection: (selection: MediaLibrarySelection) => void;
   selectMedia: (ids: string[]) => void;
+  selectCompositions: (ids: string[]) => void;
   toggleMediaSelection: (id: string) => void;
+  toggleCompositionSelection: (id: string) => void;
   clearSelection: () => void;
 
   // Filters & Search

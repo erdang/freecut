@@ -28,7 +28,7 @@ export interface Rect {
  */
 export interface MarqueeItem {
   id: string;
-  getBoundingRect: () => Rect;
+  getBoundingRect: () => Rect | null;
 }
 
 /**
@@ -192,6 +192,7 @@ export function useMarqueeSelection({
     const intersectingIds = currentItems
       .filter((item) => {
         const itemRect = item.getBoundingRect();
+        if (!itemRect) return false;
         return rectIntersects(marqueeRect, itemRect);
       })
       .map((item) => item.id);
@@ -245,6 +246,8 @@ export function useMarqueeSelection({
       target.closest('[data-item-id]') ||
       // Don't start marquee if clicking on a draggable media card
       target.closest('[data-media-id]') ||
+      // Don't start marquee if clicking on a draggable composition card
+      target.closest('[data-composition-id]') ||
       // Don't start marquee if clicking in the timeline ruler
       target.closest('.timeline-ruler') ||
       // Don't start marquee if clicking on the playhead handle
