@@ -1,6 +1,6 @@
 import type { TextItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
-import { FONT_WEIGHT_MAP } from './fonts';
+import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 
 export interface TextLayoutPreviewProperties {
   fontSize?: number;

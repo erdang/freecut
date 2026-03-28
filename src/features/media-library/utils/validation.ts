@@ -2,8 +2,6 @@
  * Media file validation utilities
  */
 
-import { formatBytes } from '@/utils/format-utils';
-
 // Supported file types based on requirements
 const SUPPORTED_VIDEO_TYPES = [
   'video/mp4',
@@ -33,7 +31,15 @@ const SUPPORTED_IMAGE_TYPES = [
   'image/svg+xml', // .svg files
 ];
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024 * 1024; // 5GB
+const GENERIC_BROWSER_MIME_TYPES = new Set([
+  '',
+  'application/octet-stream',
+  'binary/octet-stream',
+]);
+const EXTENSION_PREFERRED_MIME_TYPES = new Set([
+  '.mkv',
+  '.m4a',
+]);
 
 // Extension to MIME type mapping for fallback when browser doesn't provide MIME type
 const EXTENSION_TO_MIME: Record<string, string> = {
@@ -63,13 +69,20 @@ const EXTENSION_TO_MIME: Record<string, string> = {
  * Get MIME type from file, falling back to extension-based detection
  */
 export function getMimeType(file: File): string {
-  // Prefer extension-based detection for known extensions because browsers can
-  // report alternate or generic MIME values for some supported formats.
   const ext = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
-  if (ext && EXTENSION_TO_MIME[ext]) {
-    return EXTENSION_TO_MIME[ext];
+  const extensionMimeType = ext ? EXTENSION_TO_MIME[ext] : undefined;
+
+  // Prefer the extension for formats whose browser-reported MIME commonly
+  // varies despite the media kind staying the same (for example .mkv, .m4a).
+  if (ext && extensionMimeType && EXTENSION_PREFERRED_MIME_TYPES.has(ext)) {
+    return extensionMimeType;
   }
-  return file.type || '';
+
+  if (!GENERIC_BROWSER_MIME_TYPES.has(file.type)) {
+    return file.type;
+  }
+
+  return extensionMimeType || '';
 }
 
 interface ValidationResult {
@@ -86,16 +99,11 @@ export function validateMediaFile(file: File): ValidationResult {
     return { valid: false, error: 'File is empty' };
   }
 
-  if (file.size > MAX_FILE_SIZE) {
-    return {
-      valid: false,
-      error: `File too large. Maximum size is ${formatBytes(MAX_FILE_SIZE)}`,
-    };
-  }
-
   // Check MIME type (with extension-based fallback for files like .mkv where browser doesn't provide MIME)
   // SECURITY NOTE: This validation relies on client-provided MIME types which can be spoofed.
   // For production use, consider adding server-side validation that checks file headers/magic numbers.
+  // SVG files must be treated as untrusted content downstream; render them as image sources and avoid
+  // inline DOM injection where embedded scripts or event handlers could execute.
   // Additional validation with mediabunny.canDecode() is performed during metadata extraction.
   const allSupportedTypes = [
     ...SUPPORTED_VIDEO_TYPES,
@@ -107,7 +115,7 @@ export function validateMediaFile(file: File): ValidationResult {
   if (!allSupportedTypes.includes(mimeType)) {
     return {
       valid: false,
-      error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv, avi), audio (mp3, wav, aac, m4a, ogg/opus), image (jpg, png, gif, webp, svg)`,
+      error: `Unsupported file type: ${mimeType || file.name.split('.').pop()}. Supported types: video (mp4, webm, mov, mkv, avi), audio (mp3, wav, aac, m4a, ogg/opus), image (jpg/jpeg, png, gif, webp, svg)`,
     };
   }
 

@@ -699,7 +699,6 @@ class FilmstripCacheService {
 
   private notifyUpdate(mediaId: string, filmstrip: Filmstrip): void {
     this.clearIdleEvictionTimer(mediaId);
-    this.clearExtractionAbortTimer(mediaId);
     this.cache.set(mediaId, filmstrip);
     this.updateCacheMeta(mediaId, filmstrip);
     this.enforceMemoryBudget();
@@ -1143,6 +1142,9 @@ class FilmstripCacheService {
       ? (navigator.hardwareConcurrency || 4)
       : 4;
     const memoryConstrained = this.isSoftMemoryPressure();
+    // Snapshot the interactive state once per dispatch. Worker extraction
+    // config is fire-and-forget, so mid-flight drag/playback changes affect the
+    // next request rather than reconfiguring already-running workers.
     const interactiveThrottled = this.isInteractiveThrottleActive();
 
     // Determine workers per extraction based on hardware and frame count
