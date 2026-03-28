@@ -1198,6 +1198,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
   const resizeHandle = (
     <div
+      data-resize-handle
       className={cn(
         'h-1.5 cursor-ns-resize flex items-center justify-center',
         'bg-secondary/30 hover:bg-primary/30 transition-colors',

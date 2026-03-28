@@ -754,6 +754,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
         {/* Resize Handle */}
         {leftSidebarOpen && (
           <div
+            data-resize-handle
             onMouseDown={handleResizeStart}
             className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-primary/50 active:bg-primary/50 transition-colors z-10"
           />

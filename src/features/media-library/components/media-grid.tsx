@@ -20,17 +20,29 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+/** Maps itemSize (1=smallest, 5=largest) to CSS grid column classes */
+export const GRID_COLS_BY_SIZE: Record<number, string> = {
+  1: 'grid-cols-5 gap-1',
+  2: 'grid-cols-4 gap-1.5',
+  3: 'grid-cols-3 gap-2',
+  4: 'grid-cols-2 gap-3',
+  5: 'grid-cols-1 gap-3',
+};
+
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void;
   viewMode?: 'grid' | 'list';
+  /** Grid item size (1 = largest, 5 = smallest) */
+  itemSize?: number;
+  /** Scroll container ref — marquee can start from any empty area in this element */
+  scrollContainerRef?: React.RefObject<HTMLElement>;
 }
 
-export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid' }: MediaGridProps) {
+export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid', itemSize = 3, scrollContainerRef }: MediaGridProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [mediaIdToDelete, setMediaIdToDelete] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const wasMarqueeDraggingRef = useRef(false);
-  const hasAnimatedRef = useRef(false);
   const lastSelectedIdRef = useRef<string | null>(null);
 
   const filteredItems = useFilteredMediaItems();
@@ -79,9 +91,10 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     [filteredItems]
   );
 
-  // Marquee selection
+  // Marquee selection — use scroll container as hit area so marquee starts from any empty space
   const { marqueeState } = useMarqueeSelection({
     containerRef: containerRef as React.RefObject<HTMLElement>,
+    hitAreaRef: scrollContainerRef,
     items: marqueeItems,
     onSelectionChange: (ids) => {
       selectMedia(ids);
@@ -95,13 +108,6 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       wasMarqueeDraggingRef.current = true;
     }
   }, [marqueeState.active]);
-
-  // Mark as animated after first render to prevent re-animation on tab switches
-  useEffect(() => {
-    if (filteredItems.length > 0) {
-      hasAnimatedRef.current = true;
-    }
-  }, [filteredItems.length]);
 
   const handleCardSelect = (mediaId: string, event?: React.MouseEvent) => {
     // Shift click: select range from last selected item to this item
@@ -272,13 +278,11 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
           </div>
         </div>
       ) : (
-        <div className={viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 gap-4 max-w-5xl' : 'space-y-2'}>
+        <div className={viewMode === 'grid' ? `grid ${GRID_COLS_BY_SIZE[itemSize] ?? GRID_COLS_BY_SIZE[3]}` : 'space-y-2'}>
           {filteredItems.map((media, index) => (
             <div
               key={media.id}
               data-media-id={media.id}
-              className={hasAnimatedRef.current ? '' : 'animate-in fade-in slide-in-from-bottom-4 duration-300'}
-              style={hasAnimatedRef.current ? {} : { animationDelay: `${index * 30}ms` }}
             >
               <MediaCard
                 media={media}

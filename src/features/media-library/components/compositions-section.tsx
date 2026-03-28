@@ -31,6 +31,8 @@ import {
 import { removeItemsFromItemsActions as removeItems } from '@/features/media-library/deps/timeline-actions';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
+import { GRID_COLS_BY_SIZE } from './media-grid';
+import { CARD_GRID_BASE, CARD_LIST_BASE } from './card-styles';
 
 /**
  * Compositions section in the media library.
@@ -45,6 +47,7 @@ export function CompositionsSection() {
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
 
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
+  const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
   const [open, setOpen] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<SubComposition | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -118,7 +121,7 @@ export function CompositionsSection() {
         </CollapsibleTrigger>
         <CollapsibleContent className={cn(
           'pt-1 pb-2',
-          viewMode === 'grid' ? 'grid grid-cols-2 md:grid-cols-3 gap-4' : 'space-y-2'
+          viewMode === 'grid' ? `grid ${GRID_COLS_BY_SIZE[mediaItemSize] ?? GRID_COLS_BY_SIZE[3]}` : 'space-y-2'
         )}>
           {compositions.map((comp) => (
             <CompositionCard
@@ -278,7 +281,7 @@ function CompositionCard({
             onDragEnd={handleDragEnd}
             onDoubleClick={handleDoubleClick}
             className={cn(
-              'group relative panel-bg border-2 rounded-lg overflow-hidden transition-all duration-300 aspect-square flex flex-col hover:scale-[1.02]',
+              CARD_GRID_BASE,
               isInsideSubComp
                 ? 'opacity-50 cursor-not-allowed border-border'
                 : 'cursor-grab border-border hover:border-violet-500/50 hover:shadow-lg hover:shadow-violet-500/10'
@@ -355,7 +358,7 @@ function CompositionCard({
           onDragEnd={handleDragEnd}
           onDoubleClick={handleDoubleClick}
           className={cn(
-            'group panel-bg border rounded overflow-hidden transition-all duration-200 flex items-center gap-3 p-2',
+            CARD_LIST_BASE,
             isInsideSubComp
               ? 'opacity-50 cursor-not-allowed border-border'
               : 'cursor-grab border-border hover:border-violet-500/50'

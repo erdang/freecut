@@ -5,6 +5,7 @@ import { createLogger } from '@/shared/logging/logger';
 const logger = createLogger('MediaLibrary');
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,6 +70,7 @@ interface MediaLibraryProps {
 
 export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaLibraryProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [idsToDelete, setIdsToDelete] = useState<string[]>([]);
@@ -96,6 +98,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setSortBy = useMediaLibraryStore((s) => s.setSortBy);
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
+  const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
+  const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const mediaById = useMediaLibraryStore((s) => s.mediaById);
@@ -647,32 +651,45 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </DropdownMenuContent>
           </DropdownMenu>
 
-          {/* View mode toggle */}
-          <div className="flex items-center border border-border rounded bg-secondary ml-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className={`h-6 w-6 p-0 rounded-none rounded-l ${
-                viewMode === 'grid'
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <Grid3x3 className="w-3 h-3" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setViewMode('list')}
-              className={`h-6 w-6 p-0 rounded-none rounded-r ${
-                viewMode === 'list'
-                  ? 'bg-primary/10 text-primary'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <List className="w-3 h-3" />
-            </Button>
+          {/* View mode toggle + item size */}
+          <div className="flex items-center gap-2 ml-auto">
+            {viewMode === 'grid' && (
+              <Slider
+                min={1}
+                max={5}
+                step={1}
+                value={[mediaItemSize]}
+                onValueChange={([v]) => setMediaItemSize(v ?? 3)}
+                className="w-16"
+                aria-label="Grid item size"
+              />
+            )}
+            <div className="flex items-center border border-border rounded bg-secondary">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode('grid')}
+                className={`h-6 w-6 p-0 rounded-none rounded-l ${
+                  viewMode === 'grid'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <Grid3x3 className="w-3 h-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setViewMode('list')}
+                className={`h-6 w-6 p-0 rounded-none rounded-r ${
+                  viewMode === 'list'
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <List className="w-3 h-3" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -695,6 +712,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
         <div
+          ref={scrollContainerRef}
           className="h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -725,6 +743,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               <MediaGrid
                 onMediaSelect={onMediaSelect}
                 viewMode={viewMode}
+                itemSize={mediaItemSize}
+                scrollContainerRef={scrollContainerRef as React.RefObject<HTMLElement>}
               />
             </CollapsibleContent>
           </Collapsible>

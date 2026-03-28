@@ -44,6 +44,7 @@ export const useMediaLibraryStore = create<
       filterByType: null,
       sortBy: 'date',
       viewMode: 'grid',
+      mediaItemSize: 3,
 
       // Broken media tracking (lazy detection)
       brokenMediaIds: [],
@@ -222,6 +223,7 @@ export const useMediaLibraryStore = create<
       setFilterByType: (type) => set({ filterByType: type }),
       setSortBy: (sortBy) => set({ sortBy }),
       setViewMode: (viewMode) => set({ viewMode }),
+      setMediaItemSize: (size) => set({ mediaItemSize: Math.max(1, Math.min(5, size)) }),
 
       // Utility actions
       clearError: () => set({ error: null, errorLink: null }),

@@ -61,6 +61,8 @@ export interface MediaLibraryState {
   filterByType: 'video' | 'audio' | 'image' | null;
   sortBy: 'name' | 'date' | 'size';
   viewMode: 'grid' | 'list';
+  /** Grid item size (1 = largest / fewer columns, 5 = smallest / more columns) */
+  mediaItemSize: number;
 
   // Broken media tracking (lazy detection)
   brokenMediaIds: string[];
@@ -120,6 +122,7 @@ export interface MediaLibraryActions {
   setFilterByType: (type: 'video' | 'audio' | 'image' | null) => void;
   setSortBy: (sortBy: 'name' | 'date' | 'size') => void;
   setViewMode: (viewMode: 'grid' | 'list') => void;
+  setMediaItemSize: (size: number) => void;
 
   // Utility
   clearError: () => void;
