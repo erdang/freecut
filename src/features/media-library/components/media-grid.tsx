@@ -279,7 +279,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
         </div>
       ) : (
         <div className={viewMode === 'grid' ? `grid ${GRID_COLS_BY_SIZE[itemSize] ?? GRID_COLS_BY_SIZE[3]}` : 'space-y-2'}>
-          {filteredItems.map((media, index) => (
+          {filteredItems.map((media) => (
             <div
               key={media.id}
               data-media-id={media.id}
