@@ -91,10 +91,12 @@ export const GraphCurves = memo(function GraphCurves({
   points,
   selectedKeyframeIds,
   previewBezierConfigs,
+  strokeColor,
 }: {
   points: GraphKeyframePoint[];
   selectedKeyframeIds?: Set<string>;
   previewBezierConfigs?: Record<string, { x1: number; y1: number; x2: number; y2: number }> | null;
+  strokeColor?: string;
 }) {
   // Sort points by frame (toSorted for immutability)
   const sortedPoints = useMemo(
@@ -125,6 +127,7 @@ export const GraphCurves = memo(function GraphCurves({
                 : (startPoint.keyframe.easingConfig || { type: startPoint.keyframe.easing })
             }
             isSelected={isSelected}
+            strokeColor={strokeColor}
           />
         );
       })}

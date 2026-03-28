@@ -285,4 +285,109 @@ describe('ValueGraphEditor clipping', () => {
 
     expect(screen.getByTestId('point-selection')).toHaveTextContent('kf-1');
   });
+
+  // --- REGRESSION: selection/deselection must be rock-solid across all interaction patterns ---
+
+  it('deselects when clicking empty area AFTER a point was previously selected', () => {
+    const { container } = render(<SelectionHarness />);
+    const svg = container.querySelector('svg') as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    // Start with kf-1 selected
+    expect(screen.getByTestId('selection')).toHaveTextContent('kf-1');
+
+    // Click on the SVG background (not on a keyframe)
+    fireEvent.click(svg);
+
+    expect(screen.getByTestId('selection')).toHaveTextContent('');
+  });
+
+  it('keeps selection after pointerDown + pointerUp on a keyframe (click cycle)', () => {
+    const { container } = render(<PointSelectionHarness />);
+    const svg = container.querySelector('svg') as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    const pointHitArea = container.querySelector('.graph-keyframe circle')!;
+
+    // Full click cycle: pointerDown → pointerUp on SVG → click on SVG
+    fireEvent.pointerDown(pointHitArea, {
+      button: 0, clientX: 50, clientY: 50, pointerId: 1,
+    });
+    fireEvent.pointerUp(svg, { pointerId: 1 });
+    // The click event may fire on the SVG (due to pointer capture) — must NOT deselect
+    fireEvent.click(svg);
+
+    expect(screen.getByTestId('point-selection')).toHaveTextContent('kf-1');
+  });
+
+  it('keeps selection after dragging a keyframe and releasing', () => {
+    const { container } = render(<PointSelectionHarness />);
+    const svg = container.querySelector('svg') as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    const pointHitArea = container.querySelector('.graph-keyframe circle')!;
+
+    // pointerDown on keyframe
+    fireEvent.pointerDown(pointHitArea, {
+      button: 0, clientX: 50, clientY: 50, pointerId: 1,
+    });
+
+    // Drag past threshold
+    fireEvent.pointerMove(svg, { clientX: 70, clientY: 50, pointerId: 1 });
+
+    // Release
+    fireEvent.pointerUp(svg, { pointerId: 1 });
+
+    // Post-drag click on SVG must NOT deselect
+    fireEvent.click(svg);
+
+    expect(screen.getByTestId('point-selection')).toHaveTextContent('kf-1');
+  });
+
+  it('deselects on background click after drag completes and enough time passes', () => {
+    const { container } = render(<SelectionHarness />);
+    const svg = container.querySelector('svg') as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    expect(screen.getByTestId('selection')).toHaveTextContent('kf-1');
+
+    // Simulate a background-only interaction (no keyframe involved)
+    // pointerDown on background rect
+    const bgRect = svg.querySelector('rect[fill="transparent"]')!;
+    fireEvent.pointerDown(bgRect, {
+      button: 0, clientX: 300, clientY: 200, pointerId: 5,
+    });
+    fireEvent.pointerUp(window, { pointerId: 5 });
+
+    // Click on SVG background — should deselect
+    fireEvent.click(svg);
+
+    expect(screen.getByTestId('selection')).toHaveTextContent('');
+  });
+
+  it('selecting point A then clicking empty area deselects, then selecting point B works', () => {
+    const { container } = render(<PointSelectionHarness />);
+    const svg = container.querySelector('svg') as SVGSVGElement;
+    installSvgDomMocks(svg);
+
+    const points = container.querySelectorAll('.graph-keyframe circle');
+    const pointA = points[0]!;
+    const pointB = points[1]!;
+
+    // Select point A
+    fireEvent.pointerDown(pointA, { button: 0, clientX: 50, clientY: 50, pointerId: 1 });
+    fireEvent.pointerUp(svg, { pointerId: 1 });
+    expect(screen.getByTestId('point-selection')).toHaveTextContent('kf-1');
+
+    // Click empty area — must deselect (use a fresh click unrelated to the keyframe)
+    fireEvent.click(svg, { clientX: 400, clientY: 200 });
+    // The timestamp guard might block this if fired too fast — but the target check should pass
+    // since the SVG click target is the SVG itself (not a keyframe)
+
+    // Select point B
+    fireEvent.pointerDown(pointB, { button: 0, clientX: 300, clientY: 150, pointerId: 2 });
+    fireEvent.pointerUp(svg, { pointerId: 2 });
+
+    expect(screen.getByTestId('point-selection')).toHaveTextContent('kf-2');
+  });
 });

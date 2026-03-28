@@ -184,6 +184,8 @@ interface UseGraphInteractionReturn {
   handleBackgroundPointerDown: (event: React.PointerEvent<SVGElement>) => void;
   /** Handle graph background click (deselect) */
   handleBackgroundClick: (event: React.MouseEvent<SVGElement>) => void;
+  /** Timestamp of last keyframe/handle pointerDown (for click dedup) */
+  lastInteractionTime: React.RefObject<number>;
   /** Active marquee rect while selecting */
   marqueeRect: KeyframeMarqueeRect | null;
   /** Zoom in */
@@ -253,6 +255,10 @@ export function useGraphInteraction({
 
   // Track whether we've called onDragStart for the current drag operation
   const dragStartCalledRef = useRef(false);
+
+  // Timestamp of last keyframe/handle interaction (used to ignore click events
+  // that fire on the SVG after pointer capture redirects them away from the original target)
+  const lastInteractionTimeRef = useRef(0);
 
 
   // Memoized graph dimensions
@@ -563,6 +569,7 @@ export function useGraphInteraction({
 
       event.preventDefault();
       event.stopPropagation();
+      lastInteractionTimeRef.current = Date.now();
 
       // Capture pointer on the SVG element (not the keyframe itself)
       const svg = event.currentTarget.closest('svg');
@@ -657,6 +664,7 @@ export function useGraphInteraction({
 
       event.preventDefault();
       event.stopPropagation();
+      lastInteractionTimeRef.current = Date.now();
 
       const point = points.find((p) => p.keyframe.id === handle.keyframeId);
       if (!point) return;
@@ -1089,6 +1097,12 @@ export function useGraphInteraction({
         callbacksRef.current.onDragEnd?.();
       }
 
+      // Stamp interaction time so the post-drag click doesn't deselect
+      // Only stamp when there was an actual keyframe/handle interaction
+      if (dragStartRef.current || bezierDragStartRef.current) {
+        lastInteractionTimeRef.current = Date.now();
+      }
+
       // Reset all drag state
       dragStartRef.current = null;
       bezierDragStartRef.current = null;
@@ -1157,6 +1171,9 @@ export function useGraphInteraction({
       void event;
       if (disabled) return;
       if (marqueeJustEndedRef.current) return;
+      // Pointer capture redirects click targets to SVG — ignore clicks
+      // that happen right after a keyframe/handle interaction
+      if (Date.now() - lastInteractionTimeRef.current < 300) return;
       callbacksRef.current.onSelectionChange?.(new Set());
     },
     [disabled]
@@ -1222,6 +1239,7 @@ export function useGraphInteraction({
     handleWheel,
     handleBackgroundPointerDown,
     handleBackgroundClick,
+    lastInteractionTime: lastInteractionTimeRef,
     marqueeRect,
     zoomIn,
     zoomOut,

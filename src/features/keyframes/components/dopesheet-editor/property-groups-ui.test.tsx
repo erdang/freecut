@@ -83,7 +83,7 @@ describe('DopesheetEditor property groups', () => {
     expect(screen.getByRole('spinbutton', { name: /y position value at playhead/i })).not.toBeDisabled();
   });
 
-  it('uses the curve button to choose the graph property', () => {
+  it('uses the curve button to toggle graph property visibility', () => {
     const onPropertyChange = vi.fn();
     renderEditor({
       keyframesByProperty: { x: [], y: [] },
@@ -92,9 +92,10 @@ describe('DopesheetEditor property groups', () => {
       onPropertyChange,
     });
 
+    // All curves start visible; clicking Y toggles it off
     fireEvent.click(screen.getByRole('button', { name: /show y position curve/i }));
-
-    expect(onPropertyChange).toHaveBeenCalledWith('y');
+    // Primary switches to first remaining visible property
+    expect(onPropertyChange).toHaveBeenCalledWith('x');
   });
 
   it('shows interpolation icon controls only in graph view', () => {
@@ -210,7 +211,7 @@ describe('DopesheetEditor property groups', () => {
       onPropertyValueCommit: vi.fn(),
     });
 
-    expect(screen.getByRole('button', { name: /show transform curve/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /show all transform curves/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /lock transform rows/i })).toBeTruthy();
     expect(screen.getByRole('button', { name: /enable auto-key for transform/i })).toBeTruthy();
 

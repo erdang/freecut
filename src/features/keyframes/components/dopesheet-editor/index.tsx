@@ -546,6 +546,12 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const [lockedProperties, setLockedProperties] = useState<Partial<Record<AnimatableProperty, boolean>>>({});
   const [graphRulerUnit, setGraphRulerUnit] = useState<'frames' | 'seconds'>('frames');
   const [showAllGraphHandles, setShowAllGraphHandles] = useState(false);
+  const [graphVisibleProperties, setGraphVisibleProperties] = useState<Set<AnimatableProperty>>(() => new Set(availableProperties));
+
+  // Reset visible curves when clip selection changes
+  useEffect(() => {
+    setGraphVisibleProperties(new Set(availableProperties));
+  }, [itemId, availableProperties]);
 
   useEffect(() => {
     const groupIds = new Set(allPropertyGroups.map((group) => group.id));
@@ -733,9 +739,49 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     );
     setAllGroupsExpanded(true);
   }, [allPropertyGroups, setAllGroupsExpanded]);
-  const showPropertyCurve = useCallback((property: AnimatableProperty) => {
-    onPropertyChange?.(property);
-    onActivePropertyChange?.(property);
+  const togglePropertyCurve = useCallback((property: AnimatableProperty) => {
+    setGraphVisibleProperties((prev) => {
+      const next = new Set(prev);
+      if (next.has(property)) {
+        next.delete(property);
+      } else {
+        next.add(property);
+      }
+      // Set primary to this property when toggling on
+      if (next.has(property)) {
+        onPropertyChange?.(property);
+        onActivePropertyChange?.(property);
+      } else if (next.size > 0) {
+        // Switch primary to first remaining visible
+        const first = [...next][0]!;
+        onPropertyChange?.(first);
+        onActivePropertyChange?.(first);
+      }
+      return next;
+    });
+  }, [onActivePropertyChange, onPropertyChange]);
+
+  const toggleGroupCurves = useCallback((properties: AnimatableProperty[]) => {
+    if (properties.length === 0) return;
+    setGraphVisibleProperties((prev) => {
+      const anyVisible = properties.some((p) => prev.has(p));
+      const next = new Set(prev);
+      if (anyVisible) {
+        // Turn all off
+        for (const p of properties) next.delete(p);
+        if (next.size > 0) {
+          const first = [...next][0]!;
+          onPropertyChange?.(first);
+          onActivePropertyChange?.(first);
+        }
+      } else {
+        // Turn all on
+        for (const p of properties) next.add(p);
+        onPropertyChange?.(properties[0]!);
+        onActivePropertyChange?.(properties[0]!);
+      }
+      return next;
+    });
   }, [onActivePropertyChange, onPropertyChange]);
 
   useEffect(() => {
@@ -1327,6 +1373,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const activateProperty = useCallback((property: AnimatableProperty) => {
     if (visualizationMode === 'graph') {
       onPropertyChange?.(property);
+      // Solo: show only this property's curve
+      setGraphVisibleProperties(new Set([property]));
     }
     onActivePropertyChange?.(property);
   }, [onActivePropertyChange, onPropertyChange, visualizationMode]);
@@ -2022,8 +2070,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
   const playheadLeft = Math.max(0, Math.min(effectiveTimelineWidth - 1, frameToX(currentFrame)));
   const graphDisplayProperty = useMemo(
-    () => activeSelectedProperty ?? availableProperties[0] ?? null,
-    [activeSelectedProperty, availableProperties]
+    () => {
+      if (graphVisibleProperties.size === 0) return null;
+      // Primary is the active selected property if it's visible, else first visible
+      if (activeSelectedProperty && graphVisibleProperties.has(activeSelectedProperty)) {
+        return activeSelectedProperty;
+      }
+      return [...graphVisibleProperties][0] ?? null;
+    },
+    [activeSelectedProperty, graphVisibleProperties]
   );
   const graphDisplayPropertyLocked = graphDisplayProperty
     ? isPropertyLocked(graphDisplayProperty)
@@ -2062,7 +2117,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const renderPropertyRowContent = useCallback(
     (row: DopesheetPropertyRow, options?: { indented?: boolean }) => {
       const rowLocked = isPropertyLocked(row.property);
-      const curveVisible = graphDisplayProperty === row.property;
+      const curveVisible = graphVisibleProperties.has(row.property);
 
         return (
           <div
@@ -2070,7 +2125,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             'h-full px-1 flex items-center gap-px bg-muted/8',
               options?.indented && 'pl-3',
               row.controls.hasKeyframeAtCurrentFrame && 'bg-primary/10',
-              visualizationMode === 'graph' && graphDisplayProperty === row.property && 'bg-accent/40',
+              visualizationMode === 'graph' && graphVisibleProperties.has(row.property) && 'bg-accent/40',
             visualizationMode === 'graph' && !rowLocked && 'cursor-pointer',
             rowLocked && 'opacity-70'
           )}
@@ -2084,11 +2139,11 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className={cn(
                 MINI_ICON_BUTTON_CLASS,
                 'self-center text-muted-foreground hover:text-foreground',
-                curveVisible && 'bg-accent text-accent-foreground hover:bg-accent/90 hover:text-accent-foreground'
+                curveVisible ? 'text-orange-500 hover:text-orange-400' : 'opacity-30 hover:opacity-60'
               )}
               onClick={(event) => {
                 event.stopPropagation();
-                showPropertyCurve(row.property);
+                togglePropertyCurve(row.property);
               }}
               title={`Show ${PROPERTY_LABELS[row.property]} curve`}
               aria-label={`Show ${PROPERTY_LABELS[row.property]} curve`}
@@ -2103,7 +2158,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className={cn(
                 MINI_ICON_BUTTON_CLASS,
                 'self-center text-muted-foreground hover:text-foreground',
-                rowLocked && 'bg-muted text-foreground/80 hover:bg-muted hover:text-foreground/80'
+                rowLocked ? 'text-red-400 hover:text-red-300' : 'opacity-30 hover:opacity-60'
               )}
               onClick={(event) => {
                 event.stopPropagation();
@@ -2287,6 +2342,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       disabled,
       formatPropertyValue,
       graphDisplayProperty,
+      graphVisibleProperties,
       handleClearProperty,
       handleRowAutoKeyToggle,
       handleRowNavigate,
@@ -2299,7 +2355,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       onNavigateToKeyframe,
       onPropertyValueCommit,
       propertyValues,
-      showPropertyCurve,
+      togglePropertyCurve,
       toggleLockedProperty,
       valueDrafts,
       visualizationMode,
@@ -2308,10 +2364,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
   const renderGroupHeaderContent = useCallback(
     (group: DopesheetPropertyGroup) => {
       const groupProperties = group.rows.map((row) => row.property);
-      const activeGroupProperty = groupProperties.find((property) => property === graphDisplayProperty)
-        ?? groupProperties[0]
-        ?? null;
-      const curveVisible = activeGroupProperty !== null && graphDisplayProperty === activeGroupProperty;
+      const curveVisible = groupProperties.some((p) => graphVisibleProperties.has(p));
       const allRowsLocked = group.rows.length > 0 && group.rows.every((row) => isPropertyLocked(row.property));
       const unlockedRows = group.rows.filter((row) => !isPropertyLocked(row.property));
       const groupAutoKeyEnabled = unlockedRows.length > 0
@@ -2337,17 +2390,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className={cn(
                 MINI_ICON_BUTTON_CLASS,
                 'self-center text-muted-foreground hover:text-foreground',
-                curveVisible && 'bg-accent text-accent-foreground hover:bg-accent/90 hover:text-accent-foreground'
+                curveVisible ? 'text-orange-500 hover:text-orange-400' : 'opacity-30 hover:opacity-60'
               )}
               onClick={(event) => {
                 event.stopPropagation();
-                if (activeGroupProperty) {
-                  showPropertyCurve(activeGroupProperty);
-                }
+                toggleGroupCurves(groupProperties);
               }}
-              disabled={!activeGroupProperty}
-              title={`Show ${group.label} curve`}
-              aria-label={`Show ${group.label} curve`}
+              disabled={groupProperties.length === 0}
+              title={`Show all ${group.label} curves`}
+              aria-label={`Show all ${group.label} curves`}
               aria-pressed={curveVisible}
             >
               <LineChart className={MINI_ICON_CLASS} />
@@ -2359,7 +2410,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className={cn(
                 MINI_ICON_BUTTON_CLASS,
                 'self-center text-muted-foreground hover:text-foreground',
-                allRowsLocked && 'bg-muted text-foreground/80 hover:bg-muted hover:text-foreground/80'
+                allRowsLocked ? 'text-red-400 hover:text-red-300' : 'opacity-30 hover:opacity-60'
               )}
               onClick={(event) => {
                 event.stopPropagation();
@@ -2511,12 +2562,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       handleGroupToggleKeyframes,
       handleRowNavigate,
       graphDisplayProperty,
+      graphVisibleProperties,
       isPropertyLocked,
       isCurrentFrameBlocked,
       onRemoveKeyframes,
       onNavigateToKeyframe,
       onPropertyValueCommit,
-      showPropertyCurve,
+      toggleGroupCurves,
+      togglePropertyCurve,
       toggleGroup,
     ]
   );
@@ -2720,7 +2773,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
           {visualizationMode === 'graph' && graphDisplayProperty && (
             <span className="text-xs text-muted-foreground">
-              Graph: {PROPERTY_LABELS[graphDisplayProperty]}{graphDisplayPropertyLocked ? ' (Locked)' : ''}
+              Graph: {PROPERTY_LABELS[graphDisplayProperty]}
             </span>
           )}
 
@@ -3011,6 +3064,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                       itemId={itemId}
                       keyframesByProperty={keyframesByProperty}
                       selectedProperty={graphDisplayProperty}
+                      overlayProperties={[...graphVisibleProperties]}
                       selectedKeyframeIds={selectedKeyframeIds}
                       currentFrame={currentFrame}
                       totalFrames={totalFrames}

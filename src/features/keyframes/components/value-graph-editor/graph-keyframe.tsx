@@ -20,6 +20,10 @@ interface GraphKeyframeProps {
   onClick?: (point: GraphKeyframePoint, event: React.MouseEvent) => void;
   /** Callback when point is double-clicked */
   onDoubleClick?: (point: GraphKeyframePoint, event: React.MouseEvent) => void;
+  /** How to display time in the drag tooltip */
+  rulerUnit?: 'frames' | 'seconds';
+  /** FPS for seconds conversion */
+  fps?: number;
   /** Whether the graph is disabled */
   disabled?: boolean;
 }
@@ -35,6 +39,8 @@ const GraphKeyframe = memo(function GraphKeyframe({
   onPointerDown,
   onClick,
   onDoubleClick,
+  rulerUnit = 'frames',
+  fps = 30,
   disabled = false,
 }: GraphKeyframeProps) {
   const handlePointerDown = useCallback(
@@ -138,7 +144,7 @@ const GraphKeyframe = memo(function GraphKeyframe({
             fontSize={11}
             fontFamily="monospace"
           >
-            {`F${displayFrame} → ${formatKeyframeValue(displayValue)}`}
+            {formatDragTooltip(displayFrame, displayValue, rulerUnit, fps)}
           </text>
         </g>
       )}
@@ -156,6 +162,8 @@ export const GraphKeyframes = memo(function GraphKeyframes({
   onPointerDown,
   onClick,
   onDoubleClick,
+  rulerUnit,
+  fps,
   disabled = false,
 }: {
   points: GraphKeyframePoint[];
@@ -164,6 +172,8 @@ export const GraphKeyframes = memo(function GraphKeyframes({
   onPointerDown?: (point: GraphKeyframePoint, event: React.PointerEvent) => void;
   onClick?: (point: GraphKeyframePoint, event: React.MouseEvent) => void;
   onDoubleClick?: (point: GraphKeyframePoint, event: React.MouseEvent) => void;
+  rulerUnit?: 'frames' | 'seconds';
+  fps?: number;
   disabled?: boolean;
 }) {
   return (
@@ -177,6 +187,8 @@ export const GraphKeyframes = memo(function GraphKeyframes({
           onPointerDown={onPointerDown}
           onClick={onClick}
           onDoubleClick={onDoubleClick}
+          rulerUnit={rulerUnit}
+          fps={fps}
           disabled={disabled}
         />
       ))}
@@ -187,6 +199,17 @@ export const GraphKeyframes = memo(function GraphKeyframes({
 /**
  * Format a keyframe value for display.
  */
+function formatDragTooltip(
+  frame: number, value: number,
+  rulerUnit: 'frames' | 'seconds', fps: number
+): string {
+  const timePart = rulerUnit === 'seconds' && fps > 0
+    ? `${(frame / fps).toFixed(2)}s`
+    : `${frame}`;
+
+  return `${timePart}  ${formatKeyframeValue(value)}`;
+}
+
 function formatKeyframeValue(value: number): string {
   if (Math.abs(value) >= 100) {
     return value.toFixed(0);

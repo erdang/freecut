@@ -40,6 +40,8 @@ interface ValueGraphEditorProps {
   keyframesByProperty: Partial<Record<AnimatableProperty, Keyframe[]>>;
   /** Currently selected property (or null to show all) */
   selectedProperty?: AnimatableProperty | null;
+  /** Additional properties to render as overlay curves (visual only, no interaction) */
+  overlayProperties?: AnimatableProperty[];
   /** Selected keyframe IDs */
   selectedKeyframeIds?: Set<string>;
   /** Current playhead frame */
@@ -108,6 +110,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   itemId,
   keyframesByProperty,
   selectedProperty = null,
+  overlayProperties,
   selectedKeyframeIds = new Set(),
   currentFrame = 0,
   totalFrames = 300,
@@ -270,6 +273,45 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       isDragging: false,
     }));
   }, [displayProperty, keyframes, itemId, viewport, padding, selectedKeyframeIds]);
+
+  // Overlay curve colors (muted, distinct)
+  const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399'];
+
+  // Generate overlay points for additional properties (visual-only curves)
+  const overlayPointSets = useMemo((): Array<{ property: AnimatableProperty; points: GraphKeyframePoint[]; color: string }> => {
+    if (!overlayProperties || overlayProperties.length === 0) return [];
+
+    const graphLeft = padding.left;
+    const graphTop = padding.top;
+    const graphWidth = viewport.width - padding.left - padding.right;
+    const graphHeight = viewport.height - padding.top - padding.bottom;
+    const frameRange = viewport.endFrame - viewport.startFrame;
+
+    return overlayProperties
+      .filter((prop) => prop !== displayProperty) // skip the primary property
+      .map((prop, index) => {
+        const propKeyframes = keyframesByProperty[prop] || [];
+        if (propKeyframes.length === 0) return null;
+
+        const range = PROPERTY_VALUE_RANGES[prop];
+        const propMinValue = range?.min ?? 0;
+        const propMaxValue = range?.max ?? 1;
+        const propValueRange = propMaxValue - propMinValue;
+
+        const points: GraphKeyframePoint[] = propKeyframes.map((keyframe) => ({
+          keyframe,
+          itemId,
+          property: prop,
+          x: graphLeft + ((keyframe.frame - viewport.startFrame) / frameRange) * graphWidth,
+          y: graphTop + (1 - (keyframe.value - propMinValue) / propValueRange) * graphHeight,
+          isSelected: false,
+          isDragging: false,
+        }));
+
+        return { property: prop, points, color: OVERLAY_COLORS[index % OVERLAY_COLORS.length]! };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+  }, [overlayProperties, displayProperty, keyframesByProperty, itemId, viewport, padding]);
 
   // Calculate snap targets for keyframe dragging
   const snapTargets = useMemo(() => {
@@ -926,7 +968,14 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           {/* Extension lines (before/after keyframes) */}
           <GraphExtensionLines points={pointsWithDragState} viewport={viewport} padding={padding} />
 
-          {/* Interpolation curves */}
+          {/* Overlay curves for additional properties (rendered first, behind primary) */}
+          {overlayPointSets.map(({ property: prop, points: overlayPts, color }) => (
+            <g key={prop} opacity={0.5}>
+              <GraphCurves points={overlayPts} strokeColor={color} />
+            </g>
+          ))}
+
+          {/* Primary interpolation curves */}
           <GraphCurves points={pointsWithDragState} selectedKeyframeIds={selectedKeyframeIds} previewBezierConfigs={previewBezierConfigs} />
 
           {/* Playhead (rendered before keyframes so keyframes get click priority) */}
@@ -958,6 +1007,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
             previewValuesById={previewValues}
             onPointerDown={handleKeyframePointerDown}
             onClick={handleKeyframeClick}
+            rulerUnit={rulerUnit}
+            fps={fps}
             disabled={disabled}
           />
 
