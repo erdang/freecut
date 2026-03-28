@@ -4,4 +4,10 @@
  */
 
 export type { TimelineState, TimelineActions } from './timeline-contract';
-export { useTimelineStore, useItemsStore, useKeyframesStore } from './timeline-contract';
+export {
+  importWaveformCache,
+  useTimelineStore,
+  useItemsStore,
+  useKeyframesStore,
+  useCompositionsStore,
+} from './timeline-contract';

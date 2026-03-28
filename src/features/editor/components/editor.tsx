@@ -12,6 +12,7 @@ import { PropertiesSidebar } from './properties-sidebar';
 import { PreviewArea } from './preview-area';
 import { ProjectDebugPanel } from './project-debug-panel';
 import { InteractionLockRegion } from './interaction-lock-region';
+import { AudioMeterPanel } from './audio-meter-panel';
 import { Timeline, BentoLayoutDialog } from '@/features/editor/deps/timeline-ui';
 import { ClearKeyframesDialog } from './clear-keyframes-dialog';
 import { toast } from 'sonner';
@@ -306,7 +307,12 @@ export const Editor = memo(function Editor({ projectId, project }: EditorProps) 
             >
               <InteractionLockRegion locked={isMaskEditingActive} className="h-full">
                 <ErrorBoundary level="feature">
-                  <Timeline duration={timelineDuration} />
+                  <div className="h-full flex overflow-hidden">
+                    <div className="min-w-0 flex-1">
+                      <Timeline duration={timelineDuration} />
+                    </div>
+                    <AudioMeterPanel />
+                  </div>
                 </ErrorBoundary>
               </InteractionLockRegion>
             </ResizablePanel>
