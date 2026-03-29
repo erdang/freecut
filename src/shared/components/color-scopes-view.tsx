@@ -410,11 +410,9 @@ export const ColorScopesView = memo(function ColorScopesView({
   const [histogramMode, setHistogramMode] = useState<ScopeViewMode>('rgb');
   const [stackLayout, setStackLayout] = useState<StackScopeLayout>(() => loadStackLayout());
 
+  const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const captureFrameImageData = usePlaybackStore((s) => s.captureFrameImageData);
   const captureFrame = usePlaybackStore((s) => s.captureFrame);
-  const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const currentFrame = usePlaybackStore((s) => s.currentFrame);
-  const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const isEmbeddedStackLayout = embedded && embeddedLayout === 'stack';
   const showHistogram = embedded && (!isEmbeddedStackLayout || stackLayout === 'all');
 
@@ -686,8 +684,38 @@ export const ColorScopesView = memo(function ColorScopesView({
   // CPU: update on frame change when paused
   useEffect(() => {
     if (gpuReady !== false || !open || isPlaying) return;
-    void cpuDraw();
-  }, [gpuReady, open, isPlaying, currentFrame, previewFrame, cpuDraw]);
+
+    let rafId: number | null = null;
+    const scheduleDraw = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        void cpuDraw();
+      });
+    };
+
+    scheduleDraw();
+
+    const unsubscribe = usePlaybackStore.subscribe((state, previousState) => {
+      if (state.isPlaying) {
+        return;
+      }
+
+      const nextRequestedFrame = state.previewFrame ?? state.currentFrame;
+      const previousRequestedFrame = previousState.previewFrame ?? previousState.currentFrame;
+
+      if (nextRequestedFrame !== previousRequestedFrame) {
+        scheduleDraw();
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [gpuReady, open, isPlaying, cpuDraw]);
 
   // CPU: polling loop during playback
   useEffect(() => {
