@@ -102,6 +102,8 @@ interface ChannelFaderProps {
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   /** Imperative ref for updating the dB readout during drag (no re-render) */
   dbReadoutRef?: React.RefObject<HTMLDivElement | null>;
+  /** Imperative ref for scaling per-track meter bars during drag */
+  meterBarsRef?: React.RefObject<HTMLDivElement[]>;
 }
 
 const ChannelFader = memo(function ChannelFader({
@@ -110,6 +112,7 @@ const ChannelFader = memo(function ChannelFader({
   itemIds,
   onVolumeChange,
   dbReadoutRef,
+  meterBarsRef,
 }: ChannelFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const knobRef = useRef<HTMLDivElement | null>(null);
@@ -168,7 +171,20 @@ const ChannelFader = memo(function ChannelFader({
     const committedDb = volumeDb;
     const gainRatio = Math.pow(10, (db - committedDb) / 20);
     setMixerLiveGains(itemIds.map((id) => ({ itemId: id, gain: gainRatio })));
-  }, [dbReadoutRef, itemIds, volumeDb]);
+
+    // Scale per-track meter bars to preview the volume change.
+    // linearLevelToPercent is linear in dB, so a fader dB shift = direct percent offset.
+    // Meter dB range = AUDIO_METER_MAX_DB - AUDIO_METER_MIN_DB = 6 - (-54) = 60
+    if (meterBarsRef?.current) {
+      const deltaDb = db - committedDb;
+      const percentOffset = (deltaDb / 60) * 100;
+      for (const bar of meterBarsRef.current) {
+        const baseHeight = parseFloat(bar.dataset.baseHeight ?? bar.style.height) || 0;
+        if (!bar.dataset.baseHeight) bar.dataset.baseHeight = String(baseHeight);
+        bar.style.height = `${Math.max(0, Math.min(100, baseHeight + percentOffset))}%`;
+      }
+    }
+  }, [dbReadoutRef, itemIds, meterBarsRef, volumeDb]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -198,6 +214,10 @@ const ChannelFader = memo(function ChannelFader({
       isDraggingRef.current = false;
       dragOffsetPercentRef.current = 0;
       e.currentTarget.releasePointerCapture?.(e.pointerId);
+      // Clear meter bar base heights so next drag captures fresh values
+      if (meterBarsRef?.current) {
+        for (const bar of meterBarsRef.current) delete bar.dataset.baseHeight;
+      }
       // Commit volume without triggering composition re-render:
       // onVolumeChange mutates the track in place + markDirty.
       // Live gains stay active to compensate for stale segment volumeDb.
@@ -272,6 +292,17 @@ const ChannelStrip = memo(function ChannelStrip({
   onSoloToggle,
 }: ChannelStripProps) {
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
+  const meterBarsRef = useRef<HTMLDivElement[]>([]);
+  const meterLeftRef = useRef<HTMLDivElement | null>(null);
+  const meterRightRef = useRef<HTMLDivElement | null>(null);
+
+  // Keep meterBarsRef in sync with the individual bar refs
+  useEffect(() => {
+    const bars: HTMLDivElement[] = [];
+    if (meterLeftRef.current) bars.push(meterLeftRef.current);
+    if (meterRightRef.current) bars.push(meterRightRef.current);
+    meterBarsRef.current = bars;
+  });
   const handleMuteClick = useCallback(() => {
     onMuteToggle(track.id);
   }, [onMuteToggle, track.id]);
@@ -337,6 +368,7 @@ const ChannelStrip = memo(function ChannelStrip({
         <div className="flex gap-px w-[8px] shrink-0">
           <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
             <div
+              ref={meterLeftRef}
               data-track-id={track.id}
               data-track-channel="left"
               className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
@@ -348,6 +380,7 @@ const ChannelStrip = memo(function ChannelStrip({
           </div>
           <div className="relative flex-1 rounded-[1px] bg-[#060708] overflow-hidden">
             <div
+              ref={meterRightRef}
               data-track-id={track.id}
               data-track-channel="right"
               className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${showScanningFallback ? 'opacity-60' : ''}`}
@@ -367,6 +400,7 @@ const ChannelStrip = memo(function ChannelStrip({
             itemIds={track.itemIds}
             onVolumeChange={onVolumeChange}
             dbReadoutRef={dbReadoutRef}
+            meterBarsRef={meterBarsRef}
           />
         </div>
       </div>
