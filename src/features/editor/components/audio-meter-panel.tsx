@@ -356,18 +356,20 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     });
   }, [combinedTracks, mixerSourceTracks, panelMode, playbackGain, sources, waveformsByMediaId]);
 
-  // Called once on fader release — zero store writes during drag
+  // Mutate track volume in place — avoids setTracks() which triggers an
+  // expensive composition re-render cascade.  Live gains keep audio correct.
+  // The mutation persists on save (markDirty triggers autosave).
+  // The composition picks up the new volume on its next natural re-render.
   const handleTrackVolumeChange = useCallback((trackId: string, volumeDb: number) => {
     if (!Number.isFinite(volumeDb)) return;
     const currentTracks = useItemsStore.getState().tracks;
-    useItemsStore.getState().setTracks(
-      currentTracks.map((track) =>
-        track.id === trackId
-          ? { ...track, volume: volumeDb }
-          // Sanitize NaN volumes on other tracks (legacy project data)
-          : Number.isFinite(track.volume) ? track : { ...track, volume: 0 }
-      ),
-    );
+    for (const track of currentTracks) {
+      if (track.id === trackId) {
+        (track as { volume: number }).volume = volumeDb;
+      } else if (!Number.isFinite(track.volume)) {
+        (track as { volume: number }).volume = 0;
+      }
+    }
     useTimelineStore.getState().markDirty();
   }, []);
 

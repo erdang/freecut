@@ -8,7 +8,7 @@ import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import { useItemKeyframesFromContext } from '../contexts/keyframes-context';
 import { getPropertyKeyframes, interpolatePropertyValue } from '@/features/composition-runtime/deps/keyframes';
 import { getAudioClipFadeMultiplier, getAudioFadeMultiplier, type AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
-import { useMixerLiveGainEpoch, getMixerLiveGain } from '@/shared/state/mixer-live-gain';
+import { useMixerLiveGainEpoch, getMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
 import {
   getOrDecodeAudio,
   getOrDecodeAudioForPlayback,
@@ -152,9 +152,12 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const itemVolume = muted ? 0 : Math.max(0, linearVolume * fadeMultiplier);
   const effectiveMasterVolume = previewMasterMuted ? 0 : previewMasterVolume;
 
-  // Mixer fader live gain — updated during drag without re-rendering the composition
+  // Mixer fader live gain — updated during drag without re-rendering the composition.
+  // When the volume prop changes (composition re-rendered with updated segment),
+  // the live gain is no longer needed — the segment already has the correct volumeDb.
   useMixerLiveGainEpoch();
   const mixerGain = getMixerLiveGain(itemId);
+  useEffect(() => { clearMixerLiveGain(itemId); }, [volume, itemId]);
 
   const audioVolume = itemVolume * effectiveMasterVolume * Math.max(0, volumeMultiplier) * mixerGain;
 

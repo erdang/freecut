@@ -198,13 +198,11 @@ const ChannelFader = memo(function ChannelFader({
       isDraggingRef.current = false;
       dragOffsetPercentRef.current = 0;
       e.currentTarget.releasePointerCapture?.(e.pointerId);
-      // Defer the expensive store write so it doesn't block this frame.
-      // Live gains keep audio at the correct level until the commit lands.
-      const finalDb = latestDbRef.current;
-      requestAnimationFrame(() => {
-        clearMixerLiveGains();
-        onVolumeChange(trackId, finalDb);
-      });
+      // Commit volume without triggering composition re-render:
+      // onVolumeChange mutates the track in place + markDirty.
+      // Live gains stay active to compensate for stale segment volumeDb.
+      // They auto-clear when the composition naturally re-renders.
+      onVolumeChange(trackId, latestDbRef.current);
     },
     [onVolumeChange, trackId],
   );

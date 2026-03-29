@@ -118,20 +118,8 @@ describe('AudioMixerView', () => {
     fireEvent.pointerMove(faderRoot!, { pointerId: 1, clientY: 43.5 });
     expect(handleTrackVolumeChange).not.toHaveBeenCalled();
 
-    // Release: store commit deferred to next animation frame
-    let rafCallback: FrameRequestCallback | null = null;
-    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
-      rafCallback = cb;
-      return 0;
-    });
-
+    // Release: synchronous in-place mutation commit (no composition re-render)
     fireEvent.pointerUp(faderRoot!, { pointerId: 1, clientY: 43.5 });
-    expect(handleTrackVolumeChange).not.toHaveBeenCalled();
-
-    // Flush the deferred commit
-    rafCallback?.(performance.now());
-    rafSpy.mockRestore();
-
     expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1);
     const committedVolume = handleTrackVolumeChange.mock.calls[0]?.[1];
     expect(committedVolume).toBeGreaterThan(-10);

@@ -31,6 +31,12 @@ export function clearMixerLiveGains(): void {
   notify();
 }
 
+export function clearMixerLiveGain(itemId: string): void {
+  if (!overrides.has(itemId)) return;
+  overrides.delete(itemId);
+  notify();
+}
+
 export function getMixerLiveGain(itemId: string): number {
   return overrides.get(itemId) ?? 1;
 }
