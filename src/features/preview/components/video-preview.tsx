@@ -3312,9 +3312,16 @@ export const VideoPreview = memo(function VideoPreview({
             // Guard against stale in-flight renders that finish after scrub has ended.
             // Without this, a completed old render can re-show the overlay and hide
             // live Player updates (e.g. ruler click + gizmo interaction).
+            const isPausedOnTransitionFrame = (
+              !playbackState.isPlaying
+              && playbackState.previewFrame === null
+              && frameToRender === playbackState.currentFrame
+              && getTransitionWindowForFrame(frameToRender) !== null
+            );
             if (
               !shouldShowPlaybackTransitionOverlay
               && !forceFastScrubOverlay
+              && !isPausedOnTransitionFrame
               && !shouldShowFastScrubOverlay({
                 isGizmoInteracting: isGizmoInteractingRef.current,
                 isPlaying: playbackState.isPlaying,
@@ -3864,6 +3871,16 @@ export const VideoPreview = memo(function VideoPreview({
                 })();
               }
             }
+          } else if (pausedActiveWindow) {
+            // Paused INSIDE a transition — pin the session and render the
+            // current frame so the GPU transition effect is visible even
+            // without forceFastScrubOverlay.  Without this, the DOM Player
+            // shows the raw video frame because CSS/DOM transition rendering
+            // was removed — all transitions are GPU-only.
+            const tw = pausedActiveWindow;
+            pinTransitionPlaybackSession(tw);
+            scrubRequestedFrameRef.current = state.currentFrame;
+            void pumpRenderLoop();
           } else {
             schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
           }
@@ -3948,12 +3965,28 @@ export const VideoPreview = memo(function VideoPreview({
         return;
       }
 
+      const isPausedInsideTransition = (
+        !state.isPlaying
+        && state.previewFrame === null
+        && getTransitionWindowForFrame(state.currentFrame) !== null
+      );
       const useCurrentFrameAsTarget = (
         forceFastScrubOverlay
+        || isPausedInsideTransition
+        || (isGizmoInteractingRef.current && !preferPlayerForTextGizmoRef.current)
+      );
+      const prevIsPausedInsideTransition = (
+        !prev.isPlaying
+        && prev.previewFrame === null
+        && getTransitionWindowForFrame(prev.currentFrame) !== null
+      );
+      const prevUseCurrentFrameAsTarget = (
+        forceFastScrubOverlay
+        || prevIsPausedInsideTransition
         || (isGizmoInteractingRef.current && !preferPlayerForTextGizmoRef.current)
       );
       const targetFrame = state.previewFrame ?? (useCurrentFrameAsTarget ? state.currentFrame : null);
-      const prevTargetFrame = prev.previewFrame ?? (useCurrentFrameAsTarget ? prev.currentFrame : null);
+      const prevTargetFrame = prev.previewFrame ?? (prevUseCurrentFrameAsTarget ? prev.currentFrame : null);
       const playStateChanged = state.isPlaying !== prev.isPlaying;
       const isAtomicScrubTarget = (
         state.previewFrame !== null
@@ -4191,7 +4224,9 @@ export const VideoPreview = memo(function VideoPreview({
       }
     }
     if (!initialPlaybackState.isPlaying && initialPlaybackState.previewFrame === null) {
-      const pausedPrewarmStartFrame = getPausedTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
+      const initialPausedActiveWindow = getTransitionWindowForFrame(initialPlaybackState.currentFrame);
+      const pausedPrewarmStartFrame = initialPausedActiveWindow?.startFrame
+        ?? getPausedTransitionPrewarmStartFrame(initialPlaybackState.currentFrame);
       if (pausedPrewarmStartFrame !== null) {
         lastPausedPrearmTargetRef.current = pausedPrewarmStartFrame;
         if (forceFastScrubOverlay) {
@@ -4229,6 +4264,10 @@ export const VideoPreview = memo(function VideoPreview({
               }
             })();
           }
+        } else if (initialPausedActiveWindow) {
+          // Paused INSIDE a transition on initial mount — pin session and
+          // render so the GPU transition is visible without forceFastScrubOverlay.
+          pinTransitionPlaybackSession(initialPausedActiveWindow);
         } else {
           schedulePlaybackTransitionPrepare(pausedPrewarmStartFrame);
         }
@@ -4236,6 +4275,18 @@ export const VideoPreview = memo(function VideoPreview({
           targetFrame: pausedPrewarmStartFrame,
         });
       }
+    }
+
+    // Paused inside a transition on initial mount — trigger a render so
+    // the GPU transition is visible without forceFastScrubOverlay.
+    if (
+      !initialPlaybackState.isPlaying
+      && initialPlaybackState.previewFrame === null
+      && !forceFastScrubOverlay
+      && getTransitionWindowForFrame(initialPlaybackState.currentFrame) !== null
+    ) {
+      scrubRequestedFrameRef.current = initialPlaybackState.currentFrame;
+      void pumpRenderLoop();
     }
 
     if (
