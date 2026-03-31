@@ -38,7 +38,7 @@ const warmupLog = createLogger('StableVideoWarmup');
 const SHADOW_MOUNT_LOOKAHEAD_FRAMES = 3;
 const SHADOW_UNMOUNT_COOLDOWN_FRAMES = 3;
 const TRANSITION_SYNC_COOLDOWN_FRAMES = 3;
-const TRANSITION_WARMUP_LOOKAHEAD_SECONDS = 0.5;
+const TRANSITION_WARMUP_LOOKAHEAD_SECONDS = 1.5;
 
 /** Video item with additional properties added by MainComposition */
 export type StableVideoSequenceItem = VideoItem & {
