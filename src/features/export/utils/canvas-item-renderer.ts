@@ -1769,7 +1769,6 @@ function applyCropFeatherMask(
       0,
     );
     gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
     gradient.addColorStop(
       Math.max(0, Math.min(1, (viewportRect.width - featherPixels.right) / viewportRect.width)),
       'rgba(0, 0, 0, 1)',
@@ -1801,7 +1800,6 @@ function applyCropFeatherMask(
       0,
       viewportRect.y + viewportRect.height,
     );
-    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
     gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
     gradient.addColorStop(
       Math.max(0, Math.min(1, (viewportRect.height - featherPixels.bottom) / viewportRect.height)),

@@ -1,6 +1,6 @@
 import type React from 'react';
 import type { CropSettings } from '@/types/transform';
-import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
+import { calculateMediaCropLayout, type MediaCropLayout } from '@/shared/utils/media-crop';
 
 interface ContainedMediaLayoutProps {
   sourceWidth: number;
@@ -18,49 +18,59 @@ function percent(value: number, total: number): string {
   return `${(value / total) * 100}%`;
 }
 
-function buildEdgeMaskStyle(
-  edge: 'left' | 'right' | 'top' | 'bottom',
-  featherPixels: number,
-  viewportWidth: number,
-  viewportHeight: number,
-): React.CSSProperties {
-  const axisDimension = edge === 'left' || edge === 'right'
-    ? viewportWidth
-    : viewportHeight;
-  if (!Number.isFinite(featherPixels) || featherPixels <= 0 || axisDimension <= 0) {
-    return {};
+/**
+ * Build a single composite CSS mask-image that handles both hard crop edges
+ * and soft feather in one shot. Each cropped edge gets a gradient layer;
+ * layers are intersected so all edges apply simultaneously.
+ *
+ * Returns undefined when no crop is active (no mask needed).
+ */
+function buildCropMask(
+  layout: MediaCropLayout,
+): string | undefined {
+  const { mediaRect, viewportRect, featherPixels, crop } = layout;
+  const hasCrop = crop.left > 0 || crop.right > 0 || crop.top > 0 || crop.bottom > 0;
+  if (!hasCrop) return undefined;
+
+  const mw = mediaRect.width;
+  const mh = mediaRect.height;
+  if (mw <= 0 || mh <= 0) return undefined;
+
+  // Viewport edges in media-relative percentages
+  const vpLeft = ((viewportRect.x - mediaRect.x) / mw) * 100;
+  const vpRight = ((viewportRect.x - mediaRect.x + viewportRect.width) / mw) * 100;
+  const vpTop = ((viewportRect.y - mediaRect.y) / mh) * 100;
+  const vpBottom = ((viewportRect.y - mediaRect.y + viewportRect.height) / mh) * 100;
+
+  // Feather in media-relative percentages
+  const fl = mw > 0 ? (featherPixels.left / mw) * 100 : 0;
+  const fr = mw > 0 ? (featherPixels.right / mw) * 100 : 0;
+  const ft = mh > 0 ? (featherPixels.top / mh) * 100 : 0;
+  const fb = mh > 0 ? (featherPixels.bottom / mh) * 100 : 0;
+
+  const layers: string[] = [];
+
+  // Each cropped edge gets a gradient: transparent outside, opaque inside,
+  // with optional feather ramp at the boundary.
+  if (crop.left > 0) {
+    const opaqueStart = vpLeft + fl;
+    layers.push(`linear-gradient(90deg, transparent ${vpLeft}%, black ${opaqueStart}%, black 100%)`);
+  }
+  if (crop.right > 0) {
+    const opaqueEnd = vpRight - fr;
+    layers.push(`linear-gradient(90deg, black 0%, black ${opaqueEnd}%, transparent ${vpRight}%)`);
+  }
+  if (crop.top > 0) {
+    const opaqueStart = vpTop + ft;
+    layers.push(`linear-gradient(180deg, transparent ${vpTop}%, black ${opaqueStart}%, black 100%)`);
+  }
+  if (crop.bottom > 0) {
+    const opaqueEnd = vpBottom - fb;
+    layers.push(`linear-gradient(180deg, black 0%, black ${opaqueEnd}%, transparent ${vpBottom}%)`);
   }
 
-  const stop = Math.max(0, Math.min(100, (featherPixels / axisDimension) * 100));
-  let gradient: string;
-  switch (edge) {
-    case 'left':
-      gradient = `linear-gradient(90deg, transparent 0%, black ${stop}%, black 100%)`;
-      break;
-    case 'right':
-      gradient = `linear-gradient(90deg, black 0%, black ${100 - stop}%, transparent 100%)`;
-      break;
-    case 'top':
-      gradient = `linear-gradient(180deg, transparent 0%, black ${stop}%, black 100%)`;
-      break;
-    case 'bottom':
-      gradient = `linear-gradient(180deg, black 0%, black ${100 - stop}%, transparent 100%)`;
-      break;
-  }
-
-  return {
-    position: 'relative',
-    width: '100%',
-    height: '100%',
-    maskImage: gradient,
-    WebkitMaskImage: gradient,
-    maskRepeat: 'no-repeat',
-    WebkitMaskRepeat: 'no-repeat',
-    maskSize: '100% 100%',
-    WebkitMaskSize: '100% 100%',
-    transform: 'translateZ(0)',
-    backfaceVisibility: 'hidden',
-  };
+  if (layers.length === 0) return undefined;
+  return layers.join(', ');
 }
 
 /**
@@ -87,46 +97,11 @@ export function ContainedMediaLayout({
     return <div style={{ position: 'relative', width: '100%', height: '100%' }} />;
   }
 
-  const viewportOffsetX = layout.viewportRect.x - layout.mediaRect.x;
-  const viewportOffsetY = layout.viewportRect.y - layout.mediaRect.y;
-  const contentWidthPercent = layout.viewportRect.width > 0
-    ? (layout.mediaRect.width / layout.viewportRect.width) * 100
-    : 100;
-  const contentHeightPercent = layout.viewportRect.height > 0
-    ? (layout.mediaRect.height / layout.viewportRect.height) * 100
-    : 100;
-  let contentNode: React.ReactNode = (
-    <div
-      style={{
-        position: 'absolute',
-        left: percent(-viewportOffsetX, layout.viewportRect.width),
-        top: percent(-viewportOffsetY, layout.viewportRect.height),
-        width: `${contentWidthPercent}%`,
-        height: `${contentHeightPercent}%`,
-      }}
-    >
-      {children}
-    </div>
-  );
-
-  const maskEdges: Array<'left' | 'right' | 'top' | 'bottom'> = ['left', 'right', 'top', 'bottom'];
-  for (const edge of maskEdges) {
-    const featherPixels = layout.featherPixels[edge];
-    if (featherPixels <= 0) continue;
-
-    contentNode = (
-      <div
-        style={buildEdgeMaskStyle(
-          edge,
-          featherPixels,
-          layout.viewportRect.width,
-          layout.viewportRect.height,
-        )}
-      >
-        {contentNode}
-      </div>
-    );
-  }
+  // Single composite mask handles both hard crop and soft feather.
+  // No intermediate viewport div with overflow:hidden — eliminates sub-pixel
+  // seams from CSS percentage rounding entirely.
+  const maskImage = buildCropMask(layout);
+  const maskComposite = maskImage?.includes(', ') ? 'intersect' : undefined;
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -137,21 +112,15 @@ export function ContainedMediaLayout({
           top: percent(layout.mediaRect.y, containerHeight),
           width: percent(layout.mediaRect.width, containerWidth),
           height: percent(layout.mediaRect.height, containerHeight),
+          maskImage,
+          WebkitMaskImage: maskImage,
+          ...(maskComposite ? {
+            maskComposite,
+            WebkitMaskComposite: 'destination-in',
+          } : {}),
         }}
       >
-        <div
-          style={{
-            position: 'absolute',
-            left: percent(viewportOffsetX, layout.mediaRect.width),
-            top: percent(viewportOffsetY, layout.mediaRect.height),
-            // +1px covers sub-pixel seams from percentage rounding
-            width: `calc(${percent(layout.viewportRect.width, layout.mediaRect.width)} + 1px)`,
-            height: `calc(${percent(layout.viewportRect.height, layout.mediaRect.height)} + 1px)`,
-            overflow: 'hidden',
-          }}
-        >
-          {contentNode}
-        </div>
+        {children}
       </div>
     </div>
   );
