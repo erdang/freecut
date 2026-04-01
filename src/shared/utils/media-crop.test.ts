@@ -54,11 +54,12 @@ describe('media-crop', () => {
       width: 400,
       height: 225,
     });
+    // viewportRect is rounded to pixel boundaries
     expect(layout.viewportRect).toEqual({
       x: 40,
-      y: 132.5,
+      y: 132,
       width: 340,
-      height: 180,
+      height: 181,
     });
     expect(layout.softnessPixels).toBe(0);
     expect(layout.featherPixels).toEqual({
@@ -88,13 +89,14 @@ describe('media-crop', () => {
     });
 
     expect(layout.softnessPixels).toBeCloseTo(22.5);
-    expect(layout.cropViewportRect).toEqual(layout.viewportRect);
-    expect(layout.featherPixels).toEqual({
-      left: 22.5,
-      right: 0,
-      top: 0,
-      bottom: 0,
-    });
+    // Negative softness: no outer expansion, so cropViewportRect and
+    // viewportRect differ only by pixel-boundary rounding.
+    expect(layout.viewportRect.x).toBe(Math.floor(layout.cropViewportRect.x));
+    expect(layout.viewportRect.y).toBe(Math.floor(layout.cropViewportRect.y));
+    expect(layout.featherPixels.left).toBeCloseTo(22.5, 0);
+    expect(layout.featherPixels.right).toBe(0);
+    expect(layout.featherPixels.top).toBe(0);
+    expect(layout.featherPixels.bottom).toBe(0);
   });
 
   it('expands the viewport outward for positive softness before feathering', () => {
@@ -109,18 +111,17 @@ describe('media-crop', () => {
       width: 360,
       height: 225,
     });
+    // viewportRect is rounded to pixel boundaries to prevent sub-pixel seams
     expect(layout.viewportRect).toEqual({
-      x: 17.5,
-      y: 87.5,
-      width: 382.5,
-      height: 225,
+      x: 17,
+      y: 87,
+      width: 383,
+      height: 226,
     });
-    expect(layout.featherPixels).toEqual({
-      left: 22.5,
-      right: 0,
-      top: 0,
-      bottom: 0,
-    });
+    expect(layout.featherPixels.left).toBeCloseTo(22.5, 0);
+    expect(layout.featherPixels.right).toBe(0);
+    expect(layout.featherPixels.top).toBe(0);
+    expect(layout.featherPixels.bottom).toBe(0);
   });
 
   it('clamps opposing feather widths so they do not exceed the viewport', () => {

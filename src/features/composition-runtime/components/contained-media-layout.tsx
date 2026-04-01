@@ -144,8 +144,9 @@ export function ContainedMediaLayout({
             position: 'absolute',
             left: percent(viewportOffsetX, layout.mediaRect.width),
             top: percent(viewportOffsetY, layout.mediaRect.height),
-            width: percent(layout.viewportRect.width, layout.mediaRect.width),
-            height: percent(layout.viewportRect.height, layout.mediaRect.height),
+            // +1px covers sub-pixel seams from percentage rounding
+            width: `calc(${percent(layout.viewportRect.width, layout.mediaRect.width)} + 1px)`,
+            height: `calc(${percent(layout.viewportRect.height, layout.mediaRect.height)} + 1px)`,
             overflow: 'hidden',
           }}
         >

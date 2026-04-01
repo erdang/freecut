@@ -213,11 +213,17 @@ export function calculateMediaCropLayout(
       bottom: cropPixels.bottom > 0 ? Math.min(softnessPixels, cropPixels.bottom) : 0,
     }
     : { left: 0, right: 0, top: 0, bottom: 0 };
+  // Round to pixel boundaries — fractional viewport edges cause 1px seams
+  // in both DOM (percentage rounding) and canvas (sub-pixel clip rects).
+  const rawVpX = cropViewportRect.x - outerExpansion.left;
+  const rawVpY = cropViewportRect.y - outerExpansion.top;
+  const rawVpR = rawVpX + Math.max(0, cropViewportRect.width + outerExpansion.left + outerExpansion.right);
+  const rawVpB = rawVpY + Math.max(0, cropViewportRect.height + outerExpansion.top + outerExpansion.bottom);
   const viewportRect = {
-    x: cropViewportRect.x - outerExpansion.left,
-    y: cropViewportRect.y - outerExpansion.top,
-    width: Math.max(0, cropViewportRect.width + outerExpansion.left + outerExpansion.right),
-    height: Math.max(0, cropViewportRect.height + outerExpansion.top + outerExpansion.bottom),
+    x: Math.floor(rawVpX),
+    y: Math.floor(rawVpY),
+    width: Math.ceil(rawVpR) - Math.floor(rawVpX),
+    height: Math.ceil(rawVpB) - Math.floor(rawVpY),
   };
   const featherInput: CropInsets = {
     left: cropPixels.left > 0 ? (rawSoftnessPixels > 0 ? outerExpansion.left : softnessPixels) : 0,
