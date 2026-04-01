@@ -107,6 +107,7 @@ export interface ProjectTimeline {
       right?: number;
       top?: number;
       bottom?: number;
+      softness?: number;
     };
     // Audio properties
     volume?: number;

@@ -25,12 +25,15 @@ export interface TransformProperties {
 /**
  * Edge crop values stored as normalized source ratios.
  * Example: left=0.1 crops 10% of the source width from the left edge.
+ * Softness is normalized against the smaller source dimension.
+ * Negative values soften inward, positive values fade outward.
  */
 export interface CropSettings {
   left?: number;
   right?: number;
   top?: number;
   bottom?: number;
+  softness?: number;
 }
 
 /**

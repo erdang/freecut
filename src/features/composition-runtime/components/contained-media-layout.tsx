@@ -18,6 +18,51 @@ function percent(value: number, total: number): string {
   return `${(value / total) * 100}%`;
 }
 
+function buildEdgeMaskStyle(
+  edge: 'left' | 'right' | 'top' | 'bottom',
+  featherPixels: number,
+  viewportWidth: number,
+  viewportHeight: number,
+): React.CSSProperties {
+  const axisDimension = edge === 'left' || edge === 'right'
+    ? viewportWidth
+    : viewportHeight;
+  if (!Number.isFinite(featherPixels) || featherPixels <= 0 || axisDimension <= 0) {
+    return {};
+  }
+
+  const stop = Math.max(0, Math.min(100, (featherPixels / axisDimension) * 100));
+  let gradient: string;
+  switch (edge) {
+    case 'left':
+      gradient = `linear-gradient(90deg, transparent 0%, black ${stop}%, black 100%)`;
+      break;
+    case 'right':
+      gradient = `linear-gradient(90deg, black 0%, black ${100 - stop}%, transparent 100%)`;
+      break;
+    case 'top':
+      gradient = `linear-gradient(180deg, transparent 0%, black ${stop}%, black 100%)`;
+      break;
+    case 'bottom':
+      gradient = `linear-gradient(180deg, black 0%, black ${100 - stop}%, transparent 100%)`;
+      break;
+  }
+
+  return {
+    position: 'relative',
+    width: '100%',
+    height: '100%',
+    maskImage: gradient,
+    WebkitMaskImage: gradient,
+    maskRepeat: 'no-repeat',
+    WebkitMaskRepeat: 'no-repeat',
+    maskSize: '100% 100%',
+    WebkitMaskSize: '100% 100%',
+    transform: 'translateZ(0)',
+    backfaceVisibility: 'hidden',
+  };
+}
+
 /**
  * Explicit contain-fit wrapper for media content.
  * This makes media framing deterministic so crop preview and export use the same geometry.
@@ -50,6 +95,38 @@ export function ContainedMediaLayout({
   const contentHeightPercent = layout.viewportRect.height > 0
     ? (layout.mediaRect.height / layout.viewportRect.height) * 100
     : 100;
+  let contentNode: React.ReactNode = (
+    <div
+      style={{
+        position: 'absolute',
+        left: percent(-viewportOffsetX, layout.viewportRect.width),
+        top: percent(-viewportOffsetY, layout.viewportRect.height),
+        width: `${contentWidthPercent}%`,
+        height: `${contentHeightPercent}%`,
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  const maskEdges: Array<'left' | 'right' | 'top' | 'bottom'> = ['left', 'right', 'top', 'bottom'];
+  for (const edge of maskEdges) {
+    const featherPixels = layout.featherPixels[edge];
+    if (featherPixels <= 0) continue;
+
+    contentNode = (
+      <div
+        style={buildEdgeMaskStyle(
+          edge,
+          featherPixels,
+          layout.viewportRect.width,
+          layout.viewportRect.height,
+        )}
+      >
+        {contentNode}
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
@@ -72,17 +149,7 @@ export function ContainedMediaLayout({
             overflow: 'hidden',
           }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              left: percent(-viewportOffsetX, layout.viewportRect.width),
-              top: percent(-viewportOffsetY, layout.viewportRect.height),
-              width: `${contentWidthPercent}%`,
-              height: `${contentHeightPercent}%`,
-            }}
-          >
-            {children}
-          </div>
+          {contentNode}
         </div>
       </div>
     </div>

@@ -12,7 +12,14 @@ import {
   SliderInput,
 } from '../components';
 import { getMixedValue } from '../utils';
-import { cropPixelsToRatio, cropRatioToPixels, normalizeCropSettings } from '@/shared/utils/media-crop';
+import {
+  cropPixelsToRatio,
+  cropSignedPixelsToRatio,
+  cropSignedRatioToPixels,
+  cropRatioToPixels,
+  getCropSoftnessReferenceDimension,
+  normalizeCropSettings,
+} from '@/shared/utils/media-crop';
 
 // Speed limits (matching rate-stretch)
 const MIN_SPEED = 0.1;
@@ -41,6 +48,14 @@ function getCropPixels(item: VideoItem, edge: CropEdge): number {
   return cropRatioToPixels(item.crop?.[edge], dimension);
 }
 
+function getCropSoftnessDimension(item: VideoItem): number {
+  return Math.max(1, getCropSoftnessReferenceDimension(getSourceWidth(item), getSourceHeight(item)));
+}
+
+function getCropSoftnessPixels(item: VideoItem): number {
+  return cropSignedRatioToPixels(item.crop?.softness, getCropSoftnessDimension(item));
+}
+
 function buildCropUpdate(item: VideoItem, edge: CropEdge, pixels: number) {
   const dimension = edge === 'left' || edge === 'right'
     ? getSourceWidth(item)
@@ -48,6 +63,13 @@ function buildCropUpdate(item: VideoItem, edge: CropEdge, pixels: number) {
   return normalizeCropSettings({
     ...item.crop,
     [edge]: cropPixelsToRatio(pixels, dimension),
+  });
+}
+
+function buildCropSoftnessUpdate(item: VideoItem, pixels: number) {
+  return normalizeCropSettings({
+    ...item.crop,
+    softness: cropSignedPixelsToRatio(pixels, getCropSoftnessDimension(item)),
   });
 }
 
@@ -95,6 +117,7 @@ export function VideoSection({ items }: VideoSectionProps) {
   const cropRight = getMixedValue(videoItems, (item) => getCropPixels(item, 'right'), 0);
   const cropTop = getMixedValue(videoItems, (item) => getCropPixels(item, 'top'), 0);
   const cropBottom = getMixedValue(videoItems, (item) => getCropPixels(item, 'bottom'), 0);
+  const cropSoftness = getMixedValue(videoItems, getCropSoftnessPixels, 0);
 
   const maxSourceWidth = useMemo(
     () => Math.max(1, ...videoItems.map(getSourceWidth)),
@@ -102,6 +125,10 @@ export function VideoSection({ items }: VideoSectionProps) {
   );
   const maxSourceHeight = useMemo(
     () => Math.max(1, ...videoItems.map(getSourceHeight)),
+    [videoItems]
+  );
+  const maxCropSoftness = useMemo(
+    () => Math.max(1, ...videoItems.map(getCropSoftnessDimension)),
     [videoItems]
   );
 
@@ -208,6 +235,31 @@ export function VideoSection({ items }: VideoSectionProps) {
     [videoItems, updateItem, commitPreviewClear]
   );
 
+  const previewCropSoftness = useCallback(
+    (pixels: number) => {
+      const previews: Record<string, { crop: VideoItem['crop'] }> = {};
+      videoItems.forEach((item) => {
+        previews[item.id] = {
+          crop: buildCropSoftnessUpdate(item, pixels),
+        };
+      });
+      setPropertiesPreviewNew(previews);
+    },
+    [setPropertiesPreviewNew, videoItems]
+  );
+
+  const commitCropSoftness = useCallback(
+    (pixels: number) => {
+      videoItems.forEach((item) => {
+        updateItem(item.id, {
+          crop: buildCropSoftnessUpdate(item, pixels),
+        });
+      });
+      commitPreviewClear();
+    },
+    [videoItems, updateItem, commitPreviewClear]
+  );
+
   const resetCropEdge = useCallback(
     (edge: CropEdge) => {
       const needsUpdate = videoItems.some((item) => getCropPixels(item, edge) > CROP_TOLERANCE);
@@ -224,6 +276,20 @@ export function VideoSection({ items }: VideoSectionProps) {
     },
     [updateItem, videoItems]
   );
+
+  const resetCropSoftness = useCallback(() => {
+    const needsUpdate = videoItems.some((item) => Math.abs(getCropSoftnessPixels(item)) > CROP_TOLERANCE);
+    if (!needsUpdate) return;
+
+    videoItems.forEach((item) => {
+      updateItem(item.id, {
+        crop: normalizeCropSettings({
+          ...item.crop,
+          softness: 0,
+        }),
+      });
+    });
+  }, [updateItem, videoItems]);
 
   // Reset speed to 1x - pushes subsequent clips right to avoid overlaps
   const resetSpeedWithRipple = useTimelineStore((s: TimelineState & TimelineActions) => s.resetSpeedWithRipple);
@@ -433,6 +499,32 @@ export function VideoSection({ items }: VideoSectionProps) {
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('bottom')}
               title="Reset bottom crop"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
+
+        <PropertyRow label="Softness">
+          <div className="flex items-center gap-1 w-full">
+            <SliderInput
+              value={cropSoftness}
+              onChange={commitCropSoftness}
+              onLiveChange={previewCropSoftness}
+              min={-maxCropSoftness}
+              max={maxCropSoftness}
+              step={CROP_STEP}
+              unit="px"
+              formatValue={formatCropValue}
+              formatInputValue={formatCropValue}
+              className="flex-1 min-w-0"
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={resetCropSoftness}
+              title="Reset crop softness"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>

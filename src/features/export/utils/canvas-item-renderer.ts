@@ -395,6 +395,7 @@ function drawTier2VideoFrame(
   transform: ItemTransform,
   canvas: CanvasSettings,
   crop?: VideoItem['crop'],
+  canvasPool?: CanvasPool,
 ): boolean {
   try {
     const maybeVideoFrame = frame as VideoFrame & {
@@ -410,6 +411,7 @@ function drawTier2VideoFrame(
       canvas,
       crop,
       visibleRect,
+      canvasPool,
     );
   } catch {
     return false;
@@ -438,6 +440,8 @@ async function tryDrawWorkerPredecodedBitmap(
       transform,
       canvasSettings,
       item.crop,
+      undefined,
+      rctx.canvasPool,
     );
   };
 
@@ -547,6 +551,8 @@ async function renderVideoItem(
       transform,
       canvasSettings,
       item.crop,
+      undefined,
+      rctx.canvasPool,
     );
     // For variable-speed clips using DOM fallback during playback,
     // DON'T kick off mediabunny init — keep using DOM video for the
@@ -602,6 +608,7 @@ async function renderVideoItem(
           transform,
           canvasSettings,
           item.crop,
+          rctx.canvasPool,
         )
       ) {
         return;
@@ -682,6 +689,7 @@ async function renderVideoItem(
             transform,
             canvasSettings,
             item.crop,
+            rctx.canvasPool,
           )
         ) {
           return;
@@ -692,47 +700,67 @@ async function renderVideoItem(
         log.debug(`VIDEO DRAW (mediabunny) frame=${frame} sourceTime=${clampedTime.toFixed(2)}s`);
       }
 
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(
-        drawLayout.viewportRect.x,
-        drawLayout.viewportRect.y,
-        drawLayout.viewportRect.width,
-        drawLayout.viewportRect.height,
-      );
-      ctx.clip();
       let success = false;
       let capturedFrame: ImageBitmap | VideoFrame | null = null;
       let capturedSourceTime: number | null = null;
-      try {
-        const result = (
-          isPreviewMode && scrubbingCache
-            ? await extractor.drawFrameWithCapture(
-              ctx,
+      const drawExtractorFrame = async (
+        targetCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+      ) => (
+        isPreviewMode && scrubbingCache
+          ? await extractor.drawFrameWithCapture(
+            targetCtx,
+            clampedTime,
+            drawLayout.mediaRect.x,
+            drawLayout.mediaRect.y,
+            drawLayout.mediaRect.width,
+            drawLayout.mediaRect.height,
+          )
+          : {
+            success: await extractor.drawFrame(
+              targetCtx,
               clampedTime,
               drawLayout.mediaRect.x,
               drawLayout.mediaRect.y,
               drawLayout.mediaRect.width,
               drawLayout.mediaRect.height,
-            )
-            : {
-              success: await extractor.drawFrame(
-                ctx,
-                clampedTime,
-                drawLayout.mediaRect.x,
-                drawLayout.mediaRect.y,
-                drawLayout.mediaRect.width,
-                drawLayout.mediaRect.height,
-              ),
-              capturedFrame: null,
-              capturedSourceTime: null,
-            }
-        );
-        success = result.success;
-        capturedFrame = result.capturedFrame;
-        capturedSourceTime = result.capturedSourceTime;
-      } finally {
-        ctx.restore();
+            ),
+            capturedFrame: null,
+            capturedSourceTime: null,
+          }
+      );
+
+      if (hasCropFeather(drawLayout.featherPixels)) {
+        const { canvas: scratchCanvas, ctx: scratchCtx } = rctx.canvasPool.acquire();
+        try {
+          scratchCtx.save();
+          clipToViewport(scratchCtx, drawLayout.viewportRect);
+          try {
+            const result = await drawExtractorFrame(scratchCtx);
+            success = result.success;
+            capturedFrame = result.capturedFrame;
+            capturedSourceTime = result.capturedSourceTime;
+          } finally {
+            scratchCtx.restore();
+          }
+
+          if (success) {
+            applyCropFeatherMask(scratchCtx, drawLayout.viewportRect, drawLayout.featherPixels);
+            ctx.drawImage(scratchCanvas, 0, 0);
+          }
+        } finally {
+          rctx.canvasPool.release(scratchCanvas);
+        }
+      } else {
+        ctx.save();
+        clipToViewport(ctx, drawLayout.viewportRect);
+        try {
+          const result = await drawExtractorFrame(ctx);
+          success = result.success;
+          capturedFrame = result.capturedFrame;
+          capturedSourceTime = result.capturedSourceTime;
+        } finally {
+          ctx.restore();
+        }
       }
 
       if (success) {
@@ -762,6 +790,7 @@ async function renderVideoItem(
             transform,
             canvasSettings,
             item.crop,
+            rctx.canvasPool,
           )
         ) {
           return;
@@ -879,6 +908,8 @@ async function renderVideoItem(
     transform,
     canvasSettings,
     item.crop,
+    undefined,
+    rctx.canvasPool,
   );
 }
 
@@ -913,6 +944,8 @@ function renderImageItem(
       transform,
       canvasSettings,
       item.crop,
+      undefined,
+      rctx.canvasPool,
     );
     return;
   }
@@ -929,6 +962,8 @@ function renderImageItem(
     transform,
     canvasSettings,
     item.crop,
+    undefined,
+    rctx.canvasPool,
   );
 }
 
@@ -1633,7 +1668,11 @@ function calculateContainedMediaDrawLayout(
   transform: { x: number; y: number; width: number; height: number },
   canvas: CanvasSettings,
   crop?: VideoItem['crop'],
-): { mediaRect: { x: number; y: number; width: number; height: number }; viewportRect: { x: number; y: number; width: number; height: number } } {
+): {
+  mediaRect: { x: number; y: number; width: number; height: number };
+  viewportRect: { x: number; y: number; width: number; height: number };
+  featherPixels: ReturnType<typeof calculateMediaCropLayout>['featherPixels'];
+} {
   const containerLeft = canvas.width / 2 + transform.x - transform.width / 2;
   const containerTop = canvas.height / 2 + transform.y - transform.height / 2;
   const layout = calculateMediaCropLayout(
@@ -1657,7 +1696,122 @@ function calculateContainedMediaDrawLayout(
       width: layout.viewportRect.width,
       height: layout.viewportRect.height,
     },
+    featherPixels: layout.featherPixels,
   };
+}
+
+function hasCropFeather(
+  featherPixels: ReturnType<typeof calculateMediaCropLayout>['featherPixels'],
+): boolean {
+  return featherPixels.left > 0
+    || featherPixels.right > 0
+    || featherPixels.top > 0
+    || featherPixels.bottom > 0;
+}
+
+function clipToViewport(
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  viewportRect: { x: number; y: number; width: number; height: number },
+): void {
+  ctx.beginPath();
+  ctx.rect(
+    viewportRect.x,
+    viewportRect.y,
+    viewportRect.width,
+    viewportRect.height,
+  );
+  ctx.clip();
+}
+
+function applyCropFeatherMask(
+  ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
+  viewportRect: { x: number; y: number; width: number; height: number },
+  featherPixels: ReturnType<typeof calculateMediaCropLayout>['featherPixels'],
+): void {
+  if (viewportRect.width <= 0 || viewportRect.height <= 0) {
+    return;
+  }
+
+  const drawMaskPass = (gradient: CanvasGradient) => {
+    ctx.fillStyle = gradient;
+    ctx.fillRect(
+      viewportRect.x,
+      viewportRect.y,
+      viewportRect.width,
+      viewportRect.height,
+    );
+  };
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-in';
+
+  if (featherPixels.left > 0) {
+    const gradient = ctx.createLinearGradient(
+      viewportRect.x,
+      0,
+      viewportRect.x + viewportRect.width,
+      0,
+    );
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(
+      Math.max(0, Math.min(1, featherPixels.left / viewportRect.width)),
+      'rgba(0, 0, 0, 1)',
+    );
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+    drawMaskPass(gradient);
+  }
+
+  if (featherPixels.right > 0) {
+    const gradient = ctx.createLinearGradient(
+      viewportRect.x,
+      0,
+      viewportRect.x + viewportRect.width,
+      0,
+    );
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    gradient.addColorStop(
+      Math.max(0, Math.min(1, (viewportRect.width - featherPixels.right) / viewportRect.width)),
+      'rgba(0, 0, 0, 1)',
+    );
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    drawMaskPass(gradient);
+  }
+
+  if (featherPixels.top > 0) {
+    const gradient = ctx.createLinearGradient(
+      0,
+      viewportRect.y,
+      0,
+      viewportRect.y + viewportRect.height,
+    );
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 0)');
+    gradient.addColorStop(
+      Math.max(0, Math.min(1, featherPixels.top / viewportRect.height)),
+      'rgba(0, 0, 0, 1)',
+    );
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+    drawMaskPass(gradient);
+  }
+
+  if (featherPixels.bottom > 0) {
+    const gradient = ctx.createLinearGradient(
+      0,
+      viewportRect.y,
+      0,
+      viewportRect.y + viewportRect.height,
+    );
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    gradient.addColorStop(0, 'rgba(0, 0, 0, 1)');
+    gradient.addColorStop(
+      Math.max(0, Math.min(1, (viewportRect.height - featherPixels.bottom) / viewportRect.height)),
+      'rgba(0, 0, 0, 1)',
+    );
+    gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    drawMaskPass(gradient);
+  }
+
+  ctx.restore();
 }
 
 function drawContainedMediaSource(
@@ -1669,50 +1823,78 @@ function drawContainedMediaSource(
   canvas: CanvasSettings,
   crop?: VideoItem['crop'],
   sourceRect?: { x: number; y: number; width: number; height: number },
+  canvasPool?: CanvasPool,
 ): boolean {
   const drawLayout = calculateContainedMediaDrawLayout(sourceWidth, sourceHeight, transform, canvas, crop);
   if (drawLayout.viewportRect.width <= 0 || drawLayout.viewportRect.height <= 0) {
     return false;
   }
 
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(
-    drawLayout.viewportRect.x,
-    drawLayout.viewportRect.y,
-    drawLayout.viewportRect.width,
-    drawLayout.viewportRect.height,
-  );
-  ctx.clip();
+  const drawSource = (targetCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D) => {
+    if (
+      sourceRect
+      && Number.isFinite(sourceRect.width)
+      && Number.isFinite(sourceRect.height)
+      && sourceRect.width > 0
+      && sourceRect.height > 0
+    ) {
+      targetCtx.drawImage(
+        source,
+        sourceRect.x,
+        sourceRect.y,
+        sourceRect.width,
+        sourceRect.height,
+        drawLayout.mediaRect.x,
+        drawLayout.mediaRect.y,
+        drawLayout.mediaRect.width,
+        drawLayout.mediaRect.height,
+      );
+      return;
+    }
 
-  if (
-    sourceRect
-    && Number.isFinite(sourceRect.width)
-    && Number.isFinite(sourceRect.height)
-    && sourceRect.width > 0
-    && sourceRect.height > 0
-  ) {
-    ctx.drawImage(
-      source,
-      sourceRect.x,
-      sourceRect.y,
-      sourceRect.width,
-      sourceRect.height,
-      drawLayout.mediaRect.x,
-      drawLayout.mediaRect.y,
-      drawLayout.mediaRect.width,
-      drawLayout.mediaRect.height,
-    );
-  } else {
-    ctx.drawImage(
+    targetCtx.drawImage(
       source,
       drawLayout.mediaRect.x,
       drawLayout.mediaRect.y,
       drawLayout.mediaRect.width,
       drawLayout.mediaRect.height,
     );
+  };
+
+  if (!hasCropFeather(drawLayout.featherPixels)) {
+    ctx.save();
+    clipToViewport(ctx, drawLayout.viewportRect);
+    drawSource(ctx);
+    ctx.restore();
+    return true;
   }
 
-  ctx.restore();
+  const pooledCanvas = canvasPool?.acquire();
+  const scratchCanvas = pooledCanvas?.canvas ?? new OffscreenCanvas(canvas.width, canvas.height);
+  const scratchCtx = pooledCanvas?.ctx ?? scratchCanvas.getContext('2d');
+  if (!scratchCtx) {
+    if (pooledCanvas) {
+      canvasPool?.release(scratchCanvas);
+    }
+    return false;
+  }
+
+  try {
+    if (!pooledCanvas) {
+      scratchCtx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    scratchCtx.save();
+    clipToViewport(scratchCtx, drawLayout.viewportRect);
+    drawSource(scratchCtx);
+    scratchCtx.restore();
+    applyCropFeatherMask(scratchCtx, drawLayout.viewportRect, drawLayout.featherPixels);
+    ctx.drawImage(scratchCanvas, 0, 0);
+  } finally {
+    if (pooledCanvas) {
+      canvasPool?.release(scratchCanvas);
+    }
+  }
+
   return true;
 }

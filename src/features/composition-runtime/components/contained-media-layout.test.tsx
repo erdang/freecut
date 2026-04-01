@@ -32,4 +32,29 @@ describe('ContainedMediaLayout', () => {
     expect(parseFloat(content?.style.left ?? '0') + parseFloat(content?.style.width ?? '0')).toBeCloseTo(100, 6);
     expect(parseFloat(content?.style.top ?? '0') + parseFloat(content?.style.height ?? '0')).toBeCloseTo(100, 6);
   });
+
+  it('adds a mask wrapper when crop softness is active on a cropped edge', () => {
+    const { container } = render(
+      <ContainedMediaLayout
+        sourceWidth={1920}
+        sourceHeight={1080}
+        containerWidth={400}
+        containerHeight={400}
+        crop={{ left: 0.1, softness: 0.1 }}
+      >
+        <div data-testid="media" />
+      </ContainedMediaLayout>
+    );
+
+    const wrappers = container.querySelectorAll('div');
+    const viewport = wrappers[2] as HTMLDivElement | undefined;
+    const maskedWrapper = Array.from(wrappers).find((element) => {
+      const style = element.getAttribute('style') ?? '';
+      return style.includes('mask-image') || style.includes('-webkit-mask-image');
+    });
+
+    expect(viewport?.style.left).toBe('4.375%');
+    expect(maskedWrapper).toBeTruthy();
+    expect(maskedWrapper?.getAttribute('style')).toContain('linear-gradient');
+  });
 });

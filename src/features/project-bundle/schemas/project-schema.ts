@@ -265,6 +265,7 @@ const cropSchema = z.object({
   right: z.number().min(0).max(1).optional(),
   top: z.number().min(0).max(1).optional(),
   bottom: z.number().min(0).max(1).optional(),
+  softness: z.number().min(-1).max(1).optional(),
 });
 
 const cornerPinSchema = z.object({
