@@ -16,6 +16,8 @@ import {
   estimateFileSize,
   getDefaultAudioCodec,
   getAudioBitrateForQuality,
+  getPreferredContainerForCodec,
+  selectFallbackVideoCodec,
 } from '../utils/client-renderer';
 import { renderComposition, renderAudioOnly } from '../utils/client-render-engine';
 import { convertTimelineToComposition } from '../utils/timeline-to-composition';
@@ -312,23 +314,33 @@ export function useClientRender(): UseClientRenderReturn {
           );
 
           if (!supportedCodecs.includes(clientSettings.codec)) {
-            // Try fallback to H.264 if available
-            if (supportedCodecs.includes('avc')) {
-              clientSettings.codec = 'avc';
-              if (!videoContainer) {
-                clientSettings.container = 'mp4';
-              }
-              event.set('codecFallback', 'avc');
-            } else if (supportedCodecs.length > 0) {
-              // Use first available codec
-              const fallbackCodec = supportedCodecs[0]!;
-              clientSettings.codec = fallbackCodec;
-              if (!videoContainer) {
-                clientSettings.container = ['vp8', 'vp9', 'av1'].includes(fallbackCodec) ? 'webm' : 'mp4';
-              }
-              event.set('codecFallback', fallbackCodec);
+            const containerFallback = selectFallbackVideoCodec(
+              supportedCodecs,
+              clientSettings.container as ClientVideoContainer
+            );
+
+            if (containerFallback) {
+              clientSettings.codec = containerFallback;
+              event.set('codecFallback', containerFallback);
+            } else if (videoContainer) {
+              throw new Error(
+                `The selected ${videoContainer.toUpperCase()} format is not supported in this browser. ` +
+                `Try a different format or codec.`
+              );
             } else {
-              throw new Error('No supported video codecs available in this browser');
+              const browserFallback = selectFallbackVideoCodec(supportedCodecs);
+              if (!browserFallback) {
+                throw new Error('No supported video codecs available in this browser');
+              }
+
+              clientSettings.codec = browserFallback;
+              clientSettings.container = getPreferredContainerForCodec(browserFallback);
+              event.set('codecFallback', browserFallback);
+            }
+
+            const postFallbackValidation = validateSettings(clientSettings);
+            if (!postFallbackValidation.valid) {
+              throw new Error(postFallbackValidation.error);
             }
           }
         }
@@ -494,7 +506,6 @@ export function useClientRender(): UseClientRenderReturn {
     else if (mime.includes('quicktime') || mime.includes('mov')) extension = 'mov';
     else if (mime.includes('audio/mpeg') || mime.includes('mp3')) extension = 'mp3';
     else if (mime.includes('audio/wav') || mime.includes('wave')) extension = 'wav';
-    else if (mime.includes('audio/flac') || mime.includes('flac')) extension = 'flac';
     else if (mime.includes('audio/aac') || mime.includes('adts')) extension = 'aac';
 
     a.download = `export-${Date.now()}.${extension}`;

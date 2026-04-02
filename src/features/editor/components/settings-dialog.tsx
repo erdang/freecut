@@ -77,7 +77,7 @@ const PREVIEW_QUALITY_OPTIONS = [
 
 const EXPORT_FORMAT_OPTIONS = [
   { value: 'mp4', label: 'MP4', description: 'Best default for compatibility.' },
-  { value: 'webm', label: 'WebM', description: 'Best default for VP8/VP9 web delivery.' },
+  { value: 'webm', label: 'WebM', description: 'Best default for VP8/VP9/AV1 web delivery.' },
 ] as const;
 
 const EXPORT_QUALITY_OPTIONS = [

@@ -67,8 +67,8 @@ Layer masks with keyframeable geometry transforms for compositing and selective 
 
 - In-browser rendering via WebCodecs (no server required)
 - **Video containers:** MP4, WebM, MOV, MKV
-- **Video codecs:** H.264, H.265, VP8, VP9
-- **Audio export formats:** MP3, AAC, WAV
+- **Video codecs:** H.264, H.265, VP8, VP9, AV1
+- **Audio export formats:** MP3, AAC, WAV (PCM)
 - Quality presets: low (2 Mbps), medium (5 Mbps), high (10 Mbps), ultra (20 Mbps)
 
 ### Media

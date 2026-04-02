@@ -49,7 +49,7 @@ const faqItems = [
   },
   {
     question: 'What export formats are supported?',
-    answer: 'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV. The current export UI exposes H.264, H.265, VP8, and VP9 with low, medium, high, and ultra quality presets.',
+    answer: 'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV (PCM). The current export UI exposes H.264, H.265, VP8, VP9, and AV1 with low, medium, high, and ultra quality presets.',
   },
   {
     question: 'Future Improvements',

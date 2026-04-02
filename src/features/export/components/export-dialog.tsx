@@ -31,7 +31,12 @@ import { useProjectStore } from '@/features/export/deps/projects';
 import { useSettingsStore } from '@/features/export/deps/settings';
 import { useTimelineStore } from '@/features/export/deps/timeline';
 import { formatTimecode, framesToSeconds } from '@/utils/time-utils';
-import type { ClientVideoContainer, ClientAudioContainer } from '../utils/client-renderer';
+import {
+  getCompatibleVideoCodecs,
+  getDefaultVideoCodec,
+  type ClientVideoContainer,
+  type ClientAudioContainer,
+} from '../utils/client-renderer';
 import { ExportPreviewPlayer } from './export-preview-player';
 
 export interface ExportDialogProps {
@@ -78,7 +83,7 @@ function getResolutionOptions(projectWidth: number, projectHeight: number) {
 function getDefaultCodecForFormat(
   format: 'mp4' | 'webm'
 ): ExportSettings['codec'] {
-  return format === 'webm' ? 'vp9' : 'h264';
+  return getDefaultVideoCodec(format);
 }
 
 export function ExportDialog({ open, onClose }: ExportDialogProps) {
@@ -238,41 +243,31 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   }, [defaultExportFormat, defaultExportQuality, open, projectHeight, projectWidth, resetState]);
 
   const getCodecOptions = () => {
-    switch (videoContainer) {
-      case 'mp4':
-      case 'mov':
-        return [
-          { value: 'h264', label: 'H.264' },
-          { value: 'h265', label: 'H.265/HEVC' },
-        ];
-      case 'webm':
-        return [
-          { value: 'vp8', label: 'VP8' },
-          { value: 'vp9', label: 'VP9' },
-        ];
-      case 'mkv':
-        return [
-          { value: 'h264', label: 'H.264' },
-          { value: 'h265', label: 'H.265/HEVC' },
-          { value: 'vp8', label: 'VP8' },
-          { value: 'vp9', label: 'VP9' },
-        ];
-      default:
-        return [{ value: 'h264', label: 'H.264' }];
-    }
+    const labels: Record<string, string> = {
+      h264: 'H.264',
+      h265: 'H.265/HEVC',
+      vp8: 'VP8',
+      vp9: 'VP9',
+      av1: 'AV1',
+    };
+
+    return getCompatibleVideoCodecs(videoContainer).map((codec) => ({
+      value: codec,
+      label: labels[codec],
+    }));
   };
 
   const getVideoContainerOptions = () => [
     { value: 'mp4', label: 'MP4', description: 'Most compatible, H.264/H.265' },
     { value: 'mov', label: 'QuickTime (MOV)', description: 'Best for macOS/iOS' },
-    { value: 'webm', label: 'WebM', description: 'Web-optimized, VP8/VP9' },
-    { value: 'mkv', label: 'Matroska (MKV)', description: 'Flexible, all codecs' },
+    { value: 'webm', label: 'WebM', description: 'Web-optimized, VP8/VP9/AV1' },
+    { value: 'mkv', label: 'Matroska (MKV)', description: 'Flexible, H.264/H.265/VP8/VP9/AV1' },
   ];
 
   const getAudioContainerOptions = () => [
     { value: 'mp3', label: 'MP3', description: 'Universal, small files' },
     { value: 'aac', label: 'AAC', description: 'High quality, compact' },
-    { value: 'wav', label: 'WAV', description: 'Lossless, large files' },
+    { value: 'wav', label: 'WAV', description: 'Lossless PCM, large files' },
   ];
 
   // Reset codec when container changes to ensure compatibility

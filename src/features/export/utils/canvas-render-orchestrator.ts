@@ -14,7 +14,7 @@
 import type { CompositionInputProps } from '@/types/export';
 import type { TimelineTrack, TimelineItem, VideoItem } from '@/types/timeline';
 import type { ClientExportSettings, RenderProgress, ClientRenderResult } from './client-renderer';
-import { createOutputFormat, getMimeType } from './client-renderer';
+import { createOutputFormat, getDefaultAudioCodec, getMimeType } from './client-renderer';
 import { createLogger } from '@/shared/logging/logger';
 import { hasMediaCrop } from '@/shared/utils/media-crop';
 
@@ -481,9 +481,11 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       // Create audio buffer from processed samples
       audioBuffer = canvasAudio.createAudioBuffer(audioData);
 
-      // Select audio codec based on container
-      // WebM only supports opus/vorbis, MP4 supports aac
-      const audioCodec = settings.container === 'webm' ? 'opus' : 'aac';
+      // Select the container-compatible audio codec for the muxer.
+      const audioCodec = getDefaultAudioCodec(settings.container);
+      if (audioCodec !== 'aac' && audioCodec !== 'opus') {
+        throw new Error(`Unsupported audio codec ${audioCodec} for ${settings.container.toUpperCase()} export`);
+      }
 
       // Create audio source for encoding
       audioSource = new AudioBufferSource({
