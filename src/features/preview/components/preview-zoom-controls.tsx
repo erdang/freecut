@@ -10,11 +10,6 @@ import {
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { usePreviewZoom } from '../hooks/use-preview-zoom';
 
-const BUTTON_STYLE = {
-  height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize,
-  width: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize,
-};
-
 export function PreviewZoomControls() {
   const { zoom, zoomPresets, handlePresetZoom } = usePreviewZoom();
   const triggerRef = useRef<HTMLButtonElement>(null);
