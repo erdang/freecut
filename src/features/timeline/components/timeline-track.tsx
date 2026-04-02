@@ -10,6 +10,7 @@ import { useTimelineStore } from '../stores/timeline-store';
 import { useTrackDropPreviewStore, type TrackDropGhostPreview } from '../stores/track-drop-preview-store';
 import { useVisibleItems } from '../hooks/use-visible-items';
 import { useItemsStore } from '../stores/items-store';
+import { useCompositionsStore } from '../stores/compositions-store';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
@@ -26,6 +27,7 @@ import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { resolveEffectiveTrackStates } from '../utils/group-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
+import { wouldCreateCompositionCycle } from '../utils/composition-graph';
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
@@ -621,8 +623,12 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     const previews: GhostPreviewItem[] = [];
 
     if (data.type === 'composition') {
-      const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-      if (isInsideSubComp) {
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+      if (wouldCreateCompositionCycle({
+        parentCompositionId: activeCompositionId,
+        insertedCompositionId: data.compositionId,
+        compositionById: useCompositionsStore.getState().compositionById,
+      })) {
         e.dataTransfer.dropEffect = 'none';
         clearTrackGhostPreviews();
         return;
@@ -763,8 +769,12 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         const data = JSON.parse(rawJson);
 
         if (data.type === 'composition') {
-          const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-          if (isInsideSubComp) {
+          const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+          if (wouldCreateCompositionCycle({
+            parentCompositionId: activeCompositionId,
+            insertedCompositionId: data.compositionId,
+            compositionById: useCompositionsStore.getState().compositionById,
+          })) {
             return;
           }
 

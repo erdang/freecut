@@ -545,6 +545,84 @@ describe('TimelineStoreFacade', () => {
         })
       );
     });
+
+    it('restores the full nested composition path after saving', async () => {
+      indexedDbMocks.getProject.mockResolvedValue({
+        id: 'project-1',
+        metadata: { fps: 30, width: 1920, height: 1080 },
+        timeline: {
+          tracks: [],
+          items: [],
+          currentFrame: 0,
+          zoomLevel: 1,
+          scrollPosition: 0,
+          keyframes: [],
+          transitions: [],
+          markers: [],
+        },
+      });
+
+      useCompositionsStore.getState().setCompositions([
+        {
+          id: 'comp-a',
+          name: 'Comp A',
+          tracks: [{
+            id: 'track-a',
+            name: 'V1',
+            kind: 'video',
+            order: 0,
+            height: 80,
+            locked: false,
+            visible: true,
+            muted: false,
+            solo: false,
+            items: [],
+          }],
+          items: [{
+            id: 'item-a',
+            type: 'composition',
+            compositionId: 'comp-b',
+            trackId: 'track-a',
+            from: 0,
+            durationInFrames: 40,
+            label: 'Comp B',
+            compositionWidth: 1920,
+            compositionHeight: 1080,
+          }],
+          transitions: [],
+          keyframes: [],
+          fps: 30,
+          width: 1920,
+          height: 1080,
+          durationInFrames: 40,
+        },
+        {
+          id: 'comp-b',
+          name: 'Comp B',
+          tracks: [],
+          items: [],
+          transitions: [],
+          keyframes: [],
+          fps: 30,
+          width: 1920,
+          height: 1080,
+          durationInFrames: 40,
+        },
+      ]);
+
+      useCompositionNavigationStore.getState().enterComposition('comp-a', 'Comp A');
+      useCompositionNavigationStore.getState().enterComposition('comp-b', 'Comp B');
+
+      await useTimelineStore.getState().saveTimeline('project-1');
+
+      const navState = useCompositionNavigationStore.getState();
+      expect(navState.breadcrumbs.map((breadcrumb) => breadcrumb.label)).toEqual([
+        'Main Timeline',
+        'Comp A',
+        'Comp B',
+      ]);
+      expect(navState.activeCompositionId).toBe('comp-b');
+    });
   });
 
   describe('loadTimeline', () => {

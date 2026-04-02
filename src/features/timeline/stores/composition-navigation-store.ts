@@ -107,7 +107,8 @@ function loadComposition(compositionId: string): boolean {
   return true;
 }
 
-const MAX_DEPTH = 2;
+// Safety guard against corrupted circular data while still allowing deeply nested clips.
+const MAX_DEPTH = 16;
 
 export const useCompositionNavigationStore = create<
   CompositionNavigationState & CompositionNavigationActions

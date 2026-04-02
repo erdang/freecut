@@ -28,6 +28,10 @@ import {
   getLinkedCompositionVisualCompanion,
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
+import {
+  getDirectReferencedCompositionIds,
+  wouldCreateCompositionCycle,
+} from '../../utils/composition-graph';
 import { applyTransitionRepairs, execute } from './shared';
 
 function getTrackKindForSelectedItems(track: TimelineTrack | undefined, trackItems: TimelineItem[]): TrackKind {
@@ -202,12 +206,10 @@ function mapSubCompItemToWrapperWindow(params: {
  * 4. Removes original items from the main timeline.
  * 5. Inserts linked compound wrappers on the target video/audio lanes.
  *
- * Only allowed on the root timeline (1-level nesting limit).
+ * Supports nested compound clips, but prevents circular composition references.
  */
 export function createPreComp(name?: string, itemIds?: string[]): TimelineItem | null {
   return execute('CREATE_PRE_COMP', () => {
-    // Block pre-comp creation inside a sub-composition (1-level nesting limit)
-    if (useCompositionNavigationStore.getState().activeCompositionId !== null) return null;
     const { items, tracks } = useItemsStore.getState();
     const { transitions } = useTransitionsStore.getState();
     const { keyframes } = useKeyframesStore.getState();
@@ -222,6 +224,18 @@ export function createPreComp(name?: string, itemIds?: string[]): TimelineItem |
 
     const selectedItems = items.filter((i) => selectedIds.includes(i.id));
     if (selectedItems.length === 0) return null;
+    const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+    const compositionById = useCompositionsStore.getState().compositionById;
+
+    if (activeCompositionId !== null) {
+      const selectedCompositionIds = getDirectReferencedCompositionIds(selectedItems);
+      const wouldCycle = selectedCompositionIds.some((compositionId) => wouldCreateCompositionCycle({
+        parentCompositionId: activeCompositionId,
+        insertedCompositionId: compositionId,
+        compositionById,
+      }));
+      if (wouldCycle) return null;
+    }
 
     // --- 1. Calculate bounding box ---
     const minFrom = Math.min(...selectedItems.map((i) => i.from));

@@ -12,6 +12,7 @@ export {
   type SubComposition,
 } from '../stores/compositions-store';
 export { useItemsStore } from '../stores/items-store';
+export { wouldCreateCompositionCycle } from '../utils/composition-graph';
 
 export { removeItems, updateItem } from '../stores/timeline-actions';
 export {

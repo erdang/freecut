@@ -5,4 +5,5 @@ export {
   useCompositionsStore,
   type SubComposition,
   useItemsStore,
+  wouldCreateCompositionCycle,
 } from './timeline-contract';

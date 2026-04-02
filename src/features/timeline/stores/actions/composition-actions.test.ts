@@ -232,4 +232,58 @@ describe('composition-actions split wrappers', () => {
     expect(restoredIds.has(restoredTransitions[0]!.leftClipId)).toBe(true);
     expect(restoredIds.has(restoredTransitions[0]!.rightClipId)).toBe(true);
   });
+
+  it('creates nested compound clips while editing inside another compound clip', () => {
+    useItemsStore.getState().setTracks([]);
+    useItemsStore.getState().setItems([]);
+    useCompositionsStore.getState().setCompositions([
+      {
+        id: 'comp-parent',
+        name: 'Parent',
+        tracks: [
+          makeTrack({ id: 'comp-track-v1', name: 'V1', kind: 'video', order: 0 }),
+        ],
+        items: [
+          makeVideoItem({
+            id: 'nested-video-1',
+            trackId: 'comp-track-v1',
+            from: 0,
+            durationInFrames: 40,
+            sourceStart: 0,
+            sourceEnd: 40,
+            sourceDuration: 120,
+          }),
+          makeVideoItem({
+            id: 'nested-video-2',
+            trackId: 'comp-track-v1',
+            from: 40,
+            durationInFrames: 40,
+            label: 'nested-2.mp4',
+            src: 'blob:nested-2',
+            mediaId: 'media-2',
+            linkedGroupId: undefined,
+            sourceStart: 40,
+            sourceEnd: 80,
+            sourceDuration: 120,
+          }),
+        ],
+        transitions: [],
+        keyframes: [],
+        fps: 30,
+        width: 1920,
+        height: 1080,
+        durationInFrames: 80,
+      },
+    ]);
+
+    useCompositionNavigationStore.getState().enterComposition('comp-parent', 'Parent');
+    useSelectionStore.getState().selectItems(['nested-video-1', 'nested-video-2']);
+
+    const created = createPreComp('Nested Compound');
+
+    expect(created).toMatchObject({ type: 'composition', label: 'Nested Compound' });
+    expect(useCompositionNavigationStore.getState().activeCompositionId).toBe('comp-parent');
+    expect(useCompositionsStore.getState().compositions).toHaveLength(2);
+    expect(useItemsStore.getState().items.filter((item) => item.type === 'composition')).toHaveLength(1);
+  });
 });

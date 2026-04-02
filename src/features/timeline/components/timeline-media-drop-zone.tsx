@@ -5,6 +5,7 @@ import type { MediaMetadata } from '@/types/storage';
 import { createLogger } from '@/shared/logging/logger';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../stores/timeline-store';
+import { useCompositionsStore } from '../stores/compositions-store';
 import { useNewTrackZonePreviewStore, type NewTrackZoneGhostPreview } from '../stores/new-track-zone-preview-store';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useProjectStore } from '@/features/timeline/deps/projects';
@@ -19,6 +20,7 @@ import {
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
+import { wouldCreateCompositionCycle } from '../utils/composition-graph';
 import {
   createTimelineTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
@@ -493,8 +495,15 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     }
 
     if (data.type === 'composition') {
-      const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-      if (isInsideSubComp || zone !== 'video') {
+      const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+      if (
+        zone !== 'video'
+        || wouldCreateCompositionCycle({
+          parentCompositionId: activeCompositionId,
+          insertedCompositionId: data.compositionId,
+          compositionById: useCompositionsStore.getState().compositionById,
+        })
+      ) {
         e.dataTransfer.dropEffect = 'none';
         clearZoneGhostPreviews();
         return;
@@ -629,8 +638,15 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         const data = JSON.parse(rawJson);
 
         if (data.type === 'composition') {
-          const isInsideSubComp = useCompositionNavigationStore.getState().activeCompositionId !== null;
-          if (isInsideSubComp || zone !== 'video') {
+          const activeCompositionId = useCompositionNavigationStore.getState().activeCompositionId;
+          if (
+            zone !== 'video'
+            || wouldCreateCompositionCycle({
+              parentCompositionId: activeCompositionId,
+              insertedCompositionId: data.compositionId,
+              compositionById: useCompositionsStore.getState().compositionById,
+            })
+          ) {
             return;
           }
 

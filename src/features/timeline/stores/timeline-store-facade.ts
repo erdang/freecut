@@ -526,15 +526,23 @@ async function repairLegacyProjectAvLayouts(project: Project): Promise<{ project
  */
 async function saveTimeline(projectId: string): Promise<void> {
   // If currently editing a sub-composition, navigate back to root to save
-  // the main timeline data, then re-enter after save completes.
+  // the main timeline data, then restore the full breadcrumb path after save completes.
   const navStore = useCompositionNavigationStore.getState();
-  const previousCompositionId = navStore.activeCompositionId;
-  const previousLabel = previousCompositionId
-    ? navStore.breadcrumbs.find((b) => b.compositionId === previousCompositionId)?.label ?? ''
-    : '';
-  if (previousCompositionId !== null) {
+  const previousBreadcrumbs = navStore.breadcrumbs
+    .filter((breadcrumb) => breadcrumb.compositionId !== null)
+    .map((breadcrumb) => ({
+      compositionId: breadcrumb.compositionId!,
+      label: breadcrumb.label,
+    }));
+  if (previousBreadcrumbs.length > 0) {
     navStore.resetToRoot();
   }
+
+  const restoreCompositionPath = () => {
+    for (const breadcrumb of previousBreadcrumbs) {
+      useCompositionNavigationStore.getState().enterComposition(breadcrumb.compositionId, breadcrumb.label);
+    }
+  };
 
   // Read directly from domain stores
   const itemsState = useItemsStore.getState();
@@ -707,14 +715,14 @@ async function saveTimeline(projectId: string): Promise<void> {
     useTimelineSettingsStore.getState().markClean();
 
     // Re-enter the sub-composition the user was editing before save
-    if (previousCompositionId !== null) {
-      useCompositionNavigationStore.getState().enterComposition(previousCompositionId, previousLabel);
+    if (previousBreadcrumbs.length > 0) {
+      restoreCompositionPath();
     }
   } catch (error) {
     logger.error('Failed to save timeline:', error);
     // Re-enter even on failure so user doesn't lose their editing context
-    if (previousCompositionId !== null) {
-      useCompositionNavigationStore.getState().enterComposition(previousCompositionId, previousLabel);
+    if (previousBreadcrumbs.length > 0) {
+      restoreCompositionPath();
     }
     throw error;
   }

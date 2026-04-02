@@ -27,6 +27,7 @@ import {
   useCompositionNavigationStore,
   useItemsStore,
   type SubComposition,
+  wouldCreateCompositionCycle,
 } from '@/features/media-library/deps/timeline-stores';
 import { removeItemsFromItemsActions as removeItems } from '@/features/media-library/deps/timeline-actions';
 import { useMediaLibraryStore } from '../stores/media-library-store';
@@ -43,6 +44,7 @@ export function CompositionsSection() {
   const compositions = useCompositionsStore((s) => s.compositions);
   const removeComposition = useCompositionsStore((s) => s.removeComposition);
   const updateComposition = useCompositionsStore((s) => s.updateComposition);
+  const compositionById = useCompositionsStore((s) => s.compositionById);
   const enterComposition = useCompositionNavigationStore((s) => s.enterComposition);
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId);
 
@@ -173,7 +175,11 @@ export function CompositionsSection() {
               composition={comp}
               viewMode={viewMode}
               selected={selectedCompositionIds.includes(comp.id)}
-              isInsideSubComp={activeCompositionId !== null}
+              dragDisabled={wouldCreateCompositionCycle({
+                parentCompositionId: activeCompositionId,
+                insertedCompositionId: comp.id,
+                compositionById,
+              })}
               isEditing={editingId === comp.id}
               editValue={editValue}
               onEditValueChange={setEditValue}
@@ -234,7 +240,7 @@ interface CompositionCardProps {
   composition: SubComposition;
   viewMode: 'grid' | 'list';
   selected: boolean;
-  isInsideSubComp: boolean;
+  dragDisabled: boolean;
   isEditing: boolean;
   editValue: string;
   onEditValueChange: (value: string) => void;
@@ -250,7 +256,7 @@ function CompositionCard({
   composition,
   viewMode,
   selected,
-  isInsideSubComp,
+  dragDisabled,
   isEditing,
   editValue,
   onEditValueChange,
@@ -272,7 +278,7 @@ function CompositionCard({
 
   const handleDragStart = useCallback(
     (e: React.DragEvent) => {
-      if (isInsideSubComp) {
+      if (dragDisabled) {
         e.preventDefault();
         return;
       }
@@ -288,7 +294,7 @@ function CompositionCard({
       e.dataTransfer.effectAllowed = 'copy';
       setMediaDragData(data);
     },
-    [composition, isInsideSubComp]
+    [composition, dragDisabled]
   );
 
   const handleDragEnd = useCallback(() => {
@@ -332,7 +338,7 @@ function CompositionCard({
         <ContextMenuTrigger asChild>
           <div
             data-composition-id={composition.id}
-            draggable={!isInsideSubComp && !isEditing}
+            draggable={!dragDisabled && !isEditing}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             onClick={handleClick}
@@ -340,7 +346,7 @@ function CompositionCard({
             style={CARD_PERF_STYLE}
             className={cn(
               CARD_GRID_BASE,
-              isInsideSubComp
+              dragDisabled
                 ? 'opacity-50 cursor-not-allowed border-border'
                 : cn(
                     'cursor-grab',
@@ -410,9 +416,9 @@ function CompositionCard({
   return (
     <ContextMenu>
       <ContextMenuTrigger asChild>
-        <div
-          data-composition-id={composition.id}
-          draggable={!isInsideSubComp && !isEditing}
+          <div
+            data-composition-id={composition.id}
+          draggable={!dragDisabled && !isEditing}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onClick={handleClick}
@@ -420,7 +426,7 @@ function CompositionCard({
           style={CARD_PERF_STYLE}
           className={cn(
             CARD_LIST_BASE,
-            isInsideSubComp
+            dragDisabled
               ? 'opacity-50 cursor-not-allowed border-border'
               : cn(
                   'cursor-grab',
