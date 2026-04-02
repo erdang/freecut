@@ -1338,17 +1338,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       };
     }
 
-    // Guard: reject if placement would overlap existing segments on the target track
-    const wouldOverlap = items.some(item =>
-      item.trackId === placement.trackId
-      && item.from < placement.from + durationInFrames
-      && placement.from < item.from + item.durationInFrames
-    );
-    if (wouldOverlap) {
-      cancelPenMode();
-      return;
-    }
-
     const shapeItem: ShapeItem = {
       id: crypto.randomUUID(),
       type: 'shape',

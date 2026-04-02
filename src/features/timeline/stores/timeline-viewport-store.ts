@@ -5,6 +5,7 @@ interface TimelineViewportState {
   scrollTop: number;
   viewportWidth: number;
   viewportHeight: number;
+  pendingScrollToFrame: number | null;
 }
 
 interface TimelineViewportActions {
@@ -56,7 +57,7 @@ export const useTimelineViewportStore = create<TimelineViewportState & TimelineV
     scrollTop: 0,
     viewportWidth: 0,
     viewportHeight: 0,
-    pendingScrollToFrame: null as number | null,
+    pendingScrollToFrame: null,
     requestScrollToFrame: (frame: number) => set({ pendingScrollToFrame: frame }),
     clearScrollToFrame: () => set({ pendingScrollToFrame: null }),
     setViewport: (next) => {
