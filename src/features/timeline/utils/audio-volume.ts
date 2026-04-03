@@ -57,6 +57,9 @@ export function getAudioVolumeDbFromDragDelta(params: {
 }
 
 export function getAudioVisualizationScale(volumeDb: number): number {
-  const linearGain = Math.pow(10, clampAudioVolumeDb(volumeDb) / 20);
-  return Math.max(0.03, Math.min(4, linearGain));
+  // Use a gentler perceptual curve for waveform scaling than the actual audio gain.
+  // Literal gain (10^(dB/20)) makes boosted clips look too jumpy compared with the
+  // mixer/bus feel, so we damp the visual response while keeping 0 dB at unity.
+  const dampedScale = Math.pow(10, clampAudioVolumeDb(volumeDb) / 40);
+  return Math.max(0.06, Math.min(2.5, dampedScale));
 }
