@@ -20,6 +20,8 @@ export interface EditorState {
   linkedSelectionEnabled: boolean;
   colorScopesOpen: boolean;
   mixerFloating: boolean;
+  propertiesFullColumn: boolean;
+  mediaFullColumn: boolean;
 }
 
 export interface EditorActions {
@@ -58,4 +60,6 @@ export interface EditorActions {
   toggleColorScopesOpen: () => void;
   setMixerFloating: (floating: boolean) => void;
   toggleMixerFloating: () => void;
+  togglePropertiesFullColumn: () => void;
+  toggleMediaFullColumn: () => void;
 }

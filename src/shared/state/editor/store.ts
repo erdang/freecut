@@ -57,6 +57,15 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   mixerFloating: (() => {
     try { return localStorage.getItem('editor:mixerFloating') === 'true'; } catch { return false; }
   })(),
+  propertiesFullColumn: (() => {
+    try { return localStorage.getItem('editor:propertiesFullColumn') === 'true'; } catch { return false; }
+  })(),
+  mediaFullColumn: (() => {
+    try {
+      const v = localStorage.getItem('editor:mediaFullColumn');
+      return v === null ? true : v === 'true';
+    } catch { return true; }
+  })(),
 
   // Actions
   setActivePanel: (panel) => set({ activePanel: panel }),
@@ -180,5 +189,15 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     const next = !state.mixerFloating;
     try { localStorage.setItem('editor:mixerFloating', String(next)); } catch { /* noop */ }
     return { mixerFloating: next };
+  }),
+  togglePropertiesFullColumn: () => set((state) => {
+    const next = !state.propertiesFullColumn;
+    try { localStorage.setItem('editor:propertiesFullColumn', String(next)); } catch { /* noop */ }
+    return { propertiesFullColumn: next };
+  }),
+  toggleMediaFullColumn: () => set((state) => {
+    const next = !state.mediaFullColumn;
+    try { localStorage.setItem('editor:mediaFullColumn', String(next)); } catch { /* noop */ }
+    return { mediaFullColumn: next };
   }),
 }));
