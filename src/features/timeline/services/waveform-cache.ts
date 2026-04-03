@@ -452,12 +452,13 @@ class WaveformCacheService {
     try {
       const level = await waveformOPFSStorage.getLevel(mediaId, 0);
       if (level) {
+        const floatsPerSample = level.channels >= 2 ? 2 : 1;
         const cached: CachedWaveform = {
           peaks: level.peaks,
-          duration: level.peaks.length / level.sampleRate,
+          duration: level.peaks.length / floatsPerSample / level.sampleRate,
           sampleRate: level.sampleRate,
-          channels: 1,
-          stereo: false,
+          channels: level.channels,
+          stereo: level.channels >= 2,
           sizeBytes: level.peaks.byteLength,
           lastAccessed: Date.now(),
           isComplete: true,
@@ -1131,6 +1132,7 @@ class WaveformCacheService {
   ): Promise<{
     peaks: Float32Array;
     sampleRate: number;
+    channels: number;
   } | null> {
     const levelIndex = chooseLevelForZoom(pixelsPerSecond);
     return waveformOPFSStorage.getLevel(mediaId, levelIndex);

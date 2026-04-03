@@ -1,6 +1,6 @@
-import { memo, useCallback, useEffect, useRef, type HTMLAttributes, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
-import { linearLevelToPercent } from './audio-meter-utils';
+import { linearLevelToPercent, setLiveTrackVolumeOverride, clearLiveTrackVolumeOverride, setLiveBusVolumeOverride, clearLiveBusVolumeOverride } from './audio-meter-utils';
 import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
 
 // ---------------------------------------------------------------------------
@@ -33,6 +33,10 @@ export interface AudioMixerViewProps {
     resolvedSourceCount: number;
   };
   isPlaying: boolean;
+  masterVolumeDb: number;
+  masterMuted: boolean;
+  onMasterVolumeChange: (volumeDb: number) => void;
+  onMasterMuteToggle: () => void;
   onTrackVolumeChange: (trackId: string, volumeDb: number) => void;
   onTrackMuteToggle: (trackId: string) => void;
   onTrackSoloToggle: (trackId: string) => void;
@@ -91,6 +95,8 @@ interface SegmentedMeterBarProps {
   className?: string;
   /** Optional attributes for the active fill element */
   fillProps?: HTMLAttributes<HTMLDivElement>;
+  /** Imperative ref used for smooth local meter preview during fader drag */
+  fillRef?: RefObject<HTMLDivElement | null>;
 }
 
 const SegmentedMeterBar = memo(function SegmentedMeterBar({
@@ -99,6 +105,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
   scanning,
   className = '',
   fillProps,
+  fillRef,
 }: SegmentedMeterBarProps) {
   return (
     <div className={`relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden ${className}`}>
@@ -110,6 +117,7 @@ const SegmentedMeterBar = memo(function SegmentedMeterBar({
 
       {/* Active fill — gradient with segment mask */}
       <div
+        ref={fillRef}
         {...fillProps}
         className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#1be255] via-[#f5e146] to-[#ff6633] ${scanning ? 'opacity-50' : ''}`}
         style={{
@@ -170,9 +178,9 @@ interface ChannelFaderProps {
   /** Called once on drag end — triggers store update + markDirty */
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   /** Imperative ref for updating the dB readout during drag (no re-render) */
-  dbReadoutRef?: React.RefObject<HTMLDivElement | null>;
-  /** Shared ref for meter dB offset — ChannelStrip reads during its render cycle */
-  meterDbOffsetRef?: React.MutableRefObject<number>;
+  dbReadoutRef?: RefObject<HTMLDivElement | null>;
+  /** Immediate visual preview for the per-track meter while graph estimates catch up */
+  onMeterPreviewChange?: (previewDb: number | null) => void;
 }
 
 const ChannelFader = memo(function ChannelFader({
@@ -181,7 +189,7 @@ const ChannelFader = memo(function ChannelFader({
   itemIds,
   onVolumeChange,
   dbReadoutRef,
-  meterDbOffsetRef,
+  onMeterPreviewChange,
 }: ChannelFaderProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   const knobRef = useRef<HTMLDivElement | null>(null);
@@ -190,6 +198,10 @@ const ChannelFader = memo(function ChannelFader({
   const latestDbRef = useRef(volumeDb);
   const dragStartDbRef = useRef(volumeDb);
   const dragStartGainsRef = useRef<Map<string, number>>(new Map());
+  const finalizeDragRef = useRef<(params?: {
+    pointerId?: number;
+    target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null;
+  }) => void>(() => {});
 
   // Sync from props when not dragging
   if (!isDraggingRef.current) {
@@ -244,12 +256,11 @@ const ChannelFader = memo(function ChannelFader({
       gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
     })));
 
-    // Set meter dB offset — ChannelStrip reads this during its render cycle
-    // (it re-renders every frame during playback via level prop changes)
-    if (meterDbOffsetRef) {
-      meterDbOffsetRef.current = db - committedDb;
-    }
-  }, [dbReadoutRef, itemIds, meterDbOffsetRef, volumeDb]);
+    // Feed live volume into the meter source builder so both per-track
+    // and bus meters update in real-time during drag.
+    setLiveTrackVolumeOverride(trackId, db);
+    onMeterPreviewChange?.(db);
+  }, [dbReadoutRef, itemIds, onMeterPreviewChange, trackId, volumeDb]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -290,8 +301,13 @@ const ChannelFader = memo(function ChannelFader({
     if (target && pointerId !== undefined) {
       target.releasePointerCapture?.(pointerId);
     }
+    // Commit to store first so the graph recompiles with the new value,
+    // then clear the live override so the next resolution uses the compiled value.
     onVolumeChange(trackId, latestDbRef.current);
-  }, [onVolumeChange, trackId]);
+    clearLiveTrackVolumeOverride(trackId);
+    onMeterPreviewChange?.(null);
+  }, [onMeterPreviewChange, onVolumeChange, trackId]);
+  finalizeDragRef.current = finalizeDrag;
 
   const handlePointerUp = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -305,13 +321,14 @@ const ChannelFader = memo(function ChannelFader({
 
   useEffect(() => {
     return () => {
-      finalizeDrag();
+      finalizeDragRef.current();
     };
-  }, [finalizeDrag]);
+  }, []);
 
   const handleDoubleClick = useCallback(() => {
     applyDragValue(0);
     onVolumeChange(trackId, 0);
+    clearLiveTrackVolumeOverride(trackId);
   }, [applyDragValue, onVolumeChange, trackId]);
 
   const knobPercent = dbToFaderPercent(volumeDb);
@@ -395,13 +412,10 @@ const ChannelStrip = memo(function ChannelStrip({
   onSoloToggle,
 }: ChannelStripProps) {
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
-  const meterDbOffsetRef = useRef(0);
-  // Reset meter offset when the track volume prop updates (store committed)
-  const prevVolumeRef = useRef(track.volume);
-  if (prevVolumeRef.current !== track.volume) {
-    prevVolumeRef.current = track.volume;
-    meterDbOffsetRef.current = 0;
-  }
+  const leftBarRef = useRef<HTMLDivElement | null>(null);
+  const rightBarRef = useRef<HTMLDivElement | null>(null);
+  const leftPercentRef = useRef(0);
+  const rightPercentRef = useRef(0);
   const handleMuteClick = useCallback(() => {
     onMuteToggle(track.id);
   }, [onMuteToggle, track.id]);
@@ -417,13 +431,21 @@ const ChannelStrip = memo(function ChannelStrip({
       isPlaying,
     })
     : 0;
-  const canVisualizeMeterOffset = fallbackPercent > 0 || !!(level && (level.left > 0 || level.right > 0));
-  // Apply fader drag offset to meter levels.
-  // linearLevelToPercent is linear in dB (range=60), so dB offset → percent offset.
-  const meterOffset = canVisualizeMeterOffset ? (meterDbOffsetRef.current / 60) * 100 : 0;
-  const leftPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) + meterOffset)) : 0;
-  const rightPercent = isPlaying ? Math.max(0, Math.min(100, Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) + meterOffset)) : 0;
+  const leftPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.left) : 0, fallbackPercent) : 0;
+  const rightPercent = isPlaying ? Math.max(level ? linearLevelToPercent(level.right) : 0, fallbackPercent) : 0;
   const showScanningFallback = fallbackPercent > 0;
+  leftPercentRef.current = leftPercent;
+  rightPercentRef.current = rightPercent;
+
+  const syncMeterBars = useCallback(() => {
+    if (!leftBarRef.current || !rightBarRef.current) return;
+    leftBarRef.current.style.height = `${leftPercentRef.current}%`;
+    rightBarRef.current.style.height = `${rightPercentRef.current}%`;
+  }, []);
+
+  useEffect(() => {
+    syncMeterBars();
+  }, [syncMeterBars, leftPercent, rightPercent]);
 
   // dB readout color: green at unity, amber when boosted, dim when cut
   const dbColor = track.volume > 0.05
@@ -433,7 +455,8 @@ const ChannelStrip = memo(function ChannelStrip({
       : 'text-muted-foreground/60';
 
   const stripWidth = expanded ? 'min-w-[68px] w-[68px]' : 'min-w-[52px] w-[52px]';
-  const meterBarWidth = expanded ? 'w-[14px]' : 'w-[10px]';
+  const meterBarWidth = expanded ? 'w-[14px]' : 'w-[14px]';
+  const meterBarGap = 'gap-[2px]';
   const buttonSize = expanded ? 'w-[22px] h-[18px] text-[10px]' : 'w-[18px] h-[16px] text-[9px]';
 
   return (
@@ -487,18 +510,20 @@ const ChannelStrip = memo(function ChannelStrip({
         {/* Fader + segmented level meter area */}
         <div className={`flex-1 w-full min-h-0 flex items-stretch ${expanded ? 'gap-0.5' : 'gap-px'} py-1`}>
           {/* Segmented per-track level bars */}
-          <div className={`flex gap-px ${meterBarWidth} shrink-0`}>
+          <div className={`flex ${meterBarGap} ${meterBarWidth} shrink-0`}>
             <SegmentedMeterBar
-              height={`${leftPercent}%`}
+              height="0%"
               scanning={showScanningFallback}
+              fillRef={leftBarRef}
               fillProps={{
                 'data-track-id': track.id,
                 'data-track-channel': 'left',
               }}
             />
             <SegmentedMeterBar
-              height={`${rightPercent}%`}
+              height="0%"
               scanning={showScanningFallback}
+              fillRef={rightBarRef}
               fillProps={{
                 'data-track-id': track.id,
                 'data-track-channel': 'right',
@@ -514,7 +539,6 @@ const ChannelStrip = memo(function ChannelStrip({
               itemIds={track.itemIds}
               onVolumeChange={onVolumeChange}
               dbReadoutRef={dbReadoutRef}
-              meterDbOffsetRef={meterDbOffsetRef}
             />
           </div>
         </div>
@@ -535,11 +559,125 @@ const ChannelStrip = memo(function ChannelStrip({
 interface BusMeterProps {
   masterEstimate: AudioMixerViewProps['masterEstimate'];
   isPlaying: boolean;
+  volumeDb: number;
+  muted: boolean;
+  allItemIds: string[];
+  onVolumeChange: (volumeDb: number) => void;
+  onMuteToggle: () => void;
 }
 
-const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterProps) {
+const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, muted, allItemIds, onVolumeChange, onMuteToggle }: BusMeterProps) {
   const leftBarRef = useRef<HTMLDivElement | null>(null);
   const rightBarRef = useRef<HTMLDivElement | null>(null);
+  const dbReadoutRef = useRef<HTMLDivElement | null>(null);
+
+  // Bus fader state
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const knobRef = useRef<HTMLDivElement | null>(null);
+  const isDraggingRef = useRef(false);
+  const dragOffsetPercentRef = useRef(0);
+  const latestDbRef = useRef(volumeDb);
+  const dragStartDbRef = useRef(volumeDb);
+  const dragStartGainsRef = useRef<Map<string, number>>(new Map());
+
+  // Sync from props when not dragging
+  if (!isDraggingRef.current) {
+    latestDbRef.current = volumeDb;
+  }
+
+  const percentFromPointerEvent = useCallback((e: PointerEvent): number => {
+    const el = trackRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    if (rect.height <= 0) return 0;
+    const y = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
+    return (y / rect.height) * 100;
+  }, []);
+
+  const dragOffsetPercentFromPointerEvent = useCallback((e: PointerEvent): number => {
+    const el = trackRef.current;
+    if (!el) return 0;
+    const rect = el.getBoundingClientRect();
+    if (rect.height <= 0) return 0;
+    const pointerYFromBottom = Math.max(0, Math.min(rect.height, rect.bottom - e.clientY));
+    const currentPercent = dbToFaderPercent(latestDbRef.current);
+    const knobCenterYFromBottom = (currentPercent / 100) * rect.height;
+    const pointerIsNearKnob = Math.abs(pointerYFromBottom - knobCenterYFromBottom) <= Math.max(
+      FADER_KNOB_DRAG_TOLERANCE_PX,
+      FADER_KNOB_HEIGHT_PX / 2,
+    );
+    if (!pointerIsNearKnob) return 0;
+    return currentPercent - ((pointerYFromBottom / rect.height) * 100);
+  }, []);
+
+  const applyBusDragValue = useCallback((db: number) => {
+    latestDbRef.current = db;
+    if (knobRef.current) {
+      knobRef.current.style.top = `${100 - dbToFaderPercent(db)}%`;
+    }
+    if (dbReadoutRef.current) {
+      dbReadoutRef.current.textContent = formatFaderDb(db);
+      dbReadoutRef.current.className = `text-[10px] font-mono py-0.5 leading-none ${
+        db > 0.05 ? 'text-amber-400/90' : db > -0.05 ? 'text-emerald-400/80' : 'text-muted-foreground/60'
+      }`;
+    }
+    // Apply live gain to all items (bus = master gain offset)
+    const committedDb = dragStartDbRef.current;
+    const gainRatio = Math.pow(10, (db - committedDb) / 20);
+    setMixerLiveGains(allItemIds.map((id) => ({
+      itemId: id,
+      gain: (dragStartGainsRef.current.get(id) ?? 1) * gainRatio,
+    })));
+    setLiveBusVolumeOverride(db);
+  }, [allItemIds]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    isDraggingRef.current = true;
+    dragStartDbRef.current = latestDbRef.current;
+    dragStartGainsRef.current = new Map(allItemIds.map((id) => [id, getMixerLiveGain(id)]));
+    dragOffsetPercentRef.current = dragOffsetPercentFromPointerEvent(e.nativeEvent);
+    const percent = percentFromPointerEvent(e.nativeEvent);
+    const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
+    applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
+  }, [allItemIds, applyBusDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDraggingRef.current) return;
+    const percent = percentFromPointerEvent(e.nativeEvent);
+    const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
+    applyBusDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
+  }, [applyBusDragValue, percentFromPointerEvent]);
+
+  const finalizeBusDrag = useCallback((params?: {
+    pointerId?: number;
+    target?: Pick<HTMLDivElement, 'releasePointerCapture'> | null;
+  }) => {
+    if (!isDraggingRef.current) return;
+    const { pointerId, target } = params ?? {};
+    isDraggingRef.current = false;
+    dragOffsetPercentRef.current = 0;
+    if (target && pointerId !== undefined) {
+      target.releasePointerCapture?.(pointerId);
+    }
+    onVolumeChange(latestDbRef.current);
+    clearLiveBusVolumeOverride();
+  }, [onVolumeChange]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    finalizeBusDrag({ pointerId: e.pointerId, target: e.currentTarget });
+  }, [finalizeBusDrag]);
+
+  useEffect(() => {
+    return () => { finalizeBusDrag(); };
+  }, [finalizeBusDrag]);
+
+  const handleDoubleClick = useCallback(() => {
+    applyBusDragValue(0);
+    onVolumeChange(0);
+    clearLiveBusVolumeOverride();
+  }, [applyBusDragValue, onVolumeChange]);
 
   // Smooth the bus meter with CSS transitions rather than rAF
   const fallbackPercent = getMeterFallbackPercent({
@@ -557,8 +695,16 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterP
     if (rightBarRef.current) rightBarRef.current.style.height = `${rightPercent}%`;
   }, [leftPercent, rightPercent]);
 
+  const knobPercent = dbToFaderPercent(volumeDb);
+  const unityPercent = dbToFaderPercent(0);
+  const dbColor = volumeDb > 0.05
+    ? 'text-amber-400/90'
+    : volumeDb > -0.05
+      ? 'text-emerald-400/80'
+      : 'text-muted-foreground/60';
+
   return (
-    <div className="flex flex-col items-center h-full w-[52px] min-w-[52px] shrink-0">
+    <div className="flex flex-col items-center h-full w-[60px] min-w-[60px] shrink-0">
       {/* Inset panel */}
       <div className="flex flex-col items-center h-full w-full rounded-[3px] bg-black/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] border border-border/20 px-1">
         {/* Label */}
@@ -566,11 +712,26 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterP
           Bus 1
         </div>
 
-        {/* Spacer to align with S/M row */}
-        <div className="h-[18px] shrink-0" />
+        {/* Mute button — aligned with S/M row */}
+        <div className="flex justify-center py-0.5 shrink-0">
+          <button
+            type="button"
+            className={`w-[18px] h-[16px] rounded-[3px] text-[9px] font-bold leading-none flex items-center justify-center transition-colors ${
+              muted
+                ? 'bg-red-600 text-white shadow-[0_0_8px_rgba(220,38,38,0.4)]'
+                : 'bg-muted/40 text-muted-foreground/40 hover:bg-muted/70 hover:text-muted-foreground/70'
+            }`}
+            onClick={onMuteToggle}
+            aria-label="Mute master"
+            aria-pressed={muted}
+          >
+            M
+          </button>
+        </div>
 
-        {/* Stereo segmented meter bars */}
-        <div className="flex-1 min-h-0 flex items-stretch justify-center py-1">
+        {/* Meter bars + fader area */}
+        <div className="flex-1 min-h-0 flex items-stretch gap-px py-1">
+          {/* Stereo segmented meter bars */}
           <div className="flex gap-[2px] w-[14px] shrink-0">
             <div className="relative flex-1 rounded-[2px] bg-[#08090b] overflow-hidden">
               {/* Unlit LED backdrop */}
@@ -605,12 +766,60 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying }: BusMeterP
               />
             </div>
           </div>
+
+          {/* Bus fader — same hit area structure as channel faders */}
+          <div className="min-w-[20px] w-[20px] shrink-0">
+            <div
+              ref={trackRef}
+              data-fader-root="true"
+              className="relative h-full cursor-ns-resize select-none touch-none"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={() => {
+                if (!isDraggingRef.current) return;
+                isDraggingRef.current = false;
+                dragOffsetPercentRef.current = 0;
+                applyBusDragValue(volumeDb);
+                clearLiveBusVolumeOverride();
+              }}
+              onDoubleClick={handleDoubleClick}
+            >
+              {/* Fader track line */}
+              <div className="absolute left-1/2 top-0 bottom-0 w-[2px] -translate-x-1/2 bg-border/70" />
+
+              {/* Unity (0 dB) notch */}
+              <div
+                className="absolute left-0 right-0 flex items-center justify-center"
+                style={{ bottom: `${unityPercent}%`, transform: 'translateY(50%)' }}
+              >
+                <div className="w-full h-px bg-muted-foreground/25" />
+              </div>
+
+              {/* Fader knob — gold tint to distinguish from channel faders */}
+              <div
+                ref={knobRef}
+                className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                style={{
+                  top: `${100 - knobPercent}%`,
+                  width: '18px',
+                  height: `${FADER_KNOB_HEIGHT_PX}px`,
+                }}
+              >
+                <div className="w-full h-full rounded-[4px] bg-gradient-to-b from-[#d4c9a8] to-[#b8ad8e] shadow-[0_1px_4px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.25)] border border-[#9a9076]/50">
+                  <div className="absolute inset-x-[3px] top-[7px] h-px bg-[#6b6350]/45" />
+                  <div className="absolute inset-x-[3px] top-[10px] h-px bg-[#6b6350]/45" />
+                  <div className="absolute inset-x-[3px] top-[13px] h-px bg-[#6b6350]/45" />
+                  <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-[2px] bg-[#6b6350]/25 rounded-full mx-[2px]" />
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* L/R labels */}
-        <div className="flex gap-[2px] w-[14px] text-[7px] font-mono text-muted-foreground/40 pb-0.5">
-          <span className="flex-1 text-center">L</span>
-          <span className="flex-1 text-center">R</span>
+        {/* dB readout */}
+        <div ref={dbReadoutRef} className={`text-[10px] font-mono py-0.5 leading-none ${dbColor}`}>
+          {formatFaderDb(volumeDb)}
         </div>
       </div>
     </div>
@@ -657,24 +866,29 @@ export const AudioMixerView = memo(function AudioMixerView({
   perTrackLevels,
   masterEstimate,
   isPlaying,
+  masterVolumeDb,
+  masterMuted,
+  onMasterVolumeChange,
+  onMasterMuteToggle,
   onTrackVolumeChange,
   onTrackMuteToggle,
   onTrackSoloToggle,
   headerExtra,
   expanded,
 }: AudioMixerViewProps) {
-  // When expanded (floating), fill the panel; when docked, fit content up to max
+  // When expanded (floating), fill the panel; when docked, size to content
   const outerClassName = expanded
     ? 'panel-bg flex h-full flex-col overflow-hidden'
     : 'panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit';
-  const outerStyle = expanded
-    ? undefined
-    : { maxWidth: EDITOR_LAYOUT_CSS_VALUES.timelineMixerWidth };
+
+  const allItemIds = useMemo(
+    () => tracks.flatMap((track) => track.itemIds),
+    [tracks],
+  );
 
   return (
     <aside
       className={outerClassName}
-      style={outerStyle}
       aria-label="Audio mixer"
     >
       {/* Header — only shown when docked (floating panel has its own title bar) */}
@@ -730,7 +944,7 @@ export const AudioMixerView = memo(function AudioMixerView({
         </div>
 
         {/* Bus / master strip */}
-        <BusMeter masterEstimate={masterEstimate} isPlaying={isPlaying} />
+        <BusMeter masterEstimate={masterEstimate} isPlaying={isPlaying} volumeDb={masterVolumeDb} muted={masterMuted} allItemIds={allItemIds} onVolumeChange={onMasterVolumeChange} onMuteToggle={onMasterMuteToggle} />
       </div>
     </aside>
   );

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import {
   useTimelineStore,
   useItemsStore,
@@ -29,6 +29,9 @@ import {
   formatMeterDb,
   isAudioMixerTrack,
   linearLevelToPercent,
+  getLiveBusVolumeOverride,
+  getLiveOverrideVersion,
+  subscribeLiveOverrideVersion,
   resolveCompiledAudioMeterSources,
   type AudioMeterCompositionLookup,
   type AudioMeterEstimate,
@@ -98,7 +101,9 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const volume = usePlaybackStore((s) => s.volume);
+  const setVolume = usePlaybackStore((s) => s.setVolume);
   const muted = usePlaybackStore((s) => s.muted);
+  const toggleMute = usePlaybackStore((s) => s.toggleMute);
 
   const [waveformsByMediaId, setWaveformsByMediaId] = useState<Map<string, AudioMeterWaveform | null>>(new Map());
   const meterVisualRootRef = useRef<HTMLDivElement | null>(null);
@@ -112,7 +117,6 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   });
 
   const effectiveFrame = previewFrame ?? displayedFrame ?? currentFrame;
-  const playbackGain = isPlaying && !muted ? volume : 0;
   const combinedTracks = useMemo(() => {
     return tracks
       .filter((track) => !track.isGroup)
@@ -157,14 +161,32 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     compositionsById: combinedCompositionsById,
   }), [combinedCompositionsById, combinedTracks, fps, transitions]);
 
+  // Re-resolve sources when live fader overrides change (fader drag in progress).
+  const liveOverrideVersion = useSyncExternalStore(subscribeLiveOverrideVersion, getLiveOverrideVersion, getLiveOverrideVersion);
+
+  // Read bus override inside the same version-gated render cycle so playbackGain
+  // recomputes whenever the bus fader moves (subscription above guarantees re-render).
+  const liveBusOverrideDb = getLiveBusVolumeOverride();
+  const playbackGain = isPlaying && !muted
+    ? (liveBusOverrideDb !== null ? Math.pow(10, liveBusOverrideDb / 20) : volume)
+    : 0;
+
   const preloadSources = useMemo(() => {
     return resolveCompiledAudioMeterSources({
       graph: compiledGraph,
       frame: effectiveFrame,
       masterGain: 1,
     });
-  }, [compiledGraph, effectiveFrame]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- liveOverrideVersion invalidates when fader overrides change
+  }, [compiledGraph, effectiveFrame, liveOverrideVersion]);
 
+  // Per-track sources include track volume but not master/bus volume.
+  const perTrackSources = useMemo(() => {
+    if (!isPlaying || muted) return [];
+    return preloadSources;
+  }, [isPlaying, muted, preloadSources]);
+
+  // Bus/master sources include both track volume and master volume.
   const sources = useMemo(() => {
     if (playbackGain <= 0.0001) {
       return [];
@@ -370,14 +392,14 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [mixerSourceTracks]);
 
   const perTrackLevels = useMemo(() => {
-    if (panelMode !== 'mixer' || playbackGain <= 0.0001) return EMPTY_PER_TRACK_LEVELS;
+    if (panelMode !== 'mixer' || perTrackSources.length === 0) return EMPTY_PER_TRACK_LEVELS;
     return estimatePerTrackLevels({
       tracks: combinedTracks,
-      sources,
+      sources: perTrackSources,
       waveformsByMediaId,
       targetTrackIds: mixerSourceTracks.map((track) => track.id),
     });
-  }, [combinedTracks, mixerSourceTracks, panelMode, playbackGain, sources, waveformsByMediaId]);
+  }, [combinedTracks, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
 
   // Commit track volume in place to avoid preview playback stalls during active playback.
   // Undo remains correct because we add an explicit pre-mutation snapshot entry.
@@ -503,6 +525,23 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [applyMuteSoloLiveGains]);
 
   // ---------------------------------------------------------------------------
+  // Master volume (dB <-> linear gain for bus fader)
+  // ---------------------------------------------------------------------------
+
+  const masterVolumeDb = useMemo(() => {
+    if (volume <= 0) return -60;
+    return Math.max(-60, Math.min(12, 20 * Math.log10(volume)));
+  }, [volume]);
+
+  const handleMasterVolumeChange = useCallback((db: number) => {
+    if (db <= -60) {
+      setVolume(0);
+    } else {
+      setVolume(Math.pow(10, db / 20));
+    }
+  }, [setVolume]);
+
+  // ---------------------------------------------------------------------------
   // Mode dropdown (shared across both views)
   // ---------------------------------------------------------------------------
 
@@ -556,6 +595,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         perTrackLevels={perTrackLevels}
         masterEstimate={estimate}
         isPlaying={isPlaying}
+        masterVolumeDb={masterVolumeDb}
+        masterMuted={muted}
+        onMasterVolumeChange={handleMasterVolumeChange}
+        onMasterMuteToggle={toggleMute}
         onTrackVolumeChange={handleTrackVolumeChange}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}
@@ -575,6 +618,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         perTrackLevels={perTrackLevels}
         masterEstimate={estimate}
         isPlaying={isPlaying}
+        masterVolumeDb={masterVolumeDb}
+        masterMuted={muted}
+        onMasterVolumeChange={handleMasterVolumeChange}
+        onMasterMuteToggle={toggleMute}
         onTrackVolumeChange={handleTrackVolumeChange}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}

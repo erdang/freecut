@@ -41,6 +41,8 @@ describe('audio-volume utils', () => {
   it('returns a bounded visualization scale from volume dB', () => {
     expect(getAudioVisualizationScale(0)).toBeCloseTo(1, 5);
     expect(getAudioVisualizationScale(12)).toBeGreaterThan(1);
+    expect(getAudioVisualizationScale(12)).toBeLessThan(2.5);
+    expect(getAudioVisualizationScale(-12)).toBeGreaterThan(0.4);
     expect(getAudioVisualizationScale(-60)).toBeGreaterThan(0);
   });
 });

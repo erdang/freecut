@@ -1,7 +1,7 @@
 import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useShallow } from 'zustand/react/shallow';
-import { setMixerLiveGains, getMixerLiveGain } from '@/shared/state/mixer-live-gain';
+import { setMixerLiveGains, getMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
 import { useTimelineZoomContext } from '../../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../../stores/timeline-store';
 import { useItemsStore } from '../../stores/items-store';
@@ -18,8 +18,6 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { captureSnapshot } from '../../stores/commands/snapshot';
-import { useTimelineCommandStore } from '../../stores/timeline-command-store';
 import {
   TRANSITION_DRAG_MIME,
   useTransitionDragStore,
@@ -1640,13 +1638,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   audioFadeCurveEditRef.current = audioFadeCurveEdit;
   const audioFadeCurveCleanupRef = useRef<(() => void) | null>(null);
   const [audioVolumeEdit, setAudioVolumeEdit] = useState<{
-    previewVolume: number;
     originalVolume: number;
     isCommitting: boolean;
   } | null>(null);
-  const audioVolumeEditRef = useRef(audioVolumeEdit);
-  audioVolumeEditRef.current = audioVolumeEdit;
   const audioVolumeCleanupRef = useRef<(() => void) | null>(null);
+  const audioVolumePreviewRef = useRef(item.type === 'audio' ? (item.volume ?? 0) : 0);
+  const audioVolumeEditLabelRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => () => {
     videoFadeCleanupRef.current?.();
     audioFadeCleanupRef.current?.();
@@ -1678,7 +1675,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? (audioFadeCurveEdit?.previewFadeOutCurveX ?? item.audioFadeOutCurveX ?? 0.52)
     : 0.52;
   const displayedAudioVolumeDb = item.type === 'audio'
-    ? (audioVolumeEdit?.previewVolume ?? item.volume ?? 0)
+    ? (item.volume ?? 0)
     : 0;
   const videoFadeInPixels = useMemo(
     () => isVisualFadeItem ? getAudioFadePixels(displayedVideoFadeIn, fps, frameToPixels, visualWidth) : 0,
@@ -1715,8 +1712,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
   const audioVolumeEditLabel = useMemo(() => {
     if (!audioVolumeEdit) return null;
-    return `Volume ${displayedAudioVolumeDb >= 0 ? '+' : ''}${displayedAudioVolumeDb.toFixed(1)} dB`;
-  }, [audioVolumeEdit, displayedAudioVolumeDb]);
+    const previewVolume = audioVolumePreviewRef.current;
+    return `Volume ${previewVolume >= 0 ? '+' : ''}${previewVolume.toFixed(1)} dB`;
+  }, [audioVolumeEdit]);
   const audioVolumeLineY = useMemo(
     () => item.type === 'audio' ? getAudioVolumeLineY(displayedAudioVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) : AUDIO_ENVELOPE_VIEWBOX_HEIGHT / 2,
     [displayedAudioVolumeDb, item.type]
@@ -1795,6 +1793,63 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
+  const applyAudioVolumeVisualPreview = useCallback((previewVolumeDb: number) => {
+    audioVolumePreviewRef.current = previewVolumeDb;
+
+    if (transformRef.current) {
+      transformRef.current.style.setProperty(
+        '--timeline-audio-volume-line-y',
+        `${(getAudioVolumeLineY(previewVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) / AUDIO_ENVELOPE_VIEWBOX_HEIGHT) * 100}%`,
+      );
+      transformRef.current.style.setProperty(
+        '--timeline-audio-waveform-scale',
+        String(getAudioVisualizationScale(previewVolumeDb)),
+      );
+    }
+
+    if (audioVolumeEditLabelRef.current) {
+      audioVolumeEditLabelRef.current.textContent = `Volume ${previewVolumeDb >= 0 ? '+' : ''}${previewVolumeDb.toFixed(1)} dB`;
+    }
+  }, []);
+  const itemType = item.type;
+  const itemVolume = item.volume;
+  useEffect(() => {
+    if (itemType !== 'audio' || audioVolumeEdit !== null) {
+      return;
+    }
+
+    applyAudioVolumeVisualPreview(itemVolume ?? 0);
+  }, [applyAudioVolumeVisualPreview, audioVolumeEdit, itemType, itemVolume]);
+  const finalizeAudioVolumeChange = useCallback((nextVolume: number, options?: {
+    preserveLiveGainOnCommit?: boolean;
+    commitFromActiveEdit?: boolean;
+  }) => {
+    if (item.type !== 'audio') {
+      return;
+    }
+
+    const currentVolume = item.volume ?? 0;
+    const didChange = Math.abs(currentVolume - nextVolume) > AUDIO_VOLUME_EPSILON;
+
+    applyAudioVolumeVisualPreview(nextVolume);
+
+    if (!didChange || !options?.preserveLiveGainOnCommit) {
+      clearMixerLiveGain(item.id);
+    }
+
+    if (!didChange) {
+      setAudioVolumeEdit(null);
+      return;
+    }
+
+    if (options?.commitFromActiveEdit) {
+      setAudioVolumeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+    } else {
+      setAudioVolumeEdit(null);
+    }
+
+    updateTimelineItem(item.id, { volume: nextVolume });
+  }, [applyAudioVolumeVisualPreview, item, updateTimelineItem]);
   useEffect(() => {
     if (!videoFadeEdit?.isCommitting || !isVisualFadeItem) {
       return;
@@ -1832,7 +1887,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       return;
     }
 
-    if (Math.abs((item.volume ?? 0) - audioVolumeEdit.previewVolume) <= AUDIO_VOLUME_EPSILON) {
+    if (Math.abs((item.volume ?? 0) - audioVolumePreviewRef.current) <= AUDIO_VOLUME_EPSILON) {
       setAudioVolumeEdit(null);
     }
   }, [audioVolumeEdit, item]);
@@ -2151,11 +2206,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     const applyPreview = (nextVolume: number) => {
       latestPreviewVolume = nextVolume;
-      setAudioVolumeEdit({
-        previewVolume: nextVolume,
-        originalVolume,
-        isCommitting: false,
-      });
+      applyAudioVolumeVisualPreview(nextVolume);
       // Real-time audio feedback via live gain (no store write / no composition re-render)
       const gainRatio = Math.pow(10, (nextVolume - originalVolume) / 20);
       setMixerLiveGains([{ itemId: item.id, gain: dragStartLiveGain * gainRatio }]);
@@ -2187,36 +2238,24 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       }
 
       isDragActive = true;
+      setAudioVolumeEdit({
+        originalVolume,
+        isCommitting: false,
+      });
       applyPreview(computeVolumeDb(latestClientY));
     };
 
     const finishEdit = () => {
-      const committedVolume = audioVolumeEditRef.current?.previewVolume ?? latestPreviewVolume;
+      const committedVolume = audioVolumePreviewRef.current ?? latestPreviewVolume;
       audioVolumeCleanupRef.current?.();
       audioVolumeCleanupRef.current = null;
       // Keep live gain active — segment volumeDb is stale until composition
       // naturally re-renders, and the audio component auto-clears via useEffect.
 
-      if (Math.abs(committedVolume - originalVolume) > AUDIO_VOLUME_EPSILON) {
-        const snapshot = captureSnapshot();
-        const beforeSnapshot = {
-          ...snapshot,
-          items: snapshot.items.map((existingItem) => (
-            existingItem.id === item.id
-              ? { ...existingItem }
-              : existingItem
-          )),
-        };
-        (item as { volume: number }).volume = committedVolume;
-        useTimelineStore.getState().markDirty();
-        useTimelineCommandStore.getState().addUndoEntry(
-          { type: 'UPDATE_ITEM', payload: { id: item.id, updates: { volume: committedVolume } } },
-          beforeSnapshot,
-        );
-        setAudioVolumeEdit(null);
-      } else {
-        setAudioVolumeEdit(null);
-      }
+      finalizeAudioVolumeChange(committedVolume, {
+        preserveLiveGainOnCommit: true,
+        commitFromActiveEdit: true,
+      });
     };
 
     const handleWindowMouseMove = (event: MouseEvent) => {
@@ -2238,6 +2277,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       if (!isDragActive) {
         audioVolumeCleanupRef.current?.();
         audioVolumeCleanupRef.current = null;
+        finalizeAudioVolumeChange(originalVolume);
         return;
       }
 
@@ -2255,7 +2295,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, item, trackLocked]);
+  }, [activeTool, finalizeAudioVolumeChange, item, trackLocked]);
   const handleAudioVolumeDoubleClick = useCallback(() => {
     if (item.type !== 'audio' || trackLocked) {
       return;
@@ -2263,12 +2303,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     audioVolumeCleanupRef.current?.();
     audioVolumeCleanupRef.current = null;
-    setAudioVolumeEdit(null);
-
-    if (Math.abs((item.volume ?? 0)) > AUDIO_VOLUME_EPSILON) {
-      updateTimelineItem(item.id, { volume: 0 });
-    }
-  }, [item, trackLocked, updateTimelineItem]);
+    finalizeAudioVolumeChange(0);
+  }, [finalizeAudioVolumeChange, item, trackLocked]);
   const handleVideoFadeHandleDoubleClick = useCallback((handle: AudioFadeHandle) => {
     if (!isVisualFadeItem || trackLocked) {
       return;
@@ -2342,15 +2378,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       return contentPreviewItem;
     }
 
-    if (audioVolumeEdit === null) {
-      return contentPreviewItem;
-    }
-
-    return {
-      ...contentPreviewItem,
-      volume: audioVolumeEdit.previewVolume,
-    };
-  }, [audioVolumeEdit, contentPreviewItem, videoFadeEdit]);
+    return contentPreviewItem;
+  }, [contentPreviewItem, videoFadeEdit]);
   const linkedSyncPreviewItem = useMemo<TimelineItemType>(() => {
     let fromOffset = slideFromOffset + rippleEditOffset + moveDragPreviewFromDelta;
 
@@ -2807,6 +2836,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             contain: 'layout style paint',
             contentVisibility: 'auto',
             containIntrinsicSize: `0 ${DEFAULT_TRACK_HEIGHT}px`,
+            '--timeline-audio-volume-line-y': `${
+              item.type === 'audio' && audioVolumeEdit !== null
+                ? (getAudioVolumeLineY(audioVolumePreviewRef.current, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) / AUDIO_ENVELOPE_VIEWBOX_HEIGHT) * 100
+                : audioVolumeLineYPercent
+            }%`,
+            '--timeline-audio-waveform-scale': String(
+              item.type === 'audio' && audioVolumeEdit !== null
+                ? getAudioVisualizationScale(audioVolumePreviewRef.current)
+                : audioVisualizationScale
+            ),
           }}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
@@ -2875,7 +2914,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 <div
                   className="absolute left-0 right-0 h-px -translate-y-1/2 pointer-events-none"
                   style={{
-                    top: `${audioVolumeLineYPercent}%`,
+                    top: `var(--timeline-audio-volume-line-y, ${audioVolumeLineYPercent}%)`,
                     backgroundColor: audioVolumeLineStroke,
                   }}
                 />
@@ -2980,6 +3019,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 lineYPercent={audioVolumeLineYPercent}
                 isEditing={audioVolumeEdit !== null}
                 editLabel={audioVolumeEditLabel}
+                editLabelRef={audioVolumeEditLabelRef}
                 onVolumeMouseDown={handleAudioVolumeMouseDown}
                 onVolumeDoubleClick={handleAudioVolumeDoubleClick}
               />
