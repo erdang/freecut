@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react';
 import {
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Film,
   Layers,
   LineChart,
@@ -18,6 +20,7 @@ import {
   Pen,
   WandSparkles,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { useEditorStore } from '@/shared/state/editor';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -61,6 +64,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Use granular selectors - Zustand v5 best practice
   const leftSidebarOpen = useEditorStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar);
+  const mediaFullColumn = useEditorStore((s) => s.mediaFullColumn);
+  const toggleMediaFullColumn = useEditorStore((s) => s.toggleMediaFullColumn);
   const keyframeEditorOpen = useEditorStore((s) => s.keyframeEditorOpen);
   const setKeyframeEditorOpen = useEditorStore((s) => s.setKeyframeEditorOpen);
   const toggleKeyframeEditorOpen = useEditorStore((s) => s.toggleKeyframeEditorOpen);
@@ -375,7 +380,8 @@ export const MediaSidebar = memo(function MediaSidebar() {
         >
           <button
             onClick={toggleLeftSidebar}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            className="rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
+            style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
             data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
             data-tooltip-side="right"
           >
@@ -454,12 +460,27 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
           {/* Panel Header — sits with the tab content, below the keyframe editor */}
           <div
-            className="flex items-center px-3 border-b border-border flex-shrink-0"
+            className="flex items-center justify-between px-3 border-b border-border flex-shrink-0"
             style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
           >
             <span className="text-sm font-medium text-foreground">
               {categories.find((c) => c.id === activeTab)?.label}
             </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0"
+              style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
+              onClick={toggleMediaFullColumn}
+              data-tooltip={mediaFullColumn ? 'Dock to preview' : 'Expand full column'}
+              data-tooltip-side="bottom"
+            >
+              {mediaFullColumn ? (
+                <ChevronUp className="w-3 h-3" />
+              ) : (
+                <ChevronDown className="w-3 h-3" />
+              )}
+            </Button>
           </div>
 
           {/* Media Tab - Full Media Library */}

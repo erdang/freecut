@@ -57,6 +57,7 @@ export interface TimelineActions {
   rollingTrimItems: (leftId: string, rightId: string, editPointDelta: number) => void;
   rippleTrimItem: (id: string, handle: 'start' | 'end', trimDelta: number) => void;
   splitItem: (id: string, splitFrame: number) => void;
+  splitItemAtFrames: (id: string, splitFrames: number[]) => number;
   joinItems: (itemIds: string[]) => void;
   rateStretchItem: (id: string, newFrom: number, newDuration: number, newSpeed: number) => void;
   resetSpeedWithRipple: (itemIds: string[]) => void;

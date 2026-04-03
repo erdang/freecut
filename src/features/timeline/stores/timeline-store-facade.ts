@@ -1005,6 +1005,7 @@ function getSnapshot(): TimelineState & TimelineActions {
       rollingTrimItems: timelineActions.rollingTrimItems,
       rippleTrimItem: timelineActions.rippleTrimItem,
       splitItem: timelineActions.splitItem,
+      splitItemAtFrames: timelineActions.splitItemAtFrames,
       joinItems: timelineActions.joinItems,
       rateStretchItem: timelineActions.rateStretchItem,
       resetSpeedWithRipple: timelineActions.resetSpeedWithRipple,

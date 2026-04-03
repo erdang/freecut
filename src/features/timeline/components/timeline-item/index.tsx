@@ -105,7 +105,7 @@ import {
 } from '../../utils/smart-trim-zones';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
-import { insertFreezeFrame, linkItems, unlinkItems } from '../../stores/actions/item-actions';
+import { insertFreezeFrame, linkItems, unlinkItems, splitItemAtFrames } from '../../stores/actions/item-actions';
 import {
   createPreComp,
   dissolvePreComp,
@@ -123,7 +123,10 @@ import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFad
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { findHandleNeighborWithTransitions } from '../../utils/transition-linked-neighbors';
+import { detectScenes } from '../../deps/analysis';
+import { resolveMediaUrl } from '../../deps/media-library-resolver';
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
+const SCENE_DETECTION_OVERLAY_ID = 'scene-detection';
 const EMPTY_SEGMENT_OVERLAYS = [] as const;
 const ACTIVE_CURSOR_CLASSES = [
   'timeline-cursor-trim-left',
@@ -999,8 +1002,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
 
     if (isSlipSlideActive && slipSlideMode === 'slide') {
+      const { items } = useTimelineStore.getState();
+      const { transitions } = useTransitionsStore.getState();
+
       return getSlideOperationBoundsVisual({
         item,
+        items,
+        transitions,
         fps,
         frameToPixels,
         leftNeighbor: slideLeftNeighborForSlidItem,
@@ -1605,6 +1613,104 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const isCaptionGenerationActive = segmentOverlays.some(
     (overlay) => overlay.id === CAPTION_GENERATION_OVERLAY_ID,
   );
+
+  const isSceneDetectionActive = segmentOverlays.some(
+    (overlay) => overlay.id === SCENE_DETECTION_OVERLAY_ID,
+  );
+
+  const handleDetectScenes = useCallback(() => {
+    if (item.type !== 'video' || !item.mediaId || isBroken) return;
+
+    const mediaId = item.mediaId;
+    const clipId = item.id;
+    const clipFrom = item.from;
+    const overlayStore = useTimelineItemOverlayStore.getState();
+
+    const run = async () => {
+      const abortController = new AbortController();
+
+      try {
+        overlayStore.upsertOverlay(clipId, {
+          id: SCENE_DETECTION_OVERLAY_ID,
+          label: 'Detecting scenes',
+          progress: 0,
+          tone: 'info',
+        });
+
+        const url = await resolveMediaUrl(mediaId);
+        const video = document.createElement('video');
+        video.src = url;
+        video.muted = true;
+        video.preload = 'auto';
+
+        await new Promise<void>((resolve, reject) => {
+          video.onloadedmetadata = () => resolve();
+          video.onerror = () => reject(new Error('Failed to load video for scene detection'));
+        });
+
+        const currentFps = useTimelineStore.getState().fps;
+        const cuts = await detectScenes(video, currentFps, {
+          sampleIntervalMs: 500,
+          useGemmaVerification: false,
+          signal: abortController.signal,
+          onProgress: (progress) => {
+            const stageLabels = {
+              'optical-flow': `Analyzing motion (${progress.sceneCuts} candidates)`,
+              'loading-model': `Loading Gemma model (${progress.percent}%)`,
+              'verifying': `Verifying cuts (${progress.sceneCuts}/${progress.totalSamples} confirmed)`,
+            };
+            const label = stageLabels[progress.stage ?? 'optical-flow'];
+            useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
+              id: SCENE_DETECTION_OVERLAY_ID,
+              label,
+              progress: progress.stage === 'loading-model' ? progress.percent : progress.percent,
+              tone: 'info',
+            });
+          },
+        });
+
+        video.src = '';
+
+        if (cuts.length === 0) {
+          toast.info('No scene cuts detected');
+          return;
+        }
+
+        // Convert scene cut frames to timeline split frames (relative to clip start).
+        // Scene detection returns frames in source video space — offset by clip's `from`.
+        // Filter to cuts within the clip's duration range.
+        const clipDuration = item.durationInFrames;
+        const sourceStartFrame = item.sourceStart ?? 0;
+        const splitFrames = cuts
+          .map((cut) => cut.frame - sourceStartFrame)
+          .filter((f) => f > 0 && f < clipDuration)
+          .map((f) => f + clipFrom);
+
+        if (splitFrames.length === 0) {
+          toast.info('No scene cuts within clip bounds');
+          return;
+        }
+
+        const splitCount = splitItemAtFrames(clipId, splitFrames);
+
+        if (splitCount > 0) {
+          toast.success(`Split clip at ${splitCount} scene cut${splitCount > 1 ? 's' : ''}`);
+        } else {
+          toast.info('No valid split points found');
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('WebGPU')) {
+          toast.error('Scene detection requires WebGPU support');
+        } else {
+          toast.error('Scene detection failed');
+        }
+      } finally {
+        useTimelineItemOverlayStore.getState().removeOverlay(clipId, SCENE_DETECTION_OVERLAY_ID);
+      }
+    };
+
+    void run();
+  }, [item.id, item.type, item.mediaId, item.from, item.durationInFrames, (item as { sourceStart?: number }).sourceStart, isBroken]);
 
   // Composition operations
   const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
@@ -2824,6 +2930,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         onDissolveComposition={handleDissolveComposition}
         canCreatePreComp={isSelected}
         onCreatePreComp={handleCreatePreComp}
+        canDetectScenes={item.type === 'video' && !!item.mediaId && !isBroken}
+        isDetectingScenes={isSceneDetectionActive}
+        onDetectScenes={handleDetectScenes}
       >
         <div
           ref={transformRef}
@@ -2979,7 +3088,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
           {isVisualFadeItem && (
             <div
-              className="absolute inset-x-0 bottom-0 z-30"
+              className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
             >
               <VideoFadeHandles
@@ -3002,7 +3111,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           {/* Trim handles */}
           {item.type === 'audio' && (
             <div
-              className="absolute inset-x-0 bottom-0 z-30"
+              className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
             >
               <AudioFadeHandles

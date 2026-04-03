@@ -1,7 +1,7 @@
 import { Activity, memo, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Settings2 } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Settings2 } from 'lucide-react';
 import { useItemsStore } from '@/features/editor/deps/timeline-store';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -88,6 +88,8 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
   const toggleRightSidebar = useEditorStore((s) => s.toggleRightSidebar);
   const rightSidebarWidth = useEditorStore((s) => s.rightSidebarWidth);
   const setRightSidebarWidth = useEditorStore((s) => s.setRightSidebarWidth);
+  const propertiesFullColumn = useEditorStore((s) => s.propertiesFullColumn);
+  const togglePropertiesFullColumn = useEditorStore((s) => s.togglePropertiesFullColumn);
   const selectedItemIds = useSelectionStore((s) => s.selectedItemIds);
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId);
   const selectedTransitionId = useSelectionStore((s) => s.selectedTransitionId);
@@ -173,7 +175,22 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
               className="flex items-center justify-between px-3 border-b border-border flex-shrink-0"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
             >
-              <div className="min-w-0 flex items-center gap-2">
+              <div className="min-w-0 flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0"
+                  style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
+                  onClick={togglePropertiesFullColumn}
+                  data-tooltip={propertiesFullColumn ? 'Dock to preview' : 'Expand full column'}
+                  data-tooltip-side="bottom"
+                >
+                  {propertiesFullColumn ? (
+                    <ChevronUp className="w-3 h-3" />
+                  ) : (
+                    <ChevronDown className="w-3 h-3" />
+                  )}
+                </Button>
                 <Settings2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 <h2 className="min-w-0 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                   <span className="shrink-0 uppercase tracking-wide">Properties</span>
@@ -190,7 +207,7 @@ export const PropertiesSidebar = memo(function PropertiesSidebar() {
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
                 onClick={toggleRightSidebar}
               >
                 <ChevronRight className="w-3.5 h-3.5" />

@@ -11,6 +11,7 @@ import { Power, PowerOff, Lock, GripVertical, Radio, FoldHorizontal } from 'luci
 import type { TimelineTrack } from '@/types/timeline';
 import { useTrackDrag } from '../hooks/use-track-drag';
 import { TIMELINE_SIDEBAR_WIDTH } from '../constants';
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { useItemsStore } from '../stores/items-store';
 import { getTrackKind } from '@/features/timeline/utils/classic-tracks';
 
@@ -111,7 +112,8 @@ export const TrackHeader = memo(function TrackHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 rounded hover:bg-secondary"
+              className="rounded hover:bg-secondary"
+              style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleDisabled();
@@ -131,7 +133,8 @@ export const TrackHeader = memo(function TrackHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 rounded hover:bg-secondary"
+              className="rounded hover:bg-secondary"
+              style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleSolo();
@@ -149,7 +152,8 @@ export const TrackHeader = memo(function TrackHeader({
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 rounded hover:bg-secondary"
+              className="rounded hover:bg-secondary"
+              style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
               onClick={(e) => {
                 e.stopPropagation();
                 onToggleLock();
@@ -159,14 +163,15 @@ export const TrackHeader = memo(function TrackHeader({
               data-tooltip={track.locked ? 'Unlock track' : 'Lock track'}
             >
               <Lock
-                className={`w-3 h-3 ${track.locked ? 'opacity-50' : ''}`}
+                className={`w-3 h-3 ${track.locked ? 'text-primary' : 'opacity-70'}`}
               />
             </Button>
 
             <Button
               variant="ghost"
               size="icon"
-              className="h-5 w-5 rounded hover:bg-secondary"
+              className="rounded hover:bg-secondary"
+              style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
               onClick={(e) => {
                 e.stopPropagation();
                 onCloseGaps?.();
@@ -179,11 +184,11 @@ export const TrackHeader = memo(function TrackHeader({
             </Button>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col items-start justify-start px-1.5 py-1">
-            <span className="max-w-full truncate text-xs font-semibold leading-none font-mono">
+          <div className="flex min-h-0 flex-1 items-center gap-1.5 overflow-hidden px-1.5">
+            <span className="min-w-0 truncate text-xs font-semibold leading-none font-mono">
               {track.name}
             </span>
-            <span className="mt-1 text-[10px] leading-none text-muted-foreground">
+            <span className="shrink-0 text-[10px] leading-none text-muted-foreground">
               {itemCountLabel}
             </span>
           </div>

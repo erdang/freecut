@@ -24,6 +24,7 @@ import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { useSelectionStore } from '@/shared/state/selection';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
+import { formatTimecodeCompact } from '@/utils/time-utils';
 
 interface SourceMonitorProps {
   mediaId: string;
@@ -407,13 +408,21 @@ function SourcePlaybackControls({
   const progressRef = useRef<HTMLDivElement>(null);
   const currentTimeRef = useRef<HTMLSpanElement>(null);
   const outPointRef = useRef<number | null>(useSourcePlayerStore.getState().outPoint);
+  const [showFrames, setShowFrames] = useState(false);
+  const showFramesRef = useRef(showFrames);
+  showFramesRef.current = showFrames;
 
-  const formatTime = useCallback((f: number) => {
-    const secs = f / fps;
-    const m = Math.floor(secs / 60);
-    const s = Math.floor(secs % 60);
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  }, [fps]);
+  const frameDigits = Math.max(durationInFrames.toString().length, 1);
+
+  const formatFrameNumber = useCallback(
+    (f: number) => f.toString().padStart(frameDigits, '0'),
+    [frameDigits],
+  );
+
+  const formatTime = useCallback(
+    (f: number) => (showFramesRef.current ? formatFrameNumber(f) : formatTimecodeCompact(f, fps)),
+    [fps, formatFrameNumber],
+  );
 
   const updateFrameDisplay = useCallback((frame: number) => {
     currentFrameRef.current = frame;
@@ -425,9 +434,11 @@ function SourcePlaybackControls({
       progressRef.current.style.width = `${progress}%`;
     }
     if (currentTimeRef.current) {
-      currentTimeRef.current.textContent = formatTime(frame);
+      currentTimeRef.current.textContent = showFramesRef.current
+        ? formatFrameNumber(frame)
+        : formatTimecodeCompact(frame, fps);
     }
-  }, [formatTime, interactive, lastFrame]);
+  }, [fps, formatFrameNumber, interactive, lastFrame]);
 
   // Bridge player methods into the source player store for keyboard shortcuts
   useEffect(() => {
@@ -543,6 +554,90 @@ function SourcePlaybackControls({
   const inPct = interactive && inPoint !== null && lastFrame > 0 ? (inPoint / lastFrame) * 100 : null;
   const outPct = interactive && outPoint !== null && lastFrame > 0 ? (outPoint / lastFrame) * 100 : null;
 
+  // Draggable I/O handles + range
+  const ioStripRef = useRef<HTMLDivElement>(null);
+  const ioDragCleanupRef = useRef<(() => void) | null>(null);
+
+  const frameFromStripX = useCallback(
+    (clientX: number) => {
+      const strip = ioStripRef.current;
+      if (!strip) return 0;
+      const rect = strip.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      return Math.round(pct * lastFrame);
+    },
+    [lastFrame],
+  );
+
+  const handleIODragStart = useCallback(
+    (e: React.MouseEvent, type: 'in' | 'out') => {
+      e.preventDefault();
+      e.stopPropagation();
+      const originalCursor = document.body.style.cursor;
+      document.body.style.cursor = 'col-resize';
+
+      const store = useSourcePlayerStore.getState;
+      const onMove = (ev: MouseEvent) => {
+        const frame = frameFromStripX(ev.clientX);
+        if (type === 'in') {
+          const out = store().outPoint;
+          store().setInPoint(out !== null ? Math.min(frame, out) : frame);
+        } else {
+          const inp = store().inPoint;
+          store().setOutPoint(inp !== null ? Math.max(frame, inp) : frame);
+        }
+      };
+      const onUp = () => {
+        document.body.style.cursor = originalCursor;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        ioDragCleanupRef.current = null;
+      };
+      ioDragCleanupRef.current = onUp;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [frameFromStripX],
+  );
+
+  const handleIORangeDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const store = useSourcePlayerStore.getState;
+      const startIn = store().inPoint;
+      const startOut = store().outPoint;
+      if (startIn === null || startOut === null) return;
+      const startFrame = frameFromStripX(e.clientX);
+      const originalCursor = document.body.style.cursor;
+      document.body.style.cursor = 'grabbing';
+
+      const onMove = (ev: MouseEvent) => {
+        const nowFrame = frameFromStripX(ev.clientX);
+        const delta = nowFrame - startFrame;
+        const nextIn = Math.max(0, Math.min(lastFrame, startIn + delta));
+        const nextOut = Math.max(0, Math.min(lastFrame, startOut + delta));
+        if (nextIn > nextOut) return;
+        store().setInPoint(nextIn);
+        store().setOutPoint(nextOut);
+      };
+      const onUp = () => {
+        document.body.style.cursor = originalCursor;
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        ioDragCleanupRef.current = null;
+      };
+      ioDragCleanupRef.current = onUp;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    },
+    [frameFromStripX, lastFrame],
+  );
+
+  useEffect(() => {
+    return () => ioDragCleanupRef.current?.();
+  }, []);
+
   // Duration display when both I/O are set
   const ioDuration = interactive && inPoint !== null && outPoint !== null
     ? formatTime(outPoint - inPoint)
@@ -656,60 +751,173 @@ function SourcePlaybackControls({
       : 'Audio Source Patch Off';
 
   return (
-    <div
-      className="border-t border-border panel-header flex flex-col justify-center px-4 shrink-0 gap-1.5"
-      style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
-    >
-      {/* Progress bar with I/O markers drawn on top */}
-      <div
-        ref={barRef}
-        className="w-full h-1.5 bg-muted rounded cursor-pointer relative"
-        onMouseDown={handleBarMouseDown}
-      >
-        {/* Playhead progress (bottom layer) */}
-        <div
-          ref={progressRef}
-          className="absolute inset-y-0 left-0 bg-primary transition-none pointer-events-none rounded-l"
-          style={{ width: `${lastFrame > 0 ? (clock.currentFrame / lastFrame) * 100 : 0}%` }}
-        />
-        {/* Shaded region between in/out points */}
-        {inPct !== null && outPct !== null && (
+    <div className="@container flex flex-col shrink-0">
+      {/* Seek bar row with I/O region above and editing buttons */}
+      <div className="border-t border-border panel-header flex items-center gap-2 px-4 h-7 shrink-0">
+        <div className="flex-1 flex flex-col justify-center gap-[2px] min-w-0">
+          {/* I/O region strip — styled like timeline I/O controls */}
+          {interactive && (inPct !== null || outPct !== null) && (
+            <div ref={ioStripRef} className="w-full h-2.5 relative shrink-0">
+              {/* Draggable range strip */}
+              {inPct !== null && outPct !== null && (
+                <div
+                  className="absolute inset-y-0 cursor-grab active:cursor-grabbing"
+                  style={{
+                    left: `${inPct}%`,
+                    width: `${Math.max(0.5, outPct - inPct)}%`,
+                    background:
+                      'linear-gradient(to bottom, var(--color-timeline-io-range-fill), color-mix(in oklch, var(--color-timeline-io-range-fill) 82%, black))',
+                    border: '1px solid var(--color-timeline-io-range-border)',
+                    borderRadius: '2px',
+                    boxShadow:
+                      'inset 0 1px 0 color-mix(in oklch, white 22%, transparent), 0 0 6px var(--color-timeline-io-range-glow)',
+                    zIndex: 10,
+                  }}
+                  onMouseDown={handleIORangeDragStart}
+                />
+              )}
+              {/* In handle — grip */}
+              {inPct !== null && (
+                <div
+                  className="absolute top-0 bottom-0"
+                  style={{
+                    left: `${inPct}%`,
+                    width: '5px',
+                    borderRadius: '2px',
+                    background: `linear-gradient(to bottom, var(--color-timeline-io-handle), color-mix(in oklch, var(--color-timeline-io-handle) 75%, black))`,
+                    boxShadow: `0 0 5px color-mix(in oklch, var(--color-timeline-io-handle) 55%, transparent)`,
+                    zIndex: 20,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {/* In handle hit area */}
+              {inPct !== null && (
+                <div
+                  className="absolute cursor-col-resize"
+                  style={{
+                    left: `calc(${inPct}% - 4px)`,
+                    top: 0,
+                    bottom: 0,
+                    width: '14px',
+                    zIndex: 21,
+                  }}
+                  onMouseDown={(e) => handleIODragStart(e, 'in')}
+                />
+              )}
+              {/* Out handle — grip */}
+              {outPct !== null && (
+                <div
+                  className="absolute top-0 bottom-0"
+                  style={{
+                    left: `${outPct}%`,
+                    width: '5px',
+                    transform: 'translateX(-100%)',
+                    borderRadius: '2px',
+                    background: `linear-gradient(to bottom, var(--color-timeline-io-handle), color-mix(in oklch, var(--color-timeline-io-handle) 75%, black))`,
+                    boxShadow: `0 0 5px color-mix(in oklch, var(--color-timeline-io-handle) 55%, transparent)`,
+                    zIndex: 20,
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
+              {/* Out handle hit area */}
+              {outPct !== null && (
+                <div
+                  className="absolute cursor-col-resize"
+                  style={{
+                    left: `calc(${outPct}% - 10px)`,
+                    top: 0,
+                    bottom: 0,
+                    width: '14px',
+                    zIndex: 21,
+                  }}
+                  onMouseDown={(e) => handleIODragStart(e, 'out')}
+                />
+              )}
+            </div>
+          )}
+          {/* Seek bar */}
           <div
-            className="absolute inset-y-0 bg-blue-400/50 pointer-events-none z-10"
-            style={{ left: `${inPct}%`, width: `${outPct - inPct}%` }}
-          />
-        )}
-        {/* In marker */}
-        {inPct !== null && (
-          <div
-            className="absolute inset-y-0 w-0.5 bg-blue-400 pointer-events-none z-20"
-            style={{ left: `${inPct}%` }}
-          />
-        )}
-        {/* Out marker */}
-        {outPct !== null && (
-          <div
-            className="absolute inset-y-0 w-0.5 bg-orange-400 pointer-events-none z-20"
-            style={{ left: `${outPct}%` }}
-          />
+            ref={barRef}
+            className="w-full h-1.5 bg-muted rounded cursor-pointer relative"
+            onMouseDown={handleBarMouseDown}
+          >
+            <div
+              ref={progressRef}
+              className="absolute inset-y-0 left-0 bg-primary transition-none pointer-events-none rounded-l"
+              style={{ width: `${lastFrame > 0 ? (clock.currentFrame / lastFrame) * 100 : 0}%` }}
+            />
+          </div>
+        </div>
+        {interactive && (
+          <div className="flex items-center gap-0.5 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }}
+                  disabled={inPoint === null && outPoint === null}
+                  onClick={handleReplaySegment}
+                >
+                  <Repeat className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Play In to Out</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleMarkIn}>
+                  <ArrowLeftToLine className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Mark In (I)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleMarkOut}>
+                  <ArrowRightToLine className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Mark Out (O)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={handleClearIO}>
+                  <XCircle className="w-3 h-3" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
+            </Tooltip>
+          </div>
         )}
       </div>
 
       {/* Transport row */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-muted-foreground w-[11ch] shrink-0">
-          <span ref={currentTimeRef}>{formatTime(clock.currentFrame)}</span>
-          {' / '}
-          {formatTime(lastFrame)}
-        </span>
-        <span className="text-xs font-mono text-primary/70 w-[7ch] shrink-0">
+      <div
+        className="border-t border-border panel-header flex items-center justify-between px-4 shrink-0"
+        style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
+      >
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 bg-transparent p-0 font-mono text-[11px] tabular-nums text-left transition-colors select-none text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring rounded-sm shrink-0"
+          onClick={() => setShowFrames((prev) => !prev)}
+        >
+          <span ref={currentTimeRef} className="text-primary font-semibold">
+            {formatTime(clock.currentFrame)}
+          </span>
+          <span className="text-muted-foreground/50">/</span>
+          <span>{formatTime(lastFrame)}</span>
+        </button>
+        <span className="text-[11px] font-mono text-primary/70 shrink-0 hidden @min-[480px]:inline">
           {ioDuration ? `[${ioDuration}]` : ''}
         </span>
 
         <div className="flex items-center gap-0.5 shrink-0">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.seek(0)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(0)}>
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -717,7 +925,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.frameBack(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameBack(1)}>
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -725,7 +933,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button size="icon" className="h-6 w-6" onClick={() => player.toggle()}>
+              <Button size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.toggle()}>
                 {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </Button>
             </TooltipTrigger>
@@ -733,7 +941,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.frameForward(1)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.frameForward(1)}>
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -741,7 +949,7 @@ function SourcePlaybackControls({
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => player.seek(lastFrame)}>
+              <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => player.seek(lastFrame)}>
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
@@ -751,45 +959,6 @@ function SourcePlaybackControls({
 
         {interactive ? (
           <div className="flex items-center gap-0.5 shrink-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6"
-                  disabled={inPoint === null && outPoint === null}
-                  onClick={handleReplaySegment}
-                >
-                  <Repeat className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Play In to Out</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkIn}>
-                  <ArrowLeftToLine className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Mark In (I)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleMarkOut}>
-                  <ArrowRightToLine className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Mark Out (O)</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleClearIO}>
-                  <XCircle className="w-3.5 h-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
-            </Tooltip>
-            <div className="w-px h-4 bg-border mx-0.5" />
             <div className="flex items-center gap-1 shrink-0">
               <div className="flex items-center gap-0.5 rounded-md border border-border bg-secondary/50 px-1 py-0.5">
                 <Tooltip>
@@ -827,12 +996,13 @@ function SourcePlaybackControls({
                   <TooltipContent side="top">{audioPatchTooltip}</TooltipContent>
                 </Tooltip>
               </div>
+              {/* V/A target labels — hidden at narrow widths, info still in tooltips */}
               {patchTargetPreview.status ? (
-                <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap hidden @min-[560px]:inline">
                   {patchTargetPreview.status}
                 </span>
               ) : (
-                <div className="flex items-center gap-1 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
+                <div className="hidden @min-[560px]:flex items-center gap-1 text-[10px] font-mono text-muted-foreground whitespace-nowrap">
                   {patchTargetPreview.videoTargetName ? (
                     <span className="rounded border border-border/70 bg-secondary/60 px-1.5 py-0.5">
                       {'V->'}{patchTargetPreview.videoTargetName}
@@ -849,7 +1019,7 @@ function SourcePlaybackControls({
             <div className="w-px h-4 bg-border mx-0.5" />
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performInsertEdit()}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => performInsertEdit()}>
                   <ArrowDownToLine className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
@@ -857,7 +1027,7 @@ function SourcePlaybackControls({
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => performOverwriteEdit()}>
+                <Button variant="ghost" size="icon" style={{ width: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize }} onClick={() => performOverwriteEdit()}>
                   <Replace className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>

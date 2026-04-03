@@ -180,6 +180,8 @@ export const LoadedEditor = memo(function LoadedEditor({
   const editorLayout = getEditorLayout(editorDensity);
   const editorLayoutCssVars = getEditorLayoutCssVars(editorLayout);
   const syncSidebarLayout = useEditorStore((s) => s.syncSidebarLayout);
+  const propertiesFullColumn = useEditorStore((s) => s.propertiesFullColumn);
+  const mediaFullColumn = useEditorStore((s) => s.mediaFullColumn);
   const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
   const hasRefreshedMigrationStateRef = useRef(false);
 
@@ -430,33 +432,46 @@ export const LoadedEditor = memo(function LoadedEditor({
 
       {/* Main Layout: Full-height sidebar + vertical split */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Media Library (full height) */}
-        <InteractionLockRegion locked={isMaskEditingActive}>
-          <ErrorBoundary level="feature">
-            <MediaSidebar />
-          </ErrorBoundary>
-        </InteractionLockRegion>
+        {/* Left Sidebar - Media Library (full column mode) */}
+        {mediaFullColumn && (
+          <InteractionLockRegion locked={isMaskEditingActive}>
+            <ErrorBoundary level="feature">
+              <MediaSidebar />
+            </ErrorBoundary>
+          </InteractionLockRegion>
+        )}
 
         {/* Right side: Preview/Properties + Timeline */}
         <ResizablePanelGroup direction="vertical" className="flex-1 min-w-0">
-          {/* Top - Preview + Properties */}
+          {/* Top - Preview + Properties (inline mode) */}
           <ResizablePanel
             defaultSize={100 - editorLayout.timelineDefaultSize}
             minSize={100 - editorLayout.timelineMaxSize}
             maxSize={100 - editorLayout.timelineMinSize}
           >
             <div className="h-full flex overflow-hidden relative">
+              {/* Left Sidebar - Media Library (inline with preview) */}
+              {!mediaFullColumn && (
+                <InteractionLockRegion locked={isMaskEditingActive}>
+                  <ErrorBoundary level="feature">
+                    <MediaSidebar />
+                  </ErrorBoundary>
+                </InteractionLockRegion>
+              )}
+
               {/* Center - Preview */}
               <ErrorBoundary level="feature">
                 <PreviewArea project={project} />
               </ErrorBoundary>
 
-              {/* Right Sidebar - Properties */}
-              <InteractionLockRegion locked={isMaskEditingActive}>
-                <ErrorBoundary level="feature">
-                  <PropertiesSidebar />
-                </ErrorBoundary>
-              </InteractionLockRegion>
+              {/* Right Sidebar - Properties (inline with preview) */}
+              {!propertiesFullColumn && (
+                <InteractionLockRegion locked={isMaskEditingActive}>
+                  <ErrorBoundary level="feature">
+                    <PropertiesSidebar />
+                  </ErrorBoundary>
+                </InteractionLockRegion>
+              )}
             </div>
           </ResizablePanel>
 
@@ -483,6 +498,15 @@ export const LoadedEditor = memo(function LoadedEditor({
             </InteractionLockRegion>
           </ResizablePanel>
         </ResizablePanelGroup>
+
+        {/* Right Sidebar - Properties (full column mode) */}
+        {propertiesFullColumn && (
+          <InteractionLockRegion locked={isMaskEditingActive}>
+            <ErrorBoundary level="feature">
+              <PropertiesSidebar />
+            </ErrorBoundary>
+          </InteractionLockRegion>
+        )}
       </div>
 
       <Suspense fallback={null}>

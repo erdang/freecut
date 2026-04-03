@@ -25,6 +25,8 @@ import { getEmptyTrackIdsForRemoval } from '../utils/track-removal';
 import { createLogger } from '@/shared/logging/logger';
 import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/shared/ui/editor-layout';
 import { useTrackHeightResize } from '../hooks/use-track-height-resize';
+import { resizeTracksOfKindByDelta } from '../utils/track-resize';
+import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import {
   clampSectionDividerPosition,
   getTrackSectionLayout,
@@ -182,6 +184,34 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     const observer = new ResizeObserver(updateHeight);
     observer.observe(element);
     return () => observer.disconnect();
+  }, []);
+
+  // Alt+scroll in track headers = resize track heights (mirrors timeline-content behavior)
+  useEffect(() => {
+    const el = trackHeadersViewportRef.current;
+    if (!el) return;
+
+    const handler = (event: WheelEvent) => {
+      if (!event.altKey) return;
+      event.preventDefault();
+
+      const sectionEl = (event.target instanceof Element)
+        ? event.target.closest('[data-track-section-scroll]') as HTMLElement | null
+        : null;
+      const zone = sectionEl?.dataset.trackSectionScroll as 'video' | 'audio' | undefined;
+      if (!zone) return;
+
+      const delta = event.deltaY > 0 ? -4 : 4;
+      const currentTracks = useItemsStore.getState().tracks;
+      const nextTracks = resizeTracksOfKindByDelta(currentTracks, zone, delta);
+      if (nextTracks !== currentTracks) {
+        useItemsStore.getState().setTracks(nextTracks);
+        useTimelineSettingsStore.getState().markDirty();
+      }
+    };
+
+    el.addEventListener('wheel', handler, { passive: false });
+    return () => el.removeEventListener('wheel', handler);
   }, []);
 
   const handleSectionDividerMouseDown = useCallback((event: React.MouseEvent) => {
@@ -586,7 +616,7 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
       showTopDividerForFirstTrack: boolean;
     }
   ) => (
-    <div className="relative min-h-0 overflow-hidden" style={{ height: `${options.height}px` }}>
+    <div className="relative min-h-0 overflow-hidden" style={{ height: `${options.height}px` }} data-track-section-scroll={options.section}>
       <div ref={options.scrollRef} className="h-full overflow-hidden">
         <div className="relative min-h-full">
           {options.section === 'video' && (
