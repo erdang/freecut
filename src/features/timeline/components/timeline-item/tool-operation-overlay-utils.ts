@@ -13,6 +13,7 @@ import { getTransitionBridgeAtHandle } from '../../utils/transition-edit-guards'
 import {
   clampRippleTrimDeltaToPreserveTransition,
   clampRollingTrimDeltaToPreserveTransition,
+  clampSlideDeltaToPreserveTransitions,
 } from '../../utils/transition-utils';
 
 const LARGE_OPERATION_DELTA = 1_000_000_000;
@@ -55,6 +56,8 @@ interface StretchBoundsOptions {
 
 interface SlideBoundsOptions {
   item: TimelineItem;
+  items: TimelineItem[];
+  transitions: Transition[];
   fps: number;
   frameToPixels: (frames: number) => number;
   leftNeighbor: TimelineItem | null;
@@ -368,6 +371,8 @@ export function getStretchOperationBoundsVisual({
 
 export function getSlideOperationBoundsVisual({
   item,
+  items,
+  transitions,
   fps,
   frameToPixels,
   leftNeighbor,
@@ -379,8 +384,11 @@ export function getSlideOperationBoundsVisual({
 }: SlideBoundsOptions): OperationBoundsVisual {
   const itemStart = item.from;
   const itemEnd = item.from + item.durationInFrames;
-  const minDelta = clampSlideDeltaForBounds(item, -LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
-  const maxDelta = clampSlideDeltaForBounds(item, LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+  let minDelta = clampSlideDeltaForBounds(item, -LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+  let maxDelta = clampSlideDeltaForBounds(item, LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+  // Also clamp by transition constraints so the box aligns with the actual slide limits
+  minDelta = clampSlideDeltaToPreserveTransitions(item, minDelta, leftNeighbor, rightNeighbor, items, transitions, fps);
+  maxDelta = clampSlideDeltaToPreserveTransitions(item, maxDelta, leftNeighbor, rightNeighbor, items, transitions, fps);
   const bounds = toBoxPixels(
     Math.min(itemStart, itemStart + minDelta),
     Math.max(itemEnd, itemEnd + maxDelta),

@@ -1002,8 +1002,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
 
     if (isSlipSlideActive && slipSlideMode === 'slide') {
+      const { items } = useTimelineStore.getState();
+      const { transitions } = useTransitionsStore.getState();
+
       return getSlideOperationBoundsVisual({
         item,
+        items,
+        transitions,
         fps,
         frameToPixels,
         leftNeighbor: slideLeftNeighborForSlidItem,

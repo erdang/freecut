@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { VideoItem } from '@/types/timeline';
-import { getSlipOperationBoundsVisual, getTrimOperationBoundsVisual } from './tool-operation-overlay-utils';
+import type { Transition } from '@/types/transition';
+import { getSlideOperationBoundsVisual, getSlipOperationBoundsVisual, getTrimOperationBoundsVisual } from './tool-operation-overlay-utils';
 
 function createVideoItem(): VideoItem {
   return {
@@ -77,6 +78,83 @@ describe('tool operation overlay utils', () => {
     expect(visual.boxLeftPx).toBe(160);
     expect(visual.boxWidthPx).toBe(10);
     expect(visual.limitEdgePositionsPx).toEqual([160, 170]);
+  });
+
+  it('slide bounds box accounts for transition constraints', () => {
+    // Setup: three clips with a transition between the left neighbor and the slid item.
+    // The transition consumes source handles, limiting how far the item can slide left.
+    const leftNeighbor: VideoItem = {
+      ...createVideoItem(),
+      id: 'left',
+      from: 0,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 110, // only 10 frames of right handle
+    };
+    const item: VideoItem = {
+      ...createVideoItem(),
+      id: 'center',
+      from: 100,
+      durationInFrames: 60,
+      sourceStart: 10,
+      sourceEnd: 70,
+      sourceDuration: 120,
+    };
+    const rightNeighbor: VideoItem = {
+      ...createVideoItem(),
+      id: 'right',
+      from: 160,
+      durationInFrames: 60,
+      sourceStart: 0,
+      sourceEnd: 60,
+      sourceDuration: 120,
+    };
+    const items = [leftNeighbor, item, rightNeighbor];
+
+    // Without transitions the box should span the full neighbor-limited range
+    const withoutTransitions = getSlideOperationBoundsVisual({
+      item,
+      items,
+      transitions: [],
+      fps: 30,
+      frameToPixels: (f) => f,
+      leftNeighbor,
+      rightNeighbor,
+      constraintEdge: null,
+      constrained: false,
+      currentLeftPx: 100,
+      currentRightPx: 160,
+    });
+
+    // With a transition that consumes handles, the box should be tighter
+    const transition: Transition = {
+      id: 'trans-1',
+      type: 'crossfade',
+      presentation: 'fade',
+      timing: 'linear',
+      leftClipId: 'left',
+      rightClipId: 'center',
+      trackId: 'track-1',
+      durationInFrames: 10,
+      alignment: 0.5,
+    };
+    const withTransitions = getSlideOperationBoundsVisual({
+      item,
+      items,
+      transitions: [transition],
+      fps: 30,
+      frameToPixels: (f) => f,
+      leftNeighbor,
+      rightNeighbor,
+      constraintEdge: null,
+      constrained: false,
+      currentLeftPx: 100,
+      currentRightPx: 160,
+    });
+
+    // The transition-constrained box should be equal or narrower than the unconstrained one
+    expect(withTransitions.boxWidthPx!).toBeLessThanOrEqual(withoutTransitions.boxWidthPx!);
   });
 
   it('anchors ripple-start limits to the previewed right-edge span', () => {
