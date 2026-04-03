@@ -65,6 +65,10 @@ interface ItemContextMenuProps {
   /** Whether this item is a text item (enables generate audio option) */
   isTextItem?: boolean;
   onGenerateAudioFromText?: () => void;
+  /** Whether scene detection is available for this item */
+  canDetectScenes?: boolean;
+  isDetectingScenes?: boolean;
+  onDetectScenes?: () => void;
 }
 
 /**
@@ -108,6 +112,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onCreatePreComp,
   isTextItem,
   onGenerateAudioFromText,
+  canDetectScenes,
+  isDetectingScenes,
+  onDetectScenes,
 }: ItemContextMenuProps) {
   const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);
@@ -226,6 +233,22 @@ export const ItemContextMenu = memo(function ItemContextMenu({
             <ContextMenuSeparator />
           </>
         )}
+
+        {/* Detect Scenes - disabled pending optical flow tuning */}
+        {/* {canDetectScenes && onDetectScenes && (
+          <>
+            {isDetectingScenes ? (
+              <ContextMenuItem disabled>
+                Detecting Scenes...
+              </ContextMenuItem>
+            ) : (
+              <ContextMenuItem onClick={onDetectScenes}>
+                Detect Scenes &amp; Split
+              </ContextMenuItem>
+            )}
+            <ContextMenuSeparator />
+          </>
+        )} */}
 
         {/* Generate Audio from Text - only show for text items */}
         {isTextItem && onGenerateAudioFromText && (
