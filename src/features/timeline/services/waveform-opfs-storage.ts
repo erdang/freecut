@@ -422,7 +422,7 @@ class WaveformOPFSStorage {
   async getLevel(
     mediaId: string,
     levelIndex: number
-  ): Promise<{ sampleRate: number; peaks: Float32Array } | null> {
+  ): Promise<{ sampleRate: number; peaks: Float32Array; channels: number } | null> {
     try {
       const dir = await this.ensureDirectory();
       let fileHandle;
@@ -452,6 +452,7 @@ class WaveformOPFSStorage {
       return {
         sampleRate: level.sampleRate,
         peaks,
+        channels: header.channels,
       };
     } catch (error) {
       // NotFoundError is expected when cache doesn't exist - return null silently

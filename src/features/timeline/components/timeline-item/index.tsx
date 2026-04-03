@@ -18,8 +18,6 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
-import { captureSnapshot } from '../../stores/commands/snapshot';
-import { useTimelineCommandStore } from '../../stores/timeline-command-store';
 import {
   TRANSITION_DRAG_MIME,
   useTransitionDragStore,
@@ -2198,22 +2196,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       // naturally re-renders, and the audio component auto-clears via useEffect.
 
       if (Math.abs(committedVolume - originalVolume) > AUDIO_VOLUME_EPSILON) {
-        const snapshot = captureSnapshot();
-        const beforeSnapshot = {
-          ...snapshot,
-          items: snapshot.items.map((existingItem) => (
-            existingItem.id === item.id
-              ? { ...existingItem }
-              : existingItem
-          )),
-        };
-        (item as { volume: number }).volume = committedVolume;
-        useTimelineStore.getState().markDirty();
-        useTimelineCommandStore.getState().addUndoEntry(
-          { type: 'UPDATE_ITEM', payload: { id: item.id, updates: { volume: committedVolume } } },
-          beforeSnapshot,
-        );
-        setAudioVolumeEdit(null);
+        setAudioVolumeEdit((prev) => prev ? { ...prev, isCommitting: true } : prev);
+        updateTimelineItem(item.id, { volume: committedVolume });
       } else {
         setAudioVolumeEdit(null);
       }
