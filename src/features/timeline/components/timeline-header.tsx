@@ -580,9 +580,6 @@ export const TimelineHeader = memo(function TimelineHeader({
           <Maximize2 className="w-3.5 h-3.5" />
         </Button>
 
-        <span className="text-xs text-muted-foreground font-mono w-12 text-right">
-          {Math.round(zoomLevel * 100)}%
-        </span>
       </div>
     </div>
   );

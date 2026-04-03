@@ -179,11 +179,11 @@ export const TrackHeader = memo(function TrackHeader({
             </Button>
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col items-start justify-start px-1.5 py-1">
-            <span className="max-w-full truncate text-xs font-semibold leading-none font-mono">
+          <div className="flex min-h-0 flex-1 items-center gap-1.5 overflow-hidden px-1.5">
+            <span className="min-w-0 truncate text-xs font-semibold leading-none font-mono">
               {track.name}
             </span>
-            <span className="mt-1 text-[10px] leading-none text-muted-foreground">
+            <span className="shrink-0 text-[10px] leading-none text-muted-foreground">
               {itemCountLabel}
             </span>
           </div>
