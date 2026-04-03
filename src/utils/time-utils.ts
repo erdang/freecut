@@ -47,6 +47,23 @@ export function formatTimecode(frame: number, fps: number): string {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
 }
 
+/**
+ * Compact timecode — drops leading zero segments (e.g., "01:23:15" instead of "00:01:23:15")
+ * Always keeps at least MM:SS:FF.
+ */
+export function formatTimecodeCompact(frame: number, fps: number): string {
+  validateFps(fps);
+
+  const totalSeconds = frame / fps;
+  const { hours, minutes, seconds } = decomposeSeconds(totalSeconds);
+  const frames = Math.floor(frame % fps);
+
+  if (hours > 0) {
+    return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
+  }
+  return `${pad(minutes)}:${pad(seconds)}:${pad(frames)}`;
+}
+
 export function formatSignedFrameDelta(frameDelta: number, fps: number): string {
   const parts = formatTimecode(Math.abs(frameDelta), fps).split(':');
   while (parts.length > 2 && parts[0] === '00') {

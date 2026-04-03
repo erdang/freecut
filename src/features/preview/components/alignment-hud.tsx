@@ -16,7 +16,6 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineStore, useKeyframesStore } from '@/features/preview/deps/timeline-store';
 import { getAutoKeyframeOperation, type AutoKeyframeOperation } from '../deps/keyframes';
 import { useVisualTransforms } from '../hooks/use-visual-transform';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import type { TransformProperties } from '@/types/transform';
 
 type AlignmentType =
@@ -45,10 +44,7 @@ const ALIGNMENT_ACTIONS: Array<{
   { type: 'distribute-v', icon: AlignVerticalDistributeCenter, label: 'Distribute Vertically', minItems: 3 },
 ];
 
-const BUTTON_STYLE = {
-  height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize,
-  width: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize,
-};
+const BUTTON_STYLE = { height: 22, width: 22 };
 
 interface AlignmentToolbarProps {
   projectSize: { width: number; height: number };
@@ -183,23 +179,29 @@ export function AlignmentToolbar({ projectSize }: AlignmentToolbarProps) {
 
   if (itemCount < 1) return null;
 
+  const renderButton = ({ type, icon: Icon, label, minItems }: (typeof ALIGNMENT_ACTIONS)[number]) => (
+    <Button
+      key={type}
+      variant="ghost"
+      size="icon"
+      className="flex-shrink-0 text-muted-foreground hover:text-foreground"
+      style={BUTTON_STYLE}
+      onClick={() => handleAlign(type)}
+      disabled={itemCount < minItems}
+      data-tooltip={label}
+      aria-label={label}
+    >
+      <Icon className="w-3.5 h-3.5" />
+    </Button>
+  );
+
   return (
     <>
-      {ALIGNMENT_ACTIONS.map(({ type, icon: Icon, label, minItems }) => (
-        <Button
-          key={type}
-          variant="ghost"
-          size="icon"
-          className="flex-shrink-0 text-muted-foreground hover:text-foreground"
-          style={BUTTON_STYLE}
-          onClick={() => handleAlign(type)}
-          disabled={itemCount < minItems}
-          data-tooltip={label}
-          aria-label={label}
-        >
-          <Icon className="w-4 h-4" />
-        </Button>
-      ))}
+      {ALIGNMENT_ACTIONS.slice(0, 3).map(renderButton)}
+      <div className="w-px h-3.5 bg-border mx-0.5" />
+      {ALIGNMENT_ACTIONS.slice(3, 6).map(renderButton)}
+      <div className="w-px h-3.5 bg-border mx-0.5" />
+      {ALIGNMENT_ACTIONS.slice(6).map(renderButton)}
     </>
   );
 }
