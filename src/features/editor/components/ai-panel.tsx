@@ -208,8 +208,13 @@ function insertAudioItemAtPlayhead(media: MediaMetadata, blobUrl: string): boole
   };
 
   addItem(audioItem);
-  selectItems([audioItem.id]);
-  return true;
+
+  // addItem may silently drop the item if placement fails — verify it landed
+  const added = useTimelineStore.getState().items.some((i) => i.id === audioItem.id);
+  if (added) {
+    selectItems([audioItem.id]);
+  }
+  return added;
 }
 
 export const AiPanel = memo(function AiPanel() {
@@ -272,7 +277,7 @@ export const AiPanel = memo(function AiPanel() {
     setProgress('Preparing local TTS...');
 
     try {
-      const { blob, file } = await kittenTtsService.generateSpeechFile({
+      const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
         text: trimmedText,
         voice,
         speed,
@@ -282,17 +287,6 @@ export const AiPanel = memo(function AiPanel() {
 
       const objectUrl = URL.createObjectURL(blob);
       generationUrlsRef.current.add(objectUrl);
-
-      // Decode duration from the WAV header (44-byte PCM header, 24kHz sample rate)
-      let duration = 0;
-      const WAV_HEADER_SIZE = 44;
-      const SAMPLE_RATE = 24000;
-      const BYTES_PER_SAMPLE = 2; // 16-bit PCM
-      const CHANNELS = 1;
-      if (blob.size > WAV_HEADER_SIZE) {
-        const dataBytes = blob.size - WAV_HEADER_SIZE;
-        duration = dataBytes / (SAMPLE_RATE * BYTES_PER_SAMPLE * CHANNELS);
-      }
 
       const gen: Generation = {
         id: crypto.randomUUID(),
@@ -342,6 +336,9 @@ export const AiPanel = memo(function AiPanel() {
 
       await loadMediaItems();
       selectMedia([media.id]);
+      // Remove from tracked URLs so unmount cleanup won't revoke a URL
+      // that may be referenced by a timeline item's src
+      generationUrlsRef.current.delete(gen.objectUrl);
       updateGeneration(gen.id, { saving: false, savedMediaId: media.id });
       return media;
     } catch (saveError) {
@@ -621,7 +618,7 @@ const GenerationRow = memo(function GenerationRow({
       {/* Meta row */}
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
-          <p className="text-xs leading-relaxed" title={gen.textSnippet}>
+          <p className="line-clamp-3 text-xs leading-relaxed" title={gen.textSnippet}>
             {gen.textSnippet}
           </p>
           <p className="text-[11px] text-muted-foreground">

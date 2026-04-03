@@ -23,7 +23,21 @@ async function fetchCached(url: string, onProgress?: (stage: string) => void): P
     return URL.createObjectURL(blob);
   }
 
-  const response = await fetch(url);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 90_000);
+
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Download timed out for ${url}`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: ${response.status}`);
   }
@@ -314,7 +328,7 @@ class KittenTtsService {
     speed,
     model,
     onProgress,
-  }: GenerateSpeechOptions): Promise<{ blob: Blob; file: File }> {
+  }: GenerateSpeechOptions): Promise<{ blob: Blob; file: File; duration: number }> {
     const trimmedText = text.trim();
     if (!trimmedText) {
       throw new Error('Enter some text to synthesize.');
@@ -343,13 +357,14 @@ class KittenTtsService {
           onProgress,
         );
 
-        const blob = float32ToWav(waveform, 24000);
+        const sampleRate = 24000;
+        const blob = float32ToWav(waveform, sampleRate);
         const file = new File([blob], createOutputFileName(trimmedText, voice, model), {
           type: 'audio/wav',
           lastModified: Date.now(),
         });
 
-        return { blob, file };
+        return { blob, file, duration: waveform.length / sampleRate };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to generate speech with ${model} Kitten TTS runtime`, error);

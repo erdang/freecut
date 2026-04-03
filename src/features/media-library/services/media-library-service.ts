@@ -533,6 +533,8 @@ class MediaLibraryService {
     const createdAt = Date.now();
     const opfsPath = `content/${mediaId.slice(0, 2)}/${mediaId.slice(2, 4)}/${mediaId}/data`;
     const codec = options?.codec ?? metadata.codec ?? resolvedMimeType.split('/')[1] ?? 'unknown';
+    // Nominal height — audio waveform thumbnails don't have intrinsic dimensions,
+    // so we use a 16:9 placeholder ratio for the DB record.
     const thumbnailHeight = Math.max(1, Math.round(thumbnailMaxSize * (9 / 16)));
     const mediaMetadata: MediaMetadata = {
       id: mediaId,
