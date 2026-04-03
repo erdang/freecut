@@ -590,6 +590,9 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, o
     }
     if (dbReadoutRef.current) {
       dbReadoutRef.current.textContent = formatFaderDb(db);
+      dbReadoutRef.current.className = `text-[10px] font-mono py-0.5 leading-none ${
+        db > 0.05 ? 'text-amber-400/90' : db > -0.05 ? 'text-emerald-400/80' : 'text-muted-foreground/60'
+      }`;
     }
   }, []);
 
@@ -718,7 +721,12 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, o
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            onPointerCancel={handlePointerUp}
+            onPointerCancel={() => {
+              if (!isDraggingRef.current) return;
+              isDraggingRef.current = false;
+              dragOffsetPercentRef.current = 0;
+              applyBusDragValue(volumeDb);
+            }}
             onDoubleClick={handleDoubleClick}
           >
             {/* Fader track line */}
