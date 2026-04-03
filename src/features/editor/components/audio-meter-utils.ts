@@ -38,17 +38,19 @@ export interface AudioMeterGraphNode {
   directSegments: Array<{
     segment: AudioSegment | VideoAudioSegment;
     trackId: string;
-    trackVolumeGain: number;
+    committedTrackVolumeGain: number;
   }>;
   compoundSegments: Array<{
     segment: CompoundAudioSegment;
     compositionId: string;
     trackId: string;
+    committedTrackVolumeGain: number;
   }>;
   compositionWrappers: Array<{
     wrapper: EnrichedCompositionAudioItem | EnrichedCompositionItem;
     wrapperGain: number;
     trackId: string;
+    committedTrackVolumeGain: number;
   }>;
 }
 
@@ -73,7 +75,7 @@ export interface AudioMeterSource {
   mediaId: string;
   /** Item-level gain (fades, crossfades, item volumeDb) — excludes track and master faders. */
   gain: number;
-  /** Linear gain from the owning track's volume fader (dB → linear). 1 = 0 dB. */
+  /** Live fader correction applied on top of the gain already baked into the source graph. */
   trackVolumeGain: number;
   sourceTimeSeconds: number;
   windowSeconds: number;
@@ -149,6 +151,16 @@ function clamp(value: number, min: number, max: number): number {
 
 function toLinearGain(volumeDb: number): number {
   return Math.pow(10, volumeDb / 20);
+}
+
+function getTrackGainCorrection(trackId: string, committedTrackVolumeGain: number): number {
+  const liveOverrideDb = liveTrackVolumeOverrides.get(trackId);
+  if (liveOverrideDb === undefined) {
+    return 1;
+  }
+
+  const committedGain = Math.max(committedTrackVolumeGain, 0.000001);
+  return toLinearGain(liveOverrideDb) / committedGain;
 }
 
 function getSegmentSourceTimeSeconds(params: {
@@ -417,14 +429,21 @@ function appendAudioMeterSources(params: {
     track.id,
     toLinearGain(liveTrackVolumeOverrides.get(track.id) ?? track.volume ?? 0),
   ]));
+  const committedTrackVolumeByTrackId = new Map(effectiveTracks.map((track) => [
+    track.id,
+    toLinearGain(track.volume ?? 0),
+  ]));
 
   for (const segment of directSegments) {
-    const trackId = ownerTrackId ?? directTrackIdByItemId.get(segment.itemId) ?? '';
+    const sourceTrackId = directTrackIdByItemId.get(segment.itemId) ?? '';
+    const trackId = ownerTrackId ?? sourceTrackId;
     appendDirectSegmentSources({
       frame,
       fps,
       gainMultiplier,
-      trackVolumeGain: trackVolumeByTrackId.get(directTrackIdByItemId.get(segment.itemId) ?? '') ?? 1,
+      trackVolumeGain: trackVolumeByTrackId.get(sourceTrackId) !== undefined
+        ? (trackVolumeByTrackId.get(sourceTrackId) ?? 1) / Math.max(committedTrackVolumeByTrackId.get(sourceTrackId) ?? 1, 0.000001)
+        : 1,
       segments: [segment],
       sources,
       trackId,
@@ -481,7 +500,8 @@ function appendAudioMeterSources(params: {
       ownerTrackId,
       sources,
       wrapper,
-      wrapperGain: toLinearGain((wrapper.volume ?? 0) + (wrapper.trackVolumeDb ?? 0)),
+      wrapperGain: toLinearGain((wrapper.volume ?? 0) + (wrapper.trackVolumeDb ?? 0))
+        * getTrackGainCorrection(wrapper.trackId, toLinearGain(wrapper.trackVolumeDb ?? 0)),
     });
   }
 
@@ -507,7 +527,7 @@ function appendAudioMeterSources(params: {
       ownerTrackId,
       sources,
       wrapper,
-      wrapperGain: 1,
+      wrapperGain: getTrackGainCorrection(track.id, toLinearGain(track.volume ?? 0)),
     });
   }
 }
@@ -587,7 +607,7 @@ function buildAudioMeterGraphNode(params: {
   ].map((segment) => ({
     segment,
     trackId: directTrackIdByItemId.get(segment.itemId) ?? '',
-    trackVolumeGain: trackVolumeByTrackId.get(directTrackIdByItemId.get(segment.itemId) ?? '') ?? 1,
+    committedTrackVolumeGain: trackVolumeByTrackId.get(directTrackIdByItemId.get(segment.itemId) ?? '') ?? 1,
   }));
 
   const compoundAudioItems = audioItems.filter((item): item is EnrichedCompositionAudioItem => isCompositionAudioItem(item));
@@ -617,6 +637,7 @@ function buildAudioMeterGraphNode(params: {
       segment,
       compositionId: wrapper.compositionId,
       trackId: wrapper.trackId,
+      committedTrackVolumeGain: toLinearGain(wrapper.trackVolumeDb ?? 0),
     }];
   });
 
@@ -627,12 +648,14 @@ function buildAudioMeterGraphNode(params: {
         wrapper,
         wrapperGain: toLinearGain((wrapper.volume ?? 0) + (wrapper.trackVolumeDb ?? 0)),
         trackId: wrapper.trackId,
+        committedTrackVolumeGain: toLinearGain(wrapper.trackVolumeDb ?? 0),
       })),
     ...tracks.flatMap((track) => (
       track.items.flatMap((item): Array<{
         wrapper: EnrichedCompositionItem;
         wrapperGain: number;
         trackId: string;
+        committedTrackVolumeGain: number;
       }> => {
         if (item.type !== 'composition') return [];
         if (hasLinkedAudioCompanion(audioItems as TimelineItem[], item)) return [];
@@ -644,6 +667,7 @@ function buildAudioMeterGraphNode(params: {
           },
           wrapperGain: 1,
           trackId: track.id,
+          committedTrackVolumeGain: toLinearGain(track.volume ?? 0),
         }];
       })
     )),
@@ -673,14 +697,11 @@ function appendAudioMeterSourcesFromGraph(params: {
   }
 
   for (const directEntry of graphNode.directSegments) {
-    // Prefer live fader override so the bus meter reacts during drag.
-    const liveOverride = liveTrackVolumeOverrides.get(directEntry.trackId);
-    const trackVolumeGain = liveOverride !== undefined ? toLinearGain(liveOverride) : directEntry.trackVolumeGain;
     appendDirectSegmentSources({
       frame,
       fps: graphNode.fps,
       gainMultiplier,
-      trackVolumeGain,
+      trackVolumeGain: getTrackGainCorrection(directEntry.trackId, directEntry.committedTrackVolumeGain),
       segments: [directEntry.segment],
       sources,
       trackId: ownerTrackId ?? directEntry.trackId,
@@ -717,7 +738,9 @@ function appendAudioMeterSourcesFromGraph(params: {
       graph,
       graphNode: nestedGraph,
       frame: nestedFrame,
-      gainMultiplier: gainMultiplier * Math.max(0, toLinearGain(compoundEntry.segment.volumeDb) * crossfadeMultiplier),
+      gainMultiplier: gainMultiplier
+        * Math.max(0, toLinearGain(compoundEntry.segment.volumeDb) * crossfadeMultiplier)
+        * getTrackGainCorrection(compoundEntry.trackId, compoundEntry.committedTrackVolumeGain),
       depth: depth + 1,
       sources,
       ownerTrackId: ownerTrackId ?? compoundEntry.trackId,
@@ -752,7 +775,9 @@ function appendAudioMeterSourcesFromGraph(params: {
       graph,
       graphNode: nestedGraph,
       frame: nestedFrame,
-      gainMultiplier: gainMultiplier * compositionEntry.wrapperGain,
+      gainMultiplier: gainMultiplier
+        * compositionEntry.wrapperGain
+        * getTrackGainCorrection(compositionEntry.trackId, compositionEntry.committedTrackVolumeGain),
       depth: depth + 1,
       sources,
       ownerTrackId: ownerTrackId ?? compositionEntry.trackId,

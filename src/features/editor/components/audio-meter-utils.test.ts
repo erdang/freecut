@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AudioItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import {
+  clearLiveTrackVolumeOverride,
   compileAudioMeterGraph,
   estimateAudioMeterLevel,
   estimatePerTrackLevels,
@@ -8,6 +9,7 @@ import {
   formatMeterDb,
   resolveCompiledAudioMeterSources,
   resolveAudioMeterSources,
+  setLiveTrackVolumeOverride,
 } from './audio-meter-utils';
 
 function makeTrack(overrides: Partial<TimelineTrack> = {}): TimelineTrack {
@@ -133,6 +135,33 @@ describe('audio meter utils', () => {
 
     expect(sources).toHaveLength(1);
     expect(sources[0]?.sourceTimeSeconds).toBeCloseTo(1, 5);
+  });
+
+  it('keeps compiled direct sources at unity correction until a live override is applied', () => {
+    const audioItem = makeAudioItem();
+    const graph = compileAudioMeterGraph({
+      tracks: [makeTrack({ volume: -6, items: [audioItem] })],
+      transitions: [],
+      fps: 30,
+    });
+
+    const sources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    });
+
+    expect(sources[0]?.trackVolumeGain).toBeCloseTo(1, 5);
+
+    setLiveTrackVolumeOverride('track-1', 0);
+    const liveSources = resolveCompiledAudioMeterSources({
+      graph,
+      frame: 15,
+      masterGain: 1,
+    });
+    clearLiveTrackVolumeOverride('track-1');
+
+    expect(liveSources[0]?.trackVolumeGain).toBeCloseTo(Math.pow(10, 6 / 20), 5);
   });
 
   it('renders legacy audio tracks in the mixer', () => {
@@ -285,6 +314,72 @@ describe('audio meter utils', () => {
 
     expect(levels.get('track-parent')?.left ?? 0).toBeGreaterThan(0);
     expect(levels.get('track-empty')?.left ?? 0).toBe(0);
+  });
+
+  it('applies live track overrides to composition-backed mixer tracks in compiled graphs', () => {
+    const wrapperTrack = makeTrack({
+      id: 'track-parent',
+      name: 'A2',
+      volume: -12,
+      items: [makeAudioItem({
+        id: 'comp-audio-parent',
+        trackId: 'track-parent',
+        compositionId: 'composition-1',
+        mediaId: undefined,
+        src: '',
+      })],
+    });
+    const nestedAudio = makeAudioItem({
+      id: 'nested-audio-parent',
+      trackId: 'nested-track',
+      mediaId: 'nested-parent-media',
+      src: 'blob:nested-parent',
+    });
+    const graph = compileAudioMeterGraph({
+      tracks: [wrapperTrack],
+      transitions: [],
+      fps: 30,
+      compositionsById: {
+        'composition-1': {
+          id: 'composition-1',
+          fps: 30,
+          transitions: [],
+          tracks: [makeTrack({ id: 'nested-track', items: [nestedAudio] })],
+        },
+      },
+    });
+    const waveformsByMediaId = new Map([
+      ['nested-parent-media', {
+        peaks: new Float32Array([1, 0.5, 0.25, 0.1]),
+        sampleRate: 1,
+        channels: 1,
+      }],
+    ]);
+
+    const committedLevels = estimatePerTrackLevels({
+      tracks: [wrapperTrack],
+      sources: resolveCompiledAudioMeterSources({
+        graph,
+        frame: 15,
+        masterGain: 1,
+      }),
+      waveformsByMediaId,
+    });
+
+    setLiveTrackVolumeOverride('track-parent', 0);
+    const liveLevels = estimatePerTrackLevels({
+      tracks: [wrapperTrack],
+      sources: resolveCompiledAudioMeterSources({
+        graph,
+        frame: 15,
+        masterGain: 1,
+      }),
+      waveformsByMediaId,
+    });
+    clearLiveTrackVolumeOverride('track-parent');
+
+    expect(liveLevels.get('track-parent')?.left ?? 0).toBeGreaterThan(committedLevels.get('track-parent')?.left ?? 0);
+    expect(liveLevels.get('track-parent')?.right ?? 0).toBeGreaterThan(committedLevels.get('track-parent')?.right ?? 0);
   });
 
   it('resolves audio through deeply nested compound clips in compiled graphs', () => {
