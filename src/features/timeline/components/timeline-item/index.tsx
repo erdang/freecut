@@ -12,6 +12,7 @@ import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store'
 import { useLinkedEditPreviewStore } from '../../stores/linked-edit-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
+import { useTrackPushPreviewStore } from '../../stores/track-push-preview-store';
 import { useSlipEditPreviewStore } from '../../stores/slip-edit-preview-store';
 import { useSlideEditPreviewStore } from '../../stores/slide-edit-preview-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -30,6 +31,7 @@ import { getMediaDragData } from '@/features/timeline/deps/media-library-resolve
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
+import { useTrackPush } from '../../hooks/use-track-push';
 import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stretch';
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
@@ -47,6 +49,7 @@ import { ClipIndicators } from './clip-indicators';
 import { shouldSuppressLinkedSyncBadge } from './linked-sync-badge';
 import { shouldSuppressTimelineItemClickAfterDrag } from './post-drag-click-guard';
 import { TrimHandles, CONSTRAINED_COLORS, FREE_COLORS } from './trim-handles';
+import { TrackPushHandle } from './track-push-handle';
 import type { ActiveEdgeState } from './trim-handles';
 import { StretchHandles } from './stretch-handles';
 import { AudioFadeHandles } from './audio-fade-handles';
@@ -139,10 +142,22 @@ const ACTIVE_CURSOR_CLASSES = [
   'timeline-cursor-slip-smart',
   'timeline-cursor-slide-smart',
   'timeline-cursor-gauge',
+  'timeline-cursor-track-push',
 ] as const;
 
 // Width in pixels for trim edge hover detection
 const EDGE_HOVER_ZONE = SMART_TRIM_EDGE_ZONE_PX;
+
+// Track-push trigger zone: scale with zoom so it stays hittable when zoomed out
+const TRACK_PUSH_MIN_PX = 6;
+const TRACK_PUSH_MAX_PX = 14;
+const TRACK_PUSH_ZOOM_THRESHOLD = 120;
+function getTrackPushZonePx(pxPerSec: number, gapPx: number): number {
+  const base = pxPerSec >= TRACK_PUSH_ZOOM_THRESHOLD
+    ? TRACK_PUSH_MIN_PX
+    : Math.round(TRACK_PUSH_MIN_PX + (TRACK_PUSH_MAX_PX - TRACK_PUSH_MIN_PX) * (1 - pxPerSec / TRACK_PUSH_ZOOM_THRESHOLD));
+  return Math.max(TRACK_PUSH_MIN_PX, Math.min(base, gapPx, TRACK_PUSH_MAX_PX));
+}
 const VIDEO_FADE_EPSILON = 0.0001;
 const AUDIO_FADE_EPSILON = 0.0001;
 const AUDIO_VOLUME_EPSILON = 0.05;
@@ -354,6 +369,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     handleSlipSlideStart,
   } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
 
+  // Track push functionality — move clip + downstream items to close/open gaps
+  const { isTrackPushActive, handleTrackPushStart } = useTrackPush(item, timelineDuration, trackLocked);
+
   const activeGlobalCursorClass = useMemo(() => {
     if (isTrimming) {
       if (trimHandle === 'start') {
@@ -382,8 +400,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         : 'timeline-cursor-slip-smart';
     }
 
+    if (isTrackPushActive) {
+      return 'timeline-cursor-track-push';
+    }
+
     return null;
-  }, [isRollingEdit, isRippleEdit, isSlipSlideActive, isStretching, isTrimming, slipSlideMode, trimHandle]);
+  }, [isRollingEdit, isRippleEdit, isSlipSlideActive, isStretching, isTrimming, isTrackPushActive, slipSlideMode, trimHandle]);
 
   const gestureMode = useMemo(() => getTimelineItemGestureMode({
     isTrimming,
@@ -688,6 +710,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // Track push preview: all shifted items (anchor + downstream) move by delta
+  const trackPushOffset = useTrackPushPreviewStore(
+    useCallback((s) => {
+      if (!s.anchorItemId) return 0;
+      if (s.shiftedItemIds.has(item.id)) return s.delta;
+      return 0;
+    }, [item.id])
+  );
+
   // Slip edit preview: source window shift for the active slipped clip.
   // Used to update filmstrip/waveform source alignment during drag.
   const slipEditDelta = useSlipEditPreviewStore(
@@ -795,8 +826,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     (slideNeighborSide === 'left' ? slideNeighborDelta : 0)
     + (slideNeighborSide === 'right' ? -slideNeighborDelta : 0);
 
-  const left = Math.round(timeToPixels((previewBaseItem.from + slideFromOffset + rippleEditOffset) / fps));
-  const right = Math.round(timeToPixels((previewBaseItem.from + previewBaseItem.durationInFrames + slideDurationOffset + slideFromOffset + rippleEditOffset) / fps));
+  const left = Math.round(timeToPixels((previewBaseItem.from + slideFromOffset + rippleEditOffset + trackPushOffset) / fps));
+  const right = Math.round(timeToPixels((previewBaseItem.from + previewBaseItem.durationInFrames + slideDurationOffset + slideFromOffset + rippleEditOffset + trackPushOffset) / fps));
   const width = right - left;
 
   // Source FPS for converting source frames â†' timeline frames (sourceStart etc. are in source-native FPS)
@@ -1454,6 +1485,23 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     () => getNeighbors(),
     [getNeighbors, neighborKey]
   );
+
+  // Gap detection: clip has empty space before it (no strictly adjacent left neighbor)
+  const hasGapBefore = item.from > 0 && !leftNeighbor;
+
+  // Gap width in pixels — used for track-push handle sizing.
+  // Computed lazily only when a gap exists to avoid work on gapless clips.
+  const gapBeforePx = useMemo(() => {
+    if (!hasGapBefore) return 0;
+    const trackItems = useItemsStore.getState().itemsByTrackId[item.trackId] ?? [];
+    let prevEnd = 0;
+    for (const ti of trackItems) {
+      if (ti.id === item.id) continue;
+      const end = ti.from + ti.durationInFrames;
+      if (end <= item.from && end > prevEnd) prevEnd = end;
+    }
+    return Math.round(frameToPixels(item.from - prevEnd));
+  }, [hasGapBefore, item.trackId, item.id, item.from, item.durationInFrames, frameToPixels]);
 
   // Action handlers
   const handleJoinSelected = useCallback(() => {
@@ -3264,6 +3312,15 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           )}
         </div>
       </ItemContextMenu>
+
+      {/* Track push handle — sits in the gap to the LEFT of the clip, outside contain:paint */}
+      <TrackPushHandle
+        enabled={hasGapBefore && !trackLocked && activeTool === 'trim-edit'}
+        isActive={isTrackPushActive}
+        clipLeftPx={visualLeft}
+        zonePx={getTrackPushZonePx(pixelsPerSecond, gapBeforePx)}
+        onMouseDown={handleTrackPushStart}
+      />
 
       <ToolOperationOverlay visual={toolOperationOverlay} />
 

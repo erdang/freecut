@@ -516,6 +516,42 @@ export function closeAllGapsOnTrack(trackId: string): void {
   }, { trackId });
 }
 
+/**
+ * Track push: move a clip and all downstream items on the same track by a
+ * frame delta, closing or opening the gap before the anchor clip.
+ */
+/**
+ * Track push: move ALL items at or after the anchor clip's position — across
+ * every track — by the given frame delta.  This is a multi-track ripple
+ * move that closes or opens a gap at the anchor point.
+ * Commits as a single undo entry.
+ */
+export function trackPushItems(anchorId: string, delta: number): void {
+  if (delta === 0) return;
+
+  const items = useItemsStore.getState().items;
+  const anchor = items.find((i) => i.id === anchorId);
+  if (!anchor) return;
+
+  const cutFrame = anchor.from;
+
+  // Every item whose start is at or after the cut frame gets shifted
+  const updates: Array<{ id: string; from: number }> = [];
+  for (const ti of items) {
+    if (ti.from >= cutFrame) {
+      updates.push({ id: ti.id, from: Math.max(0, ti.from + delta) });
+    }
+  }
+
+  if (updates.length === 0) return;
+
+  execute('TRACK_PUSH', () => {
+    useItemsStore.getState()._moveItems(updates);
+    applyTransitionRepairs(updates.map((u) => u.id));
+    useTimelineSettingsStore.getState().markDirty();
+  }, { anchorId, delta });
+}
+
 export function moveItem(id: string, newFrom: number, newTrackId?: string): void {
   execute('MOVE_ITEM', () => {
     useItemsStore.getState()._moveItem(id, newFrom, newTrackId);
