@@ -33,13 +33,13 @@ const ROLL_COLORS: EdgeColors = {
   fade: 'rgba(251, 191, 36, 0.35)',
 };
 
-const CONSTRAINED_COLORS: EdgeColors = {
+export const CONSTRAINED_COLORS: EdgeColors = {
   edge: 'rgba(239, 68, 68, 0.9)',
   glow: '0 0 8px rgba(239, 68, 68, 0.5)',
   fade: 'rgba(239, 68, 68, 0.3)',
 };
 
-const FREE_COLORS: EdgeColors = {
+export const FREE_COLORS: EdgeColors = {
   edge: 'rgba(74, 222, 128, 0.9)',
   glow: '0 0 8px rgba(74, 222, 128, 0.5)',
   fade: 'rgba(74, 222, 128, 0.3)',
@@ -158,27 +158,29 @@ export const TrimHandles = memo(function TrimHandles({
             )}
             onMouseDown={(e) => onTrimStart(e, 'start')}
           >
-            {/* Solid edge at boundary */}
-            <div
-              className="absolute inset-y-0 left-0"
-              style={{ width: '2px', background: leftColors.edge, boxShadow: leftColors.glow }}
-            />
-            {/* Inward fade into this clip */}
-            <div
-              className="absolute inset-y-0"
-              style={{ left: '2px', width: '8px', background: `linear-gradient(to right, ${leftColors.fade}, transparent)` }}
-            />
-            {/* Outer edge + outward fade (roll mode, actively-hovered item only) */}
-            {isRollingStart && (
+            {/* Halo visuals — only during hover; active operations use external overlay */}
+            {!activeEdges && (
               <>
                 <div
-                  className="absolute inset-y-0"
-                  style={{ left: '-2px', width: '2px', background: leftColors.edge, boxShadow: leftColors.glow }}
+                  className="absolute inset-y-0 left-0"
+                  style={{ width: '2px', background: leftColors.edge, boxShadow: leftColors.glow }}
                 />
                 <div
                   className="absolute inset-y-0"
-                  style={{ left: '-10px', width: '8px', background: `linear-gradient(to left, ${leftColors.fade}, transparent)` }}
+                  style={{ left: '2px', width: '8px', background: `linear-gradient(to right, ${leftColors.fade}, transparent)` }}
                 />
+                {isRollingStart && (
+                  <>
+                    <div
+                      className="absolute inset-y-0"
+                      style={{ left: '-2px', width: '2px', background: leftColors.edge, boxShadow: leftColors.glow }}
+                    />
+                    <div
+                      className="absolute inset-y-0"
+                      style={{ left: '-10px', width: '8px', background: `linear-gradient(to left, ${leftColors.fade}, transparent)` }}
+                    />
+                  </>
+                )}
               </>
             )}
           </div>
@@ -202,27 +204,28 @@ export const TrimHandles = memo(function TrimHandles({
             )}
             onMouseDown={(e) => onTrimStart(e, 'end')}
           >
-            {/* Solid edge at boundary */}
-            <div
-              className="absolute inset-y-0 right-0"
-              style={{ width: '2px', background: rightColors.edge, boxShadow: rightColors.glow }}
-            />
-            {/* Inward fade into this clip */}
-            <div
-              className="absolute inset-y-0"
-              style={{ right: '2px', width: '8px', background: `linear-gradient(to left, ${rightColors.fade}, transparent)` }}
-            />
-            {/* Outer edge + outward fade (roll mode, actively-hovered item only) */}
-            {isRollingEnd && (
+            {!activeEdges && (
               <>
                 <div
-                  className="absolute inset-y-0"
-                  style={{ right: '-2px', width: '2px', background: rightColors.edge, boxShadow: rightColors.glow }}
+                  className="absolute inset-y-0 right-0"
+                  style={{ width: '2px', background: rightColors.edge, boxShadow: rightColors.glow }}
                 />
                 <div
                   className="absolute inset-y-0"
-                  style={{ right: '-10px', width: '8px', background: `linear-gradient(to right, ${rightColors.fade}, transparent)` }}
+                  style={{ right: '2px', width: '8px', background: `linear-gradient(to left, ${rightColors.fade}, transparent)` }}
                 />
+                {isRollingEnd && (
+                  <>
+                    <div
+                      className="absolute inset-y-0"
+                      style={{ right: '-2px', width: '2px', background: rightColors.edge, boxShadow: rightColors.glow }}
+                    />
+                    <div
+                      className="absolute inset-y-0"
+                      style={{ right: '-10px', width: '8px', background: `linear-gradient(to right, ${rightColors.fade}, transparent)` }}
+                    />
+                  </>
+                )}
               </>
             )}
           </div>

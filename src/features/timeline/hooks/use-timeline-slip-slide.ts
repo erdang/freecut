@@ -17,7 +17,7 @@ import {
   isMediaItem,
   timelineToSourceFrames,
 } from '../utils/source-calculations';
-import { clampTrimAmount } from '../utils/trim-utils';
+import { clampTrimAmount, clampToAdjacentItems } from '../utils/trim-utils';
 import { findEditNeighborsWithTransitions } from '../utils/transition-linked-neighbors';
 import { computeClampedSlipDelta } from '../utils/slip-utils';
 import {
@@ -154,8 +154,9 @@ export function useTimelineSlipSlide(
     }
 
     const allItems = useTimelineStore.getState().items;
+    const slidItemIds = new Set([item.id, leftNeighborId, rightNeighborId].filter(Boolean) as string[]);
 
-    // Left neighbor: clamp by how much its end can extend/shrink
+    // Left neighbor: clamp by source limits
     if (leftNeighborId) {
       const leftNeighbor = allItems.find((i) => i.id === leftNeighborId);
       if (leftNeighbor) {
@@ -163,10 +164,15 @@ export function useTimelineSlipSlide(
         if (Math.abs(clampedAmount) < Math.abs(clamped)) {
           clamped = clampedAmount;
         }
+        // Also clamp so the neighbor doesn't overlap clips beyond it
+        const adjacentClamped = clampToAdjacentItems(leftNeighbor, 'end', clamped, allItems, slidItemIds);
+        if (Math.abs(adjacentClamped) < Math.abs(clamped)) {
+          clamped = adjacentClamped;
+        }
       }
     }
 
-    // Right neighbor: clamp by how much its start can extend/shrink
+    // Right neighbor: clamp by source limits
     if (rightNeighborId) {
       const rightNeighbor = allItems.find((i) => i.id === rightNeighborId);
       if (rightNeighbor) {
@@ -174,11 +180,16 @@ export function useTimelineSlipSlide(
         if (Math.abs(clampedAmount) < Math.abs(clamped)) {
           clamped = clampedAmount;
         }
+        // Also clamp so the neighbor doesn't overlap clips beyond it
+        const adjacentClamped = clampToAdjacentItems(rightNeighbor, 'start', clamped, allItems, slidItemIds);
+        if (Math.abs(adjacentClamped) < Math.abs(clamped)) {
+          clamped = adjacentClamped;
+        }
       }
     }
 
     return clamped;
-  }, [getItemFromStore, fps]);
+  }, [getItemFromStore, fps, item.id]);
 
   // Mouse move handler
   const handleMouseMove = useCallback(

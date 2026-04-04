@@ -46,7 +46,8 @@ import { ClipContent } from './clip-content';
 import { ClipIndicators } from './clip-indicators';
 import { shouldSuppressLinkedSyncBadge } from './linked-sync-badge';
 import { shouldSuppressTimelineItemClickAfterDrag } from './post-drag-click-guard';
-import { TrimHandles } from './trim-handles';
+import { TrimHandles, CONSTRAINED_COLORS, FREE_COLORS } from './trim-handles';
+import type { ActiveEdgeState } from './trim-handles';
 import { StretchHandles } from './stretch-handles';
 import { AudioFadeHandles } from './audio-fade-handles';
 import { VideoFadeHandles } from './video-fade-handles';
@@ -1072,6 +1073,18 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     visualWidth,
     contentPreviewItem,
   ]);
+
+  // Active edge state for halo rendering (trim, roll, slip, slide, stretch)
+  const activeEdges: ActiveEdgeState | null =
+    isTrimming && trimHandle
+      ? { start: trimHandle === 'start', end: trimHandle === 'end', constrainedEdge: trimConstrained ? (isRollingEdit ? 'both' : trimHandle) : null }
+      : rollingEditHandle
+      ? { start: rollingEditHandle === 'end', end: rollingEditHandle === 'start', constrainedEdge: rollingEditConstrained ? 'both' : null }
+      : isSlipSlideActive
+      ? { start: true, end: true, constrainedEdge: slipSlideConstrained ? (slipSlideConstraintEdge ?? 'both') : null }
+      : isStretching
+      ? { start: stretchHandle === 'start', end: stretchHandle === 'end', constrainedEdge: stretchConstrained ? stretchHandle : null }
+      : null;
 
   // Visibility detection for lazy filmstrip loading (shared viewport state)
   const clipVisibility = useClipVisibility(visualLeft, visualWidth);
@@ -3186,26 +3199,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
             hoveredEdge={hoveredEdge}
             smartTrimIntent={smartTrimIntent}
             rollHoverEdge={rollHoverEdge}
-            activeEdges={
-              isTrimming && trimHandle
-                ? {
-                    start: trimHandle === 'start',
-                    end: trimHandle === 'end',
-                    // Rolling edit: both clips are stuck when constrained (constraint may come from either clip)
-                    constrainedEdge: trimConstrained ? (isRollingEdit ? 'both' : trimHandle) : null,
-                  }
-                : rollingEditHandle
-                ? {
-                    start: rollingEditHandle === 'end',
-                    end: rollingEditHandle === 'start',
-                    constrainedEdge: rollingEditConstrained ? 'both' : null,
-                  }
-                : isSlipSlideActive
-                ? { start: true, end: true, constrainedEdge: slipSlideConstrained ? (slipSlideConstraintEdge ?? 'both') : null }
-                : isStretching
-                ? { start: stretchHandle === 'start', end: stretchHandle === 'end', constrainedEdge: stretchConstrained ? stretchHandle : null }
-                : null
-            }
+            activeEdges={activeEdges}
             startCursorClass={
               smartTrimIntent === 'ripple-start'
                 ? 'cursor-ripple-left'
@@ -3272,6 +3266,35 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       </ItemContextMenu>
 
       <ToolOperationOverlay visual={toolOperationOverlay} />
+
+      {/* Active edge halos — top layer, above both clip and bounds box */}
+      {activeEdges && (
+        <div
+          className="absolute inset-y-0 pointer-events-none"
+          style={{ left: `${visualLeft}px`, width: `${visualWidth}px`, zIndex: 2 }}
+        >
+          {activeEdges.start && (() => {
+            const constrained = activeEdges.constrainedEdge === 'start' || activeEdges.constrainedEdge === 'both';
+            const colors = constrained ? CONSTRAINED_COLORS : FREE_COLORS;
+            return (
+              <>
+                <div className="absolute inset-y-0 left-0" style={{ width: '2px', background: colors.edge, boxShadow: colors.glow }} />
+                <div className="absolute inset-y-0" style={{ left: '2px', width: '8px', background: `linear-gradient(to right, ${colors.fade}, transparent)` }} />
+              </>
+            );
+          })()}
+          {activeEdges.end && (() => {
+            const constrained = activeEdges.constrainedEdge === 'end' || activeEdges.constrainedEdge === 'both';
+            const colors = constrained ? CONSTRAINED_COLORS : FREE_COLORS;
+            return (
+              <>
+                <div className="absolute inset-y-0 right-0" style={{ width: '2px', background: colors.edge, boxShadow: colors.glow }} />
+                <div className="absolute inset-y-0" style={{ right: '2px', width: '8px', background: `linear-gradient(to left, ${colors.fade}, transparent)` }} />
+              </>
+            );
+          })()}
+        </div>
+      )}
 
       {transitionDropGhost && (
         <div

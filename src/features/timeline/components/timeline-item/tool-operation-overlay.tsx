@@ -48,7 +48,7 @@ export const ToolOperationOverlay = memo(function ToolOperationOverlay({
         <div
           data-testid="tool-operation-bounds-box"
           className={cn(
-            'absolute pointer-events-none z-30 rounded-[6px] border',
+            'absolute pointer-events-none z-[1] rounded-[6px] border',
             boxAccentClass,
           )}
           style={{
