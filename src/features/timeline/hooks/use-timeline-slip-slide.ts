@@ -108,6 +108,7 @@ export function useTimelineSlipSlide(
     usePlaybackStore.getState().setPreviewFrame(null);
 
     const { leftNeighbor, rightNeighbor } = findNeighbors();
+    const currentItem = getItemFromStore();
 
     setDragState({
       isDragging: true,
@@ -127,7 +128,39 @@ export function useTimelineSlipSlide(
       constraintLabel: null,
     });
     latestDeltaRef.current = 0;
-  }, [findNeighbors, item.id, setDragState]);
+
+    // Seed preview stores immediately so linked companions show their
+    // overlays on the same frame as the primary clip (no 1-frame delay).
+    if (mode === 'slip') {
+      useSlipEditPreviewStore.getState().setPreview({
+        itemId: item.id,
+        trackId: currentItem.trackId,
+        slipDelta: 0,
+      });
+    } else {
+      useSlideEditPreviewStore.getState().setPreview({
+        itemId: item.id,
+        trackId: currentItem.trackId,
+        leftNeighborId: leftNeighbor?.id ?? null,
+        rightNeighborId: rightNeighbor?.id ?? null,
+        slideDelta: 0,
+      });
+    }
+
+    // Seed linked companion previews with zero-delta so their overlays appear immediately
+    const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
+    if (linkedSelectionEnabled) {
+      const allItems = useTimelineStore.getState().items;
+      const companions = getSynchronizedLinkedItems(allItems, currentItem.id)
+        .filter((c) => c.id !== currentItem.id);
+      if (companions.length > 0) {
+        const updates: PreviewItemUpdate[] = companions.map((c) =>
+          mode === 'slip' ? applySlipPreview(c, 0) : applyMovePreview(c, 0),
+        );
+        useLinkedEditPreviewStore.getState().setUpdates(updates);
+      }
+    }
+  }, [findNeighbors, getItemFromStore, item.id, setDragState]);
 
   /**
    * Clamp slip delta to source boundaries.
@@ -186,29 +219,64 @@ export function useTimelineSlipSlide(
       }
     }
 
-    // Non-adjacent clips: can't slide past their boundary (wall behavior).
-    // Check the sliding clip AND its linked companions on other tracks,
-    // so linked A/V pairs both contribute to the wall calculation.
-    const participantIds = new Set<string>(slidItemIds);
-
-    // Gather all clips that move with the slide (the clip itself + linked companions)
+    // Clamp by linked companions' adjacent neighbors' source limits and
+    // treat non-adjacent clips across all participant tracks as walls.
     const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
     const participants = linkedSelectionEnabled
       ? getSynchronizedLinkedItems(allItems, currentItem.id)
       : [currentItem];
 
     for (const participant of participants) {
-      const nearest = findNearestNeighbors(participant, allItems);
-      const pEnd = participant.from + participant.durationInFrames;
+      if (participant.id === currentItem.id) continue; // primary already handled above
 
-      if (nearest.leftNeighbor && !participantIds.has(nearest.leftNeighbor.id)) {
+      const pEnd = participant.from + participant.durationInFrames;
+      const participantExcludeIds = new Set<string>(slidItemIds);
+      for (const p of participants) participantExcludeIds.add(p.id);
+
+      // Find this companion's own adjacent neighbors and clamp by their source limits
+      for (const other of allItems) {
+        if (other.trackId !== participant.trackId || other.id === participant.id) continue;
+        const otherEnd = other.from + other.durationInFrames;
+        if (otherEnd === participant.from) {
+          // Left-adjacent neighbor on companion's track
+          participantExcludeIds.add(other.id);
+          const { clampedAmount } = clampTrimAmount(other, 'end', clamped, fps);
+          if (Math.abs(clampedAmount) < Math.abs(clamped)) clamped = clampedAmount;
+        }
+        if (other.from === pEnd) {
+          // Right-adjacent neighbor on companion's track
+          participantExcludeIds.add(other.id);
+          const { clampedAmount } = clampTrimAmount(other, 'start', clamped, fps);
+          if (Math.abs(clampedAmount) < Math.abs(clamped)) clamped = clampedAmount;
+        }
+      }
+
+      // Non-adjacent clips on this companion's track act as walls
+      const nearest = findNearestNeighbors(participant, allItems);
+      if (nearest.leftNeighbor && !participantExcludeIds.has(nearest.leftNeighbor.id)) {
         const wallRight = nearest.leftNeighbor.from + nearest.leftNeighbor.durationInFrames;
         const maxLeft = -(participant.from - wallRight);
         if (clamped < maxLeft) clamped = maxLeft;
       }
-      if (nearest.rightNeighbor && !participantIds.has(nearest.rightNeighbor.id)) {
+      if (nearest.rightNeighbor && !participantExcludeIds.has(nearest.rightNeighbor.id)) {
         const wallLeft = nearest.rightNeighbor.from;
         const maxRight = wallLeft - pEnd;
+        if (clamped > maxRight) clamped = maxRight;
+      }
+    }
+
+    // Also check the primary clip's track for non-adjacent walls
+    {
+      const primaryEnd = currentItem.from + currentItem.durationInFrames;
+      const nearest = findNearestNeighbors(currentItem, allItems);
+      if (nearest.leftNeighbor && !slidItemIds.has(nearest.leftNeighbor.id)) {
+        const wallRight = nearest.leftNeighbor.from + nearest.leftNeighbor.durationInFrames;
+        const maxLeft = -(currentItem.from - wallRight);
+        if (clamped < maxLeft) clamped = maxLeft;
+      }
+      if (nearest.rightNeighbor && !slidItemIds.has(nearest.rightNeighbor.id)) {
+        const wallLeft = nearest.rightNeighbor.from;
+        const maxRight = wallLeft - primaryEnd;
         if (clamped > maxRight) clamped = maxRight;
       }
     }

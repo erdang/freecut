@@ -1075,32 +1075,36 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const { items } = useTimelineStore.getState();
       const { transitions } = useTransitionsStore.getState();
 
-      // Compute wall positions — tightest constraint across the sliding clip
-      // AND its linked A/V companions so both tracks are respected.
+      // Compute wall positions across all participants (primary + companions).
+      // Each participant's own adjacent neighbors are excluded (they get trimmed).
       const linkedSelectionEnabled = useEditorStore.getState().linkedSelectionEnabled;
       const participants = linkedSelectionEnabled
         ? getSynchronizedLinkedItems(items, item.id)
         : [item];
 
-      const adjacentIds = new Set<string>();
-      if (slideLeftNeighborForSlidItem) adjacentIds.add(slideLeftNeighborForSlidItem.id);
-      if (slideRightNeighborForSlidItem) adjacentIds.add(slideRightNeighborForSlidItem.id);
-      for (const p of participants) adjacentIds.add(p.id);
-
       let leftWallFrame: number | null = null;
       let rightWallFrame: number | null = null;
       for (const participant of participants) {
+        const pEnd = participant.from + participant.durationInFrames;
+        const excludeIds = new Set<string>(participants.map((p) => p.id));
+        if (slideLeftNeighborForSlidItem) excludeIds.add(slideLeftNeighborForSlidItem.id);
+        if (slideRightNeighborForSlidItem) excludeIds.add(slideRightNeighborForSlidItem.id);
+        for (const other of items) {
+          if (other.trackId !== participant.trackId || other.id === participant.id) continue;
+          const otherEnd = other.from + other.durationInFrames;
+          if (otherEnd === participant.from || other.from === pEnd) excludeIds.add(other.id);
+        }
+
         const nearest = findNearestNeighbors(participant, items);
-        if (nearest.leftNeighbor && !adjacentIds.has(nearest.leftNeighbor.id)) {
+        if (nearest.leftNeighbor && !excludeIds.has(nearest.leftNeighbor.id)) {
           const wall = nearest.leftNeighbor.from + nearest.leftNeighbor.durationInFrames;
           const maxLeft = -(participant.from - wall);
-          // Convert to limit on the primary item's frame space
           const primaryWall = item.from + maxLeft;
           if (leftWallFrame === null || primaryWall > leftWallFrame) leftWallFrame = primaryWall;
         }
-        if (nearest.rightNeighbor && !adjacentIds.has(nearest.rightNeighbor.id)) {
+        if (nearest.rightNeighbor && !excludeIds.has(nearest.rightNeighbor.id)) {
           const wall = nearest.rightNeighbor.from;
-          const maxRight = wall - (participant.from + participant.durationInFrames);
+          const maxRight = wall - pEnd;
           const primaryWall = item.from + item.durationInFrames + maxRight;
           if (rightWallFrame === null || primaryWall < rightWallFrame) rightWallFrame = primaryWall;
         }

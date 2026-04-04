@@ -1804,20 +1804,40 @@ export function slideItem(
       ? updatedItem.sourceStart - itemSourceStartBefore
       : 0;
 
+    // Find the companion's own adjacent neighbors — may differ from the
+    // primary's linked counterparts (e.g. a solo audio clip next to the
+    // companion that has no video counterpart).
+    let cpLeftAdj: TimelineItem | null = null;
+    let cpRightAdj: TimelineItem | null = null;
+    if (synchronizedCounterpart) {
+      const cpEnd = synchronizedCounterpart.from + synchronizedCounterpart.durationInFrames;
+      const freshItems = useItemsStore.getState().items;
+      cpLeftAdj = freshItems.find((i) =>
+        i.trackId === synchronizedCounterpart.trackId
+        && i.id !== synchronizedCounterpart.id
+        && i.from + i.durationInFrames === synchronizedCounterpart.from
+      ) ?? leftCounterpart;
+      cpRightAdj = freshItems.find((i) =>
+        i.trackId === synchronizedCounterpart.trackId
+        && i.id !== synchronizedCounterpart.id
+        && i.from === cpEnd
+      ) ?? rightCounterpart;
+    }
+
     if (synchronizedCounterpart && actualSlideDelta !== 0) {
       if (actualSlideDelta > 0) {
-        if (rightCounterpart) {
-          itemsStore._trimItemStart(rightCounterpart.id, actualSlideDelta, { skipAdjacentClamp: true });
+        if (cpRightAdj) {
+          itemsStore._trimItemStart(cpRightAdj.id, actualSlideDelta, { skipAdjacentClamp: true });
         }
-        if (leftCounterpart) {
-          itemsStore._trimItemEnd(leftCounterpart.id, actualSlideDelta, { skipAdjacentClamp: true });
+        if (cpLeftAdj) {
+          itemsStore._trimItemEnd(cpLeftAdj.id, actualSlideDelta, { skipAdjacentClamp: true });
         }
       } else {
-        if (leftCounterpart) {
-          itemsStore._trimItemEnd(leftCounterpart.id, actualSlideDelta, { skipAdjacentClamp: true });
+        if (cpLeftAdj) {
+          itemsStore._trimItemEnd(cpLeftAdj.id, actualSlideDelta, { skipAdjacentClamp: true });
         }
-        if (rightCounterpart) {
-          itemsStore._trimItemStart(rightCounterpart.id, actualSlideDelta, { skipAdjacentClamp: true });
+        if (cpRightAdj) {
+          itemsStore._trimItemStart(cpRightAdj.id, actualSlideDelta, { skipAdjacentClamp: true });
         }
       }
 
@@ -1838,9 +1858,11 @@ export function slideItem(
     const affectedIds = [id];
     if (leftNeighborId) affectedIds.push(leftNeighborId);
     if (rightNeighborId) affectedIds.push(rightNeighborId);
-    if (synchronizedCounterpart) affectedIds.push(synchronizedCounterpart.id);
-    if (leftCounterpart) affectedIds.push(leftCounterpart.id);
-    if (rightCounterpart) affectedIds.push(rightCounterpart.id);
+    if (synchronizedCounterpart) {
+      affectedIds.push(synchronizedCounterpart.id);
+      if (cpLeftAdj) affectedIds.push(cpLeftAdj.id);
+      if (cpRightAdj) affectedIds.push(cpRightAdj.id);
+    }
     applyTransitionRepairs(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
