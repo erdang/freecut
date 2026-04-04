@@ -20,8 +20,8 @@ describe('ToolOperationOverlay', () => {
     );
 
     expect(screen.getByTestId('tool-operation-bounds-box')).toHaveStyle({
-      top: '4px',
-      bottom: '4px',
+      top: '1px',
+      bottom: '1px',
     });
   });
 
@@ -63,7 +63,7 @@ describe('ToolOperationOverlay', () => {
 
     expect(screen.getByTestId('tool-operation-bounds-box')).toHaveStyle({
       top: `${EDITOR_LAYOUT.timelineClipLabelRowHeight}px`,
-      bottom: '4px',
+      bottom: '1px',
     });
   });
 

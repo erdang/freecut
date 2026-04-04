@@ -23,7 +23,7 @@ export const ToolOperationOverlay = memo(function ToolOperationOverlay({
     ? 0
     : usesSlipBodyBox
     ? Math.round(EDITOR_LAYOUT.timelineClipLabelRowHeight)
-    : 4;
+    : 1;
   const boxHeight = usesCompactTopBox
     ? Math.round(EDITOR_LAYOUT.timelineClipLabelRowHeight * 2)
     : null;
@@ -55,7 +55,7 @@ export const ToolOperationOverlay = memo(function ToolOperationOverlay({
             left: `${visual.boxLeftPx}px`,
             width: `${visual.boxWidthPx}px`,
             top: boxTop,
-            ...(boxHeight === null ? { bottom: 4 } : { height: boxHeight }),
+            ...(boxHeight === null ? { bottom: 1 } : { height: boxHeight }),
           }}
         />
       )}

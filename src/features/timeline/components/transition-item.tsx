@@ -100,7 +100,7 @@ export const TransitionItem = memo(function TransitionItem({
   );
 
   // Resize functionality
-  const { isResizing, resizeHandle, handleResizeStart, previewDuration } =
+  const { isResizing, handleResizeStart, previewDuration } =
     useTransitionResize(transition);
 
   // Rolling preview (only when this transition's clips are involved)
@@ -499,8 +499,8 @@ export const TransitionItem = memo(function TransitionItem({
           style={{
             left: `${position.left}px`,
             width: `${position.width}px`,
-            top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
-            bottom: '0px',
+            top: `calc(${EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight} + 1px)`,
+            bottom: '1px',
             zIndex: isResizing ? 50 : 10,
             opacity: trackHidden ? 0.3 : undefined,
             cursor: isResizing ? 'ew-resize' : undefined,
@@ -515,13 +515,6 @@ export const TransitionItem = memo(function TransitionItem({
                 : 'border-slate-100/80 shadow-[0_0_0_1px_rgba(248,250,252,0.1)]'
             )}
           >
-            <div
-              className={cn(
-                'absolute top-0 bottom-0 w-px',
-                isSelected ? 'bg-orange-200/95' : 'bg-slate-50/85'
-              )}
-              style={{ left: `${position.cutOffset}px` }}
-            />
             <div className="absolute inset-x-0 top-0 h-px bg-slate-50/70" />
             <div className="absolute inset-x-0 bottom-0 h-px bg-slate-900/15" />
           </div>
@@ -558,14 +551,9 @@ export const TransitionItem = memo(function TransitionItem({
             />
           )}
 
-          {/* Left resize handle */}
+          {/* Left resize handle (invisible hit zone, cursor-only feedback) */}
           <div
-            className={cn(
-              'absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-l pointer-events-auto',
-              hoveredEdge === 'left' || (isResizing && resizeHandle === 'left')
-                ? 'opacity-100'
-                : 'opacity-0'
-            )}
+            className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-l pointer-events-auto"
             data-transition-hit-zone="left-edge"
             onMouseEnter={() => setHoveredEdge('left')}
             onMouseLeave={() => {
@@ -574,18 +562,11 @@ export const TransitionItem = memo(function TransitionItem({
             onMouseDown={(e) => handleResizeMouseDown(e, 'left')}
             onMouseUp={stopEvent}
             onClick={stopEvent}
-          >
-            <div className="absolute inset-y-0 left-0 w-px rounded-l-sm bg-slate-100/65" />
-          </div>
+          />
 
-          {/* Right resize handle */}
+          {/* Right resize handle (invisible hit zone, cursor-only feedback) */}
           <div
-            className={cn(
-              'absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-r pointer-events-auto',
-              hoveredEdge === 'right' || (isResizing && resizeHandle === 'right')
-                ? 'opacity-100'
-                : 'opacity-0'
-            )}
+            className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize rounded-r pointer-events-auto"
             data-transition-hit-zone="right-edge"
             onMouseEnter={() => setHoveredEdge('right')}
             onMouseLeave={() => {
@@ -594,9 +575,7 @@ export const TransitionItem = memo(function TransitionItem({
             onMouseDown={(e) => handleResizeMouseDown(e, 'right')}
             onMouseUp={stopEvent}
             onClick={stopEvent}
-          >
-            <div className="absolute inset-y-0 right-0 w-px rounded-r-sm bg-slate-100/65" />
-          </div>
+          />
         </div>
       </ContextMenuTrigger>
 
