@@ -70,6 +70,10 @@ interface SlideBoundsOptions {
   leftWallFrame?: number | null;
   /** Frame position of a non-adjacent wall on the right (blocks rightward movement) */
   rightWallFrame?: number | null;
+  /** Pre-computed min/max deltas from the hook (tightest across all tracks).
+   *  When provided, overrides the internal neighbor + wall computation. */
+  effectiveMinDelta?: number;
+  effectiveMaxDelta?: number;
 }
 
 interface SlipBoundsOptions {
@@ -387,23 +391,33 @@ export function getSlideOperationBoundsVisual({
   currentRightPx,
   leftWallFrame,
   rightWallFrame,
+  effectiveMinDelta,
+  effectiveMaxDelta,
 }: SlideBoundsOptions): OperationBoundsVisual {
   const itemStart = item.from;
   const itemEnd = item.from + item.durationInFrames;
-  let minDelta = clampSlideDeltaForBounds(item, -LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
-  let maxDelta = clampSlideDeltaForBounds(item, LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
-  // Also clamp by transition constraints so the box aligns with the actual slide limits
-  minDelta = clampSlideDeltaToPreserveTransitions(item, minDelta, leftNeighbor, rightNeighbor, items, transitions, fps);
-  maxDelta = clampSlideDeltaToPreserveTransitions(item, maxDelta, leftNeighbor, rightNeighbor, items, transitions, fps);
 
-  // Clamp by non-adjacent walls (the clip can't slide past them)
-  if (leftWallFrame != null) {
-    const wallMinDelta = -(itemStart - leftWallFrame);
-    if (wallMinDelta > minDelta) minDelta = wallMinDelta;
-  }
-  if (rightWallFrame != null) {
-    const wallMaxDelta = rightWallFrame - itemEnd;
-    if (wallMaxDelta < maxDelta) maxDelta = wallMaxDelta;
+  let minDelta: number;
+  let maxDelta: number;
+
+  if (effectiveMinDelta !== undefined && effectiveMaxDelta !== undefined) {
+    // Use pre-computed range (tightest across all tracks from the hook)
+    minDelta = effectiveMinDelta;
+    maxDelta = effectiveMaxDelta;
+  } else {
+    minDelta = clampSlideDeltaForBounds(item, -LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+    maxDelta = clampSlideDeltaForBounds(item, LARGE_OPERATION_DELTA, leftNeighbor, rightNeighbor, fps);
+    minDelta = clampSlideDeltaToPreserveTransitions(item, minDelta, leftNeighbor, rightNeighbor, items, transitions, fps);
+    maxDelta = clampSlideDeltaToPreserveTransitions(item, maxDelta, leftNeighbor, rightNeighbor, items, transitions, fps);
+
+    if (leftWallFrame != null) {
+      const wallMinDelta = -(itemStart - leftWallFrame);
+      if (wallMinDelta > minDelta) minDelta = wallMinDelta;
+    }
+    if (rightWallFrame != null) {
+      const wallMaxDelta = rightWallFrame - itemEnd;
+      if (wallMaxDelta < maxDelta) maxDelta = wallMaxDelta;
+    }
   }
 
   const bounds = toBoxPixels(

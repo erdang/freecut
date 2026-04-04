@@ -261,4 +261,96 @@ describe('tool operation overlay utils', () => {
     });
     expect(withoutWalls.boxLeftPx).toBeNull();
   });
+
+  it('slide bounds uses effectiveMinDelta/maxDelta when provided (shared range for linked A/V)', () => {
+    const item: VideoItem = {
+      ...createVideoItem(),
+      id: 'center',
+      from: 100,
+      durationInFrames: 60,
+      sourceStart: 0,
+      sourceEnd: 60,
+      sourceDuration: 200,
+    };
+
+    // With pre-computed range, neighbors/walls/transitions are ignored
+    const visual = getSlideOperationBoundsVisual({
+      item,
+      items: [],
+      transitions: [],
+      fps: 30,
+      frameToPixels: (f) => f,
+      leftNeighbor: null,
+      rightNeighbor: null,
+      constraintEdge: null,
+      constrained: false,
+      currentLeftPx: 100,
+      currentRightPx: 160,
+      effectiveMinDelta: -40,
+      effectiveMaxDelta: 30,
+    });
+
+    // Box left: min(100, 100 + (-40)) = 60
+    // Box right: max(160, 160 + 30) = 190
+    expect(visual.boxLeftPx).toBe(60);
+    expect(visual.boxWidthPx).toBe(130); // 190 - 60
+  });
+
+  it('slide bounds with effectiveDeltas produces same box for primary and companion', () => {
+    const primary: VideoItem = {
+      ...createVideoItem(),
+      id: 'primary',
+      from: 100,
+      durationInFrames: 60,
+    };
+    const companion: VideoItem = {
+      ...createVideoItem(),
+      id: 'companion',
+      from: 100,
+      durationInFrames: 60,
+      speed: 1.28,
+      sourceStart: 0,
+      sourceEnd: 77, // 60 * 1.28 = 76.8
+      sourceDuration: 200,
+    };
+
+    const sharedMin = -30;
+    const sharedMax = 20;
+
+    const primaryVisual = getSlideOperationBoundsVisual({
+      item: primary,
+      items: [],
+      transitions: [],
+      fps: 30,
+      frameToPixels: (f) => f,
+      leftNeighbor: null,
+      rightNeighbor: null,
+      constraintEdge: null,
+      constrained: false,
+      currentLeftPx: 100,
+      currentRightPx: 160,
+      effectiveMinDelta: sharedMin,
+      effectiveMaxDelta: sharedMax,
+    });
+
+    const companionVisual = getSlideOperationBoundsVisual({
+      item: companion,
+      items: [],
+      transitions: [],
+      fps: 30,
+      frameToPixels: (f) => f,
+      leftNeighbor: null,
+      rightNeighbor: null,
+      constraintEdge: null,
+      constrained: false,
+      currentLeftPx: 100,
+      currentRightPx: 160,
+      effectiveMinDelta: sharedMin,
+      effectiveMaxDelta: sharedMax,
+    });
+
+    // Both should produce the exact same box dimensions
+    expect(primaryVisual.boxLeftPx).toBe(companionVisual.boxLeftPx);
+    expect(primaryVisual.boxWidthPx).toBe(companionVisual.boxWidthPx);
+  });
 });

@@ -138,12 +138,17 @@ export function useTimelineSlipSlide(
         slipDelta: 0,
       });
     } else {
+      // Compute the effective slide range (tightest across all tracks)
+      const slideMinDelta = clampSlideDelta(-1_000_000_000, leftNeighbor?.id ?? null, rightNeighbor?.id ?? null);
+      const slideMaxDelta = clampSlideDelta(1_000_000_000, leftNeighbor?.id ?? null, rightNeighbor?.id ?? null);
       useSlideEditPreviewStore.getState().setPreview({
         itemId: item.id,
         trackId: currentItem.trackId,
         leftNeighborId: leftNeighbor?.id ?? null,
         rightNeighborId: rightNeighbor?.id ?? null,
         slideDelta: 0,
+        minDelta: slideMinDelta,
+        maxDelta: slideMaxDelta,
       });
     }
 

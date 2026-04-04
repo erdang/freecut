@@ -128,7 +128,7 @@ import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFadeCurvePath } from '../../utils/audio-fade-curve';
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
-import { findEditNeighborsWithTransitions, findHandleNeighborWithTransitions, findNearestNeighbors } from '../../utils/transition-linked-neighbors';
+import { findHandleNeighborWithTransitions, findNearestNeighbors } from '../../utils/transition-linked-neighbors';
 import { detectScenes } from '../../deps/analysis';
 import { resolveMediaUrl } from '../../deps/media-library-resolver';
 const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
@@ -781,6 +781,14 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
+  // Slide range from the preview store — the tightest constraint across all tracks.
+  // Used by both primary and companion overlays so limit boxes match.
+  const slideRange = useSlideEditPreviewStore(
+    useShallow(
+      useCallback((s) => (s.itemId ? { minDelta: s.minDelta, maxDelta: s.maxDelta } : null), [])
+    )
+  );
+
   // For the actively slid item, read neighbor IDs from preview store so we can
   // mirror commit-time source continuity logic in filmstrip/waveform preview.
   const slideLeftNeighborIdForSlidItem = useSlideEditPreviewStore(
@@ -1124,6 +1132,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         currentRightPx,
         leftWallFrame,
         rightWallFrame,
+        effectiveMinDelta: slideRange?.minDelta,
+        effectiveMaxDelta: slideRange?.maxDelta,
       });
     }
 
@@ -1139,39 +1149,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       });
     }
 
-    // Linked slide companion: show the limit box with wall constraints from this track
-    if (isLinkedSlideCompanion) {
-      const { items } = useTimelineStore.getState();
-      const { transitions } = useTransitionsStore.getState();
-
-      // Find this companion's own adjacent neighbors
-      const companionNeighbors = findEditNeighborsWithTransitions(item, items, transitions);
-      const companionLeftNeighbor = companionNeighbors.leftNeighbor;
-      const companionRightNeighbor = companionNeighbors.rightNeighbor;
-
-      // Compute walls for the companion's track
-      const companionNearest = findNearestNeighbors(item, items);
-      const companionLeftWall = companionNearest.leftNeighbor && companionNearest.leftNeighbor.id !== companionLeftNeighbor?.id
-        ? companionNearest.leftNeighbor.from + companionNearest.leftNeighbor.durationInFrames
-        : null;
-      const companionRightWall = companionNearest.rightNeighbor && companionNearest.rightNeighbor.id !== companionRightNeighbor?.id
-        ? companionNearest.rightNeighbor.from
-        : null;
-
+    // Linked slide companion: use the same effective range as the primary
+    if (isLinkedSlideCompanion && slideRange) {
       return getSlideOperationBoundsVisual({
         item,
-        items,
-        transitions,
+        items: [],
+        transitions: [],
         fps,
         frameToPixels,
-        leftNeighbor: companionLeftNeighbor,
-        rightNeighbor: companionRightNeighbor,
+        leftNeighbor: null,
+        rightNeighbor: null,
         constraintEdge: null,
         constrained: false,
         currentLeftPx,
         currentRightPx,
-        leftWallFrame: companionLeftWall,
-        rightWallFrame: companionRightWall,
+        effectiveMinDelta: slideRange.minDelta,
+        effectiveMaxDelta: slideRange.maxDelta,
       });
     }
 
