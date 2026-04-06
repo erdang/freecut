@@ -10,6 +10,12 @@ export interface PreseekSourceTarget {
   time: number;
 }
 
+export interface PausedVariableSpeedPrewarmPlan {
+  itemIds: string[];
+  visibilityFrame: number;
+  preseekFrame: number;
+}
+
 function isPreseekableVideoItem(item: TimelineItem): item is VideoItem {
   return item.type === 'video' && typeof item.src === 'string' && item.src.length > 0;
 }
@@ -184,4 +190,60 @@ export function collectPlaybackStartVariableSpeedPreseekTargets(
   }
 
   return targets;
+}
+
+export function resolvePausedVariableSpeedPrewarmPlan(
+  tracks: TimelineTrack[],
+  timelineFrame: number,
+  lookaheadFrames: number,
+): PausedVariableSpeedPrewarmPlan | null {
+  const candidateItemIds: string[] = [];
+  const candidateIdSet = new Set<string>();
+
+  for (const track of tracks) {
+    for (const item of track.items) {
+      if (!isPreseekableVideoItem(item)) continue;
+
+      const speed = item.speed ?? 1;
+      if (Math.abs(speed - 1) < 0.01) continue;
+
+      if (item.from > timelineFrame && item.from <= timelineFrame + lookaheadFrames) {
+        candidateItemIds.push(item.id);
+        candidateIdSet.add(item.id);
+      }
+    }
+  }
+
+  if (candidateItemIds.length === 0) {
+    return null;
+  }
+
+  let visibilityFrame = timelineFrame;
+
+  for (const track of tracks) {
+    const varItem = track.items.find((item) => candidateIdSet.has(item.id));
+    if (!varItem) continue;
+
+    const varTrackOrder = track.order ?? 0;
+    let latestOccluderEnd = timelineFrame;
+    for (const otherTrack of tracks) {
+      const otherOrder = otherTrack.order ?? 0;
+      if (otherOrder >= varTrackOrder) continue;
+      for (const otherItem of otherTrack.items) {
+        if (otherItem.type === 'audio' || otherItem.type === 'adjustment') continue;
+        const otherEnd = otherItem.from + otherItem.durationInFrames;
+        if (otherItem.from <= timelineFrame + lookaheadFrames && otherEnd > timelineFrame) {
+          latestOccluderEnd = Math.max(latestOccluderEnd, otherEnd);
+        }
+      }
+    }
+    visibilityFrame = latestOccluderEnd;
+    break;
+  }
+
+  return {
+    itemIds: candidateItemIds,
+    visibilityFrame,
+    preseekFrame: Math.max(timelineFrame, visibilityFrame - 1),
+  };
 }

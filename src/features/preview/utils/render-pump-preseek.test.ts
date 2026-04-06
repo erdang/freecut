@@ -7,6 +7,7 @@ import {
   collectPlaybackStartVariableSpeedPrewarmItemIds,
   collectVisibleTrackVideoSourceTimesBySrc,
   getVideoItemSourceTimeSeconds,
+  resolvePausedVariableSpeedPrewarmPlan,
 } from './render-pump-preseek';
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -127,5 +128,40 @@ describe('render pump preseek helpers', () => {
       { src: 'near.mp4', time: 2.95 },
       { src: 'running.mp4', time: 2.95 },
     ]);
+  });
+
+  it('resolves paused variable-speed prewarm visibility and preseek frame', () => {
+    const tracks = [
+      {
+        ...makeTrack([
+          makeVideoItem({ id: 'occluder', from: 95, durationInFrames: 20, speed: 1, sourceStart: 0, sourceFps: 30, src: 'top.mp4' }),
+        ]),
+        id: 'top',
+        order: 0,
+      },
+      {
+        ...makeTrack([
+          makeVideoItem({ id: 'var-speed', from: 110, durationInFrames: 40, speed: 1.5, sourceStart: 0, sourceFps: 30, src: 'bottom.mp4' }),
+        ]),
+        id: 'bottom',
+        order: 1,
+      },
+    ];
+
+    expect(resolvePausedVariableSpeedPrewarmPlan(tracks, 100, 30)).toEqual({
+      itemIds: ['var-speed'],
+      visibilityFrame: 115,
+      preseekFrame: 114,
+    });
+  });
+
+  it('returns null when there are no paused variable-speed candidates', () => {
+    const tracks = [
+      makeTrack([
+        makeVideoItem({ id: 'normal', from: 110, durationInFrames: 40, speed: 1, sourceStart: 0, sourceFps: 30, src: 'normal.mp4' }),
+      ]),
+    ];
+
+    expect(resolvePausedVariableSpeedPrewarmPlan(tracks, 100, 30)).toBeNull();
   });
 });
