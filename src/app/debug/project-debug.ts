@@ -382,15 +382,19 @@ function createDebugAPI(): ProjectDebugAPI {
     },
 
     getPlaybackState: async () => {
-      const { usePlaybackStore } = await import('@/shared/state/playback');
+      const [{ usePlaybackStore }, { usePreviewBridgeStore }] = await Promise.all([
+        import('@/shared/state/playback'),
+        import('@/shared/state/preview-bridge'),
+      ]);
       const s = usePlaybackStore.getState();
+      const bridge = usePreviewBridgeStore.getState();
       return {
         currentFrame: s.currentFrame,
         isPlaying: s.isPlaying,
         playbackRate: s.playbackRate,
         loop: s.loop,
         previewFrame: s.previewFrame,
-        displayedFrame: s.displayedFrame,
+        displayedFrame: bridge.displayedFrame,
         zoom: s.zoom,
         useProxy: s.useProxy,
       };
@@ -546,4 +550,3 @@ declare global {
     __DEBUG__?: ProjectDebugAPI;
   }
 }
-

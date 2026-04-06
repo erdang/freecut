@@ -7,6 +7,7 @@ import {
 import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
 import type { CaptureOptions, PreviewQuality } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import {
   useTimelineStore,
   useItemsStore,
@@ -55,7 +56,7 @@ import {
 } from '../utils/preview-interaction-mode';
 import { getPreloadWindowRange } from '../utils/preload-window';
 import {
-  resolvePreviewTransitionDecision,
+  resolvePreviewTransitionFromPlaybackStates,
 } from '../utils/preview-state-coordinator';
 import { getSourceWarmTarget } from '../utils/source-warm-target';
 import {
@@ -558,9 +559,9 @@ export const VideoPreview = memo(function VideoPreview({
     }
   }, [adaptiveQualityCap, isPlaying]);
 
-  const setCaptureFrame = usePlaybackStore((s) => s.setCaptureFrame);
-  const setCaptureFrameImageData = usePlaybackStore((s) => s.setCaptureFrameImageData);
-  const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
+  const setCaptureFrame = usePreviewBridgeStore((s) => s.setCaptureFrame);
+  const setCaptureFrameImageData = usePreviewBridgeStore((s) => s.setCaptureFrameImageData);
+  const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
 
   // Cache for resolved blob URLs (mediaId -> blobUrl)
   const [resolvedUrls, setResolvedUrls] = useState<Map<string, string>>(new Map());
@@ -2777,7 +2778,7 @@ export const VideoPreview = memo(function VideoPreview({
     return task;
   }, [renderOffscreenFrame]);
 
-  const setCaptureCanvasSource = usePlaybackStore((s) => s.setCaptureCanvasSource);
+  const setCaptureCanvasSource = usePreviewBridgeStore((s) => s.setCaptureCanvasSource);
 
   // Register frame capture function for scopes and thumbnail workflows.
   useEffect(() => {
@@ -4745,19 +4746,10 @@ export const VideoPreview = memo(function VideoPreview({
     void preloadMedia();
 
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
-      const transition = resolvePreviewTransitionDecision({
-        prev: {
-          isPlaying: prevState.isPlaying,
-          previewFrame: prevState.previewFrame,
-          currentFrame: prevState.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef.current,
-        },
-        next: {
-          isPlaying: state.isPlaying,
-          previewFrame: state.previewFrame,
-          currentFrame: state.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef.current,
-        },
+      const transition = resolvePreviewTransitionFromPlaybackStates({
+        prev: prevState,
+        next: state,
+        isGizmoInteracting: isGizmoInteractingRef.current,
         fps,
       });
       const interactionMode = transition.next.mode;

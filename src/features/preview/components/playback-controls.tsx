@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { useMediaLibraryStore, mediaLibraryService } from '@/features/preview/deps/media-library-contract';
 import { formatTimecode } from '@/utils/time-utils';
@@ -99,8 +100,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
   const togglePlayPause = usePlaybackStore((s) => s.togglePlayPause);
   const setCurrentFrame = usePlaybackStore((s) => s.setCurrentFrame);
   const setPreviewFrame = usePlaybackStore((s) => s.setPreviewFrame);
-  const setDisplayedFrame = usePlaybackStore((s) => s.setDisplayedFrame);
   const toggleUseProxy = usePlaybackStore((s) => s.toggleUseProxy);
+  const setDisplayedFrame = usePreviewBridgeStore((s) => s.setDisplayedFrame);
 
   // Note: Automatic playback loop is now handled by Composition Player
   // The Player controls frame advancement via frameupdate events
@@ -134,6 +135,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
 
     try {
       const playback = usePlaybackStore.getState();
+      const previewBridge = usePreviewBridgeStore.getState();
       const currentFrame = playback.previewFrame ?? playback.currentFrame;
       const fileName = buildFrameFileName(currentFrame, fps, totalFrames);
 
@@ -141,8 +143,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
       let frameWidth: number | undefined;
       let frameHeight: number | undefined;
 
-      if (playback.captureCanvasSource) {
-        const canvasSource = await playback.captureCanvasSource();
+      if (previewBridge.captureCanvasSource) {
+        const canvasSource = await previewBridge.captureCanvasSource();
         if (canvasSource) {
           frameBlob = await canvasToBlob(canvasSource, 'image/png');
           frameWidth = canvasSource.width;
@@ -150,8 +152,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         }
       }
 
-      if (!frameBlob && playback.captureFrame) {
-        const dataUrl = await playback.captureFrame({
+      if (!frameBlob && previewBridge.captureFrame) {
+        const dataUrl = await previewBridge.captureFrame({
           format: 'image/png',
           quality: 1,
           fullResolution: true,

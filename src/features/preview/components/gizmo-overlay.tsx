@@ -4,6 +4,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useKeyframesStore, useTimelineStore } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import { useGizmoStore } from '../stores/gizmo-store';
 import { useCornerPinStore } from '../stores/corner-pin-store';
@@ -52,6 +53,17 @@ export function GizmoOverlay({
   overlayPadding = 100,
 }: GizmoOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const getResolvedFrameForPlaybackState = useCallback(
+    (
+      playbackState: ReturnType<typeof usePlaybackStore.getState>,
+      displayedFrame = usePreviewBridgeStore.getState().displayedFrame,
+    ) =>
+      getResolvedPlaybackFrame({
+        ...playbackState,
+        displayedFrame,
+      }),
+    []
+  );
 
   // Context menu state for selecting from overlapping items
   const [contextMenu, setContextMenu] = useState<{
@@ -90,7 +102,10 @@ export function GizmoOverlay({
 
   // Track the "frozen" frame when playback starts - gizmos stay at this frame during playback
   // This prevents re-renders during playback while maintaining accuracy when paused/skimming
-  const initialPlaybackState = usePlaybackStore.getState();
+  const initialPlaybackState = {
+    ...usePlaybackStore.getState(),
+    displayedFrame: usePreviewBridgeStore.getState().displayedFrame,
+  };
   const frozenFrameRef = useRef<number>(
     getResolvedPlaybackFrame(initialPlaybackState)
   );
@@ -99,27 +114,34 @@ export function GizmoOverlay({
   useEffect(() => {
     if (!isPlaying) {
       // When paused/skimming, sync to the effective preview frame
-      const playbackState = usePlaybackStore.getState();
-      frozenFrameRef.current = getResolvedPlaybackFrame(playbackState);
+      frozenFrameRef.current = getResolvedFrameForPlaybackState(usePlaybackStore.getState());
     }
-  }, [isPlaying]);
+  }, [getResolvedFrameForPlaybackState, isPlaying]);
 
   // Subscribe to frame changes - always update when paused/skimming, or at clip boundaries during playback
   // NOTE: Reads items on-demand inside subscribe callback to avoid re-rendering on items change
   useEffect(() => {
     let prevFrame = usePlaybackStore.getState().currentFrame;
+    const updatePausedFrame = (
+      nextPlaybackState: ReturnType<typeof usePlaybackStore.getState>,
+      prevPlaybackState: ReturnType<typeof usePlaybackStore.getState>,
+      nextDisplayedFrame = usePreviewBridgeStore.getState().displayedFrame,
+      prevDisplayedFrame = nextDisplayedFrame,
+    ) => {
+      const effectiveFrame = getResolvedFrameForPlaybackState(nextPlaybackState, nextDisplayedFrame);
+      const prevEffectiveFrame = getResolvedFrameForPlaybackState(prevPlaybackState, prevDisplayedFrame);
+      if (effectiveFrame !== prevEffectiveFrame) {
+        frozenFrameRef.current = effectiveFrame;
+        setForceUpdate((n) => n + 1);
+      }
+    };
 
-    return usePlaybackStore.subscribe((state, prevState) => {
+    const unsubscribePlayback = usePlaybackStore.subscribe((state, prevState) => {
       const currentFrame = state.currentFrame;
 
       if (!state.isPlaying) {
         // When paused/skimming, follow whichever source was updated most recently.
-        const effectiveFrame = getResolvedPlaybackFrame(state);
-        const prevEffectiveFrame = getResolvedPlaybackFrame(prevState);
-        if (effectiveFrame !== prevEffectiveFrame) {
-          frozenFrameRef.current = effectiveFrame;
-          setForceUpdate((n) => n + 1);
-        }
+        updatePausedFrame(state, prevState);
       } else {
         // During playback, only update when crossing a clip boundary
         // Read items on-demand for fresh clip edges (avoids re-subscribing on items change)
@@ -142,7 +164,22 @@ export function GizmoOverlay({
 
       prevFrame = currentFrame;
     });
-  }, []); // No dependencies - reads items on-demand
+    const unsubscribeBridge = usePreviewBridgeStore.subscribe((bridgeState, prevBridgeState) => {
+      const playbackState = usePlaybackStore.getState();
+      if (playbackState.isPlaying) return;
+      updatePausedFrame(
+        playbackState,
+        playbackState,
+        bridgeState.displayedFrame,
+        prevBridgeState.displayedFrame,
+      );
+    });
+
+    return () => {
+      unsubscribePlayback();
+      unsubscribeBridge();
+    };
+  }, [getResolvedFrameForPlaybackState]); // Reads items on-demand from stores
 
   // Force update state to trigger re-render and useMemo recalculation when frame changes while paused/skimming
   const [frameUpdateKey, setForceUpdate] = useState(0);

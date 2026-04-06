@@ -1,8 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getPreviewRuntimeStateFromPlaybackState,
   getPreviewRuntimeSnapshot,
+  resolvePreviewTransitionFromPlaybackStates,
   resolvePreviewTransitionDecision,
 } from './preview-state-coordinator';
+
+describe('getPreviewRuntimeStateFromPlaybackState', () => {
+  it('adds interaction flags to raw playback state', () => {
+    expect(getPreviewRuntimeStateFromPlaybackState({
+      isPlaying: false,
+      previewFrame: 42,
+      currentFrame: 10,
+    }, true)).toEqual({
+      isPlaying: false,
+      previewFrame: 42,
+      currentFrame: 10,
+      isGizmoInteracting: true,
+    });
+  });
+});
 
 describe('getPreviewRuntimeSnapshot', () => {
   it('derives mode and anchor frame from playback state', () => {
@@ -19,6 +36,28 @@ describe('getPreviewRuntimeSnapshot', () => {
 });
 
 describe('resolvePreviewTransitionDecision', () => {
+  it('can derive transitions directly from playback state', () => {
+    const decision = resolvePreviewTransitionFromPlaybackStates({
+      prev: {
+        isPlaying: false,
+        previewFrame: null,
+        currentFrame: 20,
+      },
+      next: {
+        isPlaying: false,
+        previewFrame: 48,
+        currentFrame: 20,
+      },
+      isGizmoInteracting: false,
+      fps: 30,
+    });
+
+    expect(decision.enteredScrubbing).toBe(true);
+    expect(decision.previewFrameChanged).toBe(true);
+    expect(decision.currentFrameChanged).toBe(false);
+    expect(decision.preloadBurstTrigger).toBe('scrub_enter');
+  });
+
   it('detects scrub enter and frame change flags', () => {
     const decision = resolvePreviewTransitionDecision({
       prev: {

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { TimecodeDisplay } from './timecode-display';
 
 function resetPlaybackStore() {
@@ -9,7 +10,6 @@ function resetPlaybackStore() {
   usePlaybackStore.setState({
     currentFrame: 12,
     currentFrameEpoch: 0,
-    displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
     loop: false,
@@ -20,11 +20,14 @@ function resetPlaybackStore() {
     previewFrameEpoch: 0,
     frameUpdateEpoch: 0,
     previewItemId: null,
+    useProxy: true,
+    previewQuality: 1,
+  });
+  usePreviewBridgeStore.setState({
+    displayedFrame: null,
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
-    useProxy: true,
-    previewQuality: 1,
   });
 }
 
@@ -39,13 +42,13 @@ describe('TimecodeDisplay', () => {
     const button = screen.getByRole('button');
     const [currentTime, , totalTime] = button.querySelectorAll('span');
 
-    expect(button).toHaveStyle({ width: 'calc(23ch + 1rem)' });
-    expect(button).toHaveTextContent('00:00:00:12');
-    expect(button).toHaveTextContent('00:00:33:09');
+    expect(button).toHaveStyle({ width: 'calc(17ch + 0.75rem)' });
+    expect(button).toHaveTextContent('00:00:12');
+    expect(button).toHaveTextContent('00:33:09');
 
     fireEvent.click(button);
 
-    expect(button).toHaveStyle({ width: 'calc(23ch + 1rem)' });
+    expect(button).toHaveStyle({ width: 'calc(17ch + 0.75rem)' });
     expect(currentTime).not.toHaveStyle({ width: '11ch' });
     expect(totalTime).not.toHaveStyle({ width: '11ch' });
     expect(button).toHaveTextContent('0012');

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useMediaLibraryStore, mediaLibraryService } from '@/features/preview/deps/media-library-contract';
 import { PlaybackControls } from './playback-controls';
 
@@ -27,11 +28,14 @@ describe('PlaybackControls frame capture', () => {
     usePlaybackStore.setState({
       currentFrame: 12,
       previewFrame: null,
-      displayedFrame: null,
       isPlaying: false,
       volume: 1,
       useProxy: true,
+    });
+    usePreviewBridgeStore.setState({
+      displayedFrame: null,
       captureFrame: null,
+      captureFrameImageData: null,
       captureCanvasSource: async () =>
         ({
           width: 1920,

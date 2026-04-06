@@ -9,4 +9,5 @@ Current modules:
 - `clipboard`: transition and item clipboard data for copy/paste
 - `clear-keyframes-dialog`: dialog state for bulk/property keyframe deletion
 - `playback`: global transport/playhead state for preview and timeline
+- `preview-bridge`: preview presentation state (displayed overlay frame, frame capture hooks)
 - `source-player`: source monitor/player interaction state (in/out points, hover target)

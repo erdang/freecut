@@ -18,6 +18,7 @@ import type { AudioItem, CompositionItem, TimelineItem, TimelineTrack } from '@/
 import type { Transition } from '@/types/transition';
 
 import { createLogger } from '@/shared/logging/logger';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { DEFAULT_TRACK_HEIGHT } from '../constants';
 import {
   createClassicTrack,
@@ -654,7 +655,7 @@ async function saveTimeline(projectId: string): Promise<void> {
         let thumbnailBlob: Blob | null = null;
 
         // Fast path: capture from existing preview renderer (avoids full re-init)
-        const captureCanvasSource = usePlaybackStore.getState().captureCanvasSource;
+        const captureCanvasSource = usePreviewBridgeStore.getState().captureCanvasSource;
         if (captureCanvasSource) {
           try {
             const sourceCanvas = await captureCanvasSource();

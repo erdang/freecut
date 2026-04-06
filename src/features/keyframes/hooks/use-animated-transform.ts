@@ -3,6 +3,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { useTimelineStore } from '@/features/keyframes/deps/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import {
   resolveTransform,
@@ -48,7 +49,7 @@ export function useAnimatedTransform(
   // Get current frame from playback store
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
   const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
@@ -103,7 +104,7 @@ export function useAnimatedTransforms(
   // Get current frame from playback store
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
   const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);

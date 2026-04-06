@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { TimelineItem } from '@/types/timeline';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import {
   useItemsStore,
   useTimelineStore,
@@ -355,11 +356,14 @@ vi.mock('./slide-edit-overlay', () => ({
 
 import { VideoPreview } from './video-preview';
 
+function getDisplayedFrame() {
+  return usePreviewBridgeStore.getState().displayedFrame;
+}
+
 function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 0,
     currentFrameEpoch: 0,
-    displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
     loop: false,
@@ -370,9 +374,14 @@ function resetStores() {
     previewFrameEpoch: 0,
     frameUpdateEpoch: 0,
     previewItemId: null,
-    captureFrame: null,
     useProxy: true,
     previewQuality: 1,
+  });
+  usePreviewBridgeStore.setState({
+    displayedFrame: null,
+    captureFrame: null,
+    captureFrameImageData: null,
+    captureCanvasSource: null,
   });
 
   useItemsStore.getState().setTracks([]);
@@ -936,7 +945,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(24);
+      expect(getDisplayedFrame()).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
@@ -1010,7 +1019,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(24);
+      expect(getDisplayedFrame()).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
@@ -1085,7 +1094,7 @@ describe('VideoPreview sync behavior', () => {
       expect(usePlaybackStore.getState().isPlaying).toBe(true);
       expect(scrubCanvas.style.visibility).toBe('visible');
       expect(renderer.renderFrame).toHaveBeenCalledWith(25);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(25);
+      expect(getDisplayedFrame()).toBe(25);
     });
 
     renderer.renderFrame.mockClear();
@@ -1097,7 +1106,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(usePlaybackStore.getState().isPlaying).toBe(false);
       expect(scrubCanvas.style.visibility).toBe('visible');
-      expect(usePlaybackStore.getState().displayedFrame).toBe(25);
+      expect(getDisplayedFrame()).toBe(25);
     });
   });
 
@@ -1172,7 +1181,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(24);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(24);
+      expect(getDisplayedFrame()).toBe(24);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
@@ -1241,7 +1250,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(48);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -1255,7 +1264,7 @@ describe('VideoPreview sync behavior', () => {
       expect(usePlaybackStore.getState().previewFrame).toBeNull();
       expect(usePlaybackStore.getState().currentFrame).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
-      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(getDisplayedFrame()).toBe(48);
     });
   });
 
@@ -1444,7 +1453,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBe(70);
+      expect(getDisplayedFrame()).toBe(70);
     });
     seekToMock.mockClear();
 
@@ -1459,7 +1468,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(47);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(47);
+      expect(getDisplayedFrame()).toBe(47);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
@@ -1530,7 +1539,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBe(70);
+      expect(getDisplayedFrame()).toBe(70);
     });
     seekToMock.mockClear();
 
@@ -1545,7 +1554,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(47);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(47);
+      expect(getDisplayedFrame()).toBe(47);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
   });
@@ -1622,7 +1631,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     expect(scrubCanvas.style.visibility).toBe('hidden');
-    expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+    expect(getDisplayedFrame()).toBeNull();
   });
 
   it('keeps fast-scrub overlay visible until Player confirms the exact scrub release frame', async () => {
@@ -1645,7 +1654,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
     seekToMock.mockClear();
@@ -1658,7 +1667,7 @@ describe('VideoPreview sync behavior', () => {
     await waitFor(() => {
       expect(seekToMock).toHaveBeenCalledWith(48);
     });
-    expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+    expect(getDisplayedFrame()).toBe(48);
     expect(scrubCanvas.style.visibility).toBe('visible');
 
     act(() => {
@@ -1667,7 +1676,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(usePlaybackStore.getState().currentFrame).toBe(48);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -1676,7 +1685,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(getDisplayedFrame()).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
     });
   });
@@ -1755,7 +1764,7 @@ describe('VideoPreview sync behavior', () => {
     const renderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(48);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(48);
+      expect(getDisplayedFrame()).toBe(48);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -1764,7 +1773,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(getDisplayedFrame()).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
     });
   });
@@ -1846,7 +1855,7 @@ describe('VideoPreview sync behavior', () => {
       expect(renderer.prewarmFrame).toHaveBeenCalledWith(41);
       expect(renderer.prewarmFrame).toHaveBeenCalledWith(42);
       expect(scrubCanvas.style.visibility).toBe('hidden');
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(getDisplayedFrame()).toBeNull();
     });
 
     const prerenderedStartFrameCalls = renderer.renderFrame.mock.calls.filter(
@@ -1858,7 +1867,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBe(40);
+      expect(getDisplayedFrame()).toBe(40);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2036,7 +2045,7 @@ describe('VideoPreview sync behavior', () => {
 
     await waitFor(() => {
       expect(renderer.renderFrame).toHaveBeenCalledWith(61);
-      expect(usePlaybackStore.getState().displayedFrame).toBe(61);
+      expect(getDisplayedFrame()).toBe(61);
       expect(scrubCanvas.style.visibility).toBe('visible');
     });
 
@@ -2045,7 +2054,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(getDisplayedFrame()).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
     });
   });
@@ -2133,7 +2142,7 @@ describe('VideoPreview sync behavior', () => {
     });
 
     await waitFor(() => {
-      expect(usePlaybackStore.getState().displayedFrame).toBeNull();
+      expect(getDisplayedFrame()).toBeNull();
       expect(scrubCanvas.style.visibility).toBe('hidden');
     });
   });

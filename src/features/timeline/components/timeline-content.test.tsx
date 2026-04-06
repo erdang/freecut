@@ -4,6 +4,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useEditorStore } from '@/shared/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useSelectionStore } from '@/shared/state/selection';
 import type { TimelineTrack, VideoItem } from '@/types/timeline';
 
@@ -135,7 +136,6 @@ function resetStores() {
   usePlaybackStore.setState({
     currentFrame: 0,
     currentFrameEpoch: 0,
-    displayedFrame: null,
     isPlaying: false,
     playbackRate: 1,
     loop: false,
@@ -146,11 +146,14 @@ function resetStores() {
     previewFrameEpoch: 0,
     frameUpdateEpoch: 0,
     previewItemId: null,
+    useProxy: true,
+    previewQuality: 1,
+  });
+  usePreviewBridgeStore.setState({
+    displayedFrame: null,
     captureFrame: null,
     captureFrameImageData: null,
     captureCanvasSource: null,
-    useProxy: true,
-    previewQuality: 1,
   });
 
   useTimelineStore.setState({

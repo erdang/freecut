@@ -12,7 +12,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useTimelineSettingsStore } from '@/features/preview/deps/timeline-store';
-import { resolvePreviewTransitionDecision } from '../utils/preview-state-coordinator';
+import { resolvePreviewTransitionFromPlaybackStates } from '../utils/preview-state-coordinator';
 import {
   PLAYER_BACKWARD_SCRUB_SEEK_THROTTLE_MS,
   PLAYER_BACKWARD_SCRUB_SEEK_QUANTIZE_FRAMES,
@@ -151,19 +151,10 @@ export function useCustomPlayer(
     const unsubscribe = usePlaybackStore.subscribe((state, prevState) => {
       if (!playerRef.current) return;
 
-      const transition = resolvePreviewTransitionDecision({
-        prev: {
-          isPlaying: prevState.isPlaying,
-          previewFrame: prevState.previewFrame,
-          currentFrame: prevState.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef?.current === true,
-        },
-        next: {
-          isPlaying: state.isPlaying,
-          previewFrame: state.previewFrame,
-          currentFrame: state.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef?.current === true,
-        },
+      const transition = resolvePreviewTransitionFromPlaybackStates({
+        prev: prevState,
+        next: state,
+        isGizmoInteracting: isGizmoInteractingRef?.current === true,
       });
 
       if (!transition.currentFrameChanged) return;
@@ -201,19 +192,10 @@ export function useCustomPlayer(
 
     return usePlaybackStore.subscribe((state, prev) => {
       if (!playerRef.current) return;
-      const transition = resolvePreviewTransitionDecision({
-        prev: {
-          isPlaying: prev.isPlaying,
-          previewFrame: prev.previewFrame,
-          currentFrame: prev.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef?.current === true,
-        },
-        next: {
-          isPlaying: state.isPlaying,
-          previewFrame: state.previewFrame,
-          currentFrame: state.currentFrame,
-          isGizmoInteracting: isGizmoInteractingRef?.current === true,
-        },
+      const transition = resolvePreviewTransitionFromPlaybackStates({
+        prev,
+        next: state,
+        isGizmoInteracting: isGizmoInteractingRef?.current === true,
       });
       if (!transition.previewFrameChanged) return;
       const interactionMode = transition.next.mode;
