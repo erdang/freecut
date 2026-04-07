@@ -503,8 +503,14 @@ async function renderVideoItem(
 
   // Normal: play from sourceStart forwards
   // sourceStart is in source-native FPS frames, so divide by sourceFps (not project fps)
+  // Snap to nearest source frame boundary to avoid floating-point drift
+  // that can cause Math.floor(sourceTime * sourceFps) to land on the wrong frame.
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
-  const sourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+  const rawSourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+  const snappedSourceFrame = Math.round(rawSourceTime * sourceFps);
+  const sourceTime = Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
+    ? (snappedSourceFrame + 1e-4) / sourceFps
+    : rawSourceTime;
   const tier2ToleranceSeconds = getTier2VideoFrameToleranceSeconds(sourceFps);
   const domVideo = isPreviewMode && rctx.domVideoElementProvider && sourceFrameOffset === 0
     ? rctx.domVideoElementProvider(item.id)

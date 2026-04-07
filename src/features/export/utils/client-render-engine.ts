@@ -92,6 +92,16 @@ function getLog() { return createLogger('ClientRenderEngine'); }
 // ---------------------------------------------------------------------------
 
 /**
+ * Snap a source time to the nearest frame boundary to avoid floating-point
+ * drift where `Math.floor(time * fps)` lands on the wrong frame.
+ */
+function snapSourceTime(time: number, fps: number): number {
+  const frame = time * fps;
+  const rounded = Math.round(frame);
+  return Math.abs(frame - rounded) < 1e-6 ? (rounded + 1e-4) / fps : time;
+}
+
+/**
  * Check if an image item is a potentially animated image (GIF or WebP).
  * Static WebP files will be detected during frame extraction and fall back
  * to regular image rendering.
@@ -1623,7 +1633,7 @@ export async function createCompositionRenderer(
         const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
         const sourceFps = item.sourceFps ?? fps;
         const speed = item.speed ?? 1;
-        const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+        const sourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
 
         try {
@@ -1707,7 +1717,7 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const sourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
 
           const existing = batchByExtractor.get(item.id);
@@ -1759,7 +1769,7 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const sourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
           try {
             await extractor.drawFrame(ctx2d, clampedTime, 0, 0, 1, 1);
@@ -1810,7 +1820,7 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const baseSourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const baseSourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
           try {
             await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1);
           } catch {

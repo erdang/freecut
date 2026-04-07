@@ -145,15 +145,7 @@ export function buildPreviewTransitionData({
       playbackTransitionComplexStartFrames.add(window.startFrame);
     }
 
-    const leftOriginId = window.leftClip.originId;
-    const rightOriginId = window.rightClip.originId;
-    const cooldownFrames = (
-      leftOriginId
-      && rightOriginId
-      && leftOriginId === rightOriginId
-    )
-      ? 0
-      : playbackTransitionCooldownFrames;
+    const cooldownFrames = playbackTransitionCooldownFrames;
 
     return {
       startFrame: window.startFrame,

@@ -5,6 +5,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
 import {
   getBestDomVideoElementForItem,
   transitionSafePlay,
+  snapSourceTime,
 } from '@/features/preview/deps/composition-runtime';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
 
@@ -175,7 +176,7 @@ export function usePreviewTransitionSessionController({
         const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
         const sourceFps = clip.sourceFps ?? fps;
         const clipSpeed = clip.speed ?? 1;
-        const targetTime = (sourceStart / sourceFps) + (localFrame * clipSpeed / fps);
+        const targetTime = snapSourceTime((sourceStart / sourceFps) + (localFrame * clipSpeed / fps), sourceFps);
         const videoDuration = el.duration || Infinity;
         const clamped = Math.min(Math.max(0, targetTime), videoDuration - 0.05);
         const drift = Math.abs(el.currentTime - clamped);
