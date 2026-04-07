@@ -227,13 +227,11 @@ describe('snapSourceTime floating-point regression', () => {
     // (values where sourceStart/fps produces repeating decimals)
     for (const sourceStart of [1, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47,
                                 100, 439, 997, 1234, 2128, 3333, 9999]) {
-      let prevSourceFrame = -1;
       for (let localFrame = 0; localFrame < 100; localFrame++) {
         const sourceTime = getVideoTargetTimeSeconds(sourceStart, fps, localFrame, 1, fps);
         const sourceFrame = Math.floor(sourceTime * fps);
         const expected = sourceStart + localFrame;
         expect(sourceFrame).toBe(expected);
-        prevSourceFrame = sourceFrame;
       }
     }
   });
