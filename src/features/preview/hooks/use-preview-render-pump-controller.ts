@@ -387,6 +387,9 @@ export function usePreviewRenderPump({
       }, 0);
     };
 
+    // Single-owner async pump for scrub rendering. Callers never spawn a
+    // second worker; they only replace `scrubRequestedFrameRef` and let the
+    // current owner pick up the newest request on the next loop iteration.
     const pumpRenderLoop = async () => {
       if (scrubRenderInFlightRef.current) return;
       scrubRenderInFlightRef.current = true;
@@ -751,11 +754,17 @@ export function usePreviewRenderPump({
     // frame drop rate during playback to near zero.
     let playbackRafId: number | null = null;
     let lastRafRenderedFrame = -1;
+    // Playback start can wait on variable-speed decoder prewarm. While that
+    // work is pending, subscription updates can retarget state but must not
+    // start a competing async pump ahead of the rAF handoff.
     let playbackPrewarmInFlight = false;
     const pausePrewarmedItemIds = new Set<string>();
 
     let lastRafPresentedFrame = -1;
 
+    // The rAF loop keeps playback aligned to display cadence, but it still
+    // preserves the single-owner invariant: it only presents buffered frames
+    // synchronously or queues the latest target for `pumpRenderLoop`.
     const playbackRafPump = () => {
       playbackRafId = null;
       if (!scrubMountedRef.current) return;
@@ -1567,4 +1576,3 @@ export function usePreviewRenderPump({
     trackPlayerSeek,
   ]);
 }
-
