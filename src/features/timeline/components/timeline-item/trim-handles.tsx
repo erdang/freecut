@@ -8,13 +8,7 @@ import {
 } from '@/components/ui/context-menu';
 import { cn } from '@/shared/ui/cn';
 import type { SmartTrimIntent } from '../../utils/smart-trim-zones';
-import { CONSTRAINED_COLORS, FREE_COLORS, type ActiveEdgeState } from './trim-constants';
-
-interface EdgeColors {
-  edge: string;
-  glow: string;
-  fade: string;
-}
+import { CONSTRAINED_COLORS, FREE_COLORS, type ActiveEdgeState, type EdgeColors } from './trim-constants';
 
 const TRIM_COLORS: EdgeColors = {
   edge: 'rgba(255, 255, 255, 0.85)',

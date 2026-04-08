@@ -36,6 +36,7 @@ export function createDeleteActions(
     set({ error: null });
 
     const previousItems = get().mediaItems;
+    const previousSelected = get().selectedMediaIds;
     applyOptimisticDelete(set, ids);
 
     try {
@@ -44,6 +45,7 @@ export function createDeleteActions(
     } catch (error) {
       set({
         mediaItems: previousItems,
+        selectedMediaIds: previousSelected,
         error: error instanceof Error ? error.message : fallbackError,
       });
       throw error;

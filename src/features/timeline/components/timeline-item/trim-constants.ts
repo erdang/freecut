@@ -1,4 +1,4 @@
-interface EdgeColors {
+export interface EdgeColors {
   edge: string;
   glow: string;
   fade: string;

@@ -9,7 +9,7 @@ import type {
 } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 import { proxyService } from '../services/proxy-service';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
@@ -201,6 +201,10 @@ export const useMediaLibraryStore = create<
 
         set({ isLoading: true, error: null });
 
+        const opId = createOperationId();
+        const event = logger.startEvent('loadMediaItems', opId);
+        event.set('projectId', currentProjectId);
+
         try {
           // v3: Load project-scoped media only
           const mediaItems = await mediaLibraryService.getMediaForProject(currentProjectId);
@@ -211,11 +215,15 @@ export const useMediaLibraryStore = create<
             isLoading: false,
           });
 
+          event.set('mediaCount', mediaItems.length);
+
           const transcriptStatus = await loadTranscriptStatusMap(mediaItems);
           set({
             transcriptStatus,
             transcriptProgress: new Map(),
           });
+
+          event.set('transcriptsReady', [...transcriptStatus.values()].filter((s) => s === 'ready').length);
 
           // Load existing proxies from OPFS and regenerate stale entries in the background.
           try {
@@ -223,8 +231,10 @@ export const useMediaLibraryStore = create<
           } catch (error) {
             logger.warn('[MediaLibraryStore] Proxy initialization failed:', error);
           }
+
+          event.success({ mediaCount: mediaItems.length });
         } catch (error) {
-          logger.error('[MediaLibraryStore] loadMediaItems error:', error);
+          event.failure(error instanceof Error ? error : new Error(String(error)));
           const errorMessage =
             error instanceof Error ? error.message : 'Failed to load media';
           set({ error: errorMessage, isLoading: false });

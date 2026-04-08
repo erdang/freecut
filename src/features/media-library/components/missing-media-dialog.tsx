@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { useMediaLibraryStore } from '../stores/media-library-store';
 import { useProjectStore } from '@/features/media-library/deps/projects';
-import { showMediaFilePicker } from '../utils/media-file-picker';
+import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker';
 
 export function MissingMediaDialog() {
   const showDialog = useMediaLibraryStore((s) => s.showMissingMediaDialog);

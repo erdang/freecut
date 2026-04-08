@@ -234,20 +234,22 @@ describe('createImportActions', () => {
     vi.stubGlobal('window', mockWindow);
     vi.stubGlobal('navigator', mockNavigator);
 
-    let currentState = createMockState();
-    const set = vi.fn((updater: ImportUpdater) => {
-      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState & MediaLibraryActions;
-    });
-    const get = vi.fn(() => currentState);
+    try {
+      let currentState = createMockState();
+      const set = vi.fn((updater: ImportUpdater) => {
+        currentState = applyStateUpdate(currentState, updater) as MediaLibraryState & MediaLibraryActions;
+      });
+      const get = vi.fn(() => currentState);
 
-    const actions = createImportActions(set, get);
-    const result = await actions.importMedia();
+      const actions = createImportActions(set, get);
+      const result = await actions.importMedia();
 
-    expect(result).toEqual([]);
-    expect(currentState.error).toBe('File picker not supported in this browser. Use Chrome or Edge.');
-    expect(currentState.errorLink).toBeNull();
-
-    vi.stubGlobal('window', originalWindow);
-    vi.stubGlobal('navigator', originalNavigator);
+      expect(result).toEqual([]);
+      expect(currentState.error).toBe('File picker not supported in this browser. Use Chrome or Edge.');
+      expect(currentState.errorLink).toBeNull();
+    } finally {
+      vi.stubGlobal('window', originalWindow);
+      vi.stubGlobal('navigator', originalNavigator);
+    }
   });
 });

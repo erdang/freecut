@@ -275,7 +275,20 @@ class MediaLibraryService {
   }
 
   private async deleteOpfsContentIfUnreferenced(media: MediaMetadata): Promise<void> {
-    if (media.storageType !== 'opfs' || !media.contentHash) {
+    if (media.storageType !== 'opfs') {
+      return;
+    }
+
+    // If contentHash is missing but opfsPath exists, delete the OPFS file directly
+    // to avoid orphaning files that were stored without content-addressing.
+    if (!media.contentHash) {
+      if (media.opfsPath) {
+        try {
+          await opfsService.deleteFile(media.opfsPath);
+        } catch (error) {
+          logger.warn('Failed to delete OPFS file (no contentHash):', error);
+        }
+      }
       return;
     }
 
@@ -694,18 +707,17 @@ class MediaLibraryService {
     projectId: string,
     mediaIds: string[]
   ): Promise<void> {
-    const results = await Promise.allSettled(
-      mediaIds.map((mediaId) => this.deleteMediaFromProject(projectId, mediaId))
-    );
+    // Serialize deletions to avoid races on shared state (proxy aliases,
+    // content ref counts, OPFS files) that concurrent deletes would cause.
+    const errors: Array<{ id: string; error: unknown }> = [];
 
-    const errors = results
-      .map((result, i) => ({ result, id: mediaIds[i] }))
-      .filter((r): r is { result: PromiseRejectedResult; id: string } =>
-        r.result.status === 'rejected'
-      );
-
-    for (const { id, result } of errors) {
-      logger.error(`Failed to delete media ${id}:`, result.reason);
+    for (const mediaId of mediaIds) {
+      try {
+        await this.deleteMediaFromProject(projectId, mediaId);
+      } catch (error) {
+        logger.error(`Failed to delete media ${mediaId}:`, error);
+        errors.push({ id: mediaId, error });
+      }
     }
 
     if (errors.length === mediaIds.length) {
@@ -728,15 +740,13 @@ class MediaLibraryService {
   async deleteAllMediaFromProject(projectId: string): Promise<void> {
     const mediaIds = await getProjectMediaIds(projectId);
 
-    const results = await Promise.allSettled(
-      mediaIds.map((mediaId) => this.deleteMediaFromProject(projectId, mediaId))
-    );
-
-    results.forEach((result, i) => {
-      if (result.status === 'rejected') {
-        logger.error(`Failed to delete media ${mediaIds[i]} from project:`, result.reason);
+    for (const mediaId of mediaIds) {
+      try {
+        await this.deleteMediaFromProject(projectId, mediaId);
+      } catch (error) {
+        logger.error(`Failed to delete media ${mediaId} from project:`, error);
       }
-    });
+    }
   }
 
   /**

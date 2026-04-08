@@ -153,7 +153,17 @@ export function createImportActions(
     for (const handle of handles) {
       if (!handle) continue;
       const tempId = crypto.randomUUID();
-      const file = await handle.getFile();
+
+      let file: File;
+      try {
+        file = await handle.getFile();
+      } catch (error) {
+        // getFile() can fail if permission is denied or file is missing —
+        // remove the placeholder that was about to be inserted and skip.
+        logger.error(`Failed to read file from handle "${handle.name}":`, error);
+        continue;
+      }
+
       const tempItem = buildOptimisticMediaItem(handle, file, tempId);
 
       set((state) => ({
@@ -271,8 +281,7 @@ export function createImportActions(
           set({ error: error.message });
           event.failure(error);
         } else {
-          event.set('outcome', 'cancelled');
-          logger.event('import', { opId, outcome: 'cancelled' });
+          event.success({ outcome: 'cancelled', imported: 0, duplicates: 0, failed: 0, unsupportedCodecs: 0 });
         }
         return [];
       }

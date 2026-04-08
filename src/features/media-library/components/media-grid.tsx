@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 import { GRID_MIN_SIZE_PX, GRID_GAP_BY_SIZE } from './media-grid-constants';
-import { showMediaFilePicker } from '../utils/media-file-picker';
+import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker';
 
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void;

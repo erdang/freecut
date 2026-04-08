@@ -125,7 +125,7 @@ describe('createDeleteActions', () => {
     expect(proxyServiceMocks.clearProxyKey).toHaveBeenCalledWith('media-1');
   });
 
-  it('restores media items and sets an error when delete fails', async () => {
+  it('restores media items and selectedMediaIds and sets an error when delete fails', async () => {
     mediaLibraryServiceMocks.deleteMediaFromProject.mockRejectedValue(new Error('Delete failed hard'));
 
     let currentState = createMockState();
@@ -138,6 +138,7 @@ describe('createDeleteActions', () => {
 
     await expect(actions.deleteMedia('media-1')).rejects.toThrow('Delete failed hard');
     expect(currentState.mediaItems.map((item) => item.id)).toEqual(['media-1', 'media-2']);
+    expect(currentState.selectedMediaIds).toEqual(['media-1']);
     expect(currentState.error).toBe('Delete failed hard');
     expect(blobUrlManagerMocks.release).not.toHaveBeenCalled();
   });
