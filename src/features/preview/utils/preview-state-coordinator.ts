@@ -13,6 +13,11 @@ export interface PreviewRuntimeState {
   isGizmoInteracting: boolean;
 }
 
+export type PreviewPlaybackState = Pick<
+  PreviewRuntimeState,
+  'isPlaying' | 'previewFrame' | 'currentFrame'
+>;
+
 export interface PreviewRuntimeSnapshot {
   mode: PreviewInteractionMode;
   anchorFrame: number;
@@ -53,6 +58,27 @@ export function getPreviewRuntimeSnapshot(
   };
 }
 
+export function getPreviewRuntimeStateFromPlaybackState(
+  state: PreviewPlaybackState,
+  isGizmoInteracting: boolean,
+): PreviewRuntimeState {
+  return {
+    isPlaying: state.isPlaying,
+    previewFrame: state.previewFrame,
+    currentFrame: state.currentFrame,
+    isGizmoInteracting,
+  };
+}
+
+export function getPreviewRuntimeSnapshotFromPlaybackState(
+  state: PreviewPlaybackState,
+  isGizmoInteracting: boolean,
+): PreviewRuntimeSnapshot {
+  return getPreviewRuntimeSnapshot(
+    getPreviewRuntimeStateFromPlaybackState(state, isGizmoInteracting)
+  );
+}
+
 export function resolvePreviewTransitionDecision(input: {
   prev: PreviewRuntimeState;
   next: PreviewRuntimeState;
@@ -88,4 +114,17 @@ export function resolvePreviewTransitionDecision(input: {
     }),
     preloadBurstTrigger,
   };
+}
+
+export function resolvePreviewTransitionFromPlaybackStates(input: {
+  prev: PreviewPlaybackState;
+  next: PreviewPlaybackState;
+  isGizmoInteracting: boolean;
+  fps?: number;
+}): PreviewTransitionDecision {
+  return resolvePreviewTransitionDecision({
+    prev: getPreviewRuntimeStateFromPlaybackState(input.prev, input.isGizmoInteracting),
+    next: getPreviewRuntimeStateFromPlaybackState(input.next, input.isGizmoInteracting),
+    fps: input.fps,
+  });
 }

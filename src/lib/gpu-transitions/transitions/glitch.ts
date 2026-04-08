@@ -76,7 +76,14 @@ fn glitchFragment(input: VertexOutput) -> @location(0) vec4f {
   let rA = textureSample(rightTex, texSampler, dUv).a;
   let rightColor = vec4f(rR, rG, rB, rA);
 
-  var color = mix(leftColor, rightColor, useRight);
+  // Detect truly empty samples using the alpha channel; fall back to
+  // luminance only when alpha is not a reliable signal.
+  let leftEmpty  = leftColor.a  < 0.01;
+  let rightEmpty = rightColor.a < 0.01;
+  let safeLeft  = select(leftColor,  rightColor, leftEmpty  && !rightEmpty);
+  let safeRight = select(rightColor, leftColor,  rightEmpty && !leftEmpty);
+
+  var color = mix(safeLeft, safeRight, useRight);
 
   // --- Digital noise on glitched regions ---
   let noiseSeed = hash(vec2f(uv.x * params.width * 0.5,

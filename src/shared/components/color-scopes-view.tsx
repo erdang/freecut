@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Activity } from 'lucide-react';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { cn } from '@/shared/ui/cn';
 import { Button } from '@/components/ui/button';
 import { ScopeRenderer } from '@/infrastructure/gpu/scopes';
@@ -411,8 +412,8 @@ export const ColorScopesView = memo(function ColorScopesView({
   const [stackLayout, setStackLayout] = useState<StackScopeLayout>(() => loadStackLayout());
 
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
-  const captureFrameImageData = usePlaybackStore((s) => s.captureFrameImageData);
-  const captureFrame = usePlaybackStore((s) => s.captureFrame);
+  const captureFrameImageData = usePreviewBridgeStore((s) => s.captureFrameImageData);
+  const captureFrame = usePreviewBridgeStore((s) => s.captureFrame);
   const isEmbeddedStackLayout = embedded && embeddedLayout === 'stack';
   const showHistogram = embedded && (!isEmbeddedStackLayout || stackLayout === 'all');
 
@@ -533,7 +534,7 @@ export const ColorScopesView = memo(function ColorScopesView({
 
       try {
         // Try near-zero-copy canvas path first
-        const canvasSourceFn = usePlaybackStore.getState().captureCanvasSource;
+        const canvasSourceFn = usePreviewBridgeStore.getState().captureCanvasSource;
         if (canvasSourceFn) {
           const source = await canvasSourceFn();
           if (source && !cancelled) {
@@ -582,8 +583,7 @@ export const ColorScopesView = memo(function ColorScopesView({
     };
 
     const fallbackToImageData = async (r: ScopeRenderer) => {
-      const state = usePlaybackStore.getState();
-      const captureFn = state.captureFrameImageData;
+      const captureFn = usePreviewBridgeStore.getState().captureFrameImageData;
       if (!captureFn) return;
       const sampleW = isPlayingRef.current ? SAMPLE_WIDTH_PLAYING : SAMPLE_WIDTH_PAUSED;
       const sampleH = isPlayingRef.current ? SAMPLE_HEIGHT_PLAYING : SAMPLE_HEIGHT_PAUSED;

@@ -70,6 +70,7 @@ import {
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
   resolveFrameRenderScene,
+  snapSourceTime,
 } from '@/features/export/deps/composition-runtime';
 import {
   renderItem,
@@ -1623,7 +1624,7 @@ export async function createCompositionRenderer(
         const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
         const sourceFps = item.sourceFps ?? fps;
         const speed = item.speed ?? 1;
-        const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+        const sourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
         const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
 
         try {
@@ -1707,7 +1708,7 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const sourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
 
           const existing = batchByExtractor.get(item.id);
@@ -1759,7 +1760,7 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const sourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const sourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
           const clampedTime = Math.max(0, Math.min(sourceTime, extractor.getDuration() - 0.01));
           try {
             await extractor.drawFrame(ctx2d, clampedTime, 0, 0, 1, 1);
@@ -1810,7 +1811,7 @@ export async function createCompositionRenderer(
           const sourceStart = item.sourceStart ?? item.trimStart ?? 0;
           const sourceFps = item.sourceFps ?? fps;
           const speed = item.speed ?? 1;
-          const baseSourceTime = (sourceStart / sourceFps) + (localFrame / fps) * speed;
+          const baseSourceTime = snapSourceTime((sourceStart / sourceFps) + (localFrame / fps) * speed, sourceFps);
           try {
             await extractor.drawFrame(ctx2d, Math.max(0, baseSourceTime), 0, 0, 1, 1);
           } catch {

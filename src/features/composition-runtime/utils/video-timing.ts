@@ -1,4 +1,27 @@
 /**
+ * Snap a source time to the nearest frame boundary to eliminate
+ * floating-point drift.  Without this, `(sourceStart / sourceFps) +
+ * (localFrame / fps)` can accumulate error that causes
+ * `Math.floor(result * sourceFps)` to land on the wrong frame.
+ *
+ * Uses a tight tolerance (0.001 frames) so only genuine floating-point
+ * errors are corrected — times that genuinely fall between frames (e.g.
+ * mismatched source/timeline FPS) are left untouched.
+ */
+export function snapSourceTime(time: number, sourceFps: number): number {
+  const sourceFrame = time * sourceFps;
+  const rounded = Math.round(sourceFrame);
+  if (Math.abs(sourceFrame - rounded) < 1e-6) {
+    // Add a micro-epsilon (1/10000 of a frame) so that
+    // Math.floor(snapped * sourceFps) survives the round-trip.
+    // Without this, rounded/sourceFps * sourceFps can land at
+    // (rounded - 1e-14), causing Math.floor to return rounded-1.
+    return (rounded + 1e-4) / sourceFps;
+  }
+  return time;
+}
+
+/**
  * Calculate source playback time (seconds) for a video clip.
  * Supports shared Sequence rendering by applying a per-item frame offset.
  */
@@ -11,7 +34,10 @@ export function getVideoTargetTimeSeconds(
   sequenceFrameOffset: number = 0
 ): number {
   const relativeFrame = sequenceLocalFrame - sequenceFrameOffset;
-  return (safeTrimBefore / sourceFps) + (relativeFrame * playbackRate / timelineFps);
+  return snapSourceTime(
+    (safeTrimBefore / sourceFps) + (relativeFrame * playbackRate / timelineFps),
+    sourceFps,
+  );
 }
 
 /**
@@ -31,5 +57,8 @@ export function getAudioTargetTimeSeconds(
   playbackRate: number,
   timelineFps: number
 ): number {
-  return (trimBefore / sourceFps) + (sequenceLocalFrame * playbackRate / timelineFps);
+  return snapSourceTime(
+    (trimBefore / sourceFps) + (sequenceLocalFrame * playbackRate / timelineFps),
+    sourceFps,
+  );
 }

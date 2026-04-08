@@ -9,6 +9,7 @@ import {
 } from '@/features/editor/deps/timeline-store';
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useEditorStore } from '@/shared/state/editor/store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import {
@@ -97,7 +98,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const compositions = useCompositionsStore((s) => s.compositions);
 
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const volume = usePlaybackStore((s) => s.volume);

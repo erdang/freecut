@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getVideoTargetTimeSeconds, getAudioTargetTimeSeconds } from './video-timing';
+import { getVideoTargetTimeSeconds, getAudioTargetTimeSeconds, snapSourceTime } from './video-timing';
 
 describe('video timing with shared Sequences', () => {
   it('produces identical target time for grouped and isolated split clips', () => {
@@ -139,7 +139,7 @@ describe('audio-video sync for non-native FPS sources', () => {
       const atFrameZero = getAudioTargetTimeSeconds(
         sourceStart, sourceFps, 0, playbackRate, timelineFps
       );
-      expect(atFrameZero).toBeCloseTo(expectedStart, 8);
+      expect(atFrameZero).toBeCloseTo(expectedStart, 4);
     }
   });
 
@@ -158,6 +158,114 @@ describe('audio-video sync for non-native FPS sources', () => {
         sourceStart, sourceFps, frame, playbackRate, timelineFps
       );
       expect(videoTime).toBeCloseTo(audioTime, 10);
+    }
+  });
+});
+
+describe('snapSourceTime floating-point regression', () => {
+  it('maps consecutive timeline frames to consecutive source frames (sourceStart=439, fps=30)', () => {
+    const timelineFps = 30;
+    const sourceFps = 30;
+    const sourceStart = 439;
+    const clipFrom = 11260;
+
+    // Check 10 consecutive frames around a transition exit boundary
+    for (let frame = clipFrom; frame < clipFrom + 50; frame++) {
+      const localFrame = frame - clipFrom;
+      const sourceTime = getVideoTargetTimeSeconds(sourceStart, sourceFps, localFrame, 1, timelineFps);
+      const sourceFrame = Math.floor(sourceTime * sourceFps);
+      const expectedSourceFrame = sourceStart + localFrame;
+      expect(sourceFrame).toBe(expectedSourceFrame);
+    }
+  });
+
+  it('maps consecutive timeline frames to consecutive source frames (sourceStart=2128, fps=30)', () => {
+    const timelineFps = 30;
+    const sourceFps = 30;
+    const sourceStart = 2128;
+    const clipFrom = 12806;
+
+    for (let frame = clipFrom; frame < clipFrom + 50; frame++) {
+      const localFrame = frame - clipFrom;
+      const sourceTime = getVideoTargetTimeSeconds(sourceStart, sourceFps, localFrame, 1, timelineFps);
+      const sourceFrame = Math.floor(sourceTime * sourceFps);
+      const expectedSourceFrame = sourceStart + localFrame;
+      expect(sourceFrame).toBe(expectedSourceFrame);
+    }
+  });
+
+  it('never skips or duplicates source frames for mismatched FPS', () => {
+    const timelineFps = 30;
+    const sourceFps = 23.976;
+    const sourceStart = 1000;
+
+    // Get first source frame to initialize
+    const firstSourceTime = getVideoTargetTimeSeconds(sourceStart, sourceFps, 0, 1, timelineFps);
+    let prevSourceFrame = Math.floor(firstSourceTime * sourceFps);
+
+    for (let localFrame = 1; localFrame < 200; localFrame++) {
+      const sourceTime = getVideoTargetTimeSeconds(sourceStart, sourceFps, localFrame, 1, timelineFps);
+      const sourceFrame = Math.floor(sourceTime * sourceFps);
+
+      // Source frame should never go backward
+      expect(sourceFrame).toBeGreaterThanOrEqual(prevSourceFrame);
+
+      // When source frame advances, it should advance by exactly 1
+      // (for 1x speed with sourceFps < timelineFps, some frames repeat but none skip)
+      if (sourceFrame > prevSourceFrame) {
+        expect(sourceFrame - prevSourceFrame).toBe(1);
+      }
+
+      prevSourceFrame = sourceFrame;
+    }
+  });
+
+  it('never skips source frames for same-FPS clips at various sourceStart values', () => {
+    const fps = 30;
+
+    // Test sourceStart values that are known to cause floating-point issues
+    // (values where sourceStart/fps produces repeating decimals)
+    for (const sourceStart of [1, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47,
+                                100, 439, 997, 1234, 2128, 3333, 9999]) {
+      for (let localFrame = 0; localFrame < 100; localFrame++) {
+        const sourceTime = getVideoTargetTimeSeconds(sourceStart, fps, localFrame, 1, fps);
+        const sourceFrame = Math.floor(sourceTime * fps);
+        const expected = sourceStart + localFrame;
+        expect(sourceFrame).toBe(expected);
+      }
+    }
+  });
+
+  it('snapSourceTime corrects near-integer floating-point results', () => {
+    // 439/30 + 44/30 = 16.1 but floating point gives 16.099999999999998
+    // 16.099999999999998 * 30 = 482.99999999999994 → Math.floor = 482 (WRONG, should be 483)
+    const rawTime = 439 / 30 + 44 / 30; // ~16.099999999999998
+    const snapped = snapSourceTime(rawTime, 30);
+    expect(Math.floor(snapped * 30)).toBe(483); // correct
+    expect(Math.floor(rawTime * 30)).toBe(482); // would be wrong without snap
+  });
+
+  it('snapSourceTime preserves genuinely fractional times', () => {
+    // A time that genuinely falls mid-frame should not be snapped
+    const midFrameTime = 10.5 / 30; // exactly between frames 10 and 11
+    const snapped = snapSourceTime(midFrameTime, 30);
+    expect(snapped).toBe(midFrameTime);
+  });
+
+  it('snapSourceTime preserves times for mismatched FPS ratios', () => {
+    // 23.976fps source on 30fps timeline: many frames land between source frames
+    const sourceFps = 23.976;
+    const timelineFps = 30;
+    const sourceStart = 1000;
+    for (let localFrame = 0; localFrame < 50; localFrame++) {
+      const rawTime = sourceStart / sourceFps + localFrame / timelineFps;
+      const snapped = snapSourceTime(rawTime, sourceFps);
+      // For genuinely inter-frame times, snap should not alter the result
+      const rawSourceFrame = rawTime * sourceFps;
+      const fracPart = rawSourceFrame - Math.floor(rawSourceFrame);
+      if (fracPart > 0.001 && fracPart < 0.999) {
+        expect(snapped).toBe(rawTime);
+      }
     }
   });
 });

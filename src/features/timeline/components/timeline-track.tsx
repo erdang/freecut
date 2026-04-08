@@ -4,6 +4,7 @@ import { createLogger } from '@/shared/logging/logger';
 const logger = createLogger('TimelineTrack');
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
+import { TimelineDropGhostPreviews } from './timeline-drop-ghost-previews';
 import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -19,13 +20,12 @@ import { mediaLibraryService } from '@/features/timeline/deps/media-library-serv
 import {
   resolveMediaUrl,
   getMediaDragData,
-  getMediaType,
-  extractValidMediaFileEntriesFromDataTransfer,
   type CompositionDragData,
 } from '@/features/timeline/deps/media-library-resolver';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { resolveEffectiveTrackStates } from '../utils/group-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
+import { useExternalDragPreview } from '../hooks/use-external-drag-preview';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
 import { wouldCreateCompositionCycle } from '../utils/composition-graph';
 import {
@@ -47,7 +47,12 @@ import {
   buildGhostPreviewsFromTrackMediaDropPlan,
   planTrackMediaDropPlacements,
 } from '../utils/track-media-drop';
-import { preflightFirstTimelineVideoProjectMatch } from '../utils/external-file-project-match';
+import {
+  applyResolvedTimelineDrop,
+  resolveDroppedMediaEntriesFromExternalFiles,
+  resolveDroppedMediaEntriesFromPayload,
+  type DroppedMediaEntry,
+} from '../utils/drop-execution';
 import { toast } from 'sonner';
 import {
   ContextMenu,
@@ -55,82 +60,19 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '@/components/ui/context-menu';
+import {
+  isDroppableMediaType,
+  isValidDragMediaItem,
+} from '../utils/drag-drop-preview';
 
 interface TimelineTrackProps {
   track: TimelineTrackType;
   timelineWidth?: number;
 }
 
-// Type for ghost preview items during drag
 type GhostPreviewItem = TrackDropGhostPreview;
 
-interface DragMediaItem {
-  mediaId: string;
-  mediaType: DroppableMediaType;
-  fileName: string;
-  duration: number;
-}
-
-interface DroppedMediaEntry {
-  media: MediaMetadata;
-  mediaId: string;
-  mediaType: DroppableMediaType;
-  label: string;
-}
-
-interface ExternalPreviewEntry {
-  label: string;
-  mediaType: DroppableMediaType;
-  hasLinkedAudio?: boolean;
-}
-
 const MULTI_DROP_METADATA_CONCURRENCY = 3;
-
-function getGhostHighlightClasses(ghostPreviews: GhostPreviewItem[]): string {
-  if (ghostPreviews.some((ghost) => ghost.type === 'audio')) {
-    return 'border-timeline-audio/60 bg-timeline-audio/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'video')) {
-    return 'border-timeline-video/60 bg-timeline-video/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'text')) {
-    return 'border-timeline-text/60 bg-timeline-text/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'shape')) {
-    return 'border-timeline-shape/60 bg-timeline-shape/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'adjustment')) {
-    return 'border-slate-400/60 bg-slate-400/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'image')) {
-    return 'border-timeline-image/60 bg-timeline-image/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'composition')) {
-    return 'border-violet-400/60 bg-violet-600/10';
-  }
-  if (ghostPreviews.some((ghost) => ghost.type === 'external-file')) {
-    return 'border-orange-500/60 bg-orange-500/10';
-  }
-  return 'border-primary/50 bg-primary/10';
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
-}
-
-function isDroppableMediaType(value: unknown): value is DroppableMediaType {
-  return value === 'video' || value === 'audio' || value === 'image';
-}
-
-function isValidDragMediaItem(value: unknown): value is DragMediaItem {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Partial<DragMediaItem>;
-  return isNonEmptyString(candidate.mediaId)
-    && isDroppableMediaType(candidate.mediaType)
-    && isNonEmptyString(candidate.fileName)
-    && typeof candidate.duration === 'number'
-    && Number.isFinite(candidate.duration);
-}
 
 /**
  * Custom equality for TimelineTrack memo - compares track and width only
@@ -159,11 +101,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const [contextMenuFrame, setContextMenuFrame] = useState<number | null>(null);
   const [menuKey, setMenuKey] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
-  const externalPreviewItemsRef = useRef<ExternalPreviewEntry[] | null>(null);
-  const externalPreviewSignatureRef = useRef<string | null>(null);
-  const externalPreviewPromiseRef = useRef<Promise<void> | null>(null);
-  const externalPreviewTokenRef = useRef(0);
-  const lastDragFrameRef = useRef(0);
 
   // Resolve whether this track is effectively disabled for drops.
   // Uses the shared resolveEffectiveTrackStates helper so group-inherited
@@ -197,10 +134,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
   const ghostPreviews = useMemo(
     () => allGhostPreviews.filter((ghost) => ghost.targetTrackId === track.id),
     [allGhostPreviews, track.id]
-  );
-  const ghostHighlightClasses = useMemo(
-    () => getGhostHighlightClasses(ghostPreviews),
-    [ghostPreviews]
   );
 
   const getDropFrame = useCallback((event: React.DragEvent): number | null => {
@@ -400,6 +333,19 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     }];
   }, [fps, frameToPixels, track.id]);
 
+  const {
+    clearExternalPreviewSession,
+    externalPreviewItemsRef,
+    lastDragFrameRef,
+    primeExternalPreviewEntries,
+  } = useExternalDragPreview<GhostPreviewItem>({
+    buildGhostPreviews: buildGhostPreviewsForEntries,
+    setGhostPreviews: setTrackGhostPreviews,
+    onError: (error) => {
+      logger.warn('Failed to build external drag preview:', error);
+    },
+  });
+
   const buildTimelineTemplateItem = useCallback((template: unknown, dropFrame: number): TimelineItemType | null => {
     if (!isTimelineTemplateDragData(template)) {
       return null;
@@ -441,61 +387,6 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       },
     });
   }, [fps, getCurrentCanvasSize, track.id]);
-
-  const clearExternalPreviewSession = useCallback(() => {
-    externalPreviewItemsRef.current = null;
-    externalPreviewSignatureRef.current = null;
-    externalPreviewPromiseRef.current = null;
-    externalPreviewTokenRef.current += 1;
-  }, []);
-
-  const primeExternalPreviewEntries = useCallback((dataTransfer: DataTransfer) => {
-    const signature = `${dataTransfer.items.length}:${Array.from(dataTransfer.items)
-      .map((item) => `${item.kind}:${item.type || 'unknown'}`)
-      .join('|')}`;
-
-    if (externalPreviewSignatureRef.current === signature && externalPreviewItemsRef.current) {
-      return;
-    }
-
-    if (externalPreviewSignatureRef.current === signature && externalPreviewPromiseRef.current) {
-      return;
-    }
-
-    clearExternalPreviewSession();
-    externalPreviewSignatureRef.current = signature;
-    const token = externalPreviewTokenRef.current;
-
-    const previewPromise = (async () => {
-      const { supported, entries } = await extractValidMediaFileEntriesFromDataTransfer(dataTransfer);
-      if (!supported || token !== externalPreviewTokenRef.current) {
-        return;
-      }
-
-      const previewEntries = entries.flatMap((entry) => (
-        entry.mediaType === 'video' || entry.mediaType === 'audio' || entry.mediaType === 'image'
-          ? [{
-            label: entry.file.name,
-            mediaType: entry.mediaType,
-          }]
-          : []
-      ));
-
-      externalPreviewItemsRef.current = previewEntries;
-      externalPreviewPromiseRef.current = null;
-
-      if (previewEntries.length > 0) {
-        setTrackGhostPreviews(buildGhostPreviewsForEntries(previewEntries, lastDragFrameRef.current));
-      }
-    })().catch((error) => {
-      if (token === externalPreviewTokenRef.current) {
-        externalPreviewPromiseRef.current = null;
-        logger.warn('Failed to build external drag preview:', error);
-      }
-    });
-
-    externalPreviewPromiseRef.current = previewPromise;
-  }, [buildGhostPreviewsForEntries, clearExternalPreviewSession, setTrackGhostPreviews]);
 
   // Get item IDs from the full store (not virtualized subset) so drag detection
   // works even if the source item scrolls out of the visible buffer mid-drag.
@@ -841,73 +732,24 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           return;
         }
 
-        let entries: DroppedMediaEntry[] = [];
-        if (data.type === 'media-items') {
-          const rawItems = Array.isArray(data.items) ? data.items : [];
-          const validItems = rawItems.filter(isValidDragMediaItem);
-          if (validItems.length !== rawItems.length) {
-            logger.warn('Skipping invalid media-items payload entries', {
-              invalidCount: rawItems.length - validItems.length,
-            });
-          }
-
-          const mediaById = new Map(getMedia.map((media) => [media.id, media]));
-          entries = validItems.flatMap((dragItem: DragMediaItem) => {
-            const media = mediaById.get(dragItem.mediaId);
-            if (!media) {
-              logger.error('Media not found:', dragItem.mediaId);
-              return [];
-            }
-
-            return [{
-              media,
-              mediaId: dragItem.mediaId,
-              mediaType: dragItem.mediaType,
-              label: dragItem.fileName,
-            }];
-          });
-        } else if (data.type === 'media-item' && data.mediaId && data.mediaType && data.fileName) {
-          if (!isDroppableMediaType(data.mediaType)) {
-            return;
-          }
-
-          const media = getMedia.find((entry) => entry.id === data.mediaId);
-          if (!media) {
-            logger.error('Media not found:', data.mediaId);
-            return;
-          }
-
-          entries = [{
-            media,
-            mediaId: data.mediaId,
-            mediaType: data.mediaType,
-            label: data.fileName,
-          }];
-        }
+        const entries = resolveDroppedMediaEntriesFromPayload(data, getMedia, logger);
 
         if (entries.length === 0) {
           return;
         }
 
         const dropResult = await resolveTimelineItemsForEntries(entries, dropFrame);
-        if (dropResult.items.length === 0) {
-          toast.error('Unable to add dropped media items');
-          return;
-        }
-
-        if (dropResult.tracks !== useTimelineStore.getState().tracks) {
-          useTimelineStore.getState().setTracks(dropResult.tracks);
-        }
-
-        if (dropResult.items.length < entries.length) {
-          toast.warning(`Some dropped media items could not be added: ${entries.length - dropResult.items.length} failed`);
-        }
-
-        if (dropResult.items.length === 1) {
-          addItem(dropResult.items[0]!);
-        } else {
-          addItems(dropResult.items);
-        }
+        applyResolvedTimelineDrop({
+          addItem,
+          addItems,
+          currentTracks: useTimelineStore.getState().tracks,
+          dropResult,
+          emptyMessage: 'Unable to add dropped media items',
+          notify: toast,
+          partialFailureLabel: 'dropped media items',
+          requestedCount: entries.length,
+          setTracks: useTimelineStore.getState().setTracks,
+        });
         return;
       } catch (error) {
         logger.warn('Failed to parse drag payload, falling back to file-drop handling', error);
@@ -918,72 +760,27 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       return;
     }
 
-    const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
-    if (!supported) {
-      toast.warning('Drag-drop not supported in this browser. Use Chrome or Edge.');
-      return;
-    }
-
-    if (errors.length > 0) {
-      toast.error(`Some files were rejected: ${errors.join(', ')}`);
-    }
-
-    if (entries.length === 0) {
-      return;
-    }
-
-    try {
-      await preflightFirstTimelineVideoProjectMatch(entries);
-    } catch (error) {
-      toast.error('Unable to inspect dropped file.', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
-      return;
-    }
-
-    const importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.handle));
-    if (importedMedia.length === 0) {
-      toast.error('Unable to import dropped files');
-      return;
-    }
-
-    const droppedEntries: DroppedMediaEntry[] = importedMedia.flatMap((media) => {
-      const mediaType = getMediaType(media.mimeType);
-      if (!isDroppableMediaType(mediaType)) {
-        return [];
-      }
-      return [{
-        media,
-        mediaId: media.id,
-        mediaType,
-        label: media.fileName,
-      }];
+    const droppedEntries = await resolveDroppedMediaEntriesFromExternalFiles({
+      dataTransfer: e.dataTransfer,
+      importHandlesForPlacement,
+      notify: toast,
     });
-
-    if (droppedEntries.length === 0) {
-      toast.warning('Dropped files were imported, but none could be placed on the timeline.');
+    if (!droppedEntries) {
       return;
     }
 
     const dropResult = await resolveTimelineItemsForEntries(droppedEntries, dropFrame);
-    if (dropResult.items.length === 0) {
-      toast.error('Unable to add dropped files to the timeline');
-      return;
-    }
-
-    if (dropResult.tracks !== useTimelineStore.getState().tracks) {
-      useTimelineStore.getState().setTracks(dropResult.tracks);
-    }
-
-    if (dropResult.items.length < droppedEntries.length) {
-      toast.warning(`Some dropped files could not be added: ${droppedEntries.length - dropResult.items.length} failed`);
-    }
-
-    if (dropResult.items.length === 1) {
-      addItem(dropResult.items[0]!);
-    } else {
-      addItems(dropResult.items);
-    }
+    applyResolvedTimelineDrop({
+      addItem,
+      addItems,
+      currentTracks: useTimelineStore.getState().tracks,
+      dropResult,
+      emptyMessage: 'Unable to add dropped files to the timeline',
+      notify: toast,
+      partialFailureLabel: 'dropped files',
+      requestedCount: droppedEntries.length,
+      setTracks: useTimelineStore.getState().setTracks,
+    });
   };
 
   return (
@@ -1007,43 +804,13 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           onMouseDown={handleMouseDown}
           onContextMenu={handleContextMenu}
         >
-          {isDragOver && !isDropDisabled && !isExternalDragOver && ghostPreviews.length === 0 && (
-            <div className="absolute inset-0 pointer-events-none z-10 rounded border border-dashed border-primary/50 bg-primary/10" />
+          {!isDropDisabled && (
+            <TimelineDropGhostPreviews
+              ghostPreviews={ghostPreviews}
+              showEmptyOverlay={isDragOver && !isExternalDragOver && ghostPreviews.length === 0}
+              variant="track"
+            />
           )}
-
-          {!isDropDisabled && ghostPreviews.length > 0 && (
-            <div className={`absolute inset-0 pointer-events-none z-10 rounded border border-dashed ${ghostHighlightClasses}`} />
-          )}
-
-          {/* Ghost preview clips during drag */}
-          {!isDropDisabled && ghostPreviews.map((ghost, index) => (
-            <div
-              key={index}
-              className={`absolute inset-y-0 rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${
-                ghost.type === 'composition'
-                  ? 'border-violet-400 bg-violet-600/20'
-                  : ghost.type === 'external-file'
-                  ? 'border-orange-500 bg-orange-500/15'
-                  : ghost.type === 'video'
-                  ? 'border-timeline-video bg-timeline-video/20'
-                  : ghost.type === 'audio'
-                  ? 'border-timeline-audio bg-timeline-audio/20'
-                  : ghost.type === 'text'
-                  ? 'border-timeline-text bg-timeline-text/20'
-                  : ghost.type === 'shape'
-                  ? 'border-timeline-shape bg-timeline-shape/20'
-                  : ghost.type === 'adjustment'
-                  ? 'border-slate-400 bg-slate-400/15'
-                  : 'border-timeline-image bg-timeline-image/20'
-                }`}
-              style={{
-                left: `${ghost.left}px`,
-                width: `${ghost.width}px`,
-              }}
-            >
-              <span className="text-xs text-foreground/70 truncate">{ghost.label}</span>
-            </div>
-          ))}
 
           {/* Render all items for this track - dimmed when track is hidden */}
           {trackItems.map((item) => (

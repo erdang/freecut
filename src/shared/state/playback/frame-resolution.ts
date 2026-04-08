@@ -1,9 +1,10 @@
+import type { PreviewBridgeState } from '@/shared/state/preview-bridge';
 import type { PlaybackState } from './types';
 
 type FrameResolutionInput = Pick<
   PlaybackState,
-  'currentFrame' | 'previewFrame' | 'displayedFrame' | 'isPlaying' | 'currentFrameEpoch' | 'previewFrameEpoch'
->;
+  'currentFrame' | 'previewFrame' | 'isPlaying' | 'currentFrameEpoch' | 'previewFrameEpoch'
+> & Pick<PreviewBridgeState, 'displayedFrame'>;
 
 /**
  * Resolve the frame that should drive preview-adjacent UI (gizmos, overlays, keyframe probes).

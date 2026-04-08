@@ -7,6 +7,7 @@ import {
   useTimelineSettingsStore,
 } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { getResolvedPlaybackFrame } from '@/shared/state/playback/frame-resolution';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import {
@@ -48,7 +49,7 @@ export function useVisualTransforms(
   );
   const currentFrame = usePlaybackStore((s) => s.currentFrame);
   const previewFrame = usePlaybackStore((s) => s.previewFrame);
-  const displayedFrame = usePlaybackStore((s) => s.displayedFrame);
+  const displayedFrame = usePreviewBridgeStore((s) => s.displayedFrame);
   const isPlaying = usePlaybackStore((s) => s.isPlaying);
   const currentFrameEpoch = usePlaybackStore((s) => s.currentFrameEpoch);
   const previewFrameEpoch = usePlaybackStore((s) => s.previewFrameEpoch);
