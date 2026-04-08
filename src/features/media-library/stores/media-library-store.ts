@@ -9,7 +9,7 @@ import type {
 } from '../types';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 import { proxyService } from '../services/proxy-service';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { createImportActions } from './media-import-actions';
@@ -29,6 +29,95 @@ function buildMediaById(mediaItems: MediaMetadata[]): Record<string, MediaMetada
     mediaById[item.id] = item;
   }
   return mediaById;
+}
+
+function buildTranscriptStatusMap(
+  mediaItems: MediaMetadata[],
+  transcriptIds?: Set<string>
+): Map<string, 'idle' | 'ready'> {
+  const nextTranscriptStatus = new Map<string, 'idle' | 'ready'>();
+  for (const item of mediaItems) {
+    nextTranscriptStatus.set(item.id, transcriptIds?.has(item.id) ? 'ready' : 'idle');
+  }
+  return nextTranscriptStatus;
+}
+
+async function loadTranscriptStatusMap(
+  mediaItems: MediaMetadata[]
+): Promise<Map<string, 'idle' | 'ready'>> {
+  try {
+    const transcriptIds = await getTranscriptMediaIds(mediaItems.map((item) => item.id));
+    return buildTranscriptStatusMap(mediaItems, transcriptIds);
+  } catch (error) {
+    logger.warn('[MediaLibraryStore] Failed to load transcript availability:', error);
+    return buildTranscriptStatusMap(mediaItems);
+  }
+}
+
+function getProxyEligibleVideoItems(mediaItems: MediaMetadata[]): MediaMetadata[] {
+  return mediaItems.filter(
+    (item) =>
+      item.mimeType.startsWith('video/')
+      && proxyService.needsProxy(item.width, item.height, item.mimeType, item.audioCodec)
+  );
+}
+
+async function regenerateStaleProxies(videoItems: MediaMetadata[]): Promise<void> {
+  const blobUrlResults = await Promise.allSettled(
+    videoItems.map((item) => mediaLibraryService.getMediaBlobUrl(item.id))
+  );
+
+  blobUrlResults.forEach((result, index) => {
+    const item = videoItems[index];
+    if (!item) {
+      return;
+    }
+
+    if (result.status !== 'fulfilled') {
+      logger.warn(`[MediaLibraryStore] Failed to load source blob URL for stale proxy ${item.id}:`, result.reason);
+      return;
+    }
+
+    const blobUrl = result.value;
+    if (!blobUrl) {
+      logger.warn(`[MediaLibraryStore] Missing source blob URL for stale proxy ${item.id}`);
+      return;
+    }
+
+    try {
+      proxyService.generateProxy(
+        item.id,
+        blobUrl,
+        item.width,
+        item.height,
+        getSharedProxyKey(item)
+      );
+    } catch (error) {
+      logger.warn(`[MediaLibraryStore] Failed to enqueue stale proxy regeneration for ${item.id}:`, error);
+    }
+  });
+}
+
+async function initializeProxyState(mediaItems: MediaMetadata[]): Promise<void> {
+  const videoItems = getProxyEligibleVideoItems(mediaItems);
+
+  if (videoItems.length === 0) {
+    return;
+  }
+
+  for (const item of videoItems) {
+    proxyService.setProxyKey(item.id, getSharedProxyKey(item));
+  }
+
+  const staleProxyIds = await proxyService.loadExistingProxies(videoItems.map((item) => item.id));
+  if (staleProxyIds.length === 0) {
+    return;
+  }
+
+  const staleProxyIdSet = new Set(staleProxyIds);
+  await regenerateStaleProxies(
+    videoItems.filter((item) => staleProxyIdSet.has(item.id))
+  );
 }
 
 export const useMediaLibraryStore = create<
@@ -112,6 +201,10 @@ export const useMediaLibraryStore = create<
 
         set({ isLoading: true, error: null });
 
+        const opId = createOperationId();
+        const event = logger.startEvent('loadMediaItems', opId);
+        event.set('projectId', currentProjectId);
+
         try {
           // v3: Load project-scoped media only
           const mediaItems = await mediaLibraryService.getMediaForProject(currentProjectId);
@@ -122,86 +215,26 @@ export const useMediaLibraryStore = create<
             isLoading: false,
           });
 
-          try {
-            const transcriptIds = await getTranscriptMediaIds(mediaItems.map((item) => item.id));
-            const nextTranscriptStatus = new Map<string, 'idle' | 'ready'>();
-            for (const item of mediaItems) {
-              nextTranscriptStatus.set(item.id, transcriptIds.has(item.id) ? 'ready' : 'idle');
-            }
-            set({
-              transcriptStatus: nextTranscriptStatus,
-              transcriptProgress: new Map(),
-            });
-          } catch (error) {
-            logger.warn('[MediaLibraryStore] Failed to load transcript availability:', error);
-            const nextTranscriptStatus = new Map<string, 'idle'>();
-            for (const item of mediaItems) {
-              nextTranscriptStatus.set(item.id, 'idle');
-            }
-            set({
-              transcriptStatus: nextTranscriptStatus,
-              transcriptProgress: new Map(),
-            });
-          }
+          event.set('mediaCount', mediaItems.length);
+
+          const transcriptStatus = await loadTranscriptStatusMap(mediaItems);
+          set({
+            transcriptStatus,
+            transcriptProgress: new Map(),
+          });
+
+          event.set('transcriptsReady', [...transcriptStatus.values()].filter((s) => s === 'ready').length);
 
           // Load existing proxies from OPFS and regenerate stale entries in the background.
           try {
-            const videoItems = mediaItems.filter(
-              (m) => m.mimeType.startsWith('video/')
-                && proxyService.needsProxy(m.width, m.height, m.mimeType, m.audioCodec)
-            );
-
-            if (videoItems.length > 0) {
-              for (const item of videoItems) {
-                proxyService.setProxyKey(item.id, getSharedProxyKey(item));
-              }
-
-              const videoIds = videoItems.map((m) => m.id);
-              const staleProxyIds = await proxyService.loadExistingProxies(videoIds);
-
-              if (staleProxyIds.length > 0) {
-                const staleProxyIdSet = new Set(staleProxyIds);
-                const staleVideoItems = videoItems.filter((item) => staleProxyIdSet.has(item.id));
-                const blobUrlResults = await Promise.allSettled(
-                  staleVideoItems.map((item) => mediaLibraryService.getMediaBlobUrl(item.id))
-                );
-
-                blobUrlResults.forEach((result, index) => {
-                  const item = staleVideoItems[index];
-                  if (!item) {
-                    return;
-                  }
-
-                  if (result.status !== 'fulfilled') {
-                    logger.warn(`[MediaLibraryStore] Failed to load source blob URL for stale proxy ${item.id}:`, result.reason);
-                    return;
-                  }
-
-                  const blobUrl = result.value;
-                  if (!blobUrl) {
-                    logger.warn(`[MediaLibraryStore] Missing source blob URL for stale proxy ${item.id}`);
-                    return;
-                  }
-
-                  try {
-                    proxyService.generateProxy(
-                      item.id,
-                      blobUrl,
-                      item.width,
-                      item.height,
-                      getSharedProxyKey(item)
-                    );
-                  } catch (error) {
-                    logger.warn(`[MediaLibraryStore] Failed to enqueue stale proxy regeneration for ${item.id}:`, error);
-                  }
-                });
-              }
-            }
+            await initializeProxyState(mediaItems);
           } catch (error) {
             logger.warn('[MediaLibraryStore] Proxy initialization failed:', error);
           }
+
+          event.success({ mediaCount: mediaItems.length });
         } catch (error) {
-          logger.error('[MediaLibraryStore] loadMediaItems error:', error);
+          event.failure(error instanceof Error ? error : new Error(String(error)));
           const errorMessage =
             error instanceof Error ? error.message : 'Failed to load media';
           set({ error: errorMessage, isLoading: false });

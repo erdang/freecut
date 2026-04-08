@@ -96,6 +96,10 @@ async function blobToArrayBuffer(blob: Blob): Promise<ArrayBuffer> {
   return new Response(blob).arrayBuffer();
 }
 
+function buildGeneratedMediaOpfsPath(mediaId: string): string {
+  return `content/${mediaId.slice(0, 2)}/${mediaId.slice(2, 4)}/${mediaId}/data`;
+}
+
 interface PersistGeneratedMediaOptions {
   file: File;
   projectId: string;
@@ -218,6 +222,94 @@ export class FileAccessError extends Error {
 class MediaLibraryService {
   /** In-memory cache for thumbnail blob URLs to prevent flicker on re-renders */
   private thumbnailUrlCache = new Map<string, string>();
+
+  private async deleteTranscriptSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteTranscript(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete transcript:', error);
+    }
+  }
+
+  private async deleteThumbnailsSafely(mediaId: string): Promise<void> {
+    this.clearThumbnailCache(mediaId);
+    try {
+      await deleteThumbnailsByMediaId(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete thumbnails:', error);
+    }
+  }
+
+  private async clearGifFrameCacheSafely(mediaId: string): Promise<void> {
+    try {
+      await gifFrameCache.clearMedia(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete GIF frame cache:', error);
+    }
+  }
+
+  private async deleteProxySafely(
+    media: MediaMetadata,
+    options?: { preserveSharedAliases?: boolean }
+  ): Promise<void> {
+    try {
+      const sharedProxyKey = getSharedProxyKey(media);
+      if (options?.preserveSharedAliases) {
+        const allMedia = await getAllMediaDB();
+        const hasSharedAlias = allMedia.some(
+          (entry) => entry.id !== media.id && getSharedProxyKey(entry) === sharedProxyKey
+        );
+
+        if (hasSharedAlias) {
+          proxyService.clearProxyKey(media.id);
+          return;
+        }
+      }
+
+      await proxyService.deleteProxy(media.id, sharedProxyKey);
+    } catch (error) {
+      logger.warn('Failed to delete proxy:', error);
+    } finally {
+      proxyService.clearProxyKey(media.id);
+    }
+  }
+
+  private async deleteOpfsContentIfUnreferenced(media: MediaMetadata): Promise<void> {
+    if (media.storageType !== 'opfs') {
+      return;
+    }
+
+    // If contentHash is missing but opfsPath exists, delete the OPFS file directly
+    // to avoid orphaning files that were stored without content-addressing.
+    if (!media.contentHash) {
+      if (media.opfsPath) {
+        try {
+          await opfsService.deleteFile(media.opfsPath);
+        } catch (error) {
+          logger.warn('Failed to delete OPFS file (no contentHash):', error);
+        }
+      }
+      return;
+    }
+
+    const newRefCount = await decrementContentRef(media.contentHash);
+
+    if (newRefCount !== 0 || !media.opfsPath) {
+      return;
+    }
+
+    try {
+      await opfsService.deleteFile(media.opfsPath);
+    } catch (error) {
+      logger.warn('Failed to delete file from OPFS:', error);
+    }
+
+    try {
+      await deleteContent(media.contentHash);
+    } catch (error) {
+      logger.warn('Failed to delete content record:', error);
+    }
+  }
 
   /**
    * Get all media items from IndexedDB
@@ -446,7 +538,7 @@ class MediaLibraryService {
 
     const mediaId = crypto.randomUUID();
     const createdAt = Date.now();
-    const opfsPath = `content/${mediaId.slice(0, 2)}/${mediaId.slice(2, 4)}/${mediaId}/data`;
+    const opfsPath = buildGeneratedMediaOpfsPath(mediaId);
     const codec = options?.codec ?? resolvedMimeType.split('/')[1] ?? 'unknown';
     const thumbnailMaxSize = options?.thumbnailMaxSize ?? 320;
     const thumbnailQuality = options?.thumbnailQuality ?? 0.6;
@@ -531,7 +623,7 @@ class MediaLibraryService {
 
     const mediaId = crypto.randomUUID();
     const createdAt = Date.now();
-    const opfsPath = `content/${mediaId.slice(0, 2)}/${mediaId.slice(2, 4)}/${mediaId}/data`;
+    const opfsPath = buildGeneratedMediaOpfsPath(mediaId);
     const codec = options?.codec ?? metadata.codec ?? resolvedMimeType.split('/')[1] ?? 'unknown';
     // Nominal height — audio waveform thumbnails don't have intrinsic dimensions,
     // so we use a 16:9 placeholder ratio for the DB record.
@@ -598,66 +690,11 @@ class MediaLibraryService {
       // Delete media metadata
       await deleteMediaDB(mediaId);
 
-      try {
-        await deleteTranscript(mediaId);
-      } catch (error) {
-        logger.warn('Failed to delete transcript:', error);
-      }
-
-      // Delete thumbnails (clear cache first)
-      this.clearThumbnailCache(mediaId);
-      try {
-        await deleteThumbnailsByMediaId(mediaId);
-      } catch (error) {
-        logger.warn('Failed to delete thumbnails:', error);
-      }
-
-      // Delete GIF frame cache if applicable
-      try {
-        await gifFrameCache.clearMedia(mediaId);
-      } catch (error) {
-        logger.warn('Failed to delete GIF frame cache:', error);
-      }
-
-      // Delete proxy video if exists
-      try {
-        const allMedia = await getAllMediaDB();
-        const sharedProxyKey = getSharedProxyKey(media);
-        const hasSharedAlias = allMedia.some(
-          (entry) => entry.id !== mediaId && getSharedProxyKey(entry) === sharedProxyKey
-        );
-
-        if (hasSharedAlias) {
-          proxyService.clearProxyKey(mediaId);
-        } else {
-          await proxyService.deleteProxy(mediaId, sharedProxyKey);
-        }
-      } catch (error) {
-        logger.warn('Failed to delete proxy:', error);
-      } finally {
-        proxyService.clearProxyKey(mediaId);
-      }
-
-      // For OPFS storage, handle content reference counting
-      if (media.storageType === 'opfs' && media.contentHash) {
-        const newRefCount = await decrementContentRef(media.contentHash);
-
-        // If no more references to content, delete the actual file
-        if (newRefCount === 0 && media.opfsPath) {
-          try {
-            await opfsService.deleteFile(media.opfsPath);
-          } catch (error) {
-            logger.warn('Failed to delete file from OPFS:', error);
-          }
-
-          // Delete content record
-          try {
-            await deleteContent(media.contentHash);
-          } catch (error) {
-            logger.warn('Failed to delete content record:', error);
-          }
-        }
-      }
+      await this.deleteTranscriptSafely(mediaId);
+      await this.deleteThumbnailsSafely(mediaId);
+      await this.clearGifFrameCacheSafely(mediaId);
+      await this.deleteProxySafely(media, { preserveSharedAliases: true });
+      await this.deleteOpfsContentIfUnreferenced(media);
       // For handle storage: File stays on user's disk - nothing to delete
     }
   }
@@ -670,18 +707,17 @@ class MediaLibraryService {
     projectId: string,
     mediaIds: string[]
   ): Promise<void> {
-    const results = await Promise.allSettled(
-      mediaIds.map((mediaId) => this.deleteMediaFromProject(projectId, mediaId))
-    );
+    // Serialize deletions to avoid races on shared state (proxy aliases,
+    // content ref counts, OPFS files) that concurrent deletes would cause.
+    const errors: Array<{ id: string; error: unknown }> = [];
 
-    const errors = results
-      .map((result, i) => ({ result, id: mediaIds[i] }))
-      .filter((r): r is { result: PromiseRejectedResult; id: string } =>
-        r.result.status === 'rejected'
-      );
-
-    for (const { id, result } of errors) {
-      logger.error(`Failed to delete media ${id}:`, result.reason);
+    for (const mediaId of mediaIds) {
+      try {
+        await this.deleteMediaFromProject(projectId, mediaId);
+      } catch (error) {
+        logger.error(`Failed to delete media ${mediaId}:`, error);
+        errors.push({ id: mediaId, error });
+      }
     }
 
     if (errors.length === mediaIds.length) {
@@ -704,15 +740,13 @@ class MediaLibraryService {
   async deleteAllMediaFromProject(projectId: string): Promise<void> {
     const mediaIds = await getProjectMediaIds(projectId);
 
-    const results = await Promise.allSettled(
-      mediaIds.map((mediaId) => this.deleteMediaFromProject(projectId, mediaId))
-    );
-
-    results.forEach((result, i) => {
-      if (result.status === 'rejected') {
-        logger.error(`Failed to delete media ${mediaIds[i]} from project:`, result.reason);
+    for (const mediaId of mediaIds) {
+      try {
+        await this.deleteMediaFromProject(projectId, mediaId);
+      } catch (error) {
+        logger.error(`Failed to delete media ${mediaId} from project:`, error);
       }
-    });
+    }
   }
 
   /**
@@ -739,47 +773,15 @@ class MediaLibraryService {
     }
 
     // Handle OPFS storage cleanup
-    if (media.storageType === 'opfs' && media.contentHash) {
-      const newRefCount = await decrementContentRef(media.contentHash);
-
-      if (newRefCount === 0 && media.opfsPath) {
-        try {
-          await opfsService.deleteFile(media.opfsPath);
-        } catch (error) {
-          logger.warn('Failed to delete file from OPFS:', error);
-        }
-
-        try {
-          await deleteContent(media.contentHash);
-        } catch (error) {
-          logger.warn('Failed to delete content record:', error);
-        }
-      }
-    }
+    await this.deleteOpfsContentIfUnreferenced(media);
     // Handle storage: nothing to delete, file stays on disk
 
-    this.clearThumbnailCache(id);
-    try {
-      await deleteThumbnailsByMediaId(id);
-    } catch (error) {
-      logger.warn('Failed to delete thumbnails:', error);
-    }
-
-    try {
-      await proxyService.deleteProxy(id, getSharedProxyKey(media));
-    } catch (error) {
-      logger.warn('Failed to delete proxy:', error);
-    } finally {
-      proxyService.clearProxyKey(id);
-    }
+    await this.deleteThumbnailsSafely(id);
+    await this.deleteProxySafely(media);
 
     await deleteMediaDB(id);
 
-    try {
-      await deleteTranscript(id);
-    } catch (error) {
-      logger.warn('Failed to delete transcript:', error);
-    }
+    await this.deleteTranscriptSafely(id);
   }
 
   /**
@@ -1105,9 +1107,8 @@ class MediaLibraryService {
     // Clean up orphaned metadata
     for (const id of orphanedMetadata) {
       try {
-        this.clearThumbnailCache(id);
+        await this.deleteThumbnailsSafely(id);
         await deleteMediaDB(id);
-        await deleteThumbnailsByMediaId(id);
       } catch (error) {
         logger.error(`Failed to cleanup orphaned metadata ${id}:`, error);
       }

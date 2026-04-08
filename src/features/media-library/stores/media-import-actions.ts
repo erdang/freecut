@@ -4,6 +4,7 @@ import { mediaLibraryService } from '../services/media-library-service';
 import { proxyService } from '../services/proxy-service';
 import { getMimeType } from '../utils/validation';
 import { getSharedProxyKey } from '../utils/proxy-key';
+import { hasMediaFilePickerSupport, showMediaFilePicker } from '../utils/media-file-picker';
 import { createLogger, createOperationId } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaImport');
@@ -23,8 +24,49 @@ interface ImportTask {
   file: File;
 }
 
+interface CompletedImportTask extends ImportTask {
+  metadata: ImportedMetadata;
+}
+
+function buildOptimisticMediaItem(handle: FileSystemFileHandle, file: File, tempId: string): MediaMetadata {
+  const now = Date.now();
+
+  return {
+    id: tempId,
+    storageType: 'handle',
+    fileHandle: handle,
+    fileName: file.name,
+    fileSize: file.size,
+    fileLastModified: file.lastModified,
+    mimeType: getMimeType(file),
+    duration: 0,
+    width: 0,
+    height: 0,
+    fps: 30,
+    codec: 'importing...',
+    bitrate: 0,
+    tags: [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function removeImportPlaceholder(set: Set, tempId: string): void {
+  set((state) => ({
+    mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
+    importingIds: state.importingIds.filter((id) => id !== tempId),
+  }));
+}
+
+function replaceImportPlaceholder(set: Set, tempId: string, metadata: MediaMetadata): void {
+  set((state) => ({
+    mediaItems: state.mediaItems.map((item) => (item.id === tempId ? metadata : item)),
+    importingIds: state.importingIds.filter((id) => id !== tempId),
+  }));
+}
+
 function processImportResults(
-  importResults: PromiseSettledResult<{ metadata: ImportedMetadata; tempId: string; file: File; handle: FileSystemFileHandle }>[],
+  importResults: PromiseSettledResult<CompletedImportTask>[],
   importTasks: ImportTask[],
   set: Set,
   options?: { includeDuplicatesInResults?: boolean }
@@ -35,26 +77,23 @@ function processImportResults(
   let importedCount = 0;
   let failedCount = 0;
 
-  for (const result of importResults) {
+  importResults.forEach((result, index) => {
+    const importTask = importTasks[index];
+    if (!importTask) {
+      return;
+    }
+
     if (result.status === 'fulfilled') {
       const { metadata, tempId, file, handle } = result.value;
 
       if (metadata.isDuplicate) {
-        set((state) => ({
-          mediaItems: state.mediaItems.filter((item) => item.id !== tempId),
-          importingIds: state.importingIds.filter((id) => id !== tempId),
-        }));
+        removeImportPlaceholder(set, tempId);
         duplicateNames.push(file.name);
         if (options?.includeDuplicatesInResults) {
           results.push(metadata);
         }
       } else {
-        set((state) => ({
-          mediaItems: state.mediaItems.map((item) =>
-            item.id === tempId ? metadata : item
-          ),
-          importingIds: state.importingIds.filter((id) => id !== tempId),
-        }));
+        replaceImportPlaceholder(set, tempId, metadata);
 
         if (metadata.mimeType.startsWith('video/')) {
           proxyService.setProxyKey(metadata.id, getSharedProxyKey(metadata));
@@ -72,18 +111,10 @@ function processImportResults(
       }
     } else {
       failedCount++;
-      const failedTask = importTasks.find(
-        (_, i) => importResults[i] === result
-      );
-      if (failedTask) {
-        set((state) => ({
-          mediaItems: state.mediaItems.filter((item) => item.id !== failedTask.tempId),
-          importingIds: state.importingIds.filter((id) => id !== failedTask.tempId),
-        }));
-        logger.error(`Failed to import ${failedTask.file.name}`, result.reason);
-      }
+      removeImportPlaceholder(set, importTask.tempId);
+      logger.error(`Failed to import ${importTask.file.name}`, result.reason);
     }
-  }
+  });
 
   return { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount };
 }
@@ -122,26 +153,18 @@ export function createImportActions(
     for (const handle of handles) {
       if (!handle) continue;
       const tempId = crypto.randomUUID();
-      const file = await handle.getFile();
 
-      const tempItem: MediaMetadata = {
-        id: tempId,
-        storageType: 'handle',
-        fileHandle: handle,
-        fileName: file.name,
-        fileSize: file.size,
-        fileLastModified: file.lastModified,
-        mimeType: getMimeType(file),
-        duration: 0,
-        width: 0,
-        height: 0,
-        fps: 30,
-        codec: 'importing...',
-        bitrate: 0,
-        tags: [],
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      };
+      let file: File;
+      try {
+        file = await handle.getFile();
+      } catch (error) {
+        // getFile() can fail if permission is denied or file is missing —
+        // remove the placeholder that was about to be inserted and skip.
+        logger.error(`Failed to read file from handle "${handle.name}":`, error);
+        continue;
+      }
+
+      const tempItem = buildOptimisticMediaItem(handle, file, tempId);
 
       set((state) => ({
         mediaItems: [tempItem, ...state.mediaItems],
@@ -154,6 +177,17 @@ export function createImportActions(
 
     return importTasks;
   };
+
+  const runImportTasks = (
+    importTasks: ImportTask[],
+    projectId: string
+  ): Promise<PromiseSettledResult<CompletedImportTask>[]> =>
+    Promise.allSettled(
+      importTasks.map(async ({ handle, tempId, file }) => {
+        const metadata = await mediaLibraryService.importMediaWithHandle(handle, projectId);
+        return { metadata, tempId, file, handle };
+      })
+    );
 
   const importHandlesInternal = async (
     handles: FileSystemFileHandle[],
@@ -175,16 +209,7 @@ export function createImportActions(
     });
 
     const importTasks = await createOptimisticImportTasks(handles);
-
-    const importResults = await Promise.allSettled(
-      importTasks.map(async ({ handle, tempId, file }) => {
-        const metadata = await mediaLibraryService.importMediaWithHandle(
-          handle,
-          currentProjectId
-        );
-        return { metadata, tempId, file, handle };
-      })
-    );
+    const importResults = await runImportTasks(importTasks, currentProjectId);
 
     const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
       processImportResults(importResults, importTasks, set, options);
@@ -211,7 +236,7 @@ export function createImportActions(
       }
 
       // Check if File System Access API is supported
-      if (!('showOpenFilePicker' in window)) {
+      if (!hasMediaFilePickerSupport()) {
         const isBrave = 'brave' in navigator;
         set({
           error: isBrave
@@ -229,35 +254,13 @@ export function createImportActions(
 
       try {
         // Open file picker
-        const handles = await window.showOpenFilePicker({
-          multiple: true,
-          types: [
-            {
-              description: 'Media files',
-              accept: {
-                'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
-                'audio/*': ['.mp3', '.wav', '.ogg', '.m4a', '.aac'],
-                'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg'],
-              },
-            },
-          ],
-        });
+        const handles = await showMediaFilePicker({ multiple: true });
 
         event.set('fileCount', handles.length);
 
         // Create optimistic placeholders for all files immediately
         const importTasks = await createOptimisticImportTasks(handles);
-
-        // Process all imports in parallel
-        const importResults = await Promise.allSettled(
-          importTasks.map(async ({ handle, tempId, file }) => {
-            const metadata = await mediaLibraryService.importMediaWithHandle(
-              handle,
-              currentProjectId
-            );
-            return { metadata, tempId, file, handle };
-          })
-        );
+        const importResults = await runImportTasks(importTasks, currentProjectId);
 
         const { results, importedCount, duplicateNames, unsupportedCodecFiles, failedCount } =
           processImportResults(importResults, importTasks, set);
@@ -278,8 +281,7 @@ export function createImportActions(
           set({ error: error.message });
           event.failure(error);
         } else {
-          event.set('outcome', 'cancelled');
-          logger.event('import', { opId, outcome: 'cancelled' });
+          event.success({ outcome: 'cancelled', imported: 0, duplicates: 0, failed: 0, unsupportedCodecs: 0 });
         }
         return [];
       }
