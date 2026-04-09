@@ -1,7 +1,7 @@
 /**
  * Web Worker for Gemma-4 scene cut verification.
  *
- * Loads Gemma-4-E2B-it-ONNX via @huggingface/transformers (bundled by Vite).
+ * Loads Gemma-4-E4B-it-ONNX via @huggingface/transformers (bundled by Vite).
  * Runs inside a Worker so that model loading and inference don't block the
  * main thread.
  *
@@ -21,7 +21,7 @@ import {
   env,
 } from '@huggingface/transformers';
 
-const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX';
+const MODEL_ID = 'onnx-community/gemma-4-E4B-it-ONNX';
 
 // Configure transformers.js for browser worker context
 env.useBrowserCache = true;
@@ -49,6 +49,13 @@ async function loadModel(): Promise<void> {
     let lastPct = 5;
     processor = await AutoProcessor.from_pretrained(MODEL_ID);
 
+    // Model card recommends 70–140 tokens for classification/video understanding.
+    // Default 280 is more than needed; 140 halves the image tokens while keeping
+    // enough visual detail to distinguish different scenes.
+    if (processor.image_processor) {
+      processor.image_processor.max_soft_tokens = 140;
+    }
+
     model = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
       dtype: 'q4f16',
       device: 'webgpu',
@@ -73,10 +80,17 @@ async function loadModel(): Promise<void> {
 }
 
 const VERIFY_PROMPT =
-  'These two images are frames from a video, taken about 1 second apart. ' +
-  'Do they show DIFFERENT scenes or camera angles (a scene cut), ' +
-  'or the SAME scene with movement? ' +
-  'Reply with only one word: CUT or SAME';
+  'Two frames from a video, ~1 second apart. Is there an editorial cut between them?\n\n' +
+  'NOT a cut — answer SAME:\n' +
+  '- Camera movement: pan, tilt, zoom, dolly, tracking, crane, or handheld shake\n' +
+  '- Whip pan or motion blur (fast continuous camera move)\n' +
+  '- Subject or object motion within the same scene\n' +
+  '- Lighting, exposure, or focus change in the same scene\n' +
+  '- Gradual transition: dissolve, fade, crossfade\n\n' +
+  'IS a cut — answer CUT:\n' +
+  '- Completely different scene, location, or subject with no continuous motion\n' +
+  '- Abrupt jump to a different camera angle\n\n' +
+  'Answer exactly one word: CUT or SAME';
 
 async function verifyCandidate(
   id: number,
@@ -113,7 +127,7 @@ async function verifyCandidate(
     ];
 
     const prompt = processor.apply_chat_template(messages, {
-      enable_thinking: true,
+      enable_thinking: false,
       add_generation_prompt: true,
     });
 
@@ -132,7 +146,7 @@ async function verifyCandidate(
 
     const outputs = await model.generate({
       ...inputs,
-      max_new_tokens: 128,
+      max_new_tokens: 16,
       do_sample: false,
     });
 
@@ -142,11 +156,13 @@ async function verifyCandidate(
     );
 
     const raw = (decoded[0] ?? '').trim();
-    // With thinking enabled, output is: <think>...reasoning...</think>\n\nFINAL_ANSWER
-    // Extract the part after </think> if present, otherwise use the whole output
-    const afterThink = raw.includes('</think>') ? raw.split('</think>').pop()!.trim() : raw;
-    const answer = afterThink.toUpperCase();
-    post({ type: 'result', id, isSceneCut: answer.startsWith('CUT'), reason: raw });
+    // Robust keyword detection — handles preamble or explanation from the model.
+    // Conservative: default to SAME (not a cut) when ambiguous, since optical
+    // flow already flagged this as a candidate.
+    const hasCut = /\bCUT\b/i.test(raw);
+    const hasSame = /\bSAME\b/i.test(raw);
+    const isCut = hasCut && !hasSame;
+    post({ type: 'result', id, isSceneCut: isCut, reason: raw });
   } catch (err) {
     post({ type: 'result', id, isSceneCut: false, reason: `error: ${(err as Error).message}` });
   }
