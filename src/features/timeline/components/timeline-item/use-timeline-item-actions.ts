@@ -360,11 +360,27 @@ export function useTimelineItemActions({
         video.preload = 'auto';
 
         await new Promise<void>((resolve, reject) => {
-          video!.onloadedmetadata = () => resolve();
-          video!.onerror = () => reject(new Error('Failed to load video for scene detection'));
+          if (abortController.signal.aborted) {
+            reject(new DOMException('Aborted', 'AbortError'));
+            return;
+          }
+          const onAbort = () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+          abortController.signal.addEventListener('abort', onAbort, { once: true });
+          video!.onloadedmetadata = () => {
+            abortController.signal.removeEventListener('abort', onAbort);
+            resolve();
+          };
+          video!.onerror = () => {
+            abortController.signal.removeEventListener('abort', onAbort);
+            reject(new Error('Failed to load video for scene detection'));
+          };
         });
 
         const currentFps = useTimelineStore.getState().fps;
+        const media = useMediaLibraryStore.getState().mediaById[mediaId];
+        const mediaFps = media?.fps ?? currentFps;
         const cuts = await detectScenes(video, currentFps, {
           sampleIntervalMs: 500,
           useGemmaVerification: false,
@@ -391,9 +407,11 @@ export function useTimelineItemActions({
         }
 
         const clipDuration = item.durationInFrames;
-        const sourceStartFrame = sourceStart ?? 0;
+        // sourceStart is in source-native FPS; convert to project FPS for consistent math
+        const sourceStartSeconds = (sourceStart ?? 0) / mediaFps;
+        const sourceStartInProjectFrames = Math.round(sourceStartSeconds * currentFps);
         const splitFrames = cuts
-          .map((cut) => cut.frame - sourceStartFrame)
+          .map((cut) => cut.frame - sourceStartInProjectFrames)
           .filter((frame) => frame > 0 && frame < clipDuration)
           .map((frame) => frame + clipFrom);
 
@@ -410,6 +428,9 @@ export function useTimelineItemActions({
           toast.info('No valid split points found');
         }
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
         if (error instanceof Error && error.message.includes('WebGPU')) {
           toast.error('Scene detection requires WebGPU support');
         } else {
@@ -421,7 +442,10 @@ export function useTimelineItemActions({
           video.onerror = null;
           video.src = '';
         }
-        useTimelineItemOverlayStore.getState().removeOverlay(clipId, SCENE_DETECTION_OVERLAY_ID);
+        // Only remove overlay if this run still owns the controller
+        if (sceneDetectionAbortRef.current === abortController) {
+          useTimelineItemOverlayStore.getState().removeOverlay(clipId, SCENE_DETECTION_OVERLAY_ID);
+        }
       }
     };
 

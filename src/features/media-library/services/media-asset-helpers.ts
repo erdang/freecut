@@ -1,5 +1,5 @@
 import type { MediaMetadata } from '@/types/storage';
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 import {
   associateMediaWithProject,
   createMedia as createMediaDB,
@@ -7,7 +7,7 @@ import {
   deleteThumbnailsByMediaId,
   saveThumbnail as saveThumbnailDB,
 } from '@/infrastructure/storage/indexeddb';
-import { opfsService } from './opfs-service';
+import { opfsService } from '@/features/media-library/services/opfs-service';
 
 const logger = createLogger('MediaAssetHelpers');
 
@@ -44,10 +44,16 @@ export async function getGeneratedImageDimensions(
   file: File
 ): Promise<{ width: number; height: number }> {
   if (typeof createImageBitmap === 'function') {
-    const bitmap = await createImageBitmap(file);
-    const dimensions = getImageDimensionsFromBitmap(bitmap);
-    bitmap.close();
-    return dimensions;
+    let bitmap: ImageBitmap | undefined;
+    try {
+      bitmap = await createImageBitmap(file);
+      const dimensions = getImageDimensionsFromBitmap(bitmap);
+      return dimensions;
+    } catch {
+      // Fall through to Image-based fallback
+    } finally {
+      bitmap?.close();
+    }
   }
 
   return new Promise((resolve, reject) => {
@@ -100,6 +106,10 @@ export async function persistGeneratedMediaAsset({
   thumbnailWidth,
   thumbnailHeight,
 }: PersistGeneratedMediaOptions): Promise<MediaMetadata> {
+  const opId = createOperationId();
+  const event = logger.startEvent('persistGeneratedMediaAsset', opId);
+  event.merge({ projectId, mediaId: mediaMetadata.id });
+
   let metadataCreated = false;
   let thumbnailSaved = false;
 
@@ -110,7 +120,10 @@ export async function persistGeneratedMediaAsset({
 
     await opfsService.saveFile(mediaMetadata.opfsPath, await blobToArrayBuffer(file));
 
-    if (thumbnailBlob && thumbnailWidth && thumbnailHeight) {
+    const sanitizedWidth = Math.max(1, Math.floor(Math.abs(Number(thumbnailWidth) || 0)));
+    const sanitizedHeight = Math.max(1, Math.floor(Math.abs(Number(thumbnailHeight) || 0)));
+
+    if (thumbnailBlob && sanitizedWidth > 0 && sanitizedHeight > 0) {
       const thumbnailId = crypto.randomUUID();
 
       await saveThumbnailDB({
@@ -118,8 +131,8 @@ export async function persistGeneratedMediaAsset({
         mediaId: mediaMetadata.id,
         blob: thumbnailBlob,
         timestamp: 0,
-        width: thumbnailWidth,
-        height: thumbnailHeight,
+        width: sanitizedWidth,
+        height: sanitizedHeight,
       });
 
       mediaMetadata.thumbnailId = thumbnailId;
@@ -129,6 +142,7 @@ export async function persistGeneratedMediaAsset({
     await createMediaDB(mediaMetadata);
     metadataCreated = true;
     await associateMediaWithProject(projectId, mediaMetadata.id);
+    event.success({ projectId, mediaId: mediaMetadata.id });
     return mediaMetadata;
   } catch (error) {
     if (metadataCreated) {
@@ -155,6 +169,13 @@ export async function persistGeneratedMediaAsset({
       }
     }
 
+    event.failure(error, {
+      rollback: {
+        metadataDeleted: metadataCreated ? 'attempted' : 'none',
+        thumbnailDeleted: thumbnailSaved ? 'attempted' : 'none',
+        opfsDeleted: mediaMetadata.opfsPath ? 'attempted' : 'none',
+      },
+    });
     throw error;
   }
 }

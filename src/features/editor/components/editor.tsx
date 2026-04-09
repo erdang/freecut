@@ -51,17 +51,17 @@ const LazyBundleExportDialog = lazy(() =>
   }))
 );
 const LazyClearKeyframesDialog = lazy(() =>
-  import('./clear-keyframes-dialog').then((module) => ({
+  import('@/features/editor/components/clear-keyframes-dialog').then((module) => ({
     default: module.ClearKeyframesDialog,
   }))
 );
 const LazyTtsGenerateDialog = lazy(() =>
-  import('./tts-generate-dialog').then((module) => ({
+  import('@/features/editor/components/tts-generate-dialog').then((module) => ({
     default: module.TtsGenerateDialog,
   }))
 );
 const LazyProjectMediaMatchDialog = lazy(() =>
-  import('./project-media-match-dialog').then((module) => ({
+  import('@/features/editor/components/project-media-match-dialog').then((module) => ({
     default: module.ProjectMediaMatchDialog,
   }))
 );

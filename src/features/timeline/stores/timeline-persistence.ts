@@ -4,7 +4,7 @@ import type { AudioItem, CompositionItem, TimelineItem, TimelineTrack } from '@/
 import type { Transition } from '@/types/transition';
 import type { ProjectTimeline, Project } from '@/types/project';
 
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { DEFAULT_TRACK_HEIGHT } from '../constants';
@@ -146,7 +146,7 @@ function normalizeCompoundWrapperSourceFields(params: {
   return {
     sourceStart,
     sourceEnd: item.sourceEnd ?? (sourceStart + inferredSourceDuration),
-    sourceDuration: item.sourceDuration ?? fallbackDurationInFrames,
+    sourceDuration: item.sourceDuration ?? inferredSourceDuration,
     sourceFps,
     speed,
   };
@@ -511,6 +511,10 @@ async function repairLegacyProjectAvLayouts(project: Project): Promise<{ project
  * Save timeline to project in IndexedDB.
  */
 export async function saveTimeline(projectId: string): Promise<void> {
+  const opId = createOperationId();
+  const event = logger.startEvent('saveTimeline', opId);
+  event.set('projectId', projectId);
+
   // If currently editing a sub-composition, navigate back to root to save
   // the main timeline data, then restore the full breadcrumb path after save completes.
   const navStore = useCompositionNavigationStore.getState();
@@ -543,11 +547,25 @@ export async function saveTimeline(projectId: string): Promise<void> {
   const currentFrame = usePlaybackStore.getState().currentFrame;
   const zoomLevel = useZoomStore.getState().level;
 
+  event.merge({
+    itemCount: itemsState.items.length,
+    trackCount: itemsState.tracks.length,
+    transitionCount: transitionsState.transitions.length,
+    keyframeCount: keyframesState.keyframes.length,
+    currentFrame,
+  });
+
   try {
     const project = await getProject(projectId);
     if (!project) {
       throw new Error(`Project not found: ${projectId}`);
     }
+
+    event.merge({
+      fps: project.metadata?.fps,
+      width: project.metadata?.width,
+      height: project.metadata?.height,
+    });
 
     const settingsState = useTimelineSettingsStore.getState();
 
@@ -690,7 +708,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
         });
       } catch (thumbError) {
         // Thumbnail generation failure shouldn't block save
-        logger.warn('Failed to generate thumbnail:', thumbError);
+        event.set('thumbnailError', thumbError instanceof Error ? thumbError.message : String(thumbError));
       }
     }
 
@@ -705,12 +723,15 @@ export async function saveTimeline(projectId: string): Promise<void> {
     // Mark as clean after successful save
     useTimelineSettingsStore.getState().markClean();
 
+    const updatedAt = Date.now();
+    event.success({ updatedAt, thumbnailId });
+
     // Re-enter the sub-composition the user was editing before save
     if (previousBreadcrumbs.length > 0) {
       restoreCompositionPath();
     }
   } catch (error) {
-    logger.error('Failed to save timeline:', error);
+    event.failure(error);
     // Re-enter even on failure so user doesn't lose their editing context
     if (previousBreadcrumbs.length > 0) {
       restoreCompositionPath();
@@ -883,6 +904,7 @@ export async function loadTimeline(
       useMediaLibraryStore.getState().setOrphanedClips(orphans);
       useMediaLibraryStore.getState().openOrphanedClipsDialog();
     } else {
+      useMediaLibraryStore.getState().closeOrphanedClipsDialog();
       useMediaLibraryStore.getState().setOrphanedClips([]);
     }
 

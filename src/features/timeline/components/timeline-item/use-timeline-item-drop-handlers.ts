@@ -14,6 +14,7 @@ import { useTransitionsStore } from '../../stores/transitions-store';
 import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store';
 import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store';
 import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets';
+import { resolveEffectiveTrackStates } from '@/features/timeline/utils/group-utils';
 import {
   isDragPointInsideElement,
   resolveEffectDropTargetIds,
@@ -180,7 +181,7 @@ export function useTimelineItemDropHandlers({
     const items = useItemsStore.getState().items;
     const itemById = new Map(items.map((timelineItem) => [timelineItem.id, timelineItem]));
     const lockedTrackIds = new Set(
-      useTimelineStore.getState().tracks
+      resolveEffectiveTrackStates(useTimelineStore.getState().tracks)
         .filter((track) => track.locked)
         .map((track) => track.id)
     );

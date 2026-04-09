@@ -1,4 +1,4 @@
-import { createLogger } from '@/shared/logging/logger';
+import { createLogger, createOperationId } from '@/shared/logging/logger';
 
 const logger = createLogger('FileAccess');
 
@@ -22,16 +22,24 @@ export class FileAccessError extends Error {
 export async function ensureFileHandlePermission(
   handle: FileSystemFileHandle
 ): Promise<boolean> {
+  const opId = createOperationId();
+  const event = logger.startEvent('file.permission.check', opId);
+
   try {
     const permission = await handle.queryPermission({ mode: 'read' });
+    event.set('queryPermission', permission);
     if (permission === 'granted') {
+      event.success({ permission });
       return true;
     }
 
     const newPermission = await handle.requestPermission({ mode: 'read' });
-    return newPermission === 'granted';
+    event.set('requestPermission', newPermission);
+    const granted = newPermission === 'granted';
+    event.success({ permission: newPermission });
+    return granted;
   } catch (error) {
-    logger.error('Failed to get file handle permission:', error);
+    event.failure(error);
     throw new FileAccessError(
       `Unexpected error checking file permission: ${error instanceof Error ? error.message : String(error)}`,
       'unknown'
