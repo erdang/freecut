@@ -289,6 +289,13 @@ function repairCompoundClipWrappers(project: Project): { project: Project; repai
         src: '',
         ...sourceFields,
       } as AudioItem;
+      // Remove the existing audio companion to avoid a duplicate overlapping audio item
+      if (existingAudioCompanion) {
+        const companionIndex = items.findIndex((i) => i.id === existingAudioCompanion.id);
+        if (companionIndex !== -1) {
+          items.splice(companionIndex, 1);
+        }
+      }
       changed = true;
       continue;
     }
@@ -875,6 +882,8 @@ export async function loadTimeline(
       logger.warn(`Found ${orphans.length} orphaned clip(s) referencing deleted media`);
       useMediaLibraryStore.getState().setOrphanedClips(orphans);
       useMediaLibraryStore.getState().openOrphanedClipsDialog();
+    } else {
+      useMediaLibraryStore.getState().setOrphanedClips([]);
     }
 
     // Mark loading complete - signals player sync can proceed

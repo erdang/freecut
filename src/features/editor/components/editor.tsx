@@ -524,15 +524,25 @@ export const LoadedEditor = memo(function LoadedEditor({
             fileHandle={bundleFileHandle}
           />
         )}
-
-        {clearKeyframesDialogOpen && <LazyClearKeyframesDialog />}
-
-        {projectMediaMatchDialogOpen && (
-          <LazyProjectMediaMatchDialog projectId={projectId} />
-        )}
-
-        {ttsGenerateDialogOpen && <LazyTtsGenerateDialog />}
       </Suspense>
+
+      {clearKeyframesDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyClearKeyframesDialog />
+        </Suspense>
+      )}
+
+      {projectMediaMatchDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyProjectMediaMatchDialog projectId={projectId} />
+        </Suspense>
+      )}
+
+      {ttsGenerateDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyTtsGenerateDialog />
+        </Suspense>
+      )}
 
       {/* Bento Layout Preset Dialog */}
       <BentoLayoutDialog />

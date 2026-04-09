@@ -63,7 +63,7 @@ export function useTimelineItemDropHandlers({
 }: UseTimelineItemDropHandlersParams) {
   const handleTransitionCutDragOver = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
     const dragDescriptor = readDraggedTransitionDescriptor(e);
-    if (!dragDescriptor || trackLocked || !draggedTransition) {
+    if (!dragDescriptor || trackLocked) {
       return;
     }
 

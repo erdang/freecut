@@ -126,7 +126,7 @@ export function splitItem(
   const itemsToSplit = getLinkedItemsForEdit(items, id, isLinkedSelectionEnabled());
 
   for (const item of itemsToSplit) {
-    // Bounds check first â€” out-of-range splits are a silent no-op (handled by _splitItem),
+    // Bounds check first — out-of-range splits are a silent no-op (handled by _splitItem),
     // must not fall through to transition zone check which would false-positive.
     if (splitFrame <= item.from || splitFrame >= item.from + item.durationInFrames) {
       return null;
@@ -652,7 +652,7 @@ export async function insertFreezeFrame(
   const item = items.find((i) => i.id === itemId);
   if (!item || item.type !== 'video') return false;
 
-  // Validate playhead is within item bounds (exclusive of edges â€” need room to split)
+  // Validate playhead is within item bounds (exclusive of edges — need room to split)
   const itemStart = item.from;
   const itemEnd = item.from + item.durationInFrames;
   if (playheadFrame <= itemStart || playheadFrame >= itemEnd) return false;
@@ -802,7 +802,7 @@ export async function insertFreezeFrame(
       const splitResult = useItemsStore.getState()._splitItem(itemId, playheadFrame);
       if (!splitResult) {
         getLogger().error('[insertFreezeFrame] Split failed');
-        return;
+        return false;
       }
 
       const { leftItem, rightItem } = splitResult;
@@ -899,7 +899,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
     const oldFrom = item.from;
     const oldEnd = item.from + item.durationInFrames;
 
-    // Apply the trim â€” skip adjacency clamping since downstream items will be shifted
+    // Apply the trim — skip adjacency clamping since downstream items will be shifted
     if (handle === 'start') {
       itemsStore._trimItemStart(id, trimDelta, { skipAdjacentClamp: true });
     } else {
@@ -924,7 +924,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
         }
       }
     } else {
-      // Start handle: _trimItemStart moved `from` â€” move it back and compute
+      // Start handle: _trimItemStart moved `from` — move it back and compute
       // the shift from the duration change.
       // _trimItemStart: newFrom = oldFrom + clamped, newDuration = oldDuration - clamped
       // We want: from stays at oldFrom, same newDuration, downstream shifts by -clamped
@@ -1024,15 +1024,15 @@ export function rollingTrimItems(leftId: string, rightId: string, editPointDelta
     // By shrinking the losing clip first, we free up space for the gaining clip to extend into.
     if (editPointDelta > 0) {
       // Edit point moves right: right clip shrinks (frees space), then left clip extends
-        itemsStore._trimItemStart(rightId, editPointDelta);
-        itemsStore._trimItemEnd(leftId, editPointDelta);
-      } else {
-        // Edit point moves left: left clip shrinks (frees space), then right clip extends
-        itemsStore._trimItemEnd(leftId, editPointDelta);
-        itemsStore._trimItemStart(rightId, editPointDelta);
-      }
+      itemsStore._trimItemStart(rightId, editPointDelta);
+      itemsStore._trimItemEnd(leftId, editPointDelta);
+    } else {
+      // Edit point moves left: left clip shrinks (frees space), then right clip extends
+      itemsStore._trimItemEnd(leftId, editPointDelta);
+      itemsStore._trimItemStart(rightId, editPointDelta);
+    }
 
-      const rightAfter = useItemsStore.getState().itemById[rightId];
+    const rightAfter = useItemsStore.getState().itemById[rightId];
       const actualDelta = rightAfter ? rightAfter.from - rightBefore.from : 0;
 
       if (counterpartPair && actualDelta !== 0) {

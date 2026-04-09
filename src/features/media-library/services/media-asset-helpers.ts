@@ -9,7 +9,7 @@ import {
 } from '@/infrastructure/storage/indexeddb';
 import { opfsService } from './opfs-service';
 
-const logger = createLogger('MediaLibraryService');
+const logger = createLogger('MediaAssetHelpers');
 
 function getImageDimensionsFromBitmap(bitmap: ImageBitmap): { width: number; height: number } {
   return {
@@ -25,17 +25,18 @@ export function getThumbnailDimensions(
 ): { width: number; height: number } {
   const safeWidth = Math.max(1, Math.round(width));
   const safeHeight = Math.max(1, Math.round(height));
+  const safeMax = Math.max(1, Math.round(Number(maxSize) || 0));
 
   if (safeWidth >= safeHeight) {
     return {
-      width: maxSize,
-      height: Math.max(1, Math.floor((maxSize * safeHeight) / safeWidth)),
+      width: safeMax,
+      height: Math.max(1, Math.floor((safeMax * safeHeight) / safeWidth)),
     };
   }
 
   return {
-    width: Math.max(1, Math.floor((maxSize * safeWidth) / safeHeight)),
-    height: maxSize,
+    width: Math.max(1, Math.floor((safeMax * safeWidth) / safeHeight)),
+    height: safeMax,
   };
 }
 

@@ -42,29 +42,46 @@ export function placeItemsWithoutTimelineOverlap(items: TimelineItem[]): Timelin
     trackItems.sort((a, b) => a.from - b.from);
   }
 
+  // Group incoming items by track and sort each group by `from` so
+  // placement is deterministic regardless of input order.
+  const itemsByTrack = new Map<string, TimelineItem[]>();
   for (const item of items) {
-    let trackItems = occupiedRangesByTrack.get(item.trackId);
-    if (!trackItems) {
-      trackItems = [];
-      occupiedRangesByTrack.set(item.trackId, trackItems);
+    const group = itemsByTrack.get(item.trackId);
+    if (group) {
+      group.push(item);
+    } else {
+      itemsByTrack.set(item.trackId, [item]);
     }
+  }
+  for (const group of itemsByTrack.values()) {
+    group.sort((a, b) => a.from - b.from);
+  }
 
-    const finalFrom = findNextAvailableSpaceOnTrack(
-      item.from,
-      item.durationInFrames,
-      trackItems
-    );
-    const placedItem = finalFrom === item.from
-      ? item
-      : { ...item, from: finalFrom };
+  for (const group of itemsByTrack.values()) {
+    for (const item of group) {
+      let trackItems = occupiedRangesByTrack.get(item.trackId);
+      if (!trackItems) {
+        trackItems = [];
+        occupiedRangesByTrack.set(item.trackId, trackItems);
+      }
 
-    placedItems.push(placedItem);
-    trackItems.push({
-      trackId: placedItem.trackId,
-      from: placedItem.from,
-      durationInFrames: placedItem.durationInFrames,
-    });
-    trackItems.sort((a, b) => a.from - b.from);
+      const finalFrom = findNextAvailableSpaceOnTrack(
+        item.from,
+        item.durationInFrames,
+        trackItems
+      );
+      const placedItem = finalFrom === item.from
+        ? item
+        : { ...item, from: finalFrom };
+
+      placedItems.push(placedItem);
+      trackItems.push({
+        trackId: placedItem.trackId,
+        from: placedItem.from,
+        durationInFrames: placedItem.durationInFrames,
+      });
+      trackItems.sort((a, b) => a.from - b.from);
+    }
   }
 
   return placedItems;

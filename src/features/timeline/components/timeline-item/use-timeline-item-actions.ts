@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { AnimatableProperty } from '@/types/keyframe';
@@ -304,13 +304,15 @@ export function useTimelineItemActions({
     createPreComp(undefined, ids);
   }, []);
 
+  const compositionId = item.compositionId;
+  const itemLabel = item.label;
   const handleEnterComposition = useCallback(() => {
-    if (!isCompositionItem || !item.compositionId) {
+    if (!isCompositionItem || !compositionId) {
       return;
     }
 
-    useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label, item.id);
-  }, [isCompositionItem, item]);
+    useCompositionNavigationStore.getState().enterComposition(compositionId, itemLabel, item.id);
+  }, [isCompositionItem, compositionId, itemLabel, item.id]);
 
   const handleDissolveComposition = useCallback(() => {
     if (!isCompositionItem) {
@@ -319,6 +321,14 @@ export function useTimelineItemActions({
 
     dissolvePreComp(item.id);
   }, [isCompositionItem, item.id]);
+
+  const sceneDetectionAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    return () => {
+      sceneDetectionAbortRef.current?.abort();
+    };
+  }, []);
 
   const handleDetectScenes = useCallback(() => {
     if (item.type !== 'video' || !item.mediaId || isBroken) {
@@ -330,7 +340,10 @@ export function useTimelineItemActions({
     const overlayStore = useTimelineItemOverlayStore.getState();
 
     const run = async () => {
+      sceneDetectionAbortRef.current?.abort();
       const abortController = new AbortController();
+      sceneDetectionAbortRef.current = abortController;
+      let video: HTMLVideoElement | null = null;
 
       try {
         overlayStore.upsertOverlay(clipId, {
@@ -341,14 +354,14 @@ export function useTimelineItemActions({
         });
 
         const url = await resolveMediaUrl(mediaId);
-        const video = document.createElement('video');
+        video = document.createElement('video');
         video.src = url;
         video.muted = true;
         video.preload = 'auto';
 
         await new Promise<void>((resolve, reject) => {
-          video.onloadedmetadata = () => resolve();
-          video.onerror = () => reject(new Error('Failed to load video for scene detection'));
+          video!.onloadedmetadata = () => resolve();
+          video!.onerror = () => reject(new Error('Failed to load video for scene detection'));
         });
 
         const currentFps = useTimelineStore.getState().fps;
@@ -371,8 +384,6 @@ export function useTimelineItemActions({
             });
           },
         });
-
-        video.src = '';
 
         if (cuts.length === 0) {
           toast.info('No scene cuts detected');
@@ -405,6 +416,11 @@ export function useTimelineItemActions({
           toast.error('Scene detection failed');
         }
       } finally {
+        if (video) {
+          video.onloadedmetadata = null;
+          video.onerror = null;
+          video.src = '';
+        }
         useTimelineItemOverlayStore.getState().removeOverlay(clipId, SCENE_DETECTION_OVERLAY_ID);
       }
     };

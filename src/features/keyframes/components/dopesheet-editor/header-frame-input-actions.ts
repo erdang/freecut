@@ -1,5 +1,5 @@
-import type { BlockedFrameRange } from '../../utils/transition-region';
-import { clampFrame, clampToAvoidBlockedRanges } from './frame-utils';
+import type { BlockedFrameRange } from '@/features/keyframes/utils/transition-region';
+import { clampFrame, clampToAvoidBlockedRanges } from '@/features/keyframes/components/dopesheet-editor/frame-utils';
 
 export interface HeaderFrameSummaryState {
   hasMixedFrames: boolean;

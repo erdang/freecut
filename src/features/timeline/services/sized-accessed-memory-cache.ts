@@ -20,6 +20,10 @@ export class SizedAccessedMemoryCache<TEntry extends SizedAccessedEntry> {
   }
 
   add(key: string, entry: TEntry): void {
+    if (entry.sizeBytes > this.maxSizeBytes) {
+      return;
+    }
+
     const existing = this.entries.get(key);
     if (existing) {
       this.currentSizeBytes -= existing.sizeBytes;

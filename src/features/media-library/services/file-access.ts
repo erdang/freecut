@@ -1,6 +1,6 @@
 import { createLogger } from '@/shared/logging/logger';
 
-const logger = createLogger('MediaLibraryService');
+const logger = createLogger('FileAccess');
 
 /**
  * Error thrown when file handle permission is denied or file is missing.
@@ -32,6 +32,9 @@ export async function ensureFileHandlePermission(
     return newPermission === 'granted';
   } catch (error) {
     logger.error('Failed to get file handle permission:', error);
-    return false;
+    throw new FileAccessError(
+      `Unexpected error checking file permission: ${error instanceof Error ? error.message : String(error)}`,
+      'unknown'
+    );
   }
 }

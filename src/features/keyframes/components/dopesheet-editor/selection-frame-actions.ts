@@ -71,34 +71,40 @@ export function buildSelectionFramePreview({
     deltaFrames: requestedDeltaFrames,
   });
 
-  const nextPreviewFrames: Record<string, number> = {};
-  let appliedDeltaFrames = 0;
-
+  // Compute a single blocked-safe delta for the whole selection so all keyframes
+  // move by the same amount and stay in sync.
+  const allowedDeltas: number[] = [];
   for (const keyframeId of movableSelectionIds) {
     const meta = keyframeMetaById.get(keyframeId);
-    if (!meta) {
-      continue;
-    }
+    if (!meta) continue;
 
     const initialFrame = meta.keyframe.frame;
-    let nextFrame = clampFrame(initialFrame + constrainedDeltaFrames, totalFrames);
-    nextFrame = clampToAvoidBlockedRanges(nextFrame, initialFrame, transitionBlockedRanges);
-    nextFrame = clampFrame(nextFrame, totalFrames);
+    let candidate = clampFrame(initialFrame + constrainedDeltaFrames, totalFrames);
+    candidate = clampToAvoidBlockedRanges(candidate, initialFrame, transitionBlockedRanges);
+    candidate = clampFrame(candidate, totalFrames);
+    allowedDeltas.push(candidate - initialFrame);
+  }
 
-    if (nextFrame === initialFrame) {
-      continue;
-    }
+  const commonDelta = allowedDeltas.length === 0
+    ? 0
+    : constrainedDeltaFrames > 0
+      ? Math.min(...allowedDeltas)
+      : Math.max(...allowedDeltas);
 
-    if (appliedDeltaFrames === 0) {
-      appliedDeltaFrames = nextFrame - initialFrame;
-    }
+  const nextPreviewFrames: Record<string, number> = {};
+  for (const keyframeId of movableSelectionIds) {
+    const meta = keyframeMetaById.get(keyframeId);
+    if (!meta) continue;
+
+    const nextFrame = meta.keyframe.frame + commonDelta;
+    if (nextFrame === meta.keyframe.frame) continue;
     nextPreviewFrames[keyframeId] = nextFrame;
   }
 
   return {
     movableSelectionIds,
     previewFrames: Object.keys(nextPreviewFrames).length > 0 ? nextPreviewFrames : null,
-    appliedDeltaFrames,
+    appliedDeltaFrames: commonDelta,
   };
 }
 
