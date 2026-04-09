@@ -14,8 +14,6 @@ import { PreviewArea } from './preview-area';
 import { InteractionLockRegion } from './interaction-lock-region';
 import { AudioMeterPanel } from './audio-meter-panel';
 import { Timeline, BentoLayoutDialog } from '@/features/editor/deps/timeline-ui';
-import { ClearKeyframesDialog } from './clear-keyframes-dialog';
-import { TtsGenerateDialog } from './tts-generate-dialog';
 import { toast } from 'sonner';
 import { useEditorHotkeys } from '@/features/editor/hooks/use-editor-hotkeys';
 import { useAutoSave } from '../hooks/use-auto-save';
@@ -37,7 +35,9 @@ import { importExportDialog } from '@/features/editor/deps/export-contract';
 import { getEditorLayout, getEditorLayoutCssVars } from '@/shared/ui/editor-layout';
 import { createProjectUpgradeBackup, formatProjectUpgradeBackupName } from '@/features/editor/deps/projects';
 import { ProjectUpgradeDialog } from './project-upgrade-dialog';
-import { ProjectMediaMatchDialog } from './project-media-match-dialog';
+import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
+import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog';
+import { useProjectMediaMatchDialogStore } from '@/shared/state/project-media-match-dialog';
 const logger = createLogger('Editor');
 const EDITOR_PROJECT_ROUTE_ID = '/editor/$projectId';
 const LazyExportDialog = lazy(() =>
@@ -48,6 +48,21 @@ const LazyExportDialog = lazy(() =>
 const LazyBundleExportDialog = lazy(() =>
   importBundleExportDialog().then((module) => ({
     default: module.BundleExportDialog,
+  }))
+);
+const LazyClearKeyframesDialog = lazy(() =>
+  import('@/features/editor/components/clear-keyframes-dialog').then((module) => ({
+    default: module.ClearKeyframesDialog,
+  }))
+);
+const LazyTtsGenerateDialog = lazy(() =>
+  import('@/features/editor/components/tts-generate-dialog').then((module) => ({
+    default: module.TtsGenerateDialog,
+  }))
+);
+const LazyProjectMediaMatchDialog = lazy(() =>
+  import('@/features/editor/components/project-media-match-dialog').then((module) => ({
+    default: module.ProjectMediaMatchDialog,
   }))
 );
 
@@ -146,6 +161,34 @@ export const Editor = memo(function Editor({ projectId, project, migration }: Ed
   }
 
   return <LoadedEditor projectId={projectId} project={project} migration={migration} />;
+});
+
+const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { projectId: string }) {
+  const clearKeyframesDialogOpen = useClearKeyframesDialogStore((s) => s.isOpen);
+  const ttsGenerateDialogOpen = useTtsGenerateDialogStore((s) => s.isOpen);
+  const projectMediaMatchDialogOpen = useProjectMediaMatchDialogStore(
+    (s) => s.isOpen && s.projectId === projectId
+  );
+
+  return (
+    <>
+      {clearKeyframesDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyClearKeyframesDialog />
+        </Suspense>
+      )}
+      {projectMediaMatchDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyProjectMediaMatchDialog projectId={projectId} />
+        </Suspense>
+      )}
+      {ttsGenerateDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyTtsGenerateDialog />
+        </Suspense>
+      )}
+    </>
+  );
 });
 
 export const LoadedEditor = memo(function LoadedEditor({
@@ -506,16 +549,10 @@ export const LoadedEditor = memo(function LoadedEditor({
         )}
       </Suspense>
 
-      {/* Clear Keyframes Confirmation Dialog */}
-      <ClearKeyframesDialog />
-
-      <ProjectMediaMatchDialog projectId={projectId} />
+      <EditorDialogHost projectId={projectId} />
 
       {/* Bento Layout Preset Dialog */}
       <BentoLayoutDialog />
-
-      {/* TTS Generate from Text Dialog */}
-      <TtsGenerateDialog />
 
     </div>
   );

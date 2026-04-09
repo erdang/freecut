@@ -8,7 +8,6 @@ import { useItemsStore } from '../../stores/items-store';
 import { useKeyframesStore } from '../../stores/keyframes-store';
 import { useTransitionsStore } from '../../stores/transitions-store';
 import { useEffectDropPreviewStore } from '../../stores/effect-drop-preview-store';
-import { useTrackDropPreviewStore } from '../../stores/track-drop-preview-store';
 import { useLinkedEditPreviewStore } from '../../stores/linked-edit-preview-store';
 import { useRollingEditPreviewStore } from '../../stores/rolling-edit-preview-store';
 import { useRippleEditPreviewStore } from '../../stores/ripple-edit-preview-store';
@@ -20,14 +19,10 @@ import { useEditorStore } from '@/shared/state/editor';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { usePlaybackStore } from '@/shared/state/playback';
 import {
-  TRANSITION_DRAG_MIME,
   useTransitionDragStore,
-  type DraggedTransitionDescriptor,
 } from '@/shared/state/transition-drag';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import type { PreviewItemUpdate } from '../../utils/item-edit-preview';
-import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
-import { getMediaDragData } from '@/features/timeline/deps/media-library-resolver';
 import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
@@ -36,8 +31,7 @@ import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stre
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { DRAG_OPACITY } from '../../constants';
-import { canJoinItems, canJoinMultipleItems } from '@/features/timeline/utils/clip-utils';
-import { resolveTransitionTargetForEdge } from '@/features/timeline/utils/transition-targets';
+import { canJoinItems } from '@/features/timeline/utils/clip-utils';
 import { cn } from '@/shared/ui/cn';
 import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import {
@@ -70,19 +64,15 @@ import {
   getTrimOperationBoundsVisual,
 } from './tool-operation-overlay-utils';
 import { useDragVisualState } from './use-drag-visual-state';
+import { useTimelineItemActions } from './use-timeline-item-actions';
+import { useTimelineItemDropHandlers } from './use-timeline-item-drop-handlers';
 import { AnchorDragGhost, FollowerDragGhost } from './drag-ghosts';
 import { DragBlockedTooltip } from './drag-blocked-tooltip';
 import { ItemContextMenu } from './item-context-menu';
-import { toast } from 'sonner';
-import { useClearKeyframesDialogStore } from '@/shared/state/clear-keyframes-dialog';
-import { useTtsGenerateDialogStore } from '@/shared/state/tts-generate-dialog';
-import type { AnimatableProperty } from '@/types/keyframe';
-import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
 import { getRazorSplitPosition } from '../../utils/razor-snap';
 import type { RazorSnapTarget } from '../../utils/razor-snap';
 import { getFilteredItemSnapEdges } from '../../utils/timeline-snap-utils';
 import {
-  canLinkSelection,
   expandSelectionWithLinkedItems,
   getLinkedItemIds,
   getLinkedItems,
@@ -91,11 +81,6 @@ import {
   hasLinkedItems,
 } from '../../utils/linked-items';
 import { getVisibleTrackIds } from '../../utils/group-utils';
-import {
-  isDragPointInsideElement,
-  resolveEffectDropTargetIds,
-} from '../../utils/effect-drop';
-import { getTemplateEffectsForDirectApplication } from '../../utils/generated-layer-items';
 import {
   resolveSmartBodyIntent,
   resolveSmartTrimIntent,
@@ -109,29 +94,16 @@ import {
 } from '../../utils/smart-trim-zones';
 import { useMarkersStore } from '../../stores/markers-store';
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store';
-import { insertFreezeFrame, linkItems, unlinkItems, splitItemAtFrames } from '../../stores/actions/item-actions';
-import {
-  createPreComp,
-  dissolvePreComp,
-} from '../../stores/actions/composition-actions';
 import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-store';
 import { useRollHoverStore } from '../../stores/roll-hover-store';
 import { timelineToSourceFrames } from '../../utils/source-calculations';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry';
-import type { MediaTranscriptModel } from '@/types/storage';
-import { WHISPER_MODEL_LABELS } from '@/shared/utils/whisper-settings';
-import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
-import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
 import { getAudioFadePixels, getAudioFadeSecondsFromOffset, type AudioFadeHandle } from '../../utils/audio-fade';
 import { getAudioFadeCurveControlPoint, getAudioFadeCurveFromOffset, getAudioFadeCurvePath } from '../../utils/audio-fade-curve';
 import { getAudioVolumeDbFromDragDelta, getAudioVisualizationScale, getAudioVolumeLineY } from '../../utils/audio-volume';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { findHandleNeighborWithTransitions, findNearestNeighbors } from '../../utils/transition-linked-neighbors';
-import { detectScenes } from '../../deps/analysis';
-import { resolveMediaUrl } from '../../deps/media-library-resolver';
-const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
-const SCENE_DETECTION_OVERLAY_ID = 'scene-detection';
 const EMPTY_SEGMENT_OVERLAYS = [] as const;
 const ACTIVE_CURSOR_CLASSES = [
   'timeline-cursor-trim-left',
@@ -164,24 +136,6 @@ const AUDIO_VOLUME_EPSILON = 0.05;
 const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120;
 const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4;
-function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransitionDescriptor | null {
-  const cached = useTransitionDragStore.getState().draggedTransition;
-  if (cached) return cached;
-
-  const raw = event.dataTransfer.getData(TRANSITION_DRAG_MIME);
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<DraggedTransitionDescriptor>;
-    if (typeof parsed.presentation !== 'string') return null;
-    return {
-      presentation: parsed.presentation,
-      direction: parsed.direction,
-    };
-  } catch {
-    return null;
-  }
-}
 
 interface TimelineItemProps {
   item: TimelineItemType;
@@ -365,7 +319,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     handleSlipSlideStart,
   } = useTimelineSlipSlide(item, timelineDuration, trackLocked);
 
-  // Track push functionality — move clip + downstream items to close/open gaps
+  // Track push functionality - move clip + downstream items to close/open gaps
   const { isTrackPushActive, handleTrackPushStart } = useTrackPush(item, timelineDuration, trackLocked);
 
   const activeGlobalCursorClass = useMemo(() => {
@@ -614,7 +568,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }, [item.id])
   );
 
-  // Slide range from the preview store — the tightest constraint across all tracks.
+  // Slide range from the preview store - the tightest constraint across all tracks.
   // Used by both primary and companion overlays so limit boxes match.
   const slideRange = useSlideEditPreviewStore(
     useShallow(
@@ -692,7 +646,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const right = Math.round(timeToPixels((previewBaseItem.from + previewBaseItem.durationInFrames + slideDurationOffset + slideFromOffset + rippleEditOffset + trackPushOffset) / fps));
   const width = right - left;
 
-  // Source FPS for converting source frames â†' timeline frames (sourceStart etc. are in source-native FPS)
+  // Source FPS for converting source frames -> timeline frames (sourceStart etc. are in source-native FPS)
   const effectiveSourceFps = previewBaseItem.sourceFps ?? fps;
 
   // Preview item for clip internals (filmstrip/waveform) during edit drags.
@@ -819,8 +773,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     let trimVisualLeft = left;
     let trimVisualWidth = width;
 
-    // Ripple edit: compute the new right edge from frames â€” the SAME rounding
-    // path that downstream items use for their `left` â€” so both edges go through
+    // Ripple edit: compute the new right edge from frames - the SAME rounding
+    // path that downstream items use for their `left` - so both edges go through
     // a single Math.round(timeToPixels(totalFrames / fps)) and can never diverge
     // by even 1 px.  `rippleEdgeDelta` equals the downstream `rippleEditOffset`.
     if (rippleEdgeDelta !== 0) {
@@ -1269,7 +1223,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           const neighbor = findHandleNeighborWithTransitions(item, 'end', items, transitions);
           if (neighbor) useRollHoverStore.getState().setRollHover(item.id, neighbor.id, 'start');
         } else if (prevIntent === 'roll-start' || prevIntent === 'roll-end') {
-          // Was rolling, no longer — clear
+          // Was rolling, no longer - clear
           useRollHoverStore.getState().clearRollHover(item.id);
         }
       }
@@ -1350,33 +1304,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     ? 'cursor-grabbing'
     : 'cursor-default';
 
-  // Check if join is available for selected items - computed on demand
-  const getCanJoinSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length < 2) return false;
-    const items = useTimelineStore.getState().items;
-    const selectedItems = selectedItemIds
-      .map((id) => items.find((i) => i.id === id))
-      .filter((i): i is NonNullable<typeof i> => i !== undefined);
-    return canJoinMultipleItems(selectedItems);
-  }, [item.id]);
-
-  const getCanLinkSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length < 2) return false;
-
-    const items = useTimelineStore.getState().items;
-    return canLinkSelection(items, selectedItemIds);
-  }, [item.id]);
-
-  const getCanUnlinkSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length === 0) return false;
-
-    const items = useTimelineStore.getState().items;
-    return selectedItemIds.some((id) => hasLinkedItems(items, id));
-  }, []);
-
   // Reactive neighbor detection: recompute join indicators when adjacent items
   // change (covers deletion, moves to another track, and position shifts).
   // Uses itemsByTrackId for O(trackItems) instead of O(allItems) lookup.
@@ -1427,8 +1354,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   // Gap detection: clip has empty space before it (no strictly adjacent left neighbor)
   const hasGapBefore = item.from > 0 && !leftNeighbor;
 
-  // Gap width in pixels — used for track-push handle sizing.
-  // Uses getState() snapshot — acceptable because this only affects the push
+  // Gap width in pixels - used for track-push handle sizing.
+  // Uses getState() snapshot - acceptable because this only affects the push
   // handle width, which is only visible during active gap interactions.
   const gapBeforePx = useMemo(() => {
     if (!hasGapBefore) return 0;
@@ -1442,307 +1369,56 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     return Math.round(frameToPixels(item.from - prevEnd));
   }, [hasGapBefore, item.trackId, item.id, item.from, item.durationInFrames, frameToPixels]);
 
-  // Action handlers
-  const handleJoinSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length >= 2) {
-      const itemById = useItemsStore.getState().itemById;
-      const selectedItems = selectedItemIds
-        .map((id) => itemById[id])
-        .filter((i): i is NonNullable<typeof i> => i !== undefined);
-      if (canJoinMultipleItems(selectedItems)) {
-        useTimelineStore.getState().joinItems(selectedItemIds);
-      }
-    }
-  }, []);
+  const {
+    getCanJoinSelected,
+    getCanLinkSelected,
+    getCanUnlinkSelected,
+    hasSpeakableText,
+    isCaptionGenerationActive,
+    isSceneDetectionActive,
+    isCompositionItem,
+    handleJoinSelected,
+    handleJoinLeft,
+    handleJoinRight,
+    handleDelete,
+    handleRippleDelete,
+    handleLinkSelected,
+    handleUnlinkSelected,
+    handleClearAllKeyframes,
+    handleClearPropertyKeyframes,
+    handleBentoLayout,
+    handleFreezeFrame,
+    handleGenerateAudioFromText,
+    handleGenerateCaptions,
+    handleRegenerateCaptions,
+    handleCreatePreComp,
+    handleEnterComposition,
+    handleDissolveComposition,
+    handleDetectScenes,
+  } = useTimelineItemActions({
+    item,
+    isBroken,
+    leftNeighbor,
+    rightNeighbor,
+    segmentOverlays,
+  });
 
-  const handleJoinLeft = useCallback(() => {
-    if (leftNeighbor) {
-      useTimelineStore.getState().joinItems([leftNeighbor.id, item.id]);
-    }
-  }, [leftNeighbor, item.id]);
-
-  const handleJoinRight = useCallback(() => {
-    if (rightNeighbor) {
-      useTimelineStore.getState().joinItems([item.id, rightNeighbor.id]);
-    }
-  }, [rightNeighbor, item.id]);
-
-  const handleDelete = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length > 0) {
-      useTimelineStore.getState().removeItems(selectedItemIds);
-    }
-  }, []);
-
-  const handleRippleDelete = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length > 0) {
-      useTimelineStore.getState().rippleDeleteItems(selectedItemIds);
-    }
-  }, []);
-
-  const handleLinkSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    void linkItems(selectedItemIds);
-  }, []);
-
-  const handleUnlinkSelected = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    unlinkItems(selectedItemIds);
-  }, []);
-
-  const handleClearAllKeyframes = useCallback(() => {
-    useClearKeyframesDialogStore.getState().openClearAll([item.id]);
-  }, [item.id]);
-
-  const handleClearPropertyKeyframes = useCallback((property: AnimatableProperty) => {
-    useClearKeyframesDialogStore.getState().openClearProperty([item.id], property);
-  }, [item.id]);
-
-  // Bento layout
-  const handleBentoLayout = useCallback(() => {
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-    if (selectedItemIds.length < 2) return;
-    useBentoLayoutDialogStore.getState().open(selectedItemIds);
-  }, []);
-
-  // Freeze frame
-  const handleFreezeFrame = useCallback(() => {
-    if (item.type !== 'video') return;
-    const { currentFrame } = usePlaybackStore.getState();
-    void insertFreezeFrame(item.id, currentFrame);
-  }, [item.id, item.type]);
-
-  // Generate audio from text
-  const textContent = item.type === 'text' ? item.text : '';
-  const hasSpeakableText = textContent.trim().length > 0;
-  const handleGenerateAudioFromText = useCallback(() => {
-    if (!hasSpeakableText) return;
-    useTtsGenerateDialogStore.getState().open(textContent, item.id);
-  }, [item.id, textContent, hasSpeakableText]);
-
-  const handleCaptionGeneration = useCallback((
-    model: MediaTranscriptModel,
-    options?: {
-      forceTranscription?: boolean;
-      replaceExisting?: boolean;
-    },
-  ) => {
-    if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId || isBroken) {
-      return;
-    }
-
-    const mediaId = item.mediaId;
-    const clipId = item.id;
-    const store = useMediaLibraryStore.getState();
-    const overlayStore = useTimelineItemOverlayStore.getState();
-    const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
-    const forceTranscription = options?.forceTranscription ?? false;
-    const replaceExisting = options?.replaceExisting ?? false;
-    const overlayLabel = forceTranscription ? 'Regenerating captions' : 'Generating captions';
-
-    const run = async () => {
-      let updatedTranscriptStatus = previousStatus;
-
-      try {
-        const existingTranscript = await mediaTranscriptionService.getTranscript(mediaId);
-        const needsTranscription =
-          forceTranscription || !existingTranscript || existingTranscript.model !== model;
-
-        if (needsTranscription) {
-          overlayStore.upsertOverlay(clipId, {
-            id: CAPTION_GENERATION_OVERLAY_ID,
-            label: overlayLabel,
-            progress: 0,
-            tone: 'info',
-          });
-          store.setTranscriptStatus(mediaId, 'transcribing');
-          store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
-
-          await mediaTranscriptionService.transcribeMedia(mediaId, {
-            model,
-            onProgress: (progress) => {
-              const mediaLibraryStore = useMediaLibraryStore.getState();
-              mediaLibraryStore.setTranscriptProgress(mediaId, progress);
-              const mergedProgress = mediaLibraryStore.transcriptProgress.get(mediaId) ?? progress;
-
-              useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-                id: CAPTION_GENERATION_OVERLAY_ID,
-                label: overlayLabel,
-                progress: getTranscriptionOverallPercent(mergedProgress),
-                tone: 'info',
-              });
-            },
-          });
-
-          updatedTranscriptStatus = 'ready';
-          store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
-          store.clearTranscriptProgress(mediaId);
-        } else {
-          overlayStore.upsertOverlay(clipId, {
-            id: CAPTION_GENERATION_OVERLAY_ID,
-            label: replaceExisting ? 'Replacing captions' : 'Adding captions',
-            tone: 'info',
-          });
-          updatedTranscriptStatus = 'ready';
-          store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
-          store.clearTranscriptProgress(mediaId);
-        }
-
-        const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
-          clipIds: [clipId],
-          replaceExisting,
-        });
-
-        const successMessage = replaceExisting
-          ? result.insertedItemCount > 0
-            ? result.removedItemCount > 0
-              ? `Replaced ${result.removedItemCount} caption clip${result.removedItemCount === 1 ? '' : 's'} with ${result.insertedItemCount} updated clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
-              : `Regenerated ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
-            : `Removed ${result.removedItemCount} generated caption clip${result.removedItemCount === 1 ? '' : 's'} for this segment using ${WHISPER_MODEL_LABELS[model]}`
-          : `Inserted ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment with ${WHISPER_MODEL_LABELS[model]}`;
-
-        store.showNotification({
-          type: 'success',
-          message: successMessage,
-        });
-      } catch (error) {
-        if (isLocalInferenceCancellationError(error)) {
-          store.setTranscriptStatus(mediaId, previousStatus);
-          store.clearTranscriptProgress(mediaId);
-          return;
-        }
-
-        store.setTranscriptStatus(mediaId, updatedTranscriptStatus === 'ready' ? 'ready' : 'error');
-        store.clearTranscriptProgress(mediaId);
-        store.showNotification({
-          type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to generate captions for segment',
-        });
-      } finally {
-        useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
-      }
-    };
-
-    void run();
-  }, [item.id, item.mediaId, item.type, isBroken]);
-
-  const handleGenerateCaptions = useCallback((model: MediaTranscriptModel) => {
-    handleCaptionGeneration(model);
-  }, [handleCaptionGeneration]);
-
-  const handleRegenerateCaptions = useCallback((model: MediaTranscriptModel) => {
-    handleCaptionGeneration(model, {
-      forceTranscription: true,
-      replaceExisting: true,
-    });
-  }, [handleCaptionGeneration]);
-
-  const isCaptionGenerationActive = segmentOverlays.some(
-    (overlay) => overlay.id === CAPTION_GENERATION_OVERLAY_ID,
-  );
-
-  const isSceneDetectionActive = segmentOverlays.some(
-    (overlay) => overlay.id === SCENE_DETECTION_OVERLAY_ID,
-  );
-
-  const handleDetectScenes = useCallback(() => {
-    if (item.type !== 'video' || !item.mediaId || isBroken) return;
-
-    const mediaId = item.mediaId;
-    const clipId = item.id;
-    const clipFrom = item.from;
-    const overlayStore = useTimelineItemOverlayStore.getState();
-
-    const run = async () => {
-      const abortController = new AbortController();
-
-      try {
-        overlayStore.upsertOverlay(clipId, {
-          id: SCENE_DETECTION_OVERLAY_ID,
-          label: 'Detecting scenes',
-          progress: 0,
-          tone: 'info',
-        });
-
-        const url = await resolveMediaUrl(mediaId);
-        const video = document.createElement('video');
-        video.src = url;
-        video.muted = true;
-        video.preload = 'auto';
-
-        await new Promise<void>((resolve, reject) => {
-          video.onloadedmetadata = () => resolve();
-          video.onerror = () => reject(new Error('Failed to load video for scene detection'));
-        });
-
-        const currentFps = useTimelineStore.getState().fps;
-        const cuts = await detectScenes(video, currentFps, {
-          sampleIntervalMs: 500,
-          useGemmaVerification: false,
-          signal: abortController.signal,
-          onProgress: (progress) => {
-            const stageLabels = {
-              'optical-flow': `Analyzing motion (${progress.sceneCuts} candidates)`,
-              'loading-model': `Loading Gemma model (${progress.percent}%)`,
-              'verifying': `Verifying cuts (${progress.sceneCuts}/${progress.totalSamples} confirmed)`,
-            };
-            const label = stageLabels[progress.stage ?? 'optical-flow'];
-            useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-              id: SCENE_DETECTION_OVERLAY_ID,
-              label,
-              progress: progress.stage === 'loading-model' ? progress.percent : progress.percent,
-              tone: 'info',
-            });
-          },
-        });
-
-        video.src = '';
-
-        if (cuts.length === 0) {
-          toast.info('No scene cuts detected');
-          return;
-        }
-
-        // Convert scene cut frames to timeline split frames (relative to clip start).
-        // Scene detection returns frames in source video space — offset by clip's `from`.
-        // Filter to cuts within the clip's duration range.
-        const clipDuration = item.durationInFrames;
-        const sourceStartFrame = item.sourceStart ?? 0;
-        const splitFrames = cuts
-          .map((cut) => cut.frame - sourceStartFrame)
-          .filter((f) => f > 0 && f < clipDuration)
-          .map((f) => f + clipFrom);
-
-        if (splitFrames.length === 0) {
-          toast.info('No scene cuts within clip bounds');
-          return;
-        }
-
-        const splitCount = splitItemAtFrames(clipId, splitFrames);
-
-        if (splitCount > 0) {
-          toast.success(`Split clip at ${splitCount} scene cut${splitCount > 1 ? 's' : ''}`);
-        } else {
-          toast.info('No valid split points found');
-        }
-      } catch (err) {
-        if (err instanceof Error && err.message.includes('WebGPU')) {
-          toast.error('Scene detection requires WebGPU support');
-        } else {
-          toast.error('Scene detection failed');
-        }
-      } finally {
-        useTimelineItemOverlayStore.getState().removeOverlay(clipId, SCENE_DETECTION_OVERLAY_ID);
-      }
-    };
-
-    void run();
-  }, [item.id, item.type, item.mediaId, item.from, item.durationInFrames, (item as { sourceStart?: number }).sourceStart, isBroken]);
+  const {
+    handleTransitionCutDragOver,
+    handleTransitionCutDragLeave,
+    handleTransitionCutDrop,
+    handleEffectDragEnter,
+    handleEffectDragOver,
+    handleEffectDragLeave,
+    handleEffectDrop,
+  } = useTimelineItemDropHandlers({
+    item,
+    trackLocked,
+    draggedTransition,
+    addEffects,
+  });
 
   // Composition operations
-  const isCompositionItem = item.type === 'composition' || (item.type === 'audio' && !!item.compositionId);
   const isVisualFadeItem = supportsVisualFadeControls(item);
   const [videoFadeEdit, setVideoFadeEdit] = useState<{
     handle: AudioFadeHandle;
@@ -2393,7 +2069,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       const committedVolume = audioVolumePreviewRef.current ?? latestPreviewVolume;
       audioVolumeCleanupRef.current?.();
       audioVolumeCleanupRef.current = null;
-      // Keep live gain active — segment volumeDb is stale until composition
+      // Keep live gain active - segment volumeDb is stale until composition
       // naturally re-renders, and the audio component auto-clears via useEffect.
 
       finalizeAudioVolumeChange(committedVolume, {
@@ -2581,22 +2257,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       : null
   ), [linkedItemsForSync, linkedSyncPreviewItem, fps, linkedSyncPreviewUpdatesById, suppressLinkedSyncBadge]);
 
-  const handleCreatePreComp = useCallback(() => {
-    // Capture selection synchronously â€” context menu close may clear it before the dynamic import resolves
-    const ids = useSelectionStore.getState().selectedItemIds;
-    createPreComp(undefined, ids);
-  }, []);
-
-  const handleEnterComposition = useCallback(() => {
-    if (!isCompositionItem || !item.compositionId) return;
-    useCompositionNavigationStore.getState().enterComposition(item.compositionId, item.label, item.id);
-  }, [isCompositionItem, item]);
-
-  const handleDissolveComposition = useCallback(() => {
-    if (!isCompositionItem) return;
-    dissolvePreComp(item.id);
-  }, [isCompositionItem, item]);
-
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -2717,208 +2377,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     }
   }, [item.id]);
 
-  const handleTransitionCutDragOver = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
-    const dragDescriptor = readDraggedTransitionDescriptor(e);
-    if (!dragDescriptor || trackLocked || !draggedTransition) return;
-
-    const dragState = useTransitionDragStore.getState();
-
-    const target = resolveTransitionTargetForEdge({
-      itemId: item.id,
-      edge,
-      items: useItemsStore.getState().items,
-      transitions: useTransitionsStore.getState().transitions,
-    });
-
-    if (!target) {
-      dragState.clearPreview();
-      dragState.setInvalidHint({
-        x: e.clientX,
-        y: e.clientY,
-        message: 'No adjacent clip on this edge',
-      });
-      return;
-    }
-
-    if (target.hasExisting) {
-      dragState.clearPreview();
-      dragState.setInvalidHint({
-        x: e.clientX,
-        y: e.clientY,
-        message: 'Drop on the existing transition bridge to replace it',
-      });
-      return;
-    }
-
-    if (!target.canApply) {
-      dragState.clearPreview();
-      dragState.setInvalidHint({
-        x: e.clientX,
-        y: e.clientY,
-        message: target.reason ?? 'This cut cannot accept a transition',
-      });
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-    dragState.setInvalidHint(null);
-    dragState.setPreview({
-      leftClipId: target.leftClipId,
-      rightClipId: target.rightClipId,
-      durationInFrames: target.suggestedDurationInFrames,
-      alignment: target.alignment,
-    });
-  }, [draggedTransition, item.id, trackLocked]);
-
-  const handleTransitionCutDragLeave = useCallback(() => {
-    const dragState = useTransitionDragStore.getState();
-    const preview = dragState.preview;
-    if (!preview || preview.existingTransitionId) return;
-    if (preview.leftClipId === item.id || preview.rightClipId === item.id) {
-      dragState.clearPreview();
-    }
-    dragState.setInvalidHint(null);
-  }, [item.id]);
-
-  const handleTransitionCutDrop = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
-    const dragDescriptor = readDraggedTransitionDescriptor(e);
-    if (!dragDescriptor || trackLocked) return;
-
-    const target = resolveTransitionTargetForEdge({
-      itemId: item.id,
-      edge,
-      items: useItemsStore.getState().items,
-      transitions: useTransitionsStore.getState().transitions,
-    });
-
-    if (!target || target.hasExisting || !target.canApply) {
-      useTransitionDragStore.getState().clearDrag();
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-
-    useTimelineStore.getState().addTransition(
-      target.leftClipId,
-      target.rightClipId,
-      'crossfade',
-      target.suggestedDurationInFrames,
-      dragDescriptor.presentation,
-      dragDescriptor.direction,
-    );
-    useTransitionDragStore.getState().clearDrag();
-  }, [item.id, trackLocked]);
-
-  const resolveDirectEffectDropTemplate = useCallback((payload: unknown) => {
-    const effects = getTemplateEffectsForDirectApplication(payload);
-    if (!effects || trackLocked || item.type === 'audio') {
-      return null;
-    }
-
-    return effects;
-  }, [item.type, trackLocked]);
-
-  const resolveEffectDropTargets = useCallback((payload: unknown): string[] => {
-    const effects = resolveDirectEffectDropTemplate(payload);
-    if (!effects) {
-      return [];
-    }
-
-    const items = useItemsStore.getState().items;
-    const itemById = new Map(items.map((timelineItem) => [timelineItem.id, timelineItem]));
-    const lockedTrackIds = new Set(
-      useTimelineStore.getState().tracks
-        .filter((track) => track.locked)
-        .map((track) => track.id)
-    );
-    const selectedItemIds = useSelectionStore.getState().selectedItemIds;
-
-    return resolveEffectDropTargetIds({
-      hoveredItemId: item.id,
-      items,
-      selectedItemIds,
-    }).filter((itemId) => !lockedTrackIds.has(itemById.get(itemId)?.trackId ?? ''));
-  }, [item.id, resolveDirectEffectDropTemplate]);
-
-  const setEffectDropPreview = useCallback((targetItemIds: string[]) => {
-    if (targetItemIds.length === 0) {
-      useEffectDropPreviewStore.getState().clearPreview();
-      return;
-    }
-
-    useEffectDropPreviewStore.getState().setPreview(targetItemIds, item.id);
-  }, [item.id]);
-
-  const handleEffectDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    const targetItemIds = resolveEffectDropTargets(getMediaDragData());
-    if (targetItemIds.length === 0) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    setEffectDropPreview(targetItemIds);
-    useTrackDropPreviewStore.getState().clearGhostPreviews();
-  }, [resolveEffectDropTargets, setEffectDropPreview]);
-
-  const handleEffectDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    const targetItemIds = resolveEffectDropTargets(getMediaDragData());
-    if (targetItemIds.length === 0) {
-      useEffectDropPreviewStore.getState().clearPreview();
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    e.dataTransfer.dropEffect = 'copy';
-    setEffectDropPreview(targetItemIds);
-    useTrackDropPreviewStore.getState().clearGhostPreviews();
-  }, [resolveEffectDropTargets, setEffectDropPreview]);
-
-  const handleEffectDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (isDragPointInsideElement(e, e.currentTarget)) {
-      return;
-    }
-
-    if (useEffectDropPreviewStore.getState().hoveredItemId !== item.id) {
-      return;
-    }
-
-    useEffectDropPreviewStore.getState().clearPreview();
-  }, [item.id]);
-
-  const handleEffectDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    const rawPayload = e.dataTransfer.getData('application/json');
-    let parsedPayload: unknown = getMediaDragData();
-
-    if (rawPayload) {
-      try {
-        parsedPayload = JSON.parse(rawPayload);
-      } catch {
-        parsedPayload = getMediaDragData();
-      }
-    }
-
-    const effects = resolveDirectEffectDropTemplate(parsedPayload);
-    const targetItemIds = resolveEffectDropTargets(parsedPayload);
-    useEffectDropPreviewStore.getState().clearPreview();
-
-    if (!effects || targetItemIds.length === 0) {
-      return;
-    }
-
-    e.preventDefault();
-    e.stopPropagation();
-    useTrackDropPreviewStore.getState().clearGhostPreviews();
-    addEffects(targetItemIds.map((itemId) => ({ itemId, effects })));
-    if (targetItemIds.length > 1) {
-      toast.success(`Applied effect to ${targetItemIds.length} clips`);
-    }
-  }, [addEffects, resolveDirectEffectDropTemplate, resolveEffectDropTargets]);
-
   return (
     <>
       <ItemContextMenu
@@ -2996,7 +2454,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 ? getAudioVisualizationScale(audioVolumePreviewRef.current)
                 : audioVisualizationScale
             ),
-          }}
+          } as React.CSSProperties}
           onClick={handleClick}
           onDoubleClick={handleDoubleClick}
           onMouseDown={handleMouseDown}
@@ -3008,7 +2466,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           onDragLeave={handleEffectDragLeave}
           onDrop={handleEffectDrop}
         >
-          {/* Selection indicator — hidden during active gestures to reduce clutter */}
+          {/* Selection indicator - hidden during active gestures to reduce clutter */}
           {isSelected && !trackLocked && !isAnyGestureActive && (
             <div className="absolute inset-0 rounded pointer-events-none z-20 border border-primary" />
           )}
@@ -3252,7 +2710,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         </div>
       </ItemContextMenu>
 
-      {/* Track push handle — sits in the gap to the LEFT of the clip, outside contain:paint */}
+      {/* Track push handle - sits in the gap to the LEFT of the clip, outside contain:paint */}
       <TrackPushHandle
         enabled={hasGapBefore && !trackLocked && activeTool === 'trim-edit'}
         isActive={isTrackPushActive}
@@ -3263,7 +2721,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
       <ToolOperationOverlay visual={toolOperationOverlay} />
 
-      {/* Active edge halos — top layer, above both clip and bounds box */}
+      {/* Active edge halos - top layer, above both clip and bounds box */}
       {activeEdges && (
         <div
           className="absolute inset-y-0 pointer-events-none"
