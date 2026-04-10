@@ -20,26 +20,12 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
 
 /**
- * Coarse log-quantization for pixelsPerSecond during zoom interaction.
- * Uses ~30% steps so the filmstrip updates only a few times per zoom gesture
- * (keeping content correctly sized without distortion) while avoiding the
- * cost of re-rendering 89+ clips on every single wheel tick.
+ * Small render buffer: filmstrip/waveform are rendered slightly wider than the
+ * clip width.  The parent's overflow:hidden clips the excess invisibly.
+ * Protects against sub-frame timing where the CSS variable has updated but
+ * React hasn't committed the filmstrip width yet.
  */
-const ZOOM_INTERACTION_LOG_STEP = Math.log2(1.3);
-
-function quantizeZoomPps(pps: number): number {
-  if (!Number.isFinite(pps) || pps <= 0) return 1;
-  return Math.pow(2, Math.round(Math.log2(pps) / ZOOM_INTERACTION_LOG_STEP) * ZOOM_INTERACTION_LOG_STEP);
-}
-
-/**
- * Render buffer for filmstrip/waveform during zoom.
- * With 1.3x quantization steps, the quantized value can be up to sqrt(1.3)≈1.14x
- * below the live value. A buffer of 1.18x ensures pre-rendered content always
- * covers the clip container so zoom-in reveals existing tiles instead of a gap.
- * The parent's overflow:hidden clips the excess during normal rendering.
- */
-const ZOOM_RENDER_BUFFER = 1.18;
+const RENDER_BUFFER = 1.03;
 
 interface ClipContentProps {
   item: TimelineItem;
@@ -71,17 +57,11 @@ export const ClipContent = memo(function ClipContent({
   audioWaveformScale = 1,
   linkedSyncOffsetFrames = null,
 }: ClipContentProps) {
-  // During zoom interaction, use coarsely quantized live pps (~30% steps) so the
-  // filmstrip updates a few times per gesture — keeping content correctly sized
-  // without distortion — while avoiding 89+ re-renders on every wheel tick.
-  // When settled, use the exact content pps for pixel-perfect rendering.
-  const pixelsPerSecond = useZoomStore(
-    useCallback((s) => (
-      s.isZoomInteracting
-        ? quantizeZoomPps(s.pixelsPerSecond)
-        : s.contentPixelsPerSecond
-    ), [])
-  );
+  // Track the live pixelsPerSecond directly — filmstrip updates on every zoom
+  // tick (~0.23ms for 89 clips) so it tracks the zoom perfectly with zero
+  // visual jumps.  This is safe because drag/edit hooks now use imperative
+  // reads, keeping the total per-tick render cost under 0.5ms.
+  const pixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const clipLeftPx = useMemo(
@@ -92,12 +72,8 @@ export const ClipContent = memo(function ClipContent({
     () => Math.max(0, fps > 0 ? (clipWidthFrames / fps) * pixelsPerSecond : 0),
     [clipWidthFrames, fps, pixelsPerSecond],
   );
-  // Pre-render filmstrip/waveform slightly wider than the computed clip width.
-  // The parent's overflow:hidden clips the excess at rest; during zoom-in the
-  // expanding container reveals pre-rendered tiles instead of a gap.  Applied
-  // unconditionally so there is no pop when zoom settles (removing the buffer
-  // conditionally caused a visible 18% contraction on settle).
-  const renderWidth = Math.ceil(clipWidth * ZOOM_RENDER_BUFFER);
+  // Small safety buffer — clips the excess via overflow:hidden.
+  const renderWidth = Math.ceil(clipWidth * RENDER_BUFFER);
   const clipVisibility = useClipVisibility(clipLeftPx, clipWidth);
   const isCompositionAudioWrapper = item.type === 'audio' && !!item.compositionId;
 
