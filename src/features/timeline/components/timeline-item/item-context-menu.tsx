@@ -68,7 +68,7 @@ interface ItemContextMenuProps {
   /** Whether scene detection is available for this item */
   canDetectScenes?: boolean;
   isDetectingScenes?: boolean;
-  onDetectScenes?: () => void;
+  onDetectScenes?: (method: 'histogram' | 'optical-flow') => void;
 }
 
 /**
@@ -112,7 +112,9 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onCreatePreComp,
   isTextItem,
   onGenerateAudioFromText,
-  // canDetectScenes, isDetectingScenes, onDetectScenes — disabled pending optical flow tuning
+  canDetectScenes,
+  isDetectingScenes,
+  onDetectScenes,
 }: ItemContextMenuProps) {
   const hotkeys = useResolvedHotkeys();
   const selectedCount = useSelectionStore((s) => s.selectedItemIds.length);
@@ -232,21 +234,28 @@ export const ItemContextMenu = memo(function ItemContextMenu({
           </>
         )}
 
-        {/* Detect Scenes - disabled pending optical flow tuning */}
-        {/* {canDetectScenes && onDetectScenes && (
+        {canDetectScenes && onDetectScenes && (
           <>
             {isDetectingScenes ? (
               <ContextMenuItem disabled>
                 Detecting Scenes...
               </ContextMenuItem>
             ) : (
-              <ContextMenuItem onClick={onDetectScenes}>
-                Detect Scenes &amp; Split
-              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Detect Scenes &amp; Split</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-48">
+                  <ContextMenuItem onClick={() => onDetectScenes('histogram')}>
+                    Fast (Histogram)
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => onDetectScenes('optical-flow')}>
+                    AI (Gemma)
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             )}
             <ContextMenuSeparator />
           </>
-        )} */}
+        )}
 
         {/* Generate Audio from Text - only show for text items */}
         {isTextItem && onGenerateAudioFromText && (

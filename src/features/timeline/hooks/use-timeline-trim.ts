@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToTimeNow } from '../utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import { clampTrimAmount, clampToAdjacentItems, type TrimHandle } from '../utils/trim-utils';
 import { useTransitionsStore } from '../stores/transitions-store';
@@ -64,7 +64,7 @@ interface TrimState {
  * - Source boundary clamping for accurate visual feedback
  */
 export function useTimelineTrim(item: TimelineItem, timelineDuration: number, trackLocked: boolean = false) {
-  const { pixelsToTime } = useTimelineZoom();
+  const pixelsToTime = pixelsToTimeNow;
   const fps = useTimelineStore((s) => s.fps);
   const trimItemStart = useTimelineStore((s) => s.trimItemStart);
   const trimItemEnd = useTimelineStore((s) => s.trimItemEnd);
@@ -77,7 +77,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
   // Use snap calculator - pass item.id to exclude self from magnetic snaps
   // Only use magnetic snap targets (item edges), not grid lines
-  const { getMagneticSnapTargets, snapThresholdFrames, snapEnabled } = useSnapCalculator(
+  const { getMagneticSnapTargets, getSnapThresholdFrames, snapEnabled } = useSnapCalculator(
     timelineDuration,
     item.id
   );
@@ -128,7 +128,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       }
 
       let nearestTarget: SnapTarget | null = null;
-      let minDistance = snapThresholdFrames;
+      let minDistance = getSnapThresholdFrames();
 
       for (const target of targets) {
         if (excludeItemIds && target.itemId && excludeItemIds.has(target.itemId)) continue;
@@ -145,7 +145,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
 
       return { snappedFrame: targetFrame, snapTarget: null };
     },
-    [snapEnabled, getMagneticSnapTargets, snapThresholdFrames]
+    [snapEnabled, getMagneticSnapTargets, getSnapThresholdFrames]
   );
 
   // Mouse move handler - only updates local state for visual feedback

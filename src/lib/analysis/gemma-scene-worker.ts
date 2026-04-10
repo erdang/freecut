@@ -1,9 +1,9 @@
 /**
  * Web Worker for Gemma-4 scene cut verification.
  *
- * Loads Gemma-4-E2B-it-ONNX via @huggingface/transformers CDN.
- * Runs inside a Worker to bypass COEP (Cross-Origin-Embedder-Policy)
- * restrictions on the main thread.
+ * Loads Gemma-4-E4B-it-ONNX via @huggingface/transformers (bundled by Vite).
+ * Runs inside a Worker so that model loading and inference don't block the
+ * main thread.
  *
  * Messages:
  *   → { type: 'init' }                         — preload model
@@ -14,20 +14,26 @@
  *   ← { type: 'error', message }                 — error
  */
 
-// TODO: Replace CDN imports with a bundled devDependency (`@huggingface/transformers`)
-// imported via a Vite worker entry. CDN fetches bypass npm audit and lack SRI hashes,
-// meaning a compromised CDN could execute arbitrary code in this Worker context.
-// See: https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity
-const TRANSFORMERS_CDN_URL = 'https://esm.sh/@huggingface/transformers@4.0.1?bundle';
-const WASM_CDN_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.0.1/dist/';
-const MODEL_ID = 'onnx-community/gemma-4-E2B-it-ONNX';
+import {
+  AutoProcessor,
+  Gemma4ForConditionalGeneration,
+  RawImage,
+  env,
+} from '@huggingface/transformers';
+
+const MODEL_ID = 'onnx-community/gemma-4-E4B-it-ONNX';
+
+// Configure transformers.js for browser worker context
+env.useBrowserCache = true;
+env.allowLocalModels = false;
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 let processor: any = null;
 let model: any = null;
-let transformers: any = null;
 /* eslint-enable @typescript-eslint/no-explicit-any */
 let loading = false;
+let disposed = false;
+let loadGeneration = 0;
 
 function post(msg: Record<string, unknown>): void {
   self.postMessage(msg);
@@ -37,26 +43,29 @@ async function loadModel(): Promise<void> {
   if (model && processor) { post({ type: 'ready' }); return; }
   if (loading) return;
   loading = true;
+  disposed = false;
+  const thisGen = ++loadGeneration;
 
   try {
     post({ type: 'progress', stage: 'loading-transformers', percent: 0 });
-
-    const mod = await import(/* @vite-ignore */ TRANSFORMERS_CDN_URL);
-    transformers = mod;
-
-    mod.env.useBrowserCache = true;
-    mod.env.allowLocalModels = false;
-    mod.env.backends.onnx.wasm.wasmPaths = WASM_CDN_URL;
-
     post({ type: 'progress', stage: 'loading-model', percent: 5 });
 
     let lastPct = 5;
-    processor = await mod.AutoProcessor.from_pretrained(MODEL_ID);
+    const loadedProcessor = await AutoProcessor.from_pretrained(MODEL_ID);
 
-    model = await mod.Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
+    if (disposed || thisGen !== loadGeneration) return;
+
+    // Model card recommends 70–140 tokens for classification/video understanding.
+    // Default 280 is more than needed; 140 halves the image tokens while keeping
+    // enough visual detail to distinguish different scenes.
+    if (loadedProcessor.image_processor) {
+      loadedProcessor.image_processor.max_soft_tokens = 140;
+    }
+
+    const loadedModel = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {
       dtype: 'q4f16',
       device: 'webgpu',
-      progress_callback: (info: { status?: string; total?: number; loaded?: number }) => {
+      progress_callback: disposed ? undefined : (info: { status?: string; total?: number; loaded?: number }) => {
         if (info.status === 'progress' && info.total && info.loaded) {
           const pct = 5 + (info.loaded / info.total) * 90;
           if (pct - lastPct > 2) {
@@ -67,34 +76,59 @@ async function loadModel(): Promise<void> {
       },
     });
 
+    if (disposed || thisGen !== loadGeneration) {
+      if (typeof loadedModel.dispose === 'function') loadedModel.dispose();
+      return;
+    }
+
+    processor = loadedProcessor;
+    model = loadedModel;
     post({ type: 'progress', stage: 'ready', percent: 100 });
     post({ type: 'ready' });
   } catch (err) {
-    post({ type: 'error', message: `Model load failed: ${(err as Error).message}` });
+    if (!disposed) {
+      post({ type: 'error', message: `Model load failed: ${(err as Error).message}` });
+    }
   } finally {
     loading = false;
   }
 }
 
 const VERIFY_PROMPT =
-  'Look at these two consecutive video frames. ' +
-  'Is this a hard scene cut (completely different scene or shot) or continuous footage ' +
-  '(same scene with camera movement, zoom, dissolve, or minor changes)? ' +
-  'Answer with exactly one word: CUT or CONTINUOUS';
+  'Two frames from a video, ~1 second apart. Is there an editorial cut between them?\n\n' +
+  'NOT a cut — answer SAME:\n' +
+  '- Camera movement: pan, tilt, zoom, dolly, tracking, crane, or handheld shake\n' +
+  '- Whip pan or motion blur (fast continuous camera move)\n' +
+  '- Subject or object motion within the same scene\n' +
+  '- Lighting, exposure, or focus change in the same scene\n' +
+  '- Gradual transition: dissolve, fade, crossfade\n\n' +
+  'IS a cut — answer CUT:\n' +
+  '- Completely different scene, location, or subject with no continuous motion\n' +
+  '- Abrupt jump to a different camera angle\n\n' +
+  'Answer exactly one word: CUT or SAME';
 
 async function verifyCandidate(
   id: number,
   beforeBlob: Blob,
   afterBlob: Blob,
 ): Promise<void> {
-  if (!model || !processor || !transformers) {
+  if (!model || !processor) {
     post({ type: 'error', message: 'Model not loaded' });
     return;
   }
 
   try {
-    const beforeImg = await transformers.RawImage.fromBlob(beforeBlob);
-    const afterImg = await transformers.RawImage.fromBlob(afterBlob);
+    const beforeImg = await RawImage.fromBlob(beforeBlob);
+    const afterImg = await RawImage.fromBlob(afterBlob);
+
+    post({
+      type: 'debug',
+      id,
+      beforeSize: `${beforeImg.width}x${beforeImg.height}`,
+      afterSize: `${afterImg.width}x${afterImg.height}`,
+      beforeBlobSize: beforeBlob.size,
+      afterBlobSize: afterBlob.size,
+    });
 
     const messages = [
       {
@@ -112,13 +146,22 @@ async function verifyCandidate(
       add_generation_prompt: true,
     });
 
-    const inputs = await processor(prompt, [beforeImg, afterImg], {
+    post({ type: 'debug', id, prompt: typeof prompt === 'string' ? prompt.slice(0, 500) : 'non-string prompt' });
+
+    const inputs = await processor(prompt, [beforeImg, afterImg], null, {
       add_special_tokens: false,
+    });
+
+    post({
+      type: 'debug',
+      id,
+      inputIds: inputs.input_ids?.dims?.toString(),
+      pixelValues: inputs.pixel_values?.dims?.toString(),
     });
 
     const outputs = await model.generate({
       ...inputs,
-      max_new_tokens: 10,
+      max_new_tokens: 16,
       do_sample: false,
     });
 
@@ -127,11 +170,30 @@ async function verifyCandidate(
       { skip_special_tokens: true },
     );
 
-    const answer = (decoded[0] ?? '').trim().toUpperCase();
-    post({ type: 'result', id, isSceneCut: answer.startsWith('CUT'), reason: answer });
+    const raw = (decoded[0] ?? '').trim();
+    // Robust keyword detection — handles preamble or explanation from the model.
+    // Conservative: default to SAME (not a cut) when ambiguous, since optical
+    // flow already flagged this as a candidate.
+    const hasCut = /\bCUT\b/i.test(raw);
+    const hasSame = /\bSAME\b/i.test(raw);
+    const isCut = hasCut && !hasSame;
+    post({ type: 'result', id, isSceneCut: isCut, reason: raw });
   } catch (err) {
     post({ type: 'result', id, isSceneCut: false, reason: `error: ${(err as Error).message}` });
   }
+}
+
+/** Release model and processor to free VRAM. */
+function dispose(): void {
+  disposed = true;
+  if (model) {
+    // transformers.js models expose a dispose() that releases WebGPU buffers
+    if (typeof model.dispose === 'function') model.dispose();
+    model = null;
+  }
+  processor = null;
+  loading = false;
+  post({ type: 'disposed' });
 }
 
 // Use addEventListener (not self.onmessage =) so the bootstrap wrapper
@@ -142,5 +204,7 @@ self.addEventListener('message', (event: MessageEvent) => {
     void loadModel();
   } else if (msg.type === 'verify') {
     void verifyCandidate(msg.id, msg.before, msg.after);
+  } else if (msg.type === 'dispose') {
+    dispose();
   }
 });

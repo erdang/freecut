@@ -5,7 +5,7 @@ import type { DragState, UseTimelineDragReturn, SnapTarget } from '../types/drag
 import { useTimelineStore } from '../stores/timeline-store';
 import { useEditorStore } from '@/shared/state/editor';
 import { useSelectionStore } from '@/shared/state/selection';
-import { useTimelineZoom } from './use-timeline-zoom';
+import { pixelsToFramePreciseNow, frameToPixelsNow } from '@/features/timeline/utils/zoom-conversions';
 import { useSnapCalculator } from './use-snap-calculator';
 import { findNearestAvailableSpace } from '../utils/collision-utils';
 import { getTrackKind } from '../utils/classic-tracks';
@@ -321,7 +321,10 @@ export function useTimelineDrag(
   }, []);
 
   // Get zoom utilities
-  const { pixelsToFramePrecise, frameToPixels } = useTimelineZoom();
+  // Zoom conversions are read imperatively (via store.getState()) at call-time
+  // to avoid subscribing every TimelineItem to the live zoom store.
+  const pixelsToFramePrecise = pixelsToFramePreciseNow;
+  const frameToPixels = frameToPixelsNow;
 
   // Get current alt-drag state from selection store for snap exclusion logic
   const isAltDragActive = useSelectionStore((s) => s.dragState?.isAltDrag ?? false);
@@ -341,7 +344,7 @@ export function useTimelineDrag(
     return item.id;
   }, [selectedItemIds, item.id, isAltDragActive]);
 
-  const { magneticSnapTargets, snapThresholdFrames, snapEnabled } = useSnapCalculator(
+  const { magneticSnapTargets, getSnapThresholdFrames, snapEnabled } = useSnapCalculator(
     timelineDuration,
     excludeFromSnap,
     { includeTransitionMidpoints: false }
@@ -363,8 +366,8 @@ export function useTimelineDrag(
   // Update refs synchronously (not in useEffect) so they're always current
   const magneticSnapTargetsRef = useRef(magneticSnapTargets);
   magneticSnapTargetsRef.current = magneticSnapTargets;
-  const snapThresholdFramesRef = useRef(snapThresholdFrames);
-  snapThresholdFramesRef.current = snapThresholdFrames;
+  const getSnapThresholdFramesRef = useRef(getSnapThresholdFrames);
+  getSnapThresholdFramesRef.current = getSnapThresholdFrames;
   const snapEnabledRef = useRef(snapEnabled);
   snapEnabledRef.current = snapEnabled;
 
@@ -500,7 +503,7 @@ export function useTimelineDrag(
     itemDurationInFrames: number
   ): { snappedFrame: number; snapTarget: SnapTarget | null } => {
     const targets = magneticSnapTargetsRef.current;
-    const threshold = snapThresholdFramesRef.current;
+    const threshold = getSnapThresholdFramesRef.current();
     const enabled = snapEnabledRef.current;
 
     if (!enabled || targets.length === 0) {

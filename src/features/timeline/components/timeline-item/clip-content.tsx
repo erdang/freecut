@@ -9,6 +9,8 @@ import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useCompositionsStore } from '../../stores/compositions-store';
 import { useItemsStore } from '../../stores/items-store';
+import { useClipVisibility } from '../../hooks/use-clip-visibility';
+import { useZoomStore } from '../../stores/zoom-store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { summarizeCompositionClipContent } from '../../utils/composition-clip-summary';
 import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
@@ -17,15 +19,20 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 
 const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
 
+/**
+ * Small render buffer: filmstrip/waveform are rendered slightly wider than the
+ * clip width.  The parent's overflow:hidden clips the excess invisibly.
+ * Protects against sub-frame timing where the CSS variable has updated but
+ * React hasn't committed the filmstrip width yet.
+ */
+const RENDER_BUFFER = 1.03;
+
 interface ClipContentProps {
   item: TimelineItem;
-  clipWidth: number;
+  clipLeftFrames: number;
+  clipWidthFrames: number;
   fps: number;
   isLinked?: boolean;
-  isClipVisible: boolean;
-  visibleStartRatio?: number;
-  visibleEndRatio?: number;
-  pixelsPerSecond: number;
   preferImmediateRendering?: boolean;
   audioWaveformScale?: number;
   linkedSyncOffsetFrames?: number | null;
@@ -42,19 +49,32 @@ interface ClipContentProps {
  */
 export const ClipContent = memo(function ClipContent({
   item,
-  clipWidth,
+  clipLeftFrames,
+  clipWidthFrames,
   fps,
   isLinked = false,
-  isClipVisible,
-  visibleStartRatio = 0,
-  visibleEndRatio = 1,
-  pixelsPerSecond,
   preferImmediateRendering = false,
   audioWaveformScale = 1,
   linkedSyncOffsetFrames = null,
 }: ClipContentProps) {
+  // Track the live pixelsPerSecond directly — filmstrip updates on every zoom
+  // tick (~0.23ms for 89 clips) so it tracks the zoom perfectly with zero
+  // visual jumps.  This is safe because drag/edit hooks now use imperative
+  // reads, keeping the total per-tick render cost under 0.5ms.
+  const pixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond);
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
+  const clipLeftPx = useMemo(
+    () => fps > 0 ? (clipLeftFrames / fps) * pixelsPerSecond : 0,
+    [clipLeftFrames, fps, pixelsPerSecond],
+  );
+  const clipWidth = useMemo(
+    () => Math.max(0, fps > 0 ? (clipWidthFrames / fps) * pixelsPerSecond : 0),
+    [clipWidthFrames, fps, pixelsPerSecond],
+  );
+  // Small safety buffer — clips the excess via overflow:hidden.
+  const renderWidth = Math.ceil(clipWidth * RENDER_BUFFER);
+  const clipVisibility = useClipVisibility(clipLeftPx, clipWidth);
   const isCompositionAudioWrapper = item.type === 'audio' && !!item.compositionId;
 
   // For composition items: find the topmost video in the sub-comp for filmstrip
@@ -228,14 +248,15 @@ export const ClipContent = memo(function ClipContent({
             <ClipFilmstrip
               mediaId={item.mediaId}
               clipWidth={clipWidth}
+              renderWidth={renderWidth}
               sourceStart={sourceStart}
               sourceDuration={sourceDuration}
               trimStart={trimStart}
               speed={speed}
               fps={fps}
-              isVisible={isClipVisible}
-              visibleStartRatio={visibleStartRatio}
-              visibleEndRatio={visibleEndRatio}
+              isVisible={clipVisibility.isVisible}
+              visibleStartRatio={clipVisibility.visibleStartRatio}
+              visibleEndRatio={clipVisibility.visibleEndRatio}
               pixelsPerSecond={pixelsPerSecond}
               preferImmediateRendering={preferImmediateRendering}
             />
@@ -271,13 +292,13 @@ export const ClipContent = memo(function ClipContent({
             >
               <ClipWaveform
                 mediaId={item.mediaId}
-                clipWidth={clipWidth}
+                clipWidth={renderWidth}
                 sourceStart={sourceStart}
                 sourceDuration={sourceDuration}
                 trimStart={trimStart}
                 speed={speed}
                 fps={fps}
-                isVisible={isClipVisible}
+                isVisible={clipVisibility.isVisible}
                 pixelsPerSecond={pixelsPerSecond}
               />
             </div>
@@ -295,10 +316,10 @@ export const ClipContent = memo(function ClipContent({
           <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
             <CompoundClipWaveform
               composition={composition}
-              clipWidth={clipWidth}
+              clipWidth={renderWidth}
               sourceStart={compoundClipSourceStart}
               sourceDuration={compoundClipSourceDuration}
-              isVisible={isClipVisible}
+              isVisible={clipVisibility.isVisible}
               pixelsPerSecond={pixelsPerSecond}
             />
           </div>
@@ -331,14 +352,15 @@ export const ClipContent = memo(function ClipContent({
               <ClipFilmstrip
                 mediaId={compositionVisualMediaId}
                 clipWidth={clipWidth}
+                renderWidth={renderWidth}
                 sourceStart={compositionVisualSourceStart}
                 sourceDuration={compositionVisualSourceDuration}
                 trimStart={0}
                 speed={compositionVisualSpeed}
                 fps={fps}
-                isVisible={isClipVisible}
-                visibleStartRatio={visibleStartRatio}
-                visibleEndRatio={visibleEndRatio}
+                isVisible={clipVisibility.isVisible}
+                visibleStartRatio={clipVisibility.visibleStartRatio}
+                visibleEndRatio={clipVisibility.visibleEndRatio}
                 pixelsPerSecond={pixelsPerSecond}
                 preferImmediateRendering={preferImmediateRendering}
               />
@@ -352,10 +374,10 @@ export const ClipContent = memo(function ClipContent({
             >
               <CompoundClipWaveform
                 composition={composition}
-                clipWidth={clipWidth}
+                clipWidth={renderWidth}
                 sourceStart={compoundClipSourceStart}
                 sourceDuration={compoundClipSourceDuration}
-                isVisible={isClipVisible}
+                isVisible={clipVisibility.isVisible}
                 pixelsPerSecond={pixelsPerSecond}
               />
             </div>
@@ -371,10 +393,10 @@ export const ClipContent = memo(function ClipContent({
             <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
               <CompoundClipWaveform
                 composition={composition}
-                clipWidth={clipWidth}
+                clipWidth={renderWidth}
                 sourceStart={compoundClipSourceStart}
                 sourceDuration={compoundClipSourceDuration}
-                isVisible={isClipVisible}
+                isVisible={clipVisibility.isVisible}
                 pixelsPerSecond={pixelsPerSecond}
               />
             </div>
@@ -430,15 +452,16 @@ export const ClipContent = memo(function ClipContent({
               isAnimated={isAnimated}
               animationFormat={isAnimatedWebp ? 'webp' : 'gif'}
               clipWidth={clipWidth}
-              isVisible={isClipVisible}
+              renderWidth={renderWidth}
+              isVisible={clipVisibility.isVisible}
               src={item.src}
               sourceStart={sourceStart}
               sourceDuration={sourceDuration}
               trimStart={trimStart}
               speed={speed}
               fps={fps}
-              visibleStartRatio={visibleStartRatio}
-              visibleEndRatio={visibleEndRatio}
+              visibleStartRatio={clipVisibility.visibleStartRatio}
+              visibleEndRatio={clipVisibility.visibleEndRatio}
               pixelsPerSecond={pixelsPerSecond}
             />
           )}

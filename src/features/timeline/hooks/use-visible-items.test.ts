@@ -10,7 +10,7 @@ import { useItemsStore } from '../stores/items-store';
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store';
 import { useTimelineViewportStore, _resetViewportThrottle } from '../stores/timeline-viewport-store';
 import { useTransitionsStore } from '../stores/transitions-store';
-import { useZoomStore } from '../stores/zoom-store';
+import { _resetZoomStoreForTest, useZoomStore } from '../stores/zoom-store';
 
 function makeItem(id: string, from: number, duration: number): VideoItem {
   return {
@@ -107,7 +107,7 @@ describe('useVisibleItems filtering logic', () => {
       isDirty: false,
       isTimelineLoading: false,
     });
-    useZoomStore.getState().setZoomLevelImmediate(1);
+    _resetZoomStoreForTest();
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
     useTransitionsStore.getState().setTransitions([]);
@@ -212,6 +212,39 @@ describe('useVisibleItems filtering logic', () => {
 
     expect(screen.getByTestId('visible-items')).toHaveTextContent('c');
     expect(onRender).toHaveBeenCalledTimes(2);
+
+    vi.useRealTimers();
+  });
+
+  it('culls items outside the buffered viewport during live zoom-in', () => {
+    vi.useFakeTimers();
+
+    useItemsStore.getState().setItems([
+      makeItem('a', 0, 30),
+      makeItem('b', 500, 30), // at 2x zoom: pixel 3333 — outside [0,3000] buffered range
+    ]);
+
+    const onRender = vi.fn();
+    render(createElement(VisibleItemsProbe, { onRender }));
+
+    expect(screen.getByTestId('visible-items')).toHaveTextContent('a,b');
+    expect(onRender).toHaveBeenCalledTimes(1);
+
+    // Zoom in — culling now uses live pps (matching the viewport coordinate
+    // space) so item b at frame 500 correctly exits the buffered range.
+    act(() => {
+      useZoomStore.getState().setZoomLevelImmediate(2);
+    });
+
+    expect(screen.getByTestId('visible-items')).toHaveTextContent('a');
+    expect(onRender).toHaveBeenCalledTimes(2);
+
+    // After settle, same result
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+
+    expect(screen.getByTestId('visible-items')).toHaveTextContent('a');
 
     vi.useRealTimers();
   });

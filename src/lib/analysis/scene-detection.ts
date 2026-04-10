@@ -1,19 +1,40 @@
 /**
- * Scene Detection Service — Two-pass pipeline.
+ * Scene Detection Service
  *
- * Pass 1 (fast): GPU optical flow detects candidate scene cuts (~seconds).
- * Pass 2 (smart): Gemma-4 VLM verifies each candidate by comparing frame
- *                 pairs, filtering out camera pans, dissolves, and false
- *                 positives (~seconds per candidate).
+ * Two detection methods:
+ * - `histogram` (default): Fast CPU-only color histogram comparison.
+ * - `optical-flow`: GPU optical flow via WebGPU compute shaders.
+ *
+ * Optional Gemma-4 VLM verification pass filters false positives.
  */
 
 import { OpticalFlowAnalyzer } from './optical-flow-analyzer';
 import type { MotionResult } from './optical-flow-analyzer';
 import { ANALYSIS_WIDTH, ANALYSIS_HEIGHT } from './optical-flow-shaders';
+import { detectScenesHistogram } from './histogram-scene-detection';
+import { seekVideo, deduplicateCuts } from './scene-detection-utils';
 import { createGemmaSceneWorker } from './create-gemma-worker';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('SceneDetection');
+
+/**
+ * In-memory cache of scene detection results keyed by
+ * `${mediaId}:${sampleIntervalMs}:${useGemmaVerification}`.
+ * Survives across multiple detection runs within the same session.
+ */
+const resultsCache = new Map<string, SceneCut[]>();
+
+/** Clear cached results for a specific media, or all if no id given. */
+export function clearSceneCache(mediaId?: string): void {
+  if (mediaId) {
+    for (const key of resultsCache.keys()) {
+      if (key.startsWith(`${mediaId}:`)) resultsCache.delete(key);
+    }
+  } else {
+    resultsCache.clear();
+  }
+}
 
 /** Default sampling interval in milliseconds (matches masterselects) */
 const SAMPLE_INTERVAL_MS = 500;
@@ -21,9 +42,11 @@ const SAMPLE_INTERVAL_MS = 500;
 /** Minimum gap in seconds between scene cuts — prevents micro-segments from dissolves/pans */
 const MIN_CUT_GAP_SEC = 2.0;
 
-/** Resolution for frames sent to Gemma (larger = better accuracy, slower) */
-const VERIFY_FRAME_WIDTH = 320;
-const VERIFY_FRAME_HEIGHT = 180;
+/** Max dimension (longest side) for frames sent to Gemma — preserves aspect ratio */
+const VERIFY_MAX_DIM = 480;
+
+/** How far before the detected cut to sample the "before" frame (seconds) */
+const VERIFY_BEFORE_OFFSET_SEC = 1.0;
 
 export interface SceneCut {
   /** Frame number where the scene cut occurs */
@@ -45,46 +68,36 @@ export interface SceneDetectionProgress {
   stage?: 'optical-flow' | 'loading-model' | 'verifying';
 }
 
-/**
- * Seek video and wait for the seeked event with a timeout fallback.
- */
-async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const onSeeked = () => {
-      video.removeEventListener('seeked', onSeeked);
-      clearTimeout(timeout);
-      resolve();
-    };
-    const timeout = setTimeout(() => {
-      video.removeEventListener('seeked', onSeeked);
-      resolve();
-    }, 1000);
-    video.addEventListener('seeked', onSeeked);
-    video.currentTime = timeSec;
-  });
-}
-
 export interface DetectScenesOptions {
-  /** Time between optical flow samples in ms (default: 500) */
+  /**
+   * Detection method:
+   * - `'histogram'` — fast CPU-only color histogram comparison (default).
+   *    Best for hard cuts. No WebGPU required.
+   * - `'optical-flow'` — GPU optical flow via WebGPU compute shaders.
+   *    Detects more subtle transitions but requires WebGPU.
+   */
+  method?: 'histogram' | 'optical-flow';
+  /** Time between samples in ms (default: 250 for histogram, 500 for optical-flow) */
   sampleIntervalMs?: number;
-  /** Use Gemma-4 VLM to verify candidate cuts (default: true) */
+  /** Use Gemma-4 VLM to verify candidate cuts (default: false for histogram, true for optical-flow) */
   useGemmaVerification?: boolean;
   /** Progress callback */
   onProgress?: (progress: SceneDetectionProgress) => void;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
+  /** Media ID for result caching — skip re-analysis when the same media is detected again */
+  mediaId?: string;
 }
 
 /**
  * Detect scene cuts in a video element.
  *
- * Pass 1: Samples at fixed intervals and compares consecutive frames via GPU
- * optical flow. A scene cut candidate is flagged when mean motion exceeds the
- * threshold AND coverage ratio is high AND flow direction is incoherent.
+ * Uses `method` to select the detection strategy:
+ * - `'histogram'` (default): fast CPU-only color histogram comparison
+ * - `'optical-flow'`: GPU optical flow via WebGPU compute shaders
  *
- * Pass 2 (if enabled): Captures frame pairs around each candidate and sends
- * them to Gemma-4 VLM to verify whether it's a real hard cut or just camera
- * movement / dissolve.
+ * Optional Gemma-4 VLM verification pass (enabled by default for optical-flow)
+ * filters false positives from camera pans, dissolves, etc.
  */
 export async function detectScenes(
   video: HTMLVideoElement,
@@ -92,13 +105,73 @@ export async function detectScenes(
   options: DetectScenesOptions = {},
 ): Promise<SceneCut[]> {
   const {
-    sampleIntervalMs = SAMPLE_INTERVAL_MS,
-    useGemmaVerification = true,
+    method = 'histogram',
     onProgress,
     signal,
+    mediaId,
   } = options;
+
+  const sampleIntervalMs = options.sampleIntervalMs ?? (method === 'histogram' ? 250 : SAMPLE_INTERVAL_MS);
+  const useGemmaVerification = options.useGemmaVerification ?? (method === 'optical-flow');
+
+  // Return cached results when available
+  if (mediaId) {
+    const cacheKey = `${mediaId}:${method}:${sampleIntervalMs}:${useGemmaVerification}`;
+    const cached = resultsCache.get(cacheKey);
+    if (cached) {
+      log.info('Returning cached scene detection results', { mediaId, cuts: cached.length });
+      return cached;
+    }
+  }
+
+  let deduped: SceneCut[];
+
+  if (method === 'histogram') {
+    deduped = await detectScenesHistogram(video, fps, {
+      sampleIntervalMs,
+      onProgress,
+      signal,
+    });
+  } else {
+    deduped = await detectScenesOpticalFlow(video, fps, sampleIntervalMs, onProgress, signal);
+  }
+
+  const cacheKey = mediaId ? `${mediaId}:${method}:${sampleIntervalMs}:${useGemmaVerification}` : null;
+  const cacheAndReturn = (results: SceneCut[]): SceneCut[] => {
+    if (cacheKey) resultsCache.set(cacheKey, results);
+    return results;
+  };
+
+  if (!useGemmaVerification || deduped.length === 0 || signal?.aborted) {
+    return cacheAndReturn(deduped);
+  }
+
+  // Pass 2: Gemma verification — gracefully fall back to optical-flow results on failure
+  try {
+    const verified = await verifyWithGemma(video, deduped, onProgress, signal);
+    log.info('Gemma verification complete', { confirmed: verified.length, candidates: deduped.length });
+    disposeGemmaWorker();
+    return cacheAndReturn(verified);
+  } catch (err) {
+    resetGemmaWorker();
+    log.warn('Gemma verification failed, using optical flow results', { error: (err as Error).message });
+    return cacheAndReturn(deduped);
+  }
+}
+
+/**
+ * Pass 1 alternative: GPU optical flow detection.
+ * Requires WebGPU — throws if unavailable.
+ */
+async function detectScenesOpticalFlow(
+  video: HTMLVideoElement,
+  fps: number,
+  sampleIntervalMs: number,
+  onProgress?: (progress: SceneDetectionProgress) => void,
+  signal?: AbortSignal,
+): Promise<SceneCut[]> {
   if (!navigator.gpu) {
-    throw new Error('WebGPU not supported — scene detection requires GPU');
+    throw new Error('WebGPU not supported — optical-flow scene detection requires GPU');
   }
 
   const adapter = await navigator.gpu.requestAdapter();
@@ -107,7 +180,6 @@ export async function detectScenes(
 
   const analyzer = new OpticalFlowAnalyzer(device);
 
-  // Verify shader compiles cleanly
   const shaderOk = await analyzer.checkShaderCompilation();
   if (!shaderOk) {
     analyzer.destroy();
@@ -116,7 +188,6 @@ export async function detectScenes(
   }
 
   const sceneCuts: SceneCut[] = [];
-
   const duration = video.duration;
   const sampleIntervalSec = sampleIntervalMs / 1000;
   const totalSamples = Math.ceil(duration / sampleIntervalSec);
@@ -129,10 +200,8 @@ export async function detectScenes(
       if (signal?.aborted) break;
 
       const time = i * sampleIntervalSec;
-
       await seekVideo(video, time);
 
-      // Capture frame at analysis resolution
       ctx.drawImage(video, 0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
       const bitmap = await createImageBitmap(canvas);
 
@@ -156,46 +225,43 @@ export async function detectScenes(
         stage: 'optical-flow',
       });
     }
-    log.info('Optical flow pass complete', { totalSamples, maxMotion: maxMotionSeen.toFixed(4), rawCuts: sceneCuts.length });
+    log.info('Optical flow pass complete', {
+      totalSamples,
+      maxMotion: maxMotionSeen.toFixed(4),
+      rawCuts: sceneCuts.length,
+    });
   } finally {
     analyzer.destroy();
     device.destroy();
   }
 
-  // Deduplicate: when multiple cuts cluster together (dissolves, pans), keep
-  // only the strongest cut within each MIN_CUT_GAP_SEC window.
+  // Deduplicate: keep strongest cut within each MIN_CUT_GAP_SEC window
   const deduped = deduplicateCuts(sceneCuts, MIN_CUT_GAP_SEC);
-
   log.info('Deduplication complete', { cuts: deduped.length, minGapSec: MIN_CUT_GAP_SEC });
-
-  if (!useGemmaVerification || deduped.length === 0 || signal?.aborted) {
-    return deduped;
-  }
-
-  // Pass 2: Gemma verification — gracefully fall back to optical-flow results on failure
-  try {
-    const verified = await verifyWithGemma(video, deduped, onProgress, signal);
-    log.info('Gemma verification complete', { confirmed: verified.length, candidates: deduped.length });
-    return verified;
-  } catch (err) {
-    resetGemmaWorker();
-    log.warn('Gemma verification failed, using optical flow results', { error: (err as Error).message });
-    return deduped;
-  }
+  return deduped;
 }
 
 /**
- * Capture a video frame as a PNG Blob for Gemma input.
+ * Capture a video frame as a JPEG Blob for Gemma input.
+ * Preserves the video's native aspect ratio, scaling so the longest
+ * side fits within VERIFY_MAX_DIM.
  */
 async function captureFrameBlob(
   video: HTMLVideoElement,
   timeSec: number,
 ): Promise<Blob> {
   await seekVideo(video, timeSec);
-  const canvas = new OffscreenCanvas(VERIFY_FRAME_WIDTH, VERIFY_FRAME_HEIGHT);
+
+  const vw = video.videoWidth || 640;
+  const vh = video.videoHeight || 360;
+  const scale = Math.min(VERIFY_MAX_DIM / Math.max(vw, vh), 1);
+  const w = Math.round(vw * scale);
+  const h = Math.round(vh * scale);
+
+  const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d')!;
-  ctx.drawImage(video, 0, 0, VERIFY_FRAME_WIDTH, VERIFY_FRAME_HEIGHT);
-  return canvas.convertToBlob({ type: 'image/png' });
+  ctx.drawImage(video, 0, 0, w, h);
+  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.8 });
 }
 
 /**
@@ -218,6 +284,16 @@ function resetGemmaWorker(): void {
   }
 }
 
+/** Ask the worker to release VRAM, then terminate it. */
+function disposeGemmaWorker(): void {
+  if (!gemmaWorker) return;
+  gemmaWorker.postMessage({ type: 'dispose' });
+  // Give the worker a moment to release GPU buffers before terminating
+  const w = gemmaWorker;
+  gemmaWorker = null;
+  setTimeout(() => w.terminate(), 500);
+}
+
 /**
  * Pass 2: Verify candidate cuts with Gemma-4 in a Web Worker so model loading
  * and inference do not block the main thread.
@@ -229,7 +305,6 @@ async function verifyWithGemma(
   signal?: AbortSignal,
 ): Promise<SceneCut[]> {
   const worker = getGemmaWorker();
-  const sampleInterval = SAMPLE_INTERVAL_MS / 1000;
 
   // Wait for model to load (30s timeout for bootstrap + initial load handshake)
   await new Promise<void>((resolve, reject) => {
@@ -274,7 +349,7 @@ async function verifyWithGemma(
     if (signal?.aborted) break;
 
     const cut = candidates[i]!;
-    const beforeTime = Math.max(0, cut.time - sampleInterval);
+    const beforeTime = Math.max(0, cut.time - VERIFY_BEFORE_OFFSET_SEC);
 
     onProgress?.({
       percent: (i / candidates.length) * 100,
@@ -284,16 +359,20 @@ async function verifyWithGemma(
       stage: 'verifying',
     });
 
-    const [beforeBlob, afterBlob] = await Promise.all([
-      captureFrameBlob(video, beforeTime),
-      captureFrameBlob(video, cut.time),
-    ]);
+    // Serialize seeks — both mutate video.currentTime
+    const beforeBlob = await captureFrameBlob(video, beforeTime);
+    const afterBlob = await captureFrameBlob(video, cut.time);
 
     const result = await new Promise<{ isSceneCut: boolean; reason: string }>((resolve) => {
       const onMsg = (e: MessageEvent) => {
-        if (e.data.type === 'result' && e.data.id === i) {
+        if (e.data.type === 'debug') {
+          log.info('Gemma worker debug', e.data);
+        } else if (e.data.type === 'result' && e.data.id === i) {
           worker.removeEventListener('message', onMsg);
           resolve({ isSceneCut: e.data.isSceneCut, reason: e.data.reason });
+        } else if (e.data.type === 'error') {
+          worker.removeEventListener('message', onMsg);
+          resolve({ isSceneCut: false, reason: `worker error: ${e.data.message}` });
         }
       };
       worker.addEventListener('message', onMsg);
@@ -308,32 +387,4 @@ async function verifyWithGemma(
   }
 
   return verified;
-}
-
-/**
- * Cluster scene cuts that are closer than `minGapSec` and keep only
- * the one with the highest total motion in each cluster.
- */
-function deduplicateCuts(cuts: SceneCut[], minGapSec: number): SceneCut[] {
-  if (cuts.length <= 1) return cuts;
-
-  const result: SceneCut[] = [];
-  let clusterBest = cuts[0]!;
-
-  for (let i = 1; i < cuts.length; i++) {
-    const cut = cuts[i]!;
-    if (cut.time - clusterBest.time < minGapSec) {
-      // Same cluster — keep the stronger cut
-      if (cut.motion.totalMotion > clusterBest.motion.totalMotion) {
-        clusterBest = cut;
-      }
-    } else {
-      // New cluster — emit previous best and start new cluster
-      result.push(clusterBest);
-      clusterBest = cut;
-    }
-  }
-  result.push(clusterBest);
-
-  return result;
 }
