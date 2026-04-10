@@ -31,7 +31,6 @@ import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide';
 import { DRAG_OPACITY } from '../../constants';
 import { canJoinItems } from '@/features/timeline/utils/clip-utils';
 import { cn } from '@/shared/ui/cn';
-import { DEFAULT_TRACK_HEIGHT } from '@/features/timeline/constants';
 import {
   getTransitionBridgeAtHandle,
   hasTransitionBridgeAtHandle,
