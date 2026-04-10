@@ -19,6 +19,19 @@ import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 
 const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
 
+/**
+ * Coarse log-quantization for pixelsPerSecond during zoom interaction.
+ * Uses ~30% steps so the filmstrip updates only a few times per zoom gesture
+ * (keeping content correctly sized without distortion) while avoiding the
+ * cost of re-rendering 89+ clips on every single wheel tick.
+ */
+const ZOOM_INTERACTION_LOG_STEP = Math.log2(1.3);
+
+function quantizeZoomPps(pps: number): number {
+  if (!Number.isFinite(pps) || pps <= 0) return 1;
+  return Math.pow(2, Math.round(Math.log2(pps) / ZOOM_INTERACTION_LOG_STEP) * ZOOM_INTERACTION_LOG_STEP);
+}
+
 interface ClipContentProps {
   item: TimelineItem;
   clipLeftFrames: number;
@@ -49,11 +62,17 @@ export const ClipContent = memo(function ClipContent({
   audioWaveformScale = 1,
   linkedSyncOffsetFrames = null,
 }: ClipContentProps) {
-  // Use settled (content) zoom only — during zoom interaction the parent container
-  // already resizes via CSS calc(frame * var(--timeline-px-per-frame)) so ClipContent
-  // and its expensive filmstrip/waveform children skip re-renders entirely until
-  // the zoom gesture settles.
-  const pixelsPerSecond = useZoomStore((s) => s.contentPixelsPerSecond);
+  // During zoom interaction, use coarsely quantized live pps (~30% steps) so the
+  // filmstrip updates a few times per gesture — keeping content correctly sized
+  // without distortion — while avoiding 89+ re-renders on every wheel tick.
+  // When settled, use the exact content pps for pixel-perfect rendering.
+  const pixelsPerSecond = useZoomStore(
+    useCallback((s) => (
+      s.isZoomInteracting
+        ? quantizeZoomPps(s.pixelsPerSecond)
+        : s.contentPixelsPerSecond
+    ), [])
+  );
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const clipLeftPx = useMemo(
