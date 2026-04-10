@@ -330,7 +330,7 @@ export function useTimelineItemActions({
     };
   }, []);
 
-  const handleDetectScenes = useCallback(() => {
+  const handleDetectScenes = useCallback((method: 'histogram' | 'optical-flow') => {
     if (item.type !== 'video' || !item.mediaId || isBroken) {
       return;
     }
@@ -382,14 +382,13 @@ export function useTimelineItemActions({
         const media = useMediaLibraryStore.getState().mediaById[mediaId];
         const mediaFps = media?.fps ?? currentFps;
         const cuts = await detectScenes(video, currentFps, {
+          method,
           mediaId,
-          sampleIntervalMs: 500,
-          useGemmaVerification: true,
           signal: abortController.signal,
           onProgress: (progress) => {
             const stageLabels = {
-              'optical-flow': `Analyzing motion (${progress.sceneCuts} candidates)`,
-              'loading-model': `Loading Gemma model (${progress.percent}%)`,
+              'optical-flow': `Analyzing ${method === 'histogram' ? 'frames' : 'motion'} (${progress.sceneCuts} candidates)`,
+              'loading-model': `Loading Gemma model (${progress.percent.toFixed(0)}%)`,
               'verifying': `Verifying cuts (${progress.sceneCuts}/${progress.totalSamples} confirmed)`,
             };
             const label = stageLabels[progress.stage ?? 'optical-flow'];
@@ -433,7 +432,7 @@ export function useTimelineItemActions({
           return;
         }
         if (error instanceof Error && error.message.includes('WebGPU')) {
-          toast.error('Scene detection requires WebGPU support');
+          toast.error('Optical flow scene detection requires WebGPU support');
         } else {
           toast.error('Scene detection failed');
         }

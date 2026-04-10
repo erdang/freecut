@@ -1,15 +1,17 @@
 /**
- * Scene Detection Service — Two-pass pipeline.
+ * Scene Detection Service
  *
- * Pass 1 (fast): GPU optical flow detects candidate scene cuts (~seconds).
- * Pass 2 (smart): Gemma-4 VLM verifies each candidate by comparing frame
- *                 pairs, filtering out camera pans, dissolves, and false
- *                 positives (~seconds per candidate).
+ * Two detection methods:
+ * - `histogram` (default): Fast CPU-only color histogram comparison.
+ * - `optical-flow`: GPU optical flow via WebGPU compute shaders.
+ *
+ * Optional Gemma-4 VLM verification pass filters false positives.
  */
 
 import { OpticalFlowAnalyzer } from './optical-flow-analyzer';
 import type { MotionResult } from './optical-flow-analyzer';
 import { ANALYSIS_WIDTH, ANALYSIS_HEIGHT } from './optical-flow-shaders';
+import { detectScenesHistogram } from './histogram-scene-detection';
 import { createGemmaSceneWorker } from './create-gemma-worker';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -85,9 +87,17 @@ async function seekVideo(video: HTMLVideoElement, timeSec: number): Promise<void
 }
 
 export interface DetectScenesOptions {
-  /** Time between optical flow samples in ms (default: 500) */
+  /**
+   * Detection method:
+   * - `'histogram'` — fast CPU-only color histogram comparison (default).
+   *    Best for hard cuts. No WebGPU required.
+   * - `'optical-flow'` — GPU optical flow via WebGPU compute shaders.
+   *    Detects more subtle transitions but requires WebGPU.
+   */
+  method?: 'histogram' | 'optical-flow';
+  /** Time between samples in ms (default: 250 for histogram, 500 for optical-flow) */
   sampleIntervalMs?: number;
-  /** Use Gemma-4 VLM to verify candidate cuts (default: true) */
+  /** Use Gemma-4 VLM to verify candidate cuts (default: false for histogram, true for optical-flow) */
   useGemmaVerification?: boolean;
   /** Progress callback */
   onProgress?: (progress: SceneDetectionProgress) => void;
@@ -100,13 +110,12 @@ export interface DetectScenesOptions {
 /**
  * Detect scene cuts in a video element.
  *
- * Pass 1: Samples at fixed intervals and compares consecutive frames via GPU
- * optical flow. A scene cut candidate is flagged when mean motion exceeds the
- * threshold AND coverage ratio is high AND flow direction is incoherent.
+ * Uses `method` to select the detection strategy:
+ * - `'histogram'` (default): fast CPU-only color histogram comparison
+ * - `'optical-flow'`: GPU optical flow via WebGPU compute shaders
  *
- * Pass 2 (if enabled): Captures frame pairs around each candidate and sends
- * them to Gemma-4 VLM to verify whether it's a real hard cut or just camera
- * movement / dissolve.
+ * Optional Gemma-4 VLM verification pass (enabled by default for optical-flow)
+ * filters false positives from camera pans, dissolves, etc.
  */
 export async function detectScenes(
   video: HTMLVideoElement,
@@ -114,16 +123,18 @@ export async function detectScenes(
   options: DetectScenesOptions = {},
 ): Promise<SceneCut[]> {
   const {
-    sampleIntervalMs = SAMPLE_INTERVAL_MS,
-    useGemmaVerification = true,
+    method = 'histogram',
     onProgress,
     signal,
     mediaId,
   } = options;
 
+  const sampleIntervalMs = options.sampleIntervalMs ?? (method === 'histogram' ? 250 : SAMPLE_INTERVAL_MS);
+  const useGemmaVerification = options.useGemmaVerification ?? (method === 'optical-flow');
+
   // Return cached results when available
   if (mediaId) {
-    const cacheKey = `${mediaId}:${sampleIntervalMs}:${useGemmaVerification}`;
+    const cacheKey = `${mediaId}:${method}:${sampleIntervalMs}:${useGemmaVerification}`;
     const cached = resultsCache.get(cacheKey);
     if (cached) {
       log.info('Returning cached scene detection results', { mediaId, cuts: cached.length });
@@ -131,8 +142,54 @@ export async function detectScenes(
     }
   }
 
+  let deduped: SceneCut[];
+
+  if (method === 'histogram') {
+    deduped = await detectScenesHistogram(video, fps, {
+      sampleIntervalMs,
+      onProgress,
+      signal,
+    });
+  } else {
+    deduped = await detectScenesOpticalFlow(video, fps, sampleIntervalMs, onProgress, signal);
+  }
+
+  const cacheKey = mediaId ? `${mediaId}:${method}:${sampleIntervalMs}:${useGemmaVerification}` : null;
+  const cacheAndReturn = (results: SceneCut[]): SceneCut[] => {
+    if (cacheKey) resultsCache.set(cacheKey, results);
+    return results;
+  };
+
+  if (!useGemmaVerification || deduped.length === 0 || signal?.aborted) {
+    return cacheAndReturn(deduped);
+  }
+
+  // Pass 2: Gemma verification — gracefully fall back to optical-flow results on failure
+  try {
+    const verified = await verifyWithGemma(video, deduped, onProgress, signal);
+    log.info('Gemma verification complete', { confirmed: verified.length, candidates: deduped.length });
+    disposeGemmaWorker();
+    return cacheAndReturn(verified);
+  } catch (err) {
+    resetGemmaWorker();
+    log.warn('Gemma verification failed, using optical flow results', { error: (err as Error).message });
+    return cacheAndReturn(deduped);
+  }
+}
+
+/**
+ * Pass 1 alternative: GPU optical flow detection.
+ * Requires WebGPU — throws if unavailable.
+ */
+async function detectScenesOpticalFlow(
+  video: HTMLVideoElement,
+  fps: number,
+  sampleIntervalMs: number,
+  onProgress?: (progress: SceneDetectionProgress) => void,
+  signal?: AbortSignal,
+): Promise<SceneCut[]> {
   if (!navigator.gpu) {
-    throw new Error('WebGPU not supported — scene detection requires GPU');
+    throw new Error('WebGPU not supported — optical-flow scene detection requires GPU');
   }
 
   const adapter = await navigator.gpu.requestAdapter();
@@ -141,7 +198,6 @@ export async function detectScenes(
 
   const analyzer = new OpticalFlowAnalyzer(device);
 
-  // Verify shader compiles cleanly
   const shaderOk = await analyzer.checkShaderCompilation();
   if (!shaderOk) {
     analyzer.destroy();
@@ -150,7 +206,6 @@ export async function detectScenes(
   }
 
   const sceneCuts: SceneCut[] = [];
-
   const duration = video.duration;
   const sampleIntervalSec = sampleIntervalMs / 1000;
   const totalSamples = Math.ceil(duration / sampleIntervalSec);
@@ -163,10 +218,8 @@ export async function detectScenes(
       if (signal?.aborted) break;
 
       const time = i * sampleIntervalSec;
-
       await seekVideo(video, time);
 
-      // Capture frame at analysis resolution
       ctx.drawImage(video, 0, 0, ANALYSIS_WIDTH, ANALYSIS_HEIGHT);
       const bitmap = await createImageBitmap(canvas);
 
@@ -190,39 +243,20 @@ export async function detectScenes(
         stage: 'optical-flow',
       });
     }
-    log.info('Optical flow pass complete', { totalSamples, maxMotion: maxMotionSeen.toFixed(4), rawCuts: sceneCuts.length });
+    log.info('Optical flow pass complete', {
+      totalSamples,
+      maxMotion: maxMotionSeen.toFixed(4),
+      rawCuts: sceneCuts.length,
+    });
   } finally {
     analyzer.destroy();
     device.destroy();
   }
 
-  // Deduplicate: when multiple cuts cluster together (dissolves, pans), keep
-  // only the strongest cut within each MIN_CUT_GAP_SEC window.
+  // Deduplicate: keep strongest cut within each MIN_CUT_GAP_SEC window
   const deduped = deduplicateCuts(sceneCuts, MIN_CUT_GAP_SEC);
-
   log.info('Deduplication complete', { cuts: deduped.length, minGapSec: MIN_CUT_GAP_SEC });
-
-  const cacheKey = mediaId ? `${mediaId}:${sampleIntervalMs}:${useGemmaVerification}` : null;
-  const cacheAndReturn = (results: SceneCut[]): SceneCut[] => {
-    if (cacheKey) resultsCache.set(cacheKey, results);
-    return results;
-  };
-
-  if (!useGemmaVerification || deduped.length === 0 || signal?.aborted) {
-    return cacheAndReturn(deduped);
-  }
-
-  // Pass 2: Gemma verification — gracefully fall back to optical-flow results on failure
-  try {
-    const verified = await verifyWithGemma(video, deduped, onProgress, signal);
-    log.info('Gemma verification complete', { confirmed: verified.length, candidates: deduped.length });
-    disposeGemmaWorker();
-    return cacheAndReturn(verified);
-  } catch (err) {
-    resetGemmaWorker();
-    log.warn('Gemma verification failed, using optical flow results', { error: (err as Error).message });
-    return cacheAndReturn(deduped);
-  }
+  return deduped;
 }
 
 /**

@@ -68,7 +68,7 @@ interface ItemContextMenuProps {
   /** Whether scene detection is available for this item */
   canDetectScenes?: boolean;
   isDetectingScenes?: boolean;
-  onDetectScenes?: () => void;
+  onDetectScenes?: (method: 'histogram' | 'optical-flow') => void;
 }
 
 /**
@@ -241,9 +241,17 @@ export const ItemContextMenu = memo(function ItemContextMenu({
                 Detecting Scenes...
               </ContextMenuItem>
             ) : (
-              <ContextMenuItem onClick={onDetectScenes}>
-                Detect Scenes &amp; Split
-              </ContextMenuItem>
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Detect Scenes &amp; Split</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-48">
+                  <ContextMenuItem onClick={() => onDetectScenes('histogram')}>
+                    Fast (Histogram)
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={() => onDetectScenes('optical-flow')}>
+                    AI (Gemma)
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             )}
             <ContextMenuSeparator />
           </>
