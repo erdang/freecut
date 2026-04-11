@@ -13,11 +13,18 @@ export const EMPTY_TRACK_DROP_GHOST_PREVIEWS: TrackDropGhostPreview[] = [];
 
 type TrackDropGhostPreviewMap = Record<string, TrackDropGhostPreview[]>;
 
+interface TrackDropGhostOverlayHandle {
+  sync: (ghostPreviews: TrackDropGhostPreview[]) => void;
+  clear: () => void;
+}
+
 interface TrackDropPreviewState {
   ghostPreviewsByTrackId: TrackDropGhostPreviewMap;
   setGhostPreviews: (ghostPreviews: TrackDropGhostPreview[]) => void;
   clearGhostPreviews: () => void;
 }
+
+const trackDropGhostOverlayHandles = new Map<string, TrackDropGhostOverlayHandle>();
 
 function areGhostPreviewListsEqual(
   previous: TrackDropGhostPreview[],
@@ -91,15 +98,69 @@ function reconcileGhostPreviewMap(
   return hasAnyChange ? reconciledMap : previousMap;
 }
 
+function syncTrackDropGhostOverlayHandles(
+  previousMap: TrackDropGhostPreviewMap,
+  nextMap: TrackDropGhostPreviewMap
+): void {
+  const trackIds = new Set([
+    ...Object.keys(previousMap),
+    ...Object.keys(nextMap),
+  ]);
+
+  for (const trackId of trackIds) {
+    const previousTrackPreviews = previousMap[trackId] ?? EMPTY_TRACK_DROP_GHOST_PREVIEWS;
+    const nextTrackPreviews = nextMap[trackId] ?? EMPTY_TRACK_DROP_GHOST_PREVIEWS;
+
+    if (previousTrackPreviews === nextTrackPreviews) {
+      continue;
+    }
+
+    const handle = trackDropGhostOverlayHandles.get(trackId);
+    if (!handle) {
+      continue;
+    }
+
+    if (nextTrackPreviews.length === 0) {
+      handle.clear();
+    } else {
+      handle.sync(nextTrackPreviews);
+    }
+  }
+}
+
+export function registerTrackDropGhostOverlay(
+  trackId: string,
+  handle: TrackDropGhostOverlayHandle
+): () => void {
+  trackDropGhostOverlayHandles.set(trackId, handle);
+
+  const ghostPreviews = useTrackDropPreviewStore.getState().ghostPreviewsByTrackId[trackId] ?? EMPTY_TRACK_DROP_GHOST_PREVIEWS;
+  if (ghostPreviews.length === 0) {
+    handle.clear();
+  } else {
+    handle.sync(ghostPreviews);
+  }
+
+  return () => {
+    if (trackDropGhostOverlayHandles.get(trackId) === handle) {
+      trackDropGhostOverlayHandles.delete(trackId);
+    }
+  };
+}
+
 export const useTrackDropPreviewStore = create<TrackDropPreviewState>((set) => ({
   ghostPreviewsByTrackId: {},
   setGhostPreviews: (ghostPreviews) => set((state) => {
     const ghostPreviewsByTrackId = reconcileGhostPreviewMap(state.ghostPreviewsByTrackId, ghostPreviews);
+    syncTrackDropGhostOverlayHandles(state.ghostPreviewsByTrackId, ghostPreviewsByTrackId);
     return ghostPreviewsByTrackId === state.ghostPreviewsByTrackId ? state : { ghostPreviewsByTrackId };
   }),
-  clearGhostPreviews: () => set((state) => (
-    Object.keys(state.ghostPreviewsByTrackId).length === 0
-      ? state
-      : { ghostPreviewsByTrackId: {} }
-  )),
+  clearGhostPreviews: () => set((state) => {
+    if (Object.keys(state.ghostPreviewsByTrackId).length === 0) {
+      return state;
+    }
+
+    syncTrackDropGhostOverlayHandles(state.ghostPreviewsByTrackId, {});
+    return { ghostPreviewsByTrackId: {} };
+  }),
 }));

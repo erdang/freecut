@@ -105,6 +105,7 @@ export function planNewTrackZonePlacements<T>(params: {
   dropFrame: number;
   tracks: TimelineTrack[];
   existingItems: CollisionRect[];
+  existingTrackItemsById?: Map<string, CollisionRect[]>;
   anchorTrackId: string;
   zone: 'video' | 'audio';
   preferredTrackHeight: number;
@@ -115,7 +116,7 @@ export function planNewTrackZonePlacements<T>(params: {
   let workingTracks = [...params.tracks];
   let zoneVideoTrackId: string | null = null;
   let zoneAudioTrackId: string | null = null;
-  const baseTrackItemsById = buildCollisionTrackItemsMap(params.existingItems);
+  const baseTrackItemsById = params.existingTrackItemsById ?? buildCollisionTrackItemsMap(params.existingItems);
 
   const getTrackItemsToCheck = (trackId: string): ReadonlyArray<CollisionRect> => {
     const baseTrackItems = baseTrackItemsById.get(trackId) ?? [];

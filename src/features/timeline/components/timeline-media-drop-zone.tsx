@@ -1,14 +1,16 @@
-import { memo, useCallback, useRef, useState } from 'react';
-import { useShallow } from 'zustand/react/shallow';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import { createLogger } from '@/shared/logging/logger';
-import { TimelineDropGhostPreviews } from './timeline-drop-ghost-previews';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useCompositionsStore } from '../stores/compositions-store';
-import { useNewTrackZonePreviewStore, type NewTrackZoneGhostPreview } from '../stores/new-track-zone-preview-store';
+import {
+  registerNewTrackZoneGhostOverlay,
+  useNewTrackZonePreviewStore,
+  type NewTrackZoneGhostPreview,
+} from '../stores/new-track-zone-preview-store';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import { useProjectStore } from '@/features/timeline/deps/projects';
 import { mediaLibraryService } from '@/features/timeline/deps/media-library-service';
@@ -17,7 +19,11 @@ import {
   getMediaDragData,
   type CompositionDragData,
 } from '@/features/timeline/deps/media-library-resolver';
-import { findNearestAvailableSpace } from '../utils/collision-utils';
+import {
+  buildCollisionTrackItemsMap,
+  findNearestAvailableSpaceInTrackItems,
+  type CollisionRect,
+} from '../utils/collision-utils';
 import { mapWithConcurrency } from '@/shared/async/async-utils';
 import { useExternalDragPreview } from '../hooks/use-external-drag-preview';
 import { useCompositionNavigationStore } from '../stores/composition-navigation-store';
@@ -47,6 +53,9 @@ import {
   type DroppedMediaEntry,
 } from '../utils/drop-execution';
 import {
+  type ExternalDragPreviewEntry,
+  getGhostHighlightClasses,
+  getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
 } from '../utils/drag-drop-preview';
@@ -61,6 +70,15 @@ interface TimelineMediaDropZoneProps {
 }
 
 export type GhostPreviewItem = NewTrackZoneGhostPreview;
+type PreviewGhostEntry = Pick<ExternalDragPreviewEntry, 'label' | 'mediaType' | 'duration' | 'hasLinkedAudio'>;
+type PendingDragPreview = {
+  dropFrame: number;
+  dragData: ReturnType<typeof getMediaDragData>;
+  hasExternalFiles: boolean;
+  externalPreviewItems: ExternalDragPreviewEntry[] | null;
+  fileItemCount: number;
+  dataTransfer: DataTransfer | null;
+};
 
 const MULTI_DROP_METADATA_CONCURRENCY = 3;
 
@@ -71,16 +89,116 @@ const NewTrackZoneGhostOverlay = memo(function NewTrackZoneGhostOverlay({
   zone: 'video' | 'audio';
   showEmptyOverlay: boolean;
 }) {
-  const ghostPreviews = useNewTrackZonePreviewStore(
-    useShallow((s) => s.ghostPreviews.filter((ghost) => ghost.targetZone === zone))
-  );
+  const emptyOverlayRef = useRef<HTMLDivElement>(null);
+  const highlightOverlayRef = useRef<HTMLDivElement>(null);
+  const previewLayerRef = useRef<HTMLDivElement>(null);
+  const previewNodesRef = useRef<Array<{ root: HTMLDivElement; label: HTMLSpanElement }>>([]);
+  const previewCountRef = useRef(0);
+  const showEmptyOverlayRef = useRef(showEmptyOverlay);
+
+  const syncEmptyOverlayVisibility = useCallback(() => {
+    if (!emptyOverlayRef.current) {
+      return;
+    }
+
+    emptyOverlayRef.current.style.display = showEmptyOverlayRef.current && previewCountRef.current === 0 ? '' : 'none';
+  }, []);
+
+  const clearGhostPreviews = useCallback(() => {
+    previewCountRef.current = 0;
+
+    if (highlightOverlayRef.current) {
+      highlightOverlayRef.current.style.display = 'none';
+    }
+
+    if (previewLayerRef.current) {
+      previewLayerRef.current.replaceChildren();
+    }
+
+    previewNodesRef.current = [];
+    syncEmptyOverlayVisibility();
+  }, [syncEmptyOverlayVisibility]);
+
+  const syncGhostPreviews = useCallback((ghostPreviews: NewTrackZoneGhostPreview[]) => {
+    previewCountRef.current = ghostPreviews.length;
+
+    if (highlightOverlayRef.current) {
+      if (ghostPreviews.length === 0) {
+        highlightOverlayRef.current.style.display = 'none';
+      } else {
+        highlightOverlayRef.current.className = `absolute inset-0 pointer-events-none z-10 rounded border border-dashed ${getGhostHighlightClasses(ghostPreviews)}`;
+        highlightOverlayRef.current.style.display = '';
+      }
+    }
+
+    const previewLayer = previewLayerRef.current;
+    if (!previewLayer) {
+      syncEmptyOverlayVisibility();
+      return;
+    }
+
+    const previewNodes = previewNodesRef.current;
+    while (previewNodes.length > ghostPreviews.length) {
+      const removedNode = previewNodes.pop();
+      removedNode?.root.remove();
+    }
+
+    for (let index = 0; index < ghostPreviews.length; index += 1) {
+      const ghostPreview = ghostPreviews[index]!;
+      let previewNode = previewNodes[index];
+
+      if (!previewNode) {
+        const root = document.createElement('div');
+        root.className = 'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2';
+        const label = document.createElement('span');
+        label.className = 'truncate text-[10px] font-medium text-foreground/80';
+        root.appendChild(label);
+        previewLayer.appendChild(root);
+        previewNode = { root, label };
+        previewNodes[index] = previewNode;
+      }
+
+      previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 ${getGhostPreviewItemClasses(ghostPreview.type)}`;
+      previewNode.root.style.left = `${ghostPreview.left}px`;
+      previewNode.root.style.width = `${ghostPreview.width}px`;
+      previewNode.root.style.top = '0';
+      previewNode.root.style.height = '100%';
+      previewNode.label.textContent = ghostPreview.label;
+    }
+
+    syncEmptyOverlayVisibility();
+  }, [syncEmptyOverlayVisibility]);
+
+  useEffect(() => {
+    showEmptyOverlayRef.current = showEmptyOverlay;
+    syncEmptyOverlayVisibility();
+  }, [showEmptyOverlay, syncEmptyOverlayVisibility]);
+
+  useEffect(() => {
+    const unregister = registerNewTrackZoneGhostOverlay(zone, {
+      sync: syncGhostPreviews,
+      clear: clearGhostPreviews,
+    });
+
+    return () => {
+      unregister();
+      clearGhostPreviews();
+    };
+  }, [clearGhostPreviews, syncGhostPreviews, zone]);
 
   return (
-    <TimelineDropGhostPreviews
-      ghostPreviews={ghostPreviews}
-      showEmptyOverlay={showEmptyOverlay && ghostPreviews.length === 0}
-      variant="zone"
-    />
+    <>
+      <div
+        ref={emptyOverlayRef}
+        className="absolute inset-0 pointer-events-none z-10 rounded border border-dashed border-primary/50 bg-primary/10"
+        style={{ display: 'none' }}
+      />
+      <div
+        ref={highlightOverlayRef}
+        style={{ display: 'none' }}
+      />
+      <div ref={previewLayerRef} />
+    </>
   );
 });
 
@@ -105,6 +223,23 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     externalPreviewItems: null,
     fileItemCount: 0,
   });
+  const previewEntryCacheRef = useRef<{
+    dragData: ReturnType<typeof getMediaDragData>;
+    entries: PreviewGhostEntry[] | null;
+  }>({
+    dragData: null,
+    entries: null,
+  });
+  const collisionMapCacheRef = useRef<{
+    itemsRef: TimelineItemType[] | null;
+    map: Map<string, CollisionRect[]>;
+  }>({
+    itemsRef: null,
+    map: new Map<string, CollisionRect[]>(),
+  });
+  const dragPreviewRafRef = useRef<number | null>(null);
+  const pendingDragPreviewRef = useRef<PendingDragPreview | null>(null);
+  const dragOverFlagsRef = useRef({ isDragOver: false, isExternalDragOver: false });
 
   const addItem = useTimelineStore((s) => s.addItem);
   const addItems = useTimelineStore((s) => s.addItems);
@@ -162,6 +297,40 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     };
   }, []);
 
+  const getCollisionTrackItemsMap = useCallback(() => {
+    const items = useTimelineStore.getState().items;
+    const cache = collisionMapCacheRef.current;
+    if (cache.itemsRef !== items) {
+      cache.itemsRef = items;
+      cache.map = buildCollisionTrackItemsMap(items);
+    }
+    return cache.map;
+  }, []);
+
+  const findNearestAvailablePreviewSpace = useCallback((
+    proposedFrom: number,
+    durationInFrames: number,
+    targetTrackId: string,
+  ): number | null => {
+    const trackItems = getCollisionTrackItemsMap().get(targetTrackId) ?? [];
+    return findNearestAvailableSpaceInTrackItems(
+      Math.max(0, proposedFrom),
+      durationInFrames,
+      trackItems,
+    );
+  }, [getCollisionTrackItemsMap]);
+
+  const updateDragOverFlags = useCallback((nextIsDragOver: boolean, nextIsExternalDragOver: boolean) => {
+    if (dragOverFlagsRef.current.isDragOver !== nextIsDragOver) {
+      dragOverFlagsRef.current.isDragOver = nextIsDragOver;
+      setIsDragOver(nextIsDragOver);
+    }
+    if (dragOverFlagsRef.current.isExternalDragOver !== nextIsExternalDragOver) {
+      dragOverFlagsRef.current.isExternalDragOver = nextIsExternalDragOver;
+      setIsExternalDragOver(nextIsExternalDragOver);
+    }
+  }, []);
+
   const resolveTimelineItemsForEntries = useCallback(async (
     entries: DroppedMediaEntry[],
     dropFrame: number
@@ -179,6 +348,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       dropFrame,
       tracks: currentTracks,
       existingItems: useTimelineStore.getState().items,
+      existingTrackItemsById: getCollisionTrackItemsMap(),
       anchorTrackId,
       zone,
       preferredTrackHeight,
@@ -244,7 +414,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       items: resolvedTimelineItems.flatMap((timelineItems) => timelineItems ?? []),
       tracks: workingTracks,
     };
-  }, [anchorTrackId, fps, getCurrentCanvasSize, zone]);
+  }, [anchorTrackId, fps, getCollisionTrackItemsMap, getCurrentCanvasSize, zone]);
 
   const buildGhostPreviewsForEntries = useCallback((entries: Array<{
     label: string;
@@ -269,6 +439,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       dropFrame,
       tracks: currentTracks,
       existingItems: useTimelineStore.getState().items,
+      existingTrackItemsById: getCollisionTrackItemsMap(),
       anchorTrackId,
       zone,
       preferredTrackHeight,
@@ -278,7 +449,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       plannedItems,
       frameToPixels,
     });
-  }, [anchorTrackId, fps, frameToPixels, zone]);
+  }, [anchorTrackId, fps, frameToPixels, getCollisionTrackItemsMap, zone]);
 
   const buildGenericExternalGhostPreviews = useCallback((dropFrame: number, itemCount: number): GhostPreviewItem[] => {
     const previews = buildGhostPreviewsForEntries([
@@ -306,12 +477,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     }
 
     const durationInFrames = getDefaultGeneratedLayerDurationInFrames(fps);
-    const finalPosition = findNearestAvailableSpace(
-      Math.max(0, dropFrame),
-      durationInFrames,
-      createdTrack.trackId,
-      useTimelineStore.getState().items,
-    );
+    const finalPosition = findNearestAvailablePreviewSpace(dropFrame, durationInFrames, createdTrack.trackId);
     if (finalPosition === null) {
       return [];
     }
@@ -323,7 +489,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       type: template.itemType,
       targetZone: 'video',
     }];
-  }, [ensureVideoZoneTrack, fps, frameToPixels, zone]);
+  }, [ensureVideoZoneTrack, findNearestAvailablePreviewSpace, fps, frameToPixels, zone]);
 
   const {
     clearExternalPreviewSession,
@@ -346,6 +512,52 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       externalPreviewItems: null,
       fileItemCount: 0,
     };
+  }, []);
+
+  const getPreviewEntriesForDragData = useCallback((dragData: ReturnType<typeof getMediaDragData>): PreviewGhostEntry[] | null => {
+    if (!dragData) {
+      return null;
+    }
+
+    const cache = previewEntryCacheRef.current;
+    if (cache.dragData === dragData) {
+      return cache.entries;
+    }
+
+    let nextEntries: PreviewGhostEntry[] | null = null;
+
+    if (dragData.type === 'media-items' && Array.isArray(dragData.items)) {
+      const mediaById = useMediaLibraryStore.getState().mediaById;
+      const validItems = dragData.items.filter(isValidDragMediaItem);
+      nextEntries = validItems.map((item) => ({
+        label: item.fileName,
+        mediaType: item.mediaType,
+        duration: item.duration,
+        hasLinkedAudio: item.mediaType === 'video' && !!mediaById[item.mediaId]?.audioCodec,
+      }));
+    } else if (dragData.type === 'media-item' && dragData.mediaId && dragData.mediaType && dragData.fileName) {
+      const media = useMediaLibraryStore.getState().mediaById[dragData.mediaId];
+      nextEntries = media && isDroppableMediaType(dragData.mediaType)
+        ? [{
+          label: dragData.fileName,
+          mediaType: dragData.mediaType,
+          duration: dragData.duration,
+          hasLinkedAudio: dragData.mediaType === 'video' && !!media.audioCodec,
+        }]
+        : null;
+    }
+
+    cache.dragData = dragData;
+    cache.entries = nextEntries;
+    return nextEntries;
+  }, []);
+
+  const clearPendingDragPreview = useCallback(() => {
+    pendingDragPreviewRef.current = null;
+    if (dragPreviewRafRef.current !== null) {
+      cancelAnimationFrame(dragPreviewRafRef.current);
+      dragPreviewRafRef.current = null;
+    }
   }, []);
 
   const shouldSkipDragPreviewUpdate = useCallback((params: {
@@ -384,12 +596,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     }
 
     const durationInFrames = getDefaultGeneratedLayerDurationInFrames(fps);
-    const finalPosition = findNearestAvailableSpace(
-      Math.max(0, dropFrame),
-      durationInFrames,
-      createdTrack.trackId,
-      useTimelineStore.getState().items,
-    );
+    const finalPosition = findNearestAvailablePreviewSpace(dropFrame, durationInFrames, createdTrack.trackId);
     if (finalPosition === null) {
       return null;
     }
@@ -409,63 +616,53 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       }),
       tracks: createdTrack.tracks,
     };
-  }, [ensureVideoZoneTrack, fps, getCurrentCanvasSize, zone]);
+  }, [ensureVideoZoneTrack, findNearestAvailablePreviewSpace, fps, getCurrentCanvasSize, zone]);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    const data = getMediaDragData();
-    const hasExternalFiles = !data && e.dataTransfer.types.includes('Files');
-    if (!data && !hasExternalFiles) {
-      setIsExternalDragOver(false);
-      setIsDragOver(false);
-      clearZoneGhostPreviews();
-      resetDragPreviewCache();
+  const processPendingDragPreview = useCallback(() => {
+    dragPreviewRafRef.current = null;
+    const pending = pendingDragPreviewRef.current;
+    pendingDragPreviewRef.current = null;
+
+    if (!pending) {
       return;
     }
 
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'copy';
-    setIsDragOver(true);
-    setIsExternalDragOver(hasExternalFiles);
+    const setDropEffectNone = () => {
+      if (pending.dataTransfer) {
+        pending.dataTransfer.dropEffect = 'none';
+      }
+    };
 
-    const dropFrame = getDropFrame(e);
-    if (dropFrame === null) {
-      clearZoneGhostPreviews();
-      resetDragPreviewCache();
-      return;
-    }
-    lastDragFrameRef.current = dropFrame;
-
-    const externalPreviewItems = externalPreviewItemsRef.current;
-    const fileItemCount = hasExternalFiles && !externalPreviewItems
-      ? Array.from(e.dataTransfer.items).filter((item) => item.kind === 'file').length
-      : 0;
     if (shouldSkipDragPreviewUpdate({
-      dropFrame,
-      dragData: data,
-      hasExternalFiles,
-      externalPreviewItems,
-      fileItemCount,
+      dropFrame: pending.dropFrame,
+      dragData: pending.dragData,
+      hasExternalFiles: pending.hasExternalFiles,
+      externalPreviewItems: pending.externalPreviewItems,
+      fileItemCount: pending.fileItemCount,
     })) {
       return;
     }
 
-    if (hasExternalFiles) {
-      if (externalPreviewItems && externalPreviewItems.length > 0) {
-        const previews = buildGhostPreviewsForEntries(externalPreviewItems, dropFrame);
+    if (pending.hasExternalFiles) {
+      if (pending.externalPreviewItems && pending.externalPreviewItems.length > 0) {
+        const previews = buildGhostPreviewsForEntries(pending.externalPreviewItems, pending.dropFrame);
         if (previews.length === 0) {
-          e.dataTransfer.dropEffect = 'none';
-          setIsDragOver(false);
-          setIsExternalDragOver(false);
+          setDropEffectNone();
+          updateDragOverFlags(false, false);
           resetDragPreviewCache();
+          return;
         }
         setZoneGhostPreviews(previews);
       } else {
-        setZoneGhostPreviews(buildGenericExternalGhostPreviews(dropFrame, Math.max(1, fileItemCount)));
-        primeExternalPreviewEntries(e.dataTransfer);
+        setZoneGhostPreviews(buildGenericExternalGhostPreviews(pending.dropFrame, Math.max(1, pending.fileItemCount)));
+        if (pending.dataTransfer) {
+          primeExternalPreviewEntries(pending.dataTransfer);
+        }
       }
       return;
     }
 
+    const data = pending.dragData;
     if (!data) {
       clearZoneGhostPreviews();
       resetDragPreviewCache();
@@ -482,8 +679,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           compositionById: useCompositionsStore.getState().compositionById,
         })
       ) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
+        setDropEffectNone();
+        updateDragOverFlags(false, false);
         clearZoneGhostPreviews();
         resetDragPreviewCache();
         return;
@@ -492,8 +689,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       const compositionById = useCompositionsStore.getState().compositionById;
       const composition = compositionById[data.compositionId];
       if (!composition) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
+        setDropEffectNone();
+        updateDragOverFlags(false, false);
         clearZoneGhostPreviews();
         resetDragPreviewCache();
         return;
@@ -509,9 +706,10 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           durationInFrames: data.durationInFrames,
           hasLinkedAudio: compositionHasOwnedAudio({ composition, compositionById }),
         }],
-        dropFrame,
+        dropFrame: pending.dropFrame,
         tracks: currentTracks,
         existingItems: useTimelineStore.getState().items,
+        existingTrackItemsById: getCollisionTrackItemsMap(),
         anchorTrackId,
         zone,
         preferredTrackHeight,
@@ -528,8 +726,8 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         }))
         : [];
       if (previews.length === 0) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
+        setDropEffectNone();
+        updateDragOverFlags(false, false);
         resetDragPreviewCache();
       }
       setZoneGhostPreviews(previews);
@@ -538,96 +736,99 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
 
     if (data.type === 'timeline-template') {
       if (zone !== 'video') {
-        e.dataTransfer.dropEffect = 'none';
+        setDropEffectNone();
         clearZoneGhostPreviews();
         resetDragPreviewCache();
         return;
       }
 
-      const previews = buildGhostPreviewForTemplate(data, dropFrame);
+      const previews = buildGhostPreviewForTemplate(data, pending.dropFrame);
       if (previews.length === 0) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
+        setDropEffectNone();
+        updateDragOverFlags(false, false);
         resetDragPreviewCache();
       }
       setZoneGhostPreviews(previews);
       return;
     }
 
-    if (data.type === 'media-items' && data.items) {
-      const rawItems = Array.isArray(data.items) ? data.items : [];
-      const validItems = rawItems.filter(isValidDragMediaItem);
-      if (validItems.length !== rawItems.length) {
-        logger.warn('Skipping invalid media-items preview payload entries', {
-          invalidCount: rawItems.length - validItems.length,
-        });
-      }
-
-      const mediaById = new Map(getMedia.map((media) => [media.id, media]));
-      const previews = buildGhostPreviewsForEntries(
-        validItems.map((item) => ({
-          label: item.fileName,
-          mediaType: item.mediaType,
-          duration: item.duration,
-          hasLinkedAudio: item.mediaType === 'video' && !!mediaById.get(item.mediaId)?.audioCodec,
-        })),
-        dropFrame,
-      );
-      if (previews.length === 0) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
-        resetDragPreviewCache();
-      }
-      setZoneGhostPreviews(previews);
+    const previewEntries = getPreviewEntriesForDragData(data);
+    if (!previewEntries || previewEntries.length === 0) {
+      clearZoneGhostPreviews();
+      resetDragPreviewCache();
       return;
     }
 
-    if (data.type === 'media-item' && data.mediaId && data.mediaType && data.fileName) {
-      const media = getMedia.find((entry) => entry.id === data.mediaId);
-      if (!media || !isDroppableMediaType(data.mediaType)) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
-        clearZoneGhostPreviews();
-        resetDragPreviewCache();
-        return;
-      }
-
-      const itemDuration = getDroppedMediaDurationInFrames(media, data.mediaType, fps);
-      const previews = buildGhostPreviewsForEntries([
-        {
-          label: data.fileName,
-          mediaType: data.mediaType,
-          duration: itemDuration / fps,
-          hasLinkedAudio: data.mediaType === 'video' && !!media.audioCodec,
-        },
-      ], dropFrame);
-      if (previews.length === 0) {
-        e.dataTransfer.dropEffect = 'none';
-        setIsDragOver(false);
-        resetDragPreviewCache();
-      }
-      setZoneGhostPreviews(previews);
-      return;
+    const previews = buildGhostPreviewsForEntries(previewEntries, pending.dropFrame);
+    if (previews.length === 0) {
+      setDropEffectNone();
+      updateDragOverFlags(false, false);
+      resetDragPreviewCache();
     }
-
-    e.dataTransfer.dropEffect = 'none';
-    setIsDragOver(false);
-    clearZoneGhostPreviews();
-    resetDragPreviewCache();
+    setZoneGhostPreviews(previews);
   }, [
+    anchorTrackId,
     buildGenericExternalGhostPreviews,
     buildGhostPreviewForTemplate,
     buildGhostPreviewsForEntries,
     clearZoneGhostPreviews,
-    resetDragPreviewCache,
-    fps,
     frameToPixels,
-    getDropFrame,
-    getMedia,
+    getCollisionTrackItemsMap,
+    getPreviewEntriesForDragData,
     primeExternalPreviewEntries,
-    shouldSkipDragPreviewUpdate,
+    resetDragPreviewCache,
     setZoneGhostPreviews,
+    shouldSkipDragPreviewUpdate,
+    updateDragOverFlags,
     zone,
+  ]);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    const data = getMediaDragData();
+    const hasExternalFiles = !data && e.dataTransfer.types.includes('Files');
+    if (!data && !hasExternalFiles) {
+      clearPendingDragPreview();
+      updateDragOverFlags(false, false);
+      clearZoneGhostPreviews();
+      resetDragPreviewCache();
+      return;
+    }
+
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    updateDragOverFlags(true, hasExternalFiles);
+
+    const dropFrame = getDropFrame(e);
+    if (dropFrame === null) {
+      clearPendingDragPreview();
+      clearZoneGhostPreviews();
+      resetDragPreviewCache();
+      return;
+    }
+    lastDragFrameRef.current = dropFrame;
+
+    const externalPreviewItems = externalPreviewItemsRef.current;
+    const fileItemCount = hasExternalFiles && !externalPreviewItems
+      ? Array.from(e.dataTransfer.items).filter((item) => item.kind === 'file').length
+      : 0;
+    pendingDragPreviewRef.current = {
+      dropFrame,
+      dragData: data,
+      hasExternalFiles,
+      externalPreviewItems,
+      fileItemCount,
+      dataTransfer: e.dataTransfer,
+    };
+    if (dragPreviewRafRef.current === null) {
+      dragPreviewRafRef.current = requestAnimationFrame(processPendingDragPreview);
+    }
+  }, [
+    clearZoneGhostPreviews,
+    clearPendingDragPreview,
+    getDropFrame,
+    processPendingDragPreview,
+    resetDragPreviewCache,
+    updateDragOverFlags,
   ]);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
@@ -635,17 +836,21 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     if (isDragPointInsideElement(e, e.currentTarget)) {
       return;
     }
-    setIsDragOver(false);
-    setIsExternalDragOver(false);
+    clearPendingDragPreview();
+    updateDragOverFlags(false, false);
     clearZoneGhostPreviews();
     resetDragPreviewCache();
     clearExternalPreviewSession();
-  }, [clearExternalPreviewSession, clearZoneGhostPreviews, resetDragPreviewCache]);
+  }, [clearExternalPreviewSession, clearPendingDragPreview, clearZoneGhostPreviews, resetDragPreviewCache, updateDragOverFlags]);
+
+  useEffect(() => () => {
+    clearPendingDragPreview();
+  }, [clearPendingDragPreview]);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
-    setIsDragOver(false);
-    setIsExternalDragOver(false);
+    clearPendingDragPreview();
+    updateDragOverFlags(false, false);
     clearZoneGhostPreviews();
     resetDragPreviewCache();
     clearExternalPreviewSession();
@@ -792,6 +997,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     addItems,
     anchorTrackId,
     buildTimelineTemplateItem,
+    clearPendingDragPreview,
     clearZoneGhostPreviews,
     clearExternalPreviewSession,
     getDropFrame,
@@ -799,6 +1005,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
     importHandlesForPlacement,
     resetDragPreviewCache,
     resolveTimelineItemsForEntries,
+    updateDragOverFlags,
     zone,
   ]);
 

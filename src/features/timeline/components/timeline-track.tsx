@@ -4,12 +4,11 @@ import { createLogger } from '@/shared/logging/logger';
 const logger = createLogger('TimelineTrack');
 import type { TimelineTrack as TimelineTrackType, TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
-import { TimelineDropGhostPreviews } from './timeline-drop-ghost-previews';
 import { TimelineItem } from './timeline-item';
 import { TransitionItem } from './transition-item';
 import { useTimelineStore } from '../stores/timeline-store';
 import {
-  EMPTY_TRACK_DROP_GHOST_PREVIEWS,
+  registerTrackDropGhostOverlay,
   useTrackDropPreviewStore,
   type TrackDropGhostPreview,
 } from '../stores/track-drop-preview-store';
@@ -69,6 +68,8 @@ import {
 } from '@/components/ui/context-menu';
 import {
   type ExternalDragPreviewEntry,
+  getGhostHighlightClasses,
+  getGhostPreviewItemClasses,
   isDroppableMediaType,
   isValidDragMediaItem,
 } from '../utils/drag-drop-preview';
@@ -102,16 +103,114 @@ const TrackDropGhostOverlay = memo(function TrackDropGhostOverlay({
   trackId: string;
   showEmptyOverlay: boolean;
 }) {
-  const ghostPreviews = useTrackDropPreviewStore(
-    useCallback((s) => s.ghostPreviewsByTrackId[trackId] ?? EMPTY_TRACK_DROP_GHOST_PREVIEWS, [trackId])
-  );
+  const emptyOverlayRef = useRef<HTMLDivElement>(null);
+  const highlightOverlayRef = useRef<HTMLDivElement>(null);
+  const previewLayerRef = useRef<HTMLDivElement>(null);
+  const previewNodesRef = useRef<Array<{ root: HTMLDivElement; label: HTMLSpanElement }>>([]);
+  const previewCountRef = useRef(0);
+  const showEmptyOverlayRef = useRef(showEmptyOverlay);
+
+  const syncEmptyOverlayVisibility = useCallback(() => {
+    if (!emptyOverlayRef.current) {
+      return;
+    }
+
+    emptyOverlayRef.current.style.display = showEmptyOverlayRef.current && previewCountRef.current === 0 ? '' : 'none';
+  }, []);
+
+  const clearGhostPreviews = useCallback(() => {
+    previewCountRef.current = 0;
+
+    if (highlightOverlayRef.current) {
+      highlightOverlayRef.current.style.display = 'none';
+    }
+
+    if (previewLayerRef.current) {
+      previewLayerRef.current.replaceChildren();
+    }
+
+    previewNodesRef.current = [];
+    syncEmptyOverlayVisibility();
+  }, [syncEmptyOverlayVisibility]);
+
+  const syncGhostPreviews = useCallback((ghostPreviews: TrackDropGhostPreview[]) => {
+    previewCountRef.current = ghostPreviews.length;
+
+    if (highlightOverlayRef.current) {
+      if (ghostPreviews.length === 0) {
+        highlightOverlayRef.current.style.display = 'none';
+      } else {
+        highlightOverlayRef.current.className = `absolute inset-0 pointer-events-none z-10 rounded border border-dashed ${getGhostHighlightClasses(ghostPreviews)}`;
+        highlightOverlayRef.current.style.display = '';
+      }
+    }
+
+    const previewLayer = previewLayerRef.current;
+    if (!previewLayer) {
+      syncEmptyOverlayVisibility();
+      return;
+    }
+
+    const previewNodes = previewNodesRef.current;
+    while (previewNodes.length > ghostPreviews.length) {
+      const removedNode = previewNodes.pop();
+      removedNode?.root.remove();
+    }
+
+    for (let index = 0; index < ghostPreviews.length; index += 1) {
+      const ghostPreview = ghostPreviews[index]!;
+      let previewNode = previewNodes[index];
+
+      if (!previewNode) {
+        const root = document.createElement('div');
+        root.className = 'absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0';
+        const label = document.createElement('span');
+        label.className = 'text-xs text-foreground/70 truncate';
+        root.appendChild(label);
+        previewLayer.appendChild(root);
+        previewNode = { root, label };
+        previewNodes[index] = previewNode;
+      }
+
+      previewNode.root.className = `absolute rounded border-2 border-dashed pointer-events-none z-20 flex items-center px-2 inset-y-0 ${getGhostPreviewItemClasses(ghostPreview.type)}`;
+      previewNode.root.style.left = `${ghostPreview.left}px`;
+      previewNode.root.style.width = `${ghostPreview.width}px`;
+      previewNode.label.textContent = ghostPreview.label;
+    }
+
+    syncEmptyOverlayVisibility();
+  }, [syncEmptyOverlayVisibility]);
+
+  useEffect(() => {
+    showEmptyOverlayRef.current = showEmptyOverlay;
+    syncEmptyOverlayVisibility();
+  }, [showEmptyOverlay, syncEmptyOverlayVisibility]);
+
+  useEffect(() => {
+    const unregister = registerTrackDropGhostOverlay(trackId, {
+      sync: syncGhostPreviews,
+      clear: clearGhostPreviews,
+    });
+
+    return () => {
+      unregister();
+      clearGhostPreviews();
+    };
+  }, [clearGhostPreviews, syncGhostPreviews, trackId]);
 
   return (
-    <TimelineDropGhostPreviews
-      ghostPreviews={ghostPreviews}
-      showEmptyOverlay={showEmptyOverlay && ghostPreviews.length === 0}
-      variant="track"
-    />
+    <>
+      <div
+        ref={emptyOverlayRef}
+        className="absolute inset-0 pointer-events-none z-10 rounded border border-dashed border-primary/50 bg-primary/10"
+        style={{ display: 'none' }}
+      />
+      <div
+        ref={highlightOverlayRef}
+        style={{ display: 'none' }}
+      />
+      <div ref={previewLayerRef} />
+    </>
   );
 });
 
