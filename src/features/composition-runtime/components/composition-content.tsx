@@ -30,7 +30,7 @@ import {
   resolveTrackRenderState,
 } from '../utils/scene-assembly';
 import { getLinkedVideoIdsWithAudio, hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
-import { resolveProxyUrl } from '@/features/media-library/utils/media-resolver';
+import { resolveProxyUrl } from '@/features/composition-runtime/deps/media-library';
 
 type CompositionWrapperItem = CompositionItemType | (AudioItem & { compositionId: string });
 

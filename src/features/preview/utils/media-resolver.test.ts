@@ -219,7 +219,7 @@ describe('resolveMediaUrls', () => {
   });
 
   it('keeps video audio on the original source when proxy playback is enabled', async () => {
-    const { proxyService } = await import('@/features/media-library/services/proxy-service');
+    const { proxyService } = await import('@/features/preview/deps/media-library-contract');
     (mediaLibraryService.getMedia as Mock).mockResolvedValue({
       id: 'media-1',
       fileName: 'video.mp4',

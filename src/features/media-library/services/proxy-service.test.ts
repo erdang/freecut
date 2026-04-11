@@ -113,7 +113,7 @@ describe('proxyService.loadExistingProxies', () => {
   });
 
   it('uses proxy generation settings when deciding automatic proxy work', async () => {
-    const { useSettingsStore } = await import('@/features/settings/stores/settings-store');
+    const { useSettingsStore } = await import('@/features/media-library/deps/settings-contract');
     const { proxyService } = await import('./proxy-service');
 
     useSettingsStore.getState().resetToDefaults();
@@ -137,7 +137,7 @@ describe('proxyService.loadExistingProxies', () => {
       postMessage: workerPostMessage,
     });
 
-    const { useSettingsStore } = await import('@/features/settings/stores/settings-store');
+    const { useSettingsStore } = await import('@/features/media-library/deps/settings-contract');
     const { proxyService } = await import('./proxy-service');
 
     useSettingsStore.getState().resetToDefaults();
