@@ -1,6 +1,7 @@
 import { useItemsStore } from '../items-store';
-import type { TimelineItem } from '@/types/timeline';
+import type { TimelineItem, TimelineTrack } from '@/types/timeline';
 import { isTrackSyncLockEnabled } from '../../utils/track-sync-lock';
+import type { PreviewItemUpdate } from '../../utils/item-edit-preview';
 
 export interface RipplePropagationResult {
   affectedIds: string[];
@@ -10,6 +11,13 @@ export interface RipplePropagationResult {
 interface TimeInterval {
   start: number;
   end: number;
+}
+
+interface PreviewTrackItemState {
+  id: string;
+  trackId: string;
+  from: number;
+  durationInFrames: number;
 }
 
 function uniqueIds(ids: string[]): string[] {
@@ -43,8 +51,11 @@ function normalizeIntervals(intervals: TimeInterval[]): TimeInterval[] {
   return merged;
 }
 
-function getCandidateTrackIds(editedTrackIds: Set<string>): string[] {
-  const tracks = useItemsStore.getState().tracks;
+function getCandidateTrackIdsFromState(
+  items: TimelineItem[],
+  tracks: TimelineTrack[],
+  editedTrackIds: Set<string>,
+): string[] {
   const trackIds = new Set<string>();
 
   for (const track of tracks) {
@@ -53,7 +64,7 @@ function getCandidateTrackIds(editedTrackIds: Set<string>): string[] {
     }
   }
 
-  for (const item of useItemsStore.getState().items) {
+  for (const item of items) {
     if (editedTrackIds.has(item.trackId)) continue;
     if (trackIds.has(item.trackId)) continue;
 
@@ -64,6 +75,194 @@ function getCandidateTrackIds(editedTrackIds: Set<string>): string[] {
   }
 
   return [...trackIds];
+}
+
+function getCandidateTrackIds(editedTrackIds: Set<string>): string[] {
+  const { items, tracks } = useItemsStore.getState();
+  return getCandidateTrackIdsFromState(items, tracks, editedTrackIds);
+}
+
+function toPreviewTrackState(item: TimelineItem): PreviewTrackItemState {
+  return {
+    id: item.id,
+    trackId: item.trackId,
+    from: item.from,
+    durationInFrames: item.durationInFrames,
+  };
+}
+
+function setPreviewUpdate(
+  updatesById: Map<string, PreviewItemUpdate>,
+  itemId: string,
+  updates: Omit<PreviewItemUpdate, 'id'>,
+): void {
+  updatesById.set(itemId, {
+    ...(updatesById.get(itemId) ?? { id: itemId }),
+    ...updates,
+  });
+}
+
+function buildRemovedIntervalPreviewUpdatesForTrack(
+  trackItems: TimelineItem[],
+  intervals: TimeInterval[],
+): PreviewItemUpdate[] {
+  let previewItems = trackItems
+    .map(toPreviewTrackState)
+    .sort((left, right) => left.from - right.from);
+  const updatesById = new Map<string, PreviewItemUpdate>();
+
+  let removedFrames = 0;
+  for (const interval of normalizeIntervals(intervals)) {
+    const currentInterval = {
+      start: interval.start - removedFrames,
+      end: interval.end - removedFrames,
+    };
+    const intervalLength = currentInterval.end - currentInterval.start;
+    if (intervalLength <= 0) continue;
+
+    const nextPreviewItems: PreviewTrackItemState[] = [];
+    for (const item of previewItems) {
+      const itemEnd = item.from + item.durationInFrames;
+      if (itemEnd <= currentInterval.start) {
+        nextPreviewItems.push(item);
+        continue;
+      }
+
+      if (item.from >= currentInterval.end) {
+        const updated = {
+          ...item,
+          from: Math.max(0, item.from - intervalLength),
+        };
+        nextPreviewItems.push(updated);
+        setPreviewUpdate(updatesById, item.id, { from: updated.from });
+        continue;
+      }
+
+      const startsBeforeInterval = item.from < currentInterval.start;
+      const endsAfterInterval = itemEnd > currentInterval.end;
+
+      if (!startsBeforeInterval && !endsAfterInterval) {
+        setPreviewUpdate(updatesById, item.id, { hidden: true });
+        continue;
+      }
+
+      if (startsBeforeInterval && endsAfterInterval) {
+        const updated = {
+          ...item,
+          durationInFrames: Math.max(1, item.durationInFrames - intervalLength),
+        };
+        nextPreviewItems.push(updated);
+        setPreviewUpdate(updatesById, item.id, {
+          durationInFrames: updated.durationInFrames,
+        });
+        continue;
+      }
+
+      if (startsBeforeInterval) {
+        const updated = {
+          ...item,
+          durationInFrames: Math.max(1, currentInterval.start - item.from),
+        };
+        nextPreviewItems.push(updated);
+        setPreviewUpdate(updatesById, item.id, {
+          durationInFrames: updated.durationInFrames,
+        });
+        continue;
+      }
+
+      const updated = {
+        ...item,
+        from: currentInterval.start,
+        durationInFrames: Math.max(1, itemEnd - currentInterval.end),
+      };
+      nextPreviewItems.push(updated);
+      setPreviewUpdate(updatesById, item.id, {
+        from: updated.from,
+        durationInFrames: updated.durationInFrames,
+      });
+    }
+
+    previewItems = nextPreviewItems.sort((left, right) => left.from - right.from);
+    removedFrames += intervalLength;
+  }
+
+  return [...updatesById.values()];
+}
+
+function buildInsertedGapPreviewUpdatesForTrack(
+  trackItems: TimelineItem[],
+  cutFrame: number,
+  amount: number,
+): PreviewItemUpdate[] {
+  const updatesById = new Map<string, PreviewItemUpdate>();
+  for (const item of trackItems) {
+    const itemEnd = item.from + item.durationInFrames;
+    if (itemEnd <= cutFrame) {
+      continue;
+    }
+
+    if (item.from >= cutFrame) {
+      setPreviewUpdate(updatesById, item.id, {
+        from: item.from + amount,
+      });
+      continue;
+    }
+
+    setPreviewUpdate(updatesById, item.id, {
+      durationInFrames: item.durationInFrames + amount,
+    });
+  }
+
+  return [...updatesById.values()];
+}
+
+export function buildRemovedIntervalPreviewUpdatesForSyncLockedTracks(params: {
+  items: TimelineItem[];
+  tracks: TimelineTrack[];
+  editedTrackIds: Set<string>;
+  intervals: TimeInterval[];
+}): PreviewItemUpdate[] {
+  const intervals = normalizeIntervals(params.intervals);
+  if (intervals.length === 0) {
+    return [];
+  }
+
+  const candidateTrackIds = getCandidateTrackIdsFromState(
+    params.items,
+    params.tracks,
+    params.editedTrackIds,
+  );
+
+  return candidateTrackIds.flatMap((trackId) => buildRemovedIntervalPreviewUpdatesForTrack(
+    params.items.filter((item) => item.trackId === trackId),
+    intervals,
+  ));
+}
+
+export function buildInsertedGapPreviewUpdatesForSyncLockedTracks(params: {
+  items: TimelineItem[];
+  tracks: TimelineTrack[];
+  editedTrackIds: Set<string>;
+  cutFrame: number;
+  amount: number;
+}): PreviewItemUpdate[] {
+  const cutFrame = Math.max(0, Math.round(params.cutFrame));
+  const amount = Math.max(0, Math.round(params.amount));
+  if (amount === 0) {
+    return [];
+  }
+
+  const candidateTrackIds = getCandidateTrackIdsFromState(
+    params.items,
+    params.tracks,
+    params.editedTrackIds,
+  );
+
+  return candidateTrackIds.flatMap((trackId) => buildInsertedGapPreviewUpdatesForTrack(
+    params.items.filter((item) => item.trackId === trackId),
+    cutFrame,
+    amount,
+  ));
 }
 
 function removeItemsOnTrackInterval(trackId: string, interval: TimeInterval): RipplePropagationResult {
