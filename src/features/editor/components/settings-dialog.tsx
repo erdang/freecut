@@ -42,6 +42,7 @@ import {
 import {
   useMediaLibraryStore,
   getSharedProxyKey,
+  getMediaTranscriptionModelOptions,
   importProxyService,
   importMediaLibraryService,
   importThumbnailGenerator,
@@ -60,12 +61,12 @@ import {
   getWhisperLanguageSelectValue,
   getWhisperLanguageSettingValue,
   WHISPER_LANGUAGE_OPTIONS,
-  WHISPER_MODEL_OPTIONS,
   WHISPER_QUANTIZATION_OPTIONS,
 } from '@/shared/utils/whisper-settings';
 import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
 
 const log = createLogger('SettingsDialog');
+const TRANSCRIPTION_MODEL_OPTIONS = getMediaTranscriptionModelOptions();
 
 const SETTINGS_SECTIONS = [
   { id: 'general', label: 'General', icon: Settings2 },
@@ -407,7 +408,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {WHISPER_MODEL_OPTIONS.map((option) => (
+                        {TRANSCRIPTION_MODEL_OPTIONS.map((option) => (
                           <SelectItem key={option.value} value={option.value}>
                             {option.label}
                           </SelectItem>

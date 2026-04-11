@@ -15,9 +15,13 @@ import { PROPERTY_LABELS, type AnimatableProperty } from '@/types/keyframe';
 import type { PropertyKeyframes } from '@/types/keyframe';
 import type { MediaTranscriptModel } from '@/types/storage';
 import {
-  WHISPER_MODEL_LABELS,
-  WHISPER_MODEL_OPTIONS,
-} from '@/shared/utils/whisper-settings';
+  getMediaTranscriptionModelLabel,
+  getMediaTranscriptionModelOptions,
+} from '@/features/timeline/deps/media-transcription-service';
+import {
+  getSceneVerificationModelOptions,
+  type VerificationModel,
+} from '@/features/timeline/deps/analysis';
 import { formatHotkeyBinding } from '@/config/hotkeys';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 
@@ -68,7 +72,7 @@ interface ItemContextMenuProps {
   /** Whether scene detection is available for this item */
   canDetectScenes?: boolean;
   isDetectingScenes?: boolean;
-  onDetectScenes?: (method: 'histogram' | 'optical-flow', verificationModel?: 'gemma' | 'lfm') => void;
+  onDetectScenes?: (method: 'histogram' | 'optical-flow', verificationModel?: VerificationModel) => void;
 }
 
 /**
@@ -123,9 +127,17 @@ export const ItemContextMenu = memo(function ItemContextMenu({
     if (!keyframedProperties) return [];
     return keyframedProperties.filter(p => p.keyframes.length > 0);
   }, [keyframedProperties]);
+  const transcriptionModelOptions = useMemo(
+    () => getMediaTranscriptionModelOptions(),
+    [],
+  );
   const explicitCaptionModelOptions = useMemo(
-    () => WHISPER_MODEL_OPTIONS.filter((option) => option.value !== defaultCaptionModel),
-    [defaultCaptionModel]
+    () => transcriptionModelOptions.filter((option) => option.value !== defaultCaptionModel),
+    [defaultCaptionModel, transcriptionModelOptions],
+  );
+  const sceneVerificationModelOptions = useMemo(
+    () => getSceneVerificationModelOptions(),
+    [],
   );
 
   const hasKeyframes = propertiesWithKeyframes.length > 0;
@@ -247,12 +259,14 @@ export const ItemContextMenu = memo(function ItemContextMenu({
                   <ContextMenuItem onClick={() => onDetectScenes('histogram')}>
                     Fast (Histogram)
                   </ContextMenuItem>
-                  <ContextMenuItem onClick={() => onDetectScenes('optical-flow', 'gemma')}>
-                    AI (Gemma)
-                  </ContextMenuItem>
-                  <ContextMenuItem onClick={() => onDetectScenes('optical-flow', 'lfm')}>
-                    AI (LFM)
-                  </ContextMenuItem>
+                  {sceneVerificationModelOptions.map((option) => (
+                    <ContextMenuItem
+                      key={option.value}
+                      onClick={() => onDetectScenes('optical-flow', option.value)}
+                    >
+                      {`AI (${option.label})`}
+                    </ContextMenuItem>
+                  ))}
                 </ContextMenuSubContent>
               </ContextMenuSub>
             )}
@@ -284,7 +298,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
                     {defaultCaptionModel && (
                       <>
                         <ContextMenuItem onClick={() => onGenerateCaptions(defaultCaptionModel)}>
-                          {`Default (${WHISPER_MODEL_LABELS[defaultCaptionModel]})`}
+                          {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
                         </ContextMenuItem>
                         <ContextMenuSeparator />
                       </>
@@ -307,7 +321,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
                       {defaultCaptionModel && (
                         <>
                           <ContextMenuItem onClick={() => onRegenerateCaptions(defaultCaptionModel)}>
-                            {`Default (${WHISPER_MODEL_LABELS[defaultCaptionModel]})`}
+                            {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
                           </ContextMenuItem>
                           <ContextMenuSeparator />
                         </>

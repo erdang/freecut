@@ -5,7 +5,7 @@
  * - `histogram` (default): Fast CPU-only color histogram comparison.
  * - `optical-flow`: GPU optical flow via WebGPU compute shaders.
  *
- * Optional Gemma-4 VLM verification pass filters false positives.
+ * Optional VLM verification pass filters false positives.
  */
 
 import { OpticalFlowAnalyzer } from './optical-flow-analyzer';
@@ -13,14 +13,16 @@ import type { MotionResult } from './optical-flow-analyzer';
 import { ANALYSIS_WIDTH, ANALYSIS_HEIGHT } from './optical-flow-shaders';
 import { detectScenesHistogram } from './histogram-scene-detection';
 import { seekVideo, deduplicateCuts } from './scene-detection-utils';
-import { createGemmaSceneWorker } from './create-gemma-worker';
-import { createLfmSceneWorker } from './create-lfm-worker';
+import {
+  getSceneVerificationProvider,
+  type VerificationModel,
+} from './verification/registry';
+import type { SceneVerificationProvider } from './verification/types';
 import { createLogger } from '@/shared/logging/logger';
 
 const log = createLogger('SceneDetection');
 
-/** VLM model choices for scene cut verification. */
-export type VerificationModel = 'gemma' | 'lfm';
+export type { VerificationModel } from './verification/registry';
 
 /**
  * In-memory cache of scene detection results keyed by
@@ -43,10 +45,10 @@ export function clearSceneCache(mediaId?: string): void {
 /** Default sampling interval in milliseconds (matches masterselects) */
 const SAMPLE_INTERVAL_MS = 500;
 
-/** Minimum gap in seconds between scene cuts — prevents micro-segments from dissolves/pans */
+/** Minimum gap in seconds between scene cuts - prevents micro-segments from dissolves/pans */
 const MIN_CUT_GAP_SEC = 2.0;
 
-/** Max dimension (longest side) for frames sent to Gemma — preserves aspect ratio */
+/** Max dimension (longest side) for frames sent to the verification worker - preserves aspect ratio */
 const VERIFY_MAX_DIM = 480;
 
 /** How far before the detected cut to sample the "before" frame (seconds) */
@@ -59,7 +61,7 @@ export interface SceneCut {
   time: number;
   /** Motion result at the cut point */
   motion: MotionResult;
-  /** Whether Gemma verified this as a real scene cut (undefined = not verified) */
+  /** Whether a verification model confirmed this as a real scene cut (undefined = not verified) */
   verified?: boolean;
 }
 
@@ -77,9 +79,9 @@ export interface SceneDetectionProgress {
 export interface DetectScenesOptions {
   /**
    * Detection method:
-   * - `'histogram'` — fast CPU-only color histogram comparison (default).
+   * - `'histogram'` - fast CPU-only color histogram comparison (default).
    *    Best for hard cuts. No WebGPU required.
-   * - `'optical-flow'` — GPU optical flow via WebGPU compute shaders.
+   * - `'optical-flow'` - GPU optical flow via WebGPU compute shaders.
    *    Detects more subtle transitions but requires WebGPU.
    */
   method?: 'histogram' | 'optical-flow';
@@ -91,7 +93,7 @@ export interface DetectScenesOptions {
   onProgress?: (progress: SceneDetectionProgress) => void;
   /** AbortSignal for cancellation */
   signal?: AbortSignal;
-  /** Media ID for result caching — skip re-analysis when the same media is detected again */
+  /** Media ID for result caching - skip re-analysis when the same media is detected again */
   mediaId?: string;
 }
 
@@ -102,7 +104,7 @@ export interface DetectScenesOptions {
  * - `'histogram'` (default): fast CPU-only color histogram comparison
  * - `'optical-flow'`: GPU optical flow via WebGPU compute shaders
  *
- * Optional Gemma-4 VLM verification pass (enabled by default for optical-flow)
+ * Optional VLM verification pass (enabled by default for optical-flow)
  * filters false positives from camera pans, dissolves, etc.
  */
 export async function detectScenes(
@@ -152,19 +154,23 @@ export async function detectScenes(
     return cacheAndReturn(deduped);
   }
 
-  // Pass 2: VLM verification — gracefully fall back to optical-flow results on failure
-  const isLfm = verificationModel === 'lfm';
-  const worker = isLfm ? getLfmWorker() : getGemmaWorker();
-  const dispose = isLfm ? disposeLfmWorker : disposeGemmaWorker;
-  const reset = isLfm ? resetLfmWorker : resetGemmaWorker;
+  // Pass 2: VLM verification - gracefully fall back to optical-flow results on failure
+  const verificationProvider = getSceneVerificationProvider(verificationModel);
 
   try {
-    const verified = await verifyWithVlm(worker, video, deduped, verificationModel, onProgress, signal);
+    const verified = await verifyWithVlm(
+      verificationProvider,
+      video,
+      deduped,
+      verificationModel,
+      onProgress,
+      signal,
+    );
     log.info('VLM verification complete', { model: verificationModel, confirmed: verified.length, candidates: deduped.length });
-    dispose();
+    verificationProvider.disposeWorker();
     return cacheAndReturn(verified);
   } catch (err) {
-    reset();
+    verificationProvider.resetWorker();
     log.warn('VLM verification failed, using optical flow results', { model: verificationModel, error: (err as Error).message });
     return cacheAndReturn(deduped);
   }
@@ -172,7 +178,7 @@ export async function detectScenes(
 
 /**
  * Pass 1 alternative: GPU optical flow detection.
- * Requires WebGPU — throws if unavailable.
+ * Requires WebGPU - throws if unavailable.
  */
 async function detectScenesOpticalFlow(
   video: HTMLVideoElement,
@@ -182,7 +188,7 @@ async function detectScenesOpticalFlow(
   signal?: AbortSignal,
 ): Promise<SceneCut[]> {
   if (!navigator.gpu) {
-    throw new Error('WebGPU not supported — optical-flow scene detection requires GPU');
+    throw new Error('WebGPU not supported - optical-flow scene detection requires GPU');
   }
 
   const adapter = await navigator.gpu.requestAdapter();
@@ -195,7 +201,7 @@ async function detectScenesOpticalFlow(
   if (!shaderOk) {
     analyzer.destroy();
     device.destroy();
-    throw new Error('Optical flow shader compilation failed — check console for details');
+    throw new Error('Optical flow shader compilation failed - check console for details');
   }
 
   const sceneCuts: SceneCut[] = [];
@@ -253,7 +259,7 @@ async function detectScenesOpticalFlow(
 }
 
 /**
- * Capture a video frame as a JPEG Blob for Gemma input.
+ * Capture a video frame as a JPEG Blob for scene verification input.
  * Preserves the video's native aspect ratio, scaling so the longest
  * side fits within VERIFY_MAX_DIM.
  */
@@ -276,84 +282,30 @@ async function captureFrameBlob(
 }
 
 /**
- * Singleton Gemma worker — created via a Vite module-worker factory so the
- * worker entry resolves correctly in dev and production.
- */
-let gemmaWorker: Worker | null = null;
-
-function getGemmaWorker(): Worker {
-  if (!gemmaWorker) {
-    gemmaWorker = createGemmaSceneWorker();
-  }
-  return gemmaWorker;
-}
-
-function resetGemmaWorker(): void {
-  if (gemmaWorker) {
-    gemmaWorker.terminate();
-    gemmaWorker = null;
-  }
-}
-
-/** Ask the Gemma worker to release VRAM, then terminate it. */
-function disposeGemmaWorker(): void {
-  if (!gemmaWorker) return;
-  gemmaWorker.postMessage({ type: 'dispose' });
-  const w = gemmaWorker;
-  gemmaWorker = null;
-  setTimeout(() => w.terminate(), 500);
-}
-
-/**
- * Singleton LFM worker — same lifecycle pattern as Gemma.
- */
-let lfmWorker: Worker | null = null;
-
-function getLfmWorker(): Worker {
-  if (!lfmWorker) {
-    lfmWorker = createLfmSceneWorker();
-  }
-  return lfmWorker;
-}
-
-function resetLfmWorker(): void {
-  if (lfmWorker) {
-    lfmWorker.terminate();
-    lfmWorker = null;
-  }
-}
-
-/** Ask the LFM worker to release VRAM, then terminate it. */
-function disposeLfmWorker(): void {
-  if (!lfmWorker) return;
-  lfmWorker.postMessage({ type: 'dispose' });
-  const w = lfmWorker;
-  lfmWorker = null;
-  setTimeout(() => w.terminate(), 500);
-}
-
-/**
  * Pass 2: Verify candidate cuts with a VLM (Gemma or LFM) in a Web Worker
  * so model loading and inference do not block the main thread.
  */
 async function verifyWithVlm(
-  worker: Worker,
+  provider: SceneVerificationProvider,
   video: HTMLVideoElement,
   candidates: SceneCut[],
   verificationModel: VerificationModel,
   onProgress?: (progress: SceneDetectionProgress) => void,
   signal?: AbortSignal,
 ): Promise<SceneCut[]> {
-  const modelLabel = verificationModel === 'lfm' ? 'LFM' : 'Gemma';
+  const worker = provider.getWorker();
+  const modelLabel = provider.label;
 
   // Wait for model to load (30s timeout for bootstrap + initial load handshake)
   await new Promise<void>((resolve, reject) => {
     const INACTIVITY_MS = 30_000;
     let timeout = setTimeout(onTimeout, INACTIVITY_MS);
+
     function onTimeout() {
       worker.removeEventListener('message', onMsg);
       reject(new Error(`${modelLabel} worker init timed out after 30s of inactivity`));
     }
+
     const onMsg = (e: MessageEvent) => {
       const msg = e.data;
       if (msg.type === 'ready') {
@@ -365,7 +317,7 @@ async function verifyWithVlm(
         worker.removeEventListener('message', onMsg);
         reject(new Error(msg.message));
       } else if (msg.type === 'progress') {
-        // Model is downloading — reset inactivity timeout
+        // Model is downloading - reset inactivity timeout
         clearTimeout(timeout);
         timeout = setTimeout(onTimeout, INACTIVITY_MS);
         onProgress?.({
@@ -378,6 +330,7 @@ async function verifyWithVlm(
         });
       }
     };
+
     worker.addEventListener('message', onMsg);
     worker.postMessage({ type: 'init' });
   });
@@ -401,7 +354,7 @@ async function verifyWithVlm(
       verificationModel,
     });
 
-    // Serialize seeks — both mutate video.currentTime
+    // Serialize seeks - both mutate video.currentTime
     const beforeBlob = await captureFrameBlob(video, beforeTime);
     const afterBlob = await captureFrameBlob(video, cut.time);
 
@@ -417,11 +370,16 @@ async function verifyWithVlm(
           resolve({ isSceneCut: false, reason: `worker error: ${e.data.message}` });
         }
       };
+
       worker.addEventListener('message', onMsg);
       worker.postMessage({ type: 'verify', id: i, before: beforeBlob, after: afterBlob });
     });
 
-    log.info(`${modelLabel} candidate result`, { index: i, time: cut.time.toFixed(1), reason: result.reason });
+    log.info(`${modelLabel} candidate result`, {
+      index: i,
+      time: cut.time.toFixed(1),
+      reason: result.reason,
+    });
 
     if (result.isSceneCut) {
       verified.push({ ...cut, verified: true });

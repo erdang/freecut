@@ -2,6 +2,13 @@ export { OpticalFlowAnalyzer } from './optical-flow-analyzer';
 export type { MotionResult } from './optical-flow-analyzer';
 export { detectScenes, clearSceneCache } from './scene-detection';
 export type { SceneCut, SceneDetectionProgress, DetectScenesOptions, VerificationModel } from './scene-detection';
+export {
+  getDefaultSceneVerificationProvider,
+  getSceneVerificationModelLabel,
+  getSceneVerificationModelOptions,
+  getSceneVerificationProvider,
+} from './verification/registry';
+export type { SceneVerificationProvider } from './verification/types';
 export { detectScenesHistogram, computeHistogram, chiSquaredDistance } from './histogram-scene-detection';
 export type { HistogramDetectOptions } from './histogram-scene-detection';
 export { seekVideo, deduplicateCuts } from './scene-detection-utils';

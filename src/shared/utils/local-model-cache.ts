@@ -1,12 +1,20 @@
+import {
+  SCENE_VERIFICATION_MODEL_CACHE_DESCRIPTIONS,
+  SCENE_VERIFICATION_MODEL_CACHE_MATCH_FRAGMENTS,
+  SCENE_VERIFICATION_MODEL_IDS,
+  SCENE_VERIFICATION_MODEL_LABELS,
+  type SceneVerificationModelId,
+} from './scene-verification-models';
+
 export const TRANSFORMERS_CACHE_NAME = 'transformers-cache';
 export const KITTEN_TTS_MODEL_CACHE_NAME = 'kitten-tts-models';
 export const LOCAL_MODEL_CACHE_STORAGE_LABEL = 'Browser cache storage';
 const WHISPER_CACHE_MATCH_FRAGMENTS = ['/onnx-community/whisper-'];
-const GEMMA_CACHE_MATCH_FRAGMENTS = ['/onnx-community/gemma-4-e4b-it-onnx/'];
-const LFM_CACHE_MATCH_FRAGMENTS = ['/liquidai/lfm2.5-vl-450m-onnx/'];
+
+export type LocalModelCacheId = 'whisper' | SceneVerificationModelId | 'kitten-tts';
 
 export interface LocalModelCacheDefinition {
-  id: 'whisper' | 'gemma' | 'lfm' | 'kitten-tts';
+  id: LocalModelCacheId;
   label: string;
   description: string;
   cacheName: string;
@@ -23,6 +31,14 @@ export interface LocalModelCacheSummary extends LocalModelCacheDefinition {
   inspectionState: 'ready' | 'timed-out' | 'error';
 }
 
+const SCENE_VERIFICATION_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = SCENE_VERIFICATION_MODEL_IDS.map((id) => ({
+  id,
+  label: SCENE_VERIFICATION_MODEL_LABELS[id],
+  description: SCENE_VERIFICATION_MODEL_CACHE_DESCRIPTIONS[id],
+  cacheName: TRANSFORMERS_CACHE_NAME,
+  matchPathFragments: [...SCENE_VERIFICATION_MODEL_CACHE_MATCH_FRAGMENTS[id]],
+}));
+
 export const LOCAL_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = [
   {
     id: 'whisper',
@@ -31,20 +47,7 @@ export const LOCAL_MODEL_CACHE_DEFINITIONS: LocalModelCacheDefinition[] = [
     cacheName: TRANSFORMERS_CACHE_NAME,
     matchPathFragments: WHISPER_CACHE_MATCH_FRAGMENTS,
   },
-  {
-    id: 'gemma',
-    label: 'Gemma',
-    description: 'Gemma scene-detection ONNX model files and processor assets.',
-    cacheName: TRANSFORMERS_CACHE_NAME,
-    matchPathFragments: GEMMA_CACHE_MATCH_FRAGMENTS,
-  },
-  {
-    id: 'lfm',
-    label: 'LFM',
-    description: 'LFM 2.5 VL scene-detection ONNX model files and processor assets.',
-    cacheName: TRANSFORMERS_CACHE_NAME,
-    matchPathFragments: LFM_CACHE_MATCH_FRAGMENTS,
-  },
+  ...SCENE_VERIFICATION_MODEL_CACHE_DEFINITIONS,
   {
     id: 'kitten-tts',
     label: 'Kitten TTS',
