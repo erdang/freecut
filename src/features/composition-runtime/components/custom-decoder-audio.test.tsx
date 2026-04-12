@@ -7,10 +7,6 @@ const audioDecodeMocks = vi.hoisted(() => ({
   getOrDecodeAudioSliceForPlayback: vi.fn(),
 }));
 
-const indexedDbMocks = vi.hoisted(() => ({
-  getDecodedPreviewAudio: vi.fn(async () => undefined),
-}));
-
 const playbackStateMocks = vi.hoisted(() => ({
   current: {
     frame: 0,
@@ -21,13 +17,25 @@ const playbackStateMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
-vi.mock('@/infrastructure/storage/indexeddb', () => indexedDbMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
 }));
-vi.mock('./pitch-corrected-audio', () => ({
-  PitchCorrectedAudio: ({ src, sourceStartOffsetSec }: { src: string; sourceStartOffsetSec?: number }) => (
-    <div data-testid="pitch" data-src={src} data-offset={sourceStartOffsetSec ?? 0} />
+vi.mock('./soundtouch-worklet-audio', () => ({
+  SoundTouchWorkletAudio: ({
+    audioBuffer,
+    sourceStartOffsetSec,
+    isComplete,
+  }: {
+    audioBuffer: AudioBuffer;
+    sourceStartOffsetSec?: number;
+    isComplete?: boolean;
+  }) => (
+    <div
+      data-testid="pitch"
+      data-frames={audioBuffer.length}
+      data-offset={sourceStartOffsetSec ?? 0}
+      data-complete={isComplete ? 'true' : 'false'}
+    />
   ),
 }));
 vi.mock('./custom-decoder-buffered-audio', () => ({
@@ -57,10 +65,6 @@ describe('CustomDecoderAudio', () => {
       playing: false,
       resolvedVolume: 1,
     };
-    vi.spyOn(URL, 'createObjectURL')
-      .mockReturnValueOnce('blob:partial-wav')
-      .mockReturnValue('blob:partial-wav-next');
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
   });
 
   it('uses playback-first partial decode for pitch-preserved custom audio', async () => {
@@ -96,8 +100,9 @@ describe('CustomDecoderAudio', () => {
     });
 
     await waitFor(() => {
-      expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-src', 'blob:partial-wav');
+      expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-frames', String(22050 * 8));
       expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-offset', '4');
+      expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-complete', 'false');
     });
   });
 
@@ -128,7 +133,7 @@ describe('CustomDecoderAudio', () => {
     );
 
     await waitFor(() => {
-      expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-src', 'blob:partial-wav');
+      expect(document.querySelector('[data-testid="pitch"]')).toHaveAttribute('data-frames', String(22050 * 2));
     });
 
     playbackStateMocks.current = {
