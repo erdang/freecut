@@ -13,6 +13,7 @@ export {
 } from '../stores/compositions-store';
 export { useItemsStore } from '../stores/items-store';
 export { wouldCreateCompositionCycle } from '../utils/composition-graph';
+export { getSynchronizedLinkedItems } from '../utils/linked-items';
 
 export {
   deleteCompoundClips,
