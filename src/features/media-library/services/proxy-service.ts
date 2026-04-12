@@ -547,7 +547,9 @@ class ProxyService {
           }
 
           if (metadata.status === 'error') {
-            staleProxyIds.push(...collectMappedMediaIds(proxyKey));
+            // Failed proxies are removed, but we do not automatically requeue
+            // them on startup. Repeated deterministic failures should not keep
+            // restarting in the background every session.
             await removeProxyEntry(proxyKey, 'failed');
             continue;
           }

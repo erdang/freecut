@@ -13,6 +13,8 @@ const PARTIAL_WAV_READY_SECONDS = 2;
 const PARTIAL_WAV_WAIT_TIMEOUT_MS = 6000;
 const PARTIAL_WAV_EXTENSION_TRIGGER_SECONDS = 1.25;
 const PARTIAL_WAV_EXTENSION_READY_SECONDS = 3;
+const BACKGROUND_FULL_DECODE_DELAY_MS = 1500;
+const BACKGROUND_FULL_DECODE_BACKSTOP_MS = 4000;
 
 interface CustomDecoderAudioProps extends AudioPlaybackProps {
   src: string;
@@ -234,10 +236,56 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
     if (!mediaId || !src) return;
 
     let cancelled = false;
+    let fullDecodeStarted = false;
+    let scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+    let fullDecodeTimer: ReturnType<typeof setTimeout> | null = null;
     const effectiveSourceFps = sourceFps ?? 30;
     const clipStartTime = Math.max(0, trimBefore / effectiveSourceFps);
+    const clearScheduledFullDecode = () => {
+      scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+      if (fullDecodeTimer !== null) {
+        clearTimeout(fullDecodeTimer);
+        fullDecodeTimer = null;
+      }
+    };
+    const startFullDecode = () => {
+      if (cancelled || fullDecodeStarted) return;
+      clearScheduledFullDecode();
+      fullDecodeStarted = true;
+      getOrDecodeAudio(mediaId, src)
+        .then((buffer) => {
+          if (cancelled) return;
+          setDecodedSource({
+            buffer,
+            sourceStartOffsetSec: 0,
+            coverageEndSec: Number.POSITIVE_INFINITY,
+            isComplete: true,
+          });
+          log.info('Decoded pitch source ready', { mediaId });
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          log.error('Failed to prepare decoded pitch source', { mediaId, err });
+        });
+    };
+    const scheduleFullDecode = (delayMs: number) => {
+      if (cancelled || fullDecodeStarted) return;
+      const safeDelayMs = Math.max(0, delayMs);
+      const dueAtMs = Date.now() + safeDelayMs;
+      if (fullDecodeTimer !== null && dueAtMs >= scheduledFullDecodeAtMs - 1) {
+        return;
+      }
+      clearScheduledFullDecode();
+      scheduledFullDecodeAtMs = dueAtMs;
+      fullDecodeTimer = setTimeout(() => {
+        fullDecodeTimer = null;
+        scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+        startFullDecode();
+      }, safeDelayMs);
+    };
     setDecodedSource(null);
     pendingExtensionKeyRef.current = null;
+    scheduleFullDecode(BACKGROUND_FULL_DECODE_BACKSTOP_MS);
 
     getOrDecodeAudioSliceForPlayback(mediaId, src, {
       minReadySeconds: PARTIAL_WAV_READY_SECONDS,
@@ -258,6 +306,11 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
           }
           return nextSource;
         });
+        if (slice.isComplete) {
+          clearScheduledFullDecode();
+        } else {
+          scheduleFullDecode(BACKGROUND_FULL_DECODE_DELAY_MS);
+        }
         log.info('Partial decoded pitch source ready', {
           mediaId,
           duration: slice.buffer.duration.toFixed(2),
@@ -266,26 +319,12 @@ const CustomDecoderPitchPreservedAudio: React.FC<CustomDecoderAudioProps> = ({
       .catch((err) => {
         if (cancelled) return;
         log.error('Failed to prepare partial decoded pitch source', { mediaId, err });
-      });
-
-    getOrDecodeAudio(mediaId, src)
-      .then((buffer) => {
-        if (cancelled) return;
-        setDecodedSource({
-          buffer,
-          sourceStartOffsetSec: 0,
-          coverageEndSec: Number.POSITIVE_INFINITY,
-          isComplete: true,
-        });
-        log.info('Decoded pitch source ready', { mediaId });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        log.error('Failed to prepare decoded pitch source', { mediaId, err });
+        startFullDecode();
       });
 
     return () => {
       cancelled = true;
+      clearScheduledFullDecode();
     };
   }, [mediaId, src, trimBefore, sourceFps]);
 

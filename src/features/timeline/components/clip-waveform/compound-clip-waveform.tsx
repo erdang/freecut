@@ -11,6 +11,7 @@ import { WAVEFORM_FILL_COLOR, WAVEFORM_STROKE_COLOR } from '../../constants';
 import { getCompositionOwnedAudioSources } from '../../utils/composition-clip-summary';
 import { mixCompoundClipWaveformPeaks } from '../../utils/compound-clip-waveform';
 import { computeWaveformRenderWindow } from './render-window';
+import { getPreviewStartupDelayMs, schedulePreviewWork } from '../../hooks/preview-work-budget';
 
 const logger = createLogger('CompoundClipWaveform');
 const WAVEFORM_VERTICAL_PADDING_PX = 3;
@@ -135,38 +136,43 @@ export const CompoundClipWaveform = memo(function CompoundClipWaveform({
     setIsLoading(true);
     setHasError(false);
 
-    void Promise.allSettled(missingIds.map(async (mediaId) => {
-      const blobUrl = await resolveMediaUrl(mediaId);
-      if (!blobUrl) {
-        throw new Error(`Missing blob URL for ${mediaId}`);
-      }
-      const waveform = await waveformCache.getWaveform(mediaId, blobUrl);
-      return [mediaId, waveform] as const;
-    })).then((results) => {
-      if (cancelled || requestToken !== requestTokenRef.current) {
-        return;
-      }
-
-      const resolved = new Map(cachedMap);
-      let hadFailure = false;
-      for (const result of results) {
-        if (result.status === 'fulfilled') {
-          resolved.set(result.value[0], result.value[1]);
-        } else {
-          hadFailure = true;
-          logger.warn('Failed to load compound waveform source', result.reason);
+    const cancelScheduledStart = schedulePreviewWork(() => {
+      void Promise.allSettled(missingIds.map(async (mediaId) => {
+        const blobUrl = await resolveMediaUrl(mediaId);
+        if (!blobUrl) {
+          throw new Error(`Missing blob URL for ${mediaId}`);
         }
-      }
+        const waveform = await waveformCache.getWaveform(mediaId, blobUrl);
+        return [mediaId, waveform] as const;
+      })).then((results) => {
+        if (cancelled || requestToken !== requestTokenRef.current) {
+          return;
+        }
 
-      setWaveformsByMediaId(resolved);
-      setHasError(hadFailure && resolved.size === 0);
-      setIsLoading(false);
+        const resolved = new Map(cachedMap);
+        let hadFailure = false;
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            resolved.set(result.value[0], result.value[1]);
+          } else {
+            hadFailure = true;
+            logger.warn('Failed to load compound waveform source', result.reason);
+          }
+        }
+
+        setWaveformsByMediaId(resolved);
+        setHasError(hadFailure && resolved.size === 0);
+        setIsLoading(false);
+      });
+    }, {
+      delayMs: getPreviewStartupDelayMs(sourceDuration),
     });
 
     return () => {
       cancelled = true;
+      cancelScheduledStart();
     };
-  }, [isVisible, mediaIds, mediaIdsKey]);
+  }, [isVisible, mediaIds, mediaIdsKey, sourceDuration]);
 
   const mixedWaveform = useMemo(() => {
     if (ownedAudioSources.length === 0 || waveformsByMediaId.size === 0) {

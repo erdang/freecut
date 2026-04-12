@@ -37,16 +37,6 @@ export function prewarmDroppedTimelineAudio(
   const customWarmups: Promise<unknown>[] = [];
   let releasePreviewHold: (() => void) | null = null;
 
-  const ensurePreviewHold = () => {
-    if (releasePreviewHold) {
-      return;
-    }
-    releasePreviewHold = registerPreviewAudioStartupHold({
-      minDurationMs: AUDIO_STARTUP_PREVIEW_MIN_HOLD_MS,
-      maxDurationMs: PARTIAL_AUDIO_WAIT_TIMEOUT_MS,
-    });
-  };
-
   for (const item of items) {
     if (item.type !== 'video' && item.type !== 'audio') {
       continue;
@@ -78,7 +68,12 @@ export function prewarmDroppedTimelineAudio(
       continue;
     }
     warmedKeys.add(warmKey);
-    ensurePreviewHold();
+    if (!releasePreviewHold) {
+      releasePreviewHold = registerPreviewAudioStartupHold({
+        minDurationMs: AUDIO_STARTUP_PREVIEW_MIN_HOLD_MS,
+        maxDurationMs: PARTIAL_AUDIO_WAIT_TIMEOUT_MS,
+      });
+    }
 
     const codec = entry.media.audioCodec ?? entry.media.codec;
     if (needsCustomAudioDecoder(codec)) {
@@ -99,17 +94,17 @@ export function prewarmDroppedTimelineAudio(
     prewarmPreviewAudioElement(src, targetTimeSeconds);
   }
 
-  if (!releasePreviewHold) {
+  const releaseHold = releasePreviewHold;
+  if (!releaseHold) {
     return;
   }
 
   if (customWarmups.length === 0) {
-    releasePreviewHold();
+    releaseHold();
     return;
   }
 
-  const finalizePreviewHold = releasePreviewHold;
   void Promise.allSettled(customWarmups).finally(() => {
-    finalizePreviewHold();
+    releaseHold();
   });
 }

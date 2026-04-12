@@ -29,7 +29,13 @@ import type { DecodedPreviewAudioMeta, DecodedPreviewAudioBin } from '@/types/st
 const log = createLogger('PreviewAudioCache');
 
 const cache = new Map<string, AudioBuffer>();
+const playbackSliceCache = new Map<string, PlaybackAudioSlice>();
 const pendingDecodes = new Map<string, Promise<AudioBuffer>>();
+const pendingPlaybackSliceDecodes = new Map<string, {
+  requestedStartTime: number;
+  requestedCoverageEndTime: number;
+  promise: Promise<PlaybackAudioSlice>;
+}>();
 /** LRU access order — most recently accessed at the end. */
 const accessOrder: string[] = [];
 
@@ -61,6 +67,7 @@ function evictIfNeeded(): void {
 const DEFAULT_PLAYABLE_PARTIAL_READY_SECONDS = 2;
 const PLAYABLE_PARTIAL_TIMEOUT_MS = 8000;
 const PLAYABLE_PARTIAL_PREROLL_SECONDS = 0.25;
+const PENDING_PLAYBACK_SLICE_REUSE_HEADROOM_SECONDS = 1;
 
 /** Sample rate for IndexedDB storage; 22050 Hz is sufficient for preview. */
 const STORAGE_SAMPLE_RATE = 22050;
@@ -72,6 +79,62 @@ export interface PlaybackAudioSlice {
   buffer: AudioBuffer;
   startTime: number;
   isComplete: boolean;
+}
+
+function getPlaybackSliceCoverageEnd(slice: PlaybackAudioSlice): number {
+  return slice.startTime + slice.buffer.duration;
+}
+
+function playbackSliceCoversTarget(
+  slice: PlaybackAudioSlice,
+  targetTimeSeconds: number,
+  minReadySeconds: number,
+): boolean {
+  return (
+    targetTimeSeconds >= (slice.startTime - 0.05)
+    && getPlaybackSliceCoverageEnd(slice) >= (targetTimeSeconds + minReadySeconds - 0.05)
+  );
+}
+
+function pendingPlaybackSliceCoversTarget(
+  request: {
+    requestedStartTime: number;
+    requestedCoverageEndTime: number;
+  },
+  targetTimeSeconds: number,
+  minReadySeconds: number,
+): boolean {
+  const reusableHeadroomSeconds = Math.min(
+    minReadySeconds,
+    PENDING_PLAYBACK_SLICE_REUSE_HEADROOM_SECONDS,
+  );
+
+  return (
+    request.requestedStartTime <= (targetTimeSeconds + 0.05)
+    && request.requestedCoverageEndTime >= (targetTimeSeconds + reusableHeadroomSeconds - 0.05)
+  );
+}
+
+function rememberPlaybackSlice(mediaId: string, slice: PlaybackAudioSlice): void {
+  if (slice.isComplete) {
+    playbackSliceCache.delete(mediaId);
+    return;
+  }
+
+  const existing = playbackSliceCache.get(mediaId);
+  if (!existing) {
+    playbackSliceCache.set(mediaId, slice);
+    return;
+  }
+
+  const existingCoverageEnd = getPlaybackSliceCoverageEnd(existing);
+  const nextCoverageEnd = getPlaybackSliceCoverageEnd(slice);
+  if (
+    nextCoverageEnd > existingCoverageEnd + 0.05
+    || slice.startTime < existing.startTime - 0.05
+  ) {
+    playbackSliceCache.set(mediaId, slice);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -110,7 +173,7 @@ async function downsampleBuffer(buffer: AudioBuffer, targetRate: number): Promis
 
   // Manual linear interpolation — ~10x faster than OfflineAudioContext
   // for preview-quality downsampling (22050 Hz). Quality is sufficient
-  // since we're going from 48kHz→22kHz with anti-aliasing handled by
+  // since we're going from 48kHz?22kHz with anti-aliasing handled by
   // the Nyquist limit at the target rate.
   const ctx = new OfflineAudioContext(numChannels, targetFrames, targetRate);
   const outBuffer = ctx.createBuffer(numChannels, targetFrames, targetRate);
@@ -173,6 +236,7 @@ function ensureDecodeStarted(mediaId: string, src: string): Promise<AudioBuffer>
   const promise = loadOrDecodeAudio(mediaId, src)
     .then((buffer) => {
       cache.set(mediaId, buffer);
+      playbackSliceCache.delete(mediaId);
       currentCacheBytes += estimateBufferBytes(buffer);
       touchCacheEntry(mediaId);
       evictIfNeeded();
@@ -202,74 +266,79 @@ export function isPreviewAudioDecodePending(mediaId: string): boolean {
 
 async function loadPartialFromBins(
   mediaId: string,
-  minSeconds: number,
-): Promise<AudioBuffer | null> {
+  targetTimeSeconds: number,
+  minReadySeconds: number,
+  preRollSeconds: number,
+): Promise<PlaybackAudioSlice | null> {
   const metaRecord = await getDecodedPreviewAudio(mediaId);
   let storedSampleRate = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta'
     && Number.isFinite(metaRecord.sampleRate) && metaRecord.sampleRate > 0)
     ? metaRecord.sampleRate
     : 0;
+  const binDurationSec = (metaRecord && 'kind' in metaRecord && metaRecord.kind === 'meta'
+    && Number.isFinite(metaRecord.binDurationSec) && metaRecord.binDurationSec > 0)
+    ? metaRecord.binDurationSec
+    : BIN_DURATION_SEC;
+  const requestedStartTime = Math.max(0, targetTimeSeconds - preRollSeconds);
+  const requestedCoverageEndTime = targetTimeSeconds + minReadySeconds;
+  const startBinIndex = Math.max(0, Math.floor(requestedStartTime / binDurationSec));
   const bins: DecodedPreviewAudioBin[] = [];
   let totalFrames = 0;
-  let minFrames = storedSampleRate > 0 ? Math.max(1, Math.floor(minSeconds * storedSampleRate)) : 0;
-
-  // Load contiguous bins from the beginning until we have enough playable audio.
-  for (let i = 0; i < 512; i++) {
+  const sliceStartTime = startBinIndex * binDurationSec;
+  let coverageEndTime = sliceStartTime;
+  // Load contiguous bins around the requested target until we cover the
+  // desired playback headroom or hit a gap in persisted decode bins.
+  for (let i = startBinIndex; i < startBinIndex + 512; i++) {
     const record = await getDecodedPreviewAudio(binKey(mediaId, i));
     if (!(record && 'kind' in record && record.kind === 'bin')) {
       break;
     }
-
     const bin = record as DecodedPreviewAudioBin;
     if (bin.binIndex !== i || bin.frames <= 0) {
       break;
     }
-
-    // Derive sample rate from first bin when meta is unavailable
+    // Derive sample rate from first bin when meta is unavailable.
     if (storedSampleRate <= 0 && bin.sampleRate && Number.isFinite(bin.sampleRate) && bin.sampleRate > 0) {
       storedSampleRate = bin.sampleRate;
-      minFrames = Math.max(1, Math.floor(minSeconds * storedSampleRate));
     }
-
     bins.push(bin);
     totalFrames += bin.frames;
-    if (minFrames > 0 && totalFrames >= minFrames) {
+    if (storedSampleRate > 0) {
+      coverageEndTime = sliceStartTime + (totalFrames / storedSampleRate);
+    }
+    if (coverageEndTime >= requestedCoverageEndTime - 0.05) {
       break;
     }
   }
-
   if (storedSampleRate <= 0) {
     storedSampleRate = STORAGE_SAMPLE_RATE;
   }
-
   if (bins.length === 0 || totalFrames <= 0) {
     return null;
   }
-
   const offlineCtx = new OfflineAudioContext(2, totalFrames, storedSampleRate);
   const buffer = offlineCtx.createBuffer(2, totalFrames, storedSampleRate);
   const leftChannel = buffer.getChannelData(0);
   const rightChannel = buffer.getChannelData(1);
-
   let offset = 0;
   for (const bin of bins) {
     const left = new Int16Array(bin.left);
     const right = new Int16Array(bin.right);
     const frames = Math.min(bin.frames, left.length, right.length);
     if (frames <= 0) continue;
-
     leftChannel.set(int16ToFloat32(left.subarray(0, frames)), offset);
     rightChannel.set(int16ToFloat32(right.subarray(0, frames)), offset);
     offset += frames;
   }
-
   if (offset <= 0) {
     return null;
   }
-
-  return buffer;
+  return {
+    buffer,
+    startTime: sliceStartTime,
+    isComplete: false,
+  };
 }
-
 async function decodeAudioWindow(
   mediaId: string,
   src: string,
@@ -407,34 +476,85 @@ export async function getOrDecodeAudioSliceForPlayback(
   const waitTimeoutMs = Math.max(0, options?.waitTimeoutMs ?? PLAYABLE_PARTIAL_TIMEOUT_MS);
   const targetTimeSeconds = Math.max(0, options?.targetTimeSeconds ?? 0);
   const preRollSeconds = Math.max(0, options?.preRollSeconds ?? PLAYABLE_PARTIAL_PREROLL_SECONDS);
-  const fullDecodePromise = ensureDecodeStarted(mediaId, src);
+  const pendingFullDecodePromise = pendingDecodes.get(mediaId) ?? null;
 
-  // If bins are already present from a previous run/decode, use them immediately.
-  const immediatePartial = await loadPartialFromBins(mediaId, minReadySeconds);
-  if (immediatePartial && targetTimeSeconds <= immediatePartial.duration) {
-    return {
-      buffer: immediatePartial,
-      startTime: 0,
-      isComplete: false,
-    };
+  const cachedPlaybackSlice = playbackSliceCache.get(mediaId);
+  if (cachedPlaybackSlice && playbackSliceCoversTarget(cachedPlaybackSlice, targetTimeSeconds, minReadySeconds)) {
+    return cachedPlaybackSlice;
+  }
+
+  const pendingPlaybackSlice = pendingPlaybackSliceDecodes.get(mediaId);
+  if (
+    pendingPlaybackSlice
+    && pendingPlaybackSliceCoversTarget(
+      pendingPlaybackSlice,
+      targetTimeSeconds,
+      minReadySeconds,
+    )
+  ) {
+    return pendingPlaybackSlice.promise;
   }
 
   const partialStartTime = Math.max(0, targetTimeSeconds - preRollSeconds);
   const partialDurationSeconds = minReadySeconds + preRollSeconds;
-  try {
-    const partialPromise = decodeAudioWindow(
+  const requiredCoverageEnd = targetTimeSeconds + minReadySeconds;
+  const partialPromise = (async (): Promise<PlaybackAudioSlice> => {
+    // If bins are already present from a previous run/decode, use them immediately
+    // only when they cover the current target plus enough headroom to keep
+    // playback continuous. Returning a slice that merely contains the current
+    // position can strand the preview path at the tail of the rebuilt bins.
+    const immediatePartial = await loadPartialFromBins(
       mediaId,
-      src,
-      partialStartTime,
-      partialDurationSeconds,
+      targetTimeSeconds,
+      minReadySeconds,
+      preRollSeconds,
     );
+    if (
+      immediatePartial
+      && playbackSliceCoversTarget(immediatePartial, targetTimeSeconds, minReadySeconds)
+    ) {
+      rememberPlaybackSlice(mediaId, immediatePartial);
+      return immediatePartial;
+    }
+
+    try {
+      const slice = await decodeAudioWindow(
+        mediaId,
+        src,
+        partialStartTime,
+        partialDurationSeconds,
+      );
+      rememberPlaybackSlice(mediaId, slice);
+      return slice;
+    } catch (windowError) {
+      log.warn('Targeted preview audio window decode failed, falling back to full decode', {
+        mediaId,
+        targetTimeSeconds,
+        error: windowError,
+      });
+    }
+
+    return {
+      buffer: await getOrDecodeAudio(mediaId, src),
+      startTime: 0,
+      isComplete: true,
+    };
+  })();
+
+  pendingPlaybackSliceDecodes.set(mediaId, {
+    requestedStartTime: partialStartTime,
+    requestedCoverageEndTime: requiredCoverageEnd,
+    promise: partialPromise,
+  });
+
+  try {
     if (waitTimeoutMs > 0) {
       return await Promise.race([
         partialPromise,
         (async () => {
           await sleep(waitTimeoutMs);
           return {
-            buffer: await fullDecodePromise,
+            buffer: await (pendingFullDecodePromise ?? getOrDecodeAudio(mediaId, src)),
             startTime: 0,
             isComplete: true,
           } satisfies PlaybackAudioSlice;
@@ -442,19 +562,12 @@ export async function getOrDecodeAudioSliceForPlayback(
       ]);
     }
     return await partialPromise;
-  } catch (windowError) {
-    log.warn('Targeted preview audio window decode failed, falling back to full decode', {
-      mediaId,
-      targetTimeSeconds,
-      error: windowError,
-    });
+  } finally {
+    const pendingSlice = pendingPlaybackSliceDecodes.get(mediaId);
+    if (pendingSlice?.promise === partialPromise) {
+      pendingPlaybackSliceDecodes.delete(mediaId);
+    }
   }
-
-  return {
-    buffer: await fullDecodePromise,
-    startTime: 0,
-    isComplete: true,
-  };
 }
 
 export async function getOrDecodeAudioForPlayback(
@@ -474,6 +587,8 @@ export async function getOrDecodeAudioForPlayback(
 /** Clear all cached preview audio buffers (call on project unload). */
 export function clearPreviewAudioCache(): void {
   cache.clear();
+  playbackSliceCache.clear();
+  pendingPlaybackSliceDecodes.clear();
   accessOrder.length = 0;
   currentCacheBytes = 0;
   log.debug('Preview audio cache cleared');

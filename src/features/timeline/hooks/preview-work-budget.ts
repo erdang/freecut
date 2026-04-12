@@ -1,5 +1,8 @@
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
+import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
+import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
+import { useTrackPushPreviewStore } from '../stores/track-push-preview-store';
 import { useZoomStore } from '../stores/zoom-store';
 import { useSelectionStore } from '@/shared/state/selection';
 
@@ -41,7 +44,22 @@ function hasActiveEditPreview(): boolean {
   }
 
   const ripple = useRippleEditPreviewStore.getState();
-  return ripple.trimmedItemId !== null || ripple.handle !== null;
+  if (ripple.trimmedItemId !== null || ripple.handle !== null) {
+    return true;
+  }
+
+  const slip = useSlipEditPreviewStore.getState();
+  if (slip.itemId !== null) {
+    return true;
+  }
+
+  const slide = useSlideEditPreviewStore.getState();
+  if (slide.itemId !== null) {
+    return true;
+  }
+
+  const trackPush = useTrackPushPreviewStore.getState();
+  return trackPush.anchorItemId !== null;
 }
 
 function clearPreviewAudioStartupTimer(): void {
@@ -137,6 +155,9 @@ export function subscribePreviewWorkBudget(callback: () => void): () => void {
     useSelectionStore.subscribe(callback),
     useRollingEditPreviewStore.subscribe(callback),
     useRippleEditPreviewStore.subscribe(callback),
+    useSlipEditPreviewStore.subscribe(callback),
+    useSlideEditPreviewStore.subscribe(callback),
+    useTrackPushPreviewStore.subscribe(callback),
   ];
 
   return () => {

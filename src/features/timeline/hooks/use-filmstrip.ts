@@ -80,6 +80,13 @@ export function useFilmstrip({
     setProgress(nextProgress);
   });
 
+  // Abort any in-flight extraction when this consumer goes away or switches media.
+  useEffect(() => {
+    return () => {
+      filmstripCache.abort(mediaId);
+    };
+  }, [mediaId]);
+
   // Filmstrip extraction runs at 1fps, so quantize the requested source
   // window to frame indices before passing it to the cache.
   const priorityRange = useMemo(() => {
@@ -104,6 +111,18 @@ export function useFilmstrip({
 
     return unsubscribe;
   }, [mediaId, enabled, blobUrl, duration]);
+
+  // Once a clip leaves the active workset, stop spending background decode time on it.
+  useEffect(() => {
+    if (enabled && blobUrl && duration > 0 && isVisible) {
+      return;
+    }
+
+    filmstripCache.abort(mediaId);
+    isGeneratingRef.current = false;
+    hasPendingStartRef.current = false;
+    setIsLoading(false);
+  }, [mediaId, enabled, blobUrl, duration, isVisible]);
 
   // Load filmstrip when visible
   useEffect(() => {

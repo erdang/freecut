@@ -10,6 +10,9 @@ import {
 } from './preview-work-budget';
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store';
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store';
+import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store';
+import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store';
+import { useTrackPushPreviewStore } from '../stores/track-push-preview-store';
 import { _resetZoomStoreForTest } from '../stores/zoom-store';
 
 describe('preview work budget', () => {
@@ -20,6 +23,9 @@ describe('preview work budget', () => {
     useSelectionStore.getState().setDragState(null);
     useRollingEditPreviewStore.getState().clearPreview();
     useRippleEditPreviewStore.getState().clearPreview();
+    useSlipEditPreviewStore.getState().clearPreview();
+    useSlideEditPreviewStore.getState().clearPreview();
+    useTrackPushPreviewStore.getState().clearPreview();
   });
 
   afterEach(() => {
@@ -28,6 +34,9 @@ describe('preview work budget', () => {
     useSelectionStore.getState().setDragState(null);
     useRollingEditPreviewStore.getState().clearPreview();
     useRippleEditPreviewStore.getState().clearPreview();
+    useSlipEditPreviewStore.getState().clearPreview();
+    useSlideEditPreviewStore.getState().clearPreview();
+    useTrackPushPreviewStore.getState().clearPreview();
     vi.useRealTimers();
   });
 
@@ -67,5 +76,37 @@ describe('preview work budget', () => {
     expect(isPreviewWorkDeferred()).toBe(false);
 
     unsubscribe();
+  });
+
+  it('defers preview work during slip, slide, and track-push previews', () => {
+    useSlipEditPreviewStore.getState().setPreview({
+      itemId: 'item-1',
+      trackId: 'track-1',
+      slipDelta: 0,
+    });
+    expect(isPreviewWorkDeferred()).toBe(true);
+    useSlipEditPreviewStore.getState().clearPreview();
+    expect(isPreviewWorkDeferred()).toBe(false);
+
+    useSlideEditPreviewStore.getState().setPreview({
+      itemId: 'item-1',
+      trackId: 'track-1',
+      leftNeighborId: null,
+      rightNeighborId: null,
+      slideDelta: 0,
+    });
+    expect(isPreviewWorkDeferred()).toBe(true);
+    useSlideEditPreviewStore.getState().clearPreview();
+    expect(isPreviewWorkDeferred()).toBe(false);
+
+    useTrackPushPreviewStore.getState().setPreview({
+      anchorItemId: 'item-1',
+      trackId: 'track-1',
+      shiftedItemIds: new Set(['item-1']),
+      delta: 0,
+    });
+    expect(isPreviewWorkDeferred()).toBe(true);
+    useTrackPushPreviewStore.getState().clearPreview();
+    expect(isPreviewWorkDeferred()).toBe(false);
   });
 });

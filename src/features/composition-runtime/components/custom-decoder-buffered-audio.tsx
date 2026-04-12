@@ -26,6 +26,11 @@ const BACKGROUND_RESYNC_GRACE_MS = 250;
 const INITIAL_PLAYABLE_BUFFER_SECONDS = 2;
 const PARTIAL_BUFFER_EXTENSION_TRIGGER_SECONDS = 1.25;
 const PARTIAL_BUFFER_EXTENSION_READY_SECONDS = 3;
+const PARTIAL_BUFFER_REQUEST_PREROLL_SECONDS = 1;
+const PENDING_SLICE_REUSE_HEADROOM_SECONDS = 1;
+const PAUSED_SEEK_PREFETCH_DEBOUNCE_MS = 50;
+const BACKGROUND_FULL_DECODE_DELAY_MS = 1500;
+const BACKGROUND_FULL_DECODE_BACKSTOP_MS = 4000;
 // Prefer a playable partial decode first, then upgrade to the full buffer in
 // the background. This keeps custom-decoded formats like Vorbis responsive on
 // first play after import/refresh instead of waiting for the whole file.
@@ -64,6 +69,40 @@ function shouldReplaceSlice(
   }
   return false;
 }
+
+interface PendingSliceRequest {
+  requestId: number;
+  requestedStartTime: number;
+  requestedCoverageEndTime: number;
+  promise: Promise<PlaybackAudioSlice>;
+}
+
+interface QueuedPreviewSource {
+  predecessor: AudioBufferSourceNode;
+  node: AudioBufferSourceNode;
+  startAtContextTime: number;
+  startOffset: number;
+  bufferStartTime: number;
+  coverageEndTime: number;
+  playbackRate: number;
+}
+
+function pendingSliceRequestCoversTarget(
+  request: PendingSliceRequest,
+  targetTimeSeconds: number,
+  minReadySeconds: number,
+): boolean {
+  const reusableHeadroomSeconds = Math.min(
+    minReadySeconds,
+    PENDING_SLICE_REUSE_HEADROOM_SECONDS,
+  );
+
+  return (
+    request.requestedStartTime <= (targetTimeSeconds + 0.05)
+    && request.requestedCoverageEndTime >= (targetTimeSeconds + reusableHeadroomSeconds - 0.05)
+  );
+}
+
 
 export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProps> = React.memo(({
   src,
@@ -130,12 +169,103 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const lastBufferStartTimeRef = useRef<number>(0);
   const needsInitialSyncRef = useRef<boolean>(true);
   const pendingExtensionKeyRef = useRef<string | null>(null);
+  const latestSliceRequestIdRef = useRef<number>(0);
+  const activeSliceRequestRef = useRef<PendingSliceRequest | null>(null);
+  const pausedSeekPrefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pausedSeekPrefetchKeyRef = useRef<string | null>(null);
+  const queuedSourceRef = useRef<QueuedPreviewSource | null>(null);
+
+  const requestPartialSlice = useCallback((targetTimeSeconds: number, minReadySeconds: number) => {
+    const requestId = ++latestSliceRequestIdRef.current;
+    const request: PendingSliceRequest = {
+      requestId,
+      requestedStartTime: Math.max(0, targetTimeSeconds - PARTIAL_BUFFER_REQUEST_PREROLL_SECONDS),
+      requestedCoverageEndTime: targetTimeSeconds + minReadySeconds,
+      promise: getOrDecodeAudioSliceForPlayback(mediaId, src, {
+        minReadySeconds,
+        waitTimeoutMs: 6000,
+        targetTimeSeconds,
+        preRollSeconds: PARTIAL_BUFFER_REQUEST_PREROLL_SECONDS,
+      }),
+    };
+    activeSliceRequestRef.current = request;
+    return {
+      requestId,
+      promise: request.promise,
+    };
+  }, [mediaId, src]);
+
+  const acceptPartialSlice = useCallback((requestId: number, slice: PlaybackAudioSlice): boolean => {
+    if (requestId !== latestSliceRequestIdRef.current) {
+      return false;
+    }
+
+    setAudioSlice((current) => {
+      if (!shouldReplaceSlice(current, slice)) {
+        return current;
+      }
+      return slice;
+    });
+    return true;
+  }, []);
 
   useEffect(() => {
     if (!mediaId || !src) return;
 
     let cancelled = false;
+    let fullDecodeStarted = false;
+    let scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+    let fullDecodeTimer: ReturnType<typeof setTimeout> | null = null;
     const effectiveSourceFps = sourceFps ?? fps;
+    const clearScheduledFullDecode = () => {
+      scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+      if (fullDecodeTimer !== null) {
+        clearTimeout(fullDecodeTimer);
+        fullDecodeTimer = null;
+      }
+    };
+    const startFullDecode = () => {
+      if (cancelled || fullDecodeStarted) {
+        return;
+      }
+      clearScheduledFullDecode();
+      activeSliceRequestRef.current = null;
+      fullDecodeStarted = true;
+      getOrDecodeAudio(mediaId, src)
+        .then((buffer) => {
+          if (!cancelled) {
+            setAudioSlice((current) => {
+              if (current?.isComplete && current.buffer.length === buffer.length && current.buffer.sampleRate === buffer.sampleRate) {
+                return current;
+              }
+              return { buffer, startTime: 0, isComplete: true };
+            });
+          }
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            log.error('Failed to finalize buffered audio decode', { mediaId, err });
+          }
+        });
+    };
+    const scheduleFullDecode = (delayMs: number) => {
+      if (cancelled || fullDecodeStarted) {
+        return;
+      }
+      const safeDelayMs = Math.max(0, delayMs);
+      const dueAtMs = Date.now() + safeDelayMs;
+      if (fullDecodeTimer !== null && dueAtMs >= scheduledFullDecodeAtMs - 1) {
+        return;
+      }
+      clearScheduledFullDecode();
+      scheduledFullDecodeAtMs = dueAtMs;
+      fullDecodeTimer = setTimeout(() => {
+        fullDecodeTimer = null;
+        scheduledFullDecodeAtMs = Number.POSITIVE_INFINITY;
+        startFullDecode();
+      }, safeDelayMs);
+    };
+    activeSliceRequestRef.current = null;
     const decodeSeedKey = `${mediaId}:${src}:${trimBefore}:${effectiveSourceFps}:${playbackRate}`;
     if (decodeSeedRef.current?.key !== decodeSeedKey) {
       decodeSeedRef.current = {
@@ -170,19 +300,19 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         });
     } else {
       // Legacy low-latency path: start from partial bins, then upgrade to full decode.
-      getOrDecodeAudioSliceForPlayback(mediaId, src, {
-        minReadySeconds: INITIAL_PLAYABLE_BUFFER_SECONDS,
-        waitTimeoutMs: 6000,
-        targetTimeSeconds: initialTargetTime,
-      })
+      scheduleFullDecode(BACKGROUND_FULL_DECODE_BACKSTOP_MS);
+      const initialSliceRequest = requestPartialSlice(initialTargetTime, INITIAL_PLAYABLE_BUFFER_SECONDS);
+      initialSliceRequest.promise
         .then((slice) => {
           if (!cancelled) {
-            setAudioSlice((current) => {
-              if (!shouldReplaceSlice(current, slice)) {
-                return current;
-              }
-              return slice;
-            });
+            if (!acceptPartialSlice(initialSliceRequest.requestId, slice)) {
+              return;
+            }
+            if (slice.isComplete) {
+              clearScheduledFullDecode();
+            } else {
+              scheduleFullDecode(BACKGROUND_FULL_DECODE_DELAY_MS);
+            }
             log.info('Initial buffered audio ready', {
               mediaId,
               duration: slice.buffer.duration.toFixed(2),
@@ -190,43 +320,67 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
               channels: slice.buffer.numberOfChannels,
               startTime: slice.startTime.toFixed(2),
             });
+
+            // The startup slice is intentionally small for fast first sound.
+            // If it is still tiny once ready, immediately ask for follow-up
+            // coverage so 1x playback does not outrun the initial buffer before
+            // the normal extension effect gets another turn.
+            if (!slice.isComplete && slice.buffer.duration <= INITIAL_PLAYABLE_BUFFER_SECONDS + 0.5) {
+              const prefetchTargetTime = Math.max(
+                initialTargetTime,
+                slice.startTime + Math.max(0, slice.buffer.duration - PARTIAL_BUFFER_HEADROOM_SECONDS),
+              );
+              const prefetchSliceRequest = requestPartialSlice(
+                prefetchTargetTime,
+                PARTIAL_BUFFER_EXTENSION_READY_SECONDS,
+              );
+              void prefetchSliceRequest.promise
+                .then((nextSlice) => {
+                  if (cancelled) {
+                    return;
+                  }
+                  acceptPartialSlice(prefetchSliceRequest.requestId, nextSlice);
+                })
+                .catch((err) => {
+                  if (!cancelled) {
+                    log.warn('Failed to prefetch buffered custom decoder audio slice', {
+                      mediaId,
+                      targetTime: prefetchTargetTime,
+                      err,
+                    });
+                  }
+                })
+                .finally(() => {
+                  if (activeSliceRequestRef.current?.requestId === prefetchSliceRequest.requestId) {
+                    activeSliceRequestRef.current = null;
+                  }
+                });
+            }
           }
         })
         .catch((err) => {
           if (!cancelled) {
             log.error('Failed to decode buffered audio', { mediaId, err });
           }
-        });
-
-      // Upgrade to full decoded buffer when background decode/reassembly completes.
-      getOrDecodeAudio(mediaId, src)
-        .then((buffer) => {
-          if (!cancelled) {
-            setAudioSlice((current) => {
-              if (current?.isComplete && current.buffer.length === buffer.length && current.buffer.sampleRate === buffer.sampleRate) {
-                return current;
-              }
-              return { buffer, startTime: 0, isComplete: true };
-            });
-          }
+          startFullDecode();
         })
-        .catch((err) => {
-          if (!cancelled) {
-            log.error('Failed to finalize buffered audio decode', { mediaId, err });
+        .finally(() => {
+          if (activeSliceRequestRef.current?.requestId === initialSliceRequest.requestId) {
+            activeSliceRequestRef.current = null;
           }
         });
     }
 
-    return () => { cancelled = true; };
-  }, [mediaId, src, trimBefore, sourceFps, fps, playbackRate]);
+    return () => {
+      cancelled = true;
+      clearScheduledFullDecode();
+      activeSliceRequestRef.current = null;
+    };
+  }, [acceptPartialSlice, fps, mediaId, playbackRate, requestPartialSlice, sourceFps, src, trimBefore]);
 
   useEffect(() => {
     const currentSlice = audioSlice;
     if (!currentSlice || currentSlice.isComplete || !playing) {
-      pendingExtensionKeyRef.current = null;
-      return;
-    }
-    if (!isPreviewAudioDecodePending(mediaId)) {
       pendingExtensionKeyRef.current = null;
       return;
     }
@@ -236,8 +390,24 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const coverageEnd = getSliceCoverageEnd(currentSlice);
     const remainingCoverage = coverageEnd - targetTime;
     const isTargetOutsideSlice = targetTime < currentSlice.startTime || targetTime >= coverageEnd;
+    const shouldPrefetchImmediately = currentSlice.buffer.duration <= INITIAL_PLAYABLE_BUFFER_SECONDS + 0.5;
+    const extensionTriggerSeconds = shouldPrefetchImmediately
+      ? currentSlice.buffer.duration
+      : PARTIAL_BUFFER_EXTENSION_TRIGGER_SECONDS;
 
-    if (!isTargetOutsideSlice && remainingCoverage > PARTIAL_BUFFER_EXTENSION_TRIGGER_SECONDS) {
+    if (!isTargetOutsideSlice && remainingCoverage > extensionTriggerSeconds) {
+      return;
+    }
+
+    const activeSliceRequest = activeSliceRequestRef.current;
+    if (
+      activeSliceRequest
+      && pendingSliceRequestCoversTarget(
+        activeSliceRequest,
+        Math.max(0, targetTime),
+        PARTIAL_BUFFER_EXTENSION_READY_SECONDS,
+      )
+    ) {
       return;
     }
 
@@ -248,21 +418,16 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     pendingExtensionKeyRef.current = requestKey;
 
     let cancelled = false;
-    getOrDecodeAudioSliceForPlayback(mediaId, src, {
-      minReadySeconds: PARTIAL_BUFFER_EXTENSION_READY_SECONDS,
-      waitTimeoutMs: 6000,
-      targetTimeSeconds: Math.max(0, targetTime),
-    })
+    const extensionSliceRequest = requestPartialSlice(
+      Math.max(0, targetTime),
+      PARTIAL_BUFFER_EXTENSION_READY_SECONDS,
+    );
+    extensionSliceRequest.promise
       .then((nextSlice) => {
         if (cancelled) {
           return;
         }
-        setAudioSlice((current) => {
-          if (!shouldReplaceSlice(current, nextSlice)) {
-            return current;
-          }
-          return nextSlice;
-        });
+        acceptPartialSlice(extensionSliceRequest.requestId, nextSlice);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -274,6 +439,9 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         }
       })
       .finally(() => {
+        if (activeSliceRequestRef.current?.requestId === extensionSliceRequest.requestId) {
+          activeSliceRequestRef.current = null;
+        }
         if (!cancelled && pendingExtensionKeyRef.current === requestKey) {
           pendingExtensionKeyRef.current = null;
         }
@@ -285,7 +453,93 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         pendingExtensionKeyRef.current = null;
       }
     };
-  }, [audioSlice, frame, fps, mediaId, playbackRate, playing, sourceFps, src, trimBefore]);
+  }, [acceptPartialSlice, audioSlice, frame, fps, mediaId, playbackRate, playing, requestPartialSlice, sourceFps, src, trimBefore]);
+
+  useEffect(() => {
+    if (playing) {
+      if (pausedSeekPrefetchTimerRef.current !== null) {
+        clearTimeout(pausedSeekPrefetchTimerRef.current);
+        pausedSeekPrefetchTimerRef.current = null;
+      }
+      pausedSeekPrefetchKeyRef.current = null;
+      return;
+    }
+
+    const currentSlice = audioSlice;
+    if (currentSlice?.isComplete) {
+      pausedSeekPrefetchKeyRef.current = null;
+      return;
+    }
+
+    const effectiveSourceFps = sourceFps ?? fps;
+    const targetTime = getAudioTargetTimeSeconds(trimBefore, effectiveSourceFps, frame, playbackRate, fps);
+    if (!currentSlice && decodeSeedRef.current && Math.abs(decodeSeedRef.current.targetTime - targetTime) <= 0.001) {
+      pausedSeekPrefetchKeyRef.current = null;
+      return;
+    }
+    const coverageEnd = currentSlice ? getSliceCoverageEnd(currentSlice) : 0;
+    const hasEnoughCoverage = !!currentSlice
+      && targetTime >= currentSlice.startTime
+      && coverageEnd >= (targetTime + INITIAL_PLAYABLE_BUFFER_SECONDS - PARTIAL_BUFFER_HEADROOM_SECONDS);
+
+    const activeSliceRequest = activeSliceRequestRef.current;
+    const hasActiveCoveredRequest = !!activeSliceRequest && pendingSliceRequestCoversTarget(
+      activeSliceRequest,
+      targetTime,
+      INITIAL_PLAYABLE_BUFFER_SECONDS,
+    );
+
+    if (hasEnoughCoverage || hasActiveCoveredRequest) {
+      pausedSeekPrefetchKeyRef.current = null;
+      return;
+    }
+
+    const requestKey = `${mediaId}:${src}:${playbackRate}:${targetTime.toFixed(3)}`;
+    if (pausedSeekPrefetchKeyRef.current === requestKey) {
+      return;
+    }
+    pausedSeekPrefetchKeyRef.current = requestKey;
+
+    if (pausedSeekPrefetchTimerRef.current !== null) {
+      clearTimeout(pausedSeekPrefetchTimerRef.current);
+      pausedSeekPrefetchTimerRef.current = null;
+    }
+
+    let cancelled = false;
+    pausedSeekPrefetchTimerRef.current = setTimeout(() => {
+      pausedSeekPrefetchTimerRef.current = null;
+      const prefetchRequest = requestPartialSlice(Math.max(0, targetTime), INITIAL_PLAYABLE_BUFFER_SECONDS);
+      void prefetchRequest.promise
+        .then((slice) => {
+          if (cancelled) {
+            return;
+          }
+          acceptPartialSlice(prefetchRequest.requestId, slice);
+        })
+        .catch((err) => {
+          if (!cancelled) {
+            log.warn('Failed to prefetch paused custom decoder audio slice', {
+              mediaId,
+              targetTime,
+              err,
+            });
+          }
+        })
+        .finally(() => {
+          if (activeSliceRequestRef.current?.requestId === prefetchRequest.requestId) {
+            activeSliceRequestRef.current = null;
+          }
+        });
+    }, PAUSED_SEEK_PREFETCH_DEBOUNCE_MS);
+
+    return () => {
+      cancelled = true;
+      if (pausedSeekPrefetchTimerRef.current !== null) {
+        clearTimeout(pausedSeekPrefetchTimerRef.current);
+        pausedSeekPrefetchTimerRef.current = null;
+      }
+    };
+  }, [acceptPartialSlice, audioSlice, fps, frame, mediaId, playbackRate, playing, requestPartialSlice, sourceFps, src, trimBefore]);
 
   useEffect(() => {
     const graph = createPreviewClipAudioGraph();
@@ -293,11 +547,22 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     graphRef.current = graph;
 
     return () => {
+      const queuedSource = queuedSourceRef.current;
+      if (queuedSource) {
+        try { queuedSource.node.stop(); } catch { /* already stopped */ }
+        queuedSource.node.disconnect();
+        queuedSourceRef.current = null;
+      }
       if (sourceRef.current) {
         try { sourceRef.current.stop(); } catch { /* already stopped */ }
         sourceRef.current.disconnect();
         sourceRef.current = null;
       }
+      if (pausedSeekPrefetchTimerRef.current !== null) {
+        clearTimeout(pausedSeekPrefetchTimerRef.current);
+        pausedSeekPrefetchTimerRef.current = null;
+      }
+      activeSliceRequestRef.current = null;
       graph.dispose();
       graphRef.current = null;
     };
@@ -379,8 +644,20 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     rampPreviewClipGain(graph, safeVolume);
   }, [audioVolume]);
 
+  const clearQueuedSource = useCallback(() => {
+    const queuedSource = queuedSourceRef.current;
+    if (!queuedSource) {
+      return;
+    }
+
+    queuedSourceRef.current = null;
+    try { queuedSource.node.stop(); } catch { /* already stopped */ }
+    queuedSource.node.disconnect();
+  }, []);
+
   const stopSource = useCallback((fadeOut: boolean = true) => {
     startRequestIdRef.current += 1;
+    clearQueuedSource();
 
     const source = sourceRef.current;
     if (!source) return;
@@ -402,7 +679,98 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     }
 
     try { source.stop(); } catch { /* already stopped */ }
-  }, []);
+  }, [clearQueuedSource]);
+
+  const scheduleQueuedSource = useCallback((
+    ctx: AudioContext,
+    graph: PreviewClipAudioGraph,
+    currentSource: AudioBufferSourceNode,
+    nextSlice: PlaybackAudioSlice,
+  ): boolean => {
+    const currentBuffer = currentSource.buffer;
+    if (!currentBuffer) {
+      return false;
+    }
+
+    const currentCoverageEndTime = lastBufferStartTimeRef.current + currentBuffer.duration;
+    const nextCoverageEndTime = nextSlice.startTime + nextSlice.buffer.duration;
+    if (nextCoverageEndTime <= currentCoverageEndTime + 0.05) {
+      return false;
+    }
+
+    const handoffTime = Math.max(currentCoverageEndTime, nextSlice.startTime);
+    const startOffset = handoffTime - nextSlice.startTime;
+    if (startOffset < 0 || startOffset >= nextSlice.buffer.duration - 0.01) {
+      return false;
+    }
+
+    const currentSourceTimeAtStart = lastBufferStartTimeRef.current + lastStartOffsetRef.current;
+    const sourceRate = Math.max(0.0001, lastStartRateRef.current);
+    const startAtContextTime = lastSyncContextTimeRef.current
+      + ((handoffTime - currentSourceTimeAtStart) / sourceRate);
+    if (!Number.isFinite(startAtContextTime) || startAtContextTime <= ctx.currentTime + 0.02) {
+      return false;
+    }
+
+    const queuedSource = queuedSourceRef.current;
+    if (
+      queuedSource
+      && queuedSource.predecessor === currentSource
+      && Math.abs(queuedSource.startAtContextTime - startAtContextTime) <= 0.05
+      && queuedSource.bufferStartTime <= nextSlice.startTime + 0.05
+      && queuedSource.coverageEndTime >= nextCoverageEndTime - 0.05
+    ) {
+      return true;
+    }
+
+    clearQueuedSource();
+
+    const nextSource = ctx.createBufferSource();
+    nextSource.buffer = nextSlice.buffer;
+    nextSource.playbackRate.value = playbackRate;
+    nextSource.connect(graph.sourceInputNode);
+
+    const scheduledSource: QueuedPreviewSource = {
+      predecessor: currentSource,
+      node: nextSource,
+      startAtContextTime,
+      startOffset,
+      bufferStartTime: nextSlice.startTime,
+      coverageEndTime: nextCoverageEndTime,
+      playbackRate,
+    };
+    queuedSourceRef.current = scheduledSource;
+
+    nextSource.onended = () => {
+      nextSource.disconnect();
+      if (queuedSourceRef.current?.node === nextSource) {
+        queuedSourceRef.current = null;
+      }
+      if (sourceRef.current === nextSource) {
+        sourceRef.current = null;
+      }
+    };
+
+    try {
+      nextSource.start(
+        startAtContextTime,
+        Math.max(0, Math.min(startOffset, nextSlice.buffer.duration - 0.01)),
+      );
+      return true;
+    } catch (err) {
+      log.warn('Failed to queue buffered custom decoder audio slice', {
+        mediaId,
+        startAtContextTime,
+        startOffset,
+        err,
+      });
+      if (queuedSourceRef.current?.node === nextSource) {
+        queuedSourceRef.current = null;
+      }
+      try { nextSource.disconnect(); } catch { /* already disconnected */ }
+      return false;
+    }
+  }, [clearQueuedSource, mediaId, playbackRate]);
 
   useEffect(() => {
     const audioBuffer = audioSlice?.buffer ?? null;
@@ -447,12 +815,15 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         // Treat large frame jumps as explicit seeks and re-sync immediately.
         shouldStart = true;
       } else if (currentSource.buffer !== audioBuffer) {
-        // Buffer changed (partial -> full). Avoid immediate restart thrash;
-        // only re-sync if current source is close to running out.
-        const sourceDuration = currentSource.buffer?.duration ?? 0;
-        const remainingCoverage = (lastBufferStartTimeRef.current + sourceDuration) - targetTime;
-        if (remainingCoverage <= PARTIAL_BUFFER_HEADROOM_SECONDS) {
-          shouldStart = true;
+        const queued = scheduleQueuedSource(ctx, graph, currentSource, audioSlice);
+        if (!queued) {
+          // Buffer changed (partial -> full). Avoid immediate restart thrash;
+          // only re-sync if current source is close to running out.
+          const sourceDuration = currentSource.buffer?.duration ?? 0;
+          const remainingCoverage = (lastBufferStartTimeRef.current + sourceDuration) - targetTime;
+          if (remainingCoverage <= PARTIAL_BUFFER_HEADROOM_SECONDS) {
+            shouldStart = true;
+          }
         }
       } else {
         // While decode is pending, avoid drift-driven seeks because frame cadence
@@ -474,12 +845,12 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
       if (shouldStart) {
         // If we only have a partial decode and timeline position is beyond its duration,
         // wait for more bins/full decode instead of repeatedly starting at partial tail.
-        if (
-          (targetOffsetInBuffer < 0 || targetOffsetInBuffer >= audioBuffer.duration - PARTIAL_BUFFER_HEADROOM_SECONDS)
-          && isPreviewAudioDecodePending(mediaId)
-        ) {
-          stopSource();
-          return;
+        if (targetOffsetInBuffer < 0 || targetOffsetInBuffer >= audioBuffer.duration - PARTIAL_BUFFER_HEADROOM_SECONDS) {
+          const shouldWaitForMoreAudio = !audioSlice?.isComplete || isPreviewAudioDecodePending(mediaId);
+          if (shouldWaitForMoreAudio) {
+            stopSource();
+            return;
+          }
         }
 
         stopSource();
@@ -498,6 +869,17 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
           source.connect(liveGraph.sourceInputNode);
           source.onended = () => {
             source.disconnect();
+            const queuedSource = queuedSourceRef.current;
+            if (queuedSource?.predecessor === source) {
+              queuedSourceRef.current = null;
+              sourceRef.current = queuedSource.node;
+              lastSyncContextTimeRef.current = queuedSource.startAtContextTime;
+              lastStartOffsetRef.current = queuedSource.startOffset;
+              lastStartRateRef.current = queuedSource.playbackRate;
+              lastBufferStartTimeRef.current = queuedSource.bufferStartTime;
+              return;
+            }
+
             if (sourceRef.current === source) {
               sourceRef.current = null;
             }
@@ -534,7 +916,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     if (!isBackgrounded && !backgroundGraceActive && wasBackgroundedRef.current) {
       wasBackgroundedRef.current = false;
     }
-  }, [audioSlice, frame, fps, playing, playbackRate, trimBefore, mediaId, sourceFps, stopSource]);
+  }, [audioSlice, frame, fps, playing, playbackRate, trimBefore, mediaId, scheduleQueuedSource, sourceFps, stopSource]);
 
   return null;
 });

@@ -223,8 +223,8 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     postMessage({
       type: 'append-source',
       startFrame: Math.max(0, Math.floor(sourceStartOffsetSec * graph.context.sampleRate)),
-      leftChannel: serialized.leftChannel.buffer,
-      rightChannel: serialized.rightChannel.buffer,
+      leftChannel: serialized.leftChannel.buffer as ArrayBuffer,
+      rightChannel: serialized.rightChannel.buffer as ArrayBuffer,
       frameCount: serialized.frameCount,
       sampleRate: serialized.sampleRate,
     });
@@ -307,7 +307,7 @@ export const SoundTouchWorkletAudio: React.FC<SoundTouchWorkletAudioProps> = Rea
     }
   }, [fps, frame, nodeReady, playbackRate, playing, sourceFps, trimBefore]);
 
-  if (fallback && (!nodeReady || fallbackRequested)) {
+  if (fallbackRequested && fallback) {
     return <>{fallback}</>;
   }
 
