@@ -9,24 +9,12 @@ import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
-
-let sharedAudioContext: AudioContext | null = null;
-
-function getSharedAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-
-  const webkitWindow = window as Window & {
-    webkitAudioContext?: typeof AudioContext;
-  };
-  const AudioContextCtor = window.AudioContext ?? webkitWindow.webkitAudioContext;
-  if (!AudioContextCtor) return null;
-
-  if (sharedAudioContext === null || sharedAudioContext.state === 'closed') {
-    sharedAudioContext = new AudioContextCtor();
-  }
-
-  return sharedAudioContext;
-}
+import {
+  createPreviewClipAudioGraph,
+  rampPreviewClipGain,
+  setPreviewClipGain,
+  type PreviewClipAudioGraph,
+} from '../utils/preview-audio-graph';
 
 interface PitchCorrectedAudioProps extends AudioPlaybackProps {
   src: string;
@@ -91,8 +79,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
   });
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  // Web Audio API refs are created lazily only when gain > 1 is needed.
-  const gainNodeRef = useRef<GainNode | null>(null);
+  const graphRef = useRef<PreviewClipAudioGraph | null>(null);
   const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   // Track when we last synced - initialized to current time
   const lastSyncTimeRef = useRef<number>(Date.now());
@@ -109,20 +96,39 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
     }
   }, [playing]);
 
-  // Use HTML5 audio with native preservesPitch.
-  // Export uses Canvas + WebCodecs (client-render-engine.ts) which handles audio separately.
-  // Web Audio graph is created lazily only when volume boost (>1) is needed.
+  // Use HTML5 audio transport with a shared clip graph so future EQ/SFX can be
+  // inserted in the same place as buffered custom-decoder playback.
   useEffect(() => {
     const audio = acquirePreviewAudioElement(src);
+    const graph = createPreviewClipAudioGraph();
+    if (!graph) {
+      releasePreviewAudioElement(audio);
+      return;
+    }
     audioRef.current = audio;
+    graphRef.current = graph;
+    audio.volume = 1;
+    audio.muted = false;
+
+    try {
+      const sourceNode = graph.context.createMediaElementSource(audio);
+      markPreviewAudioElementUsesWebAudio(audio);
+      sourceNode.connect(graph.sourceInputNode);
+      sourceNodeRef.current = sourceNode;
+    } catch {
+      graph.dispose();
+      graphRef.current = null;
+      audioRef.current = null;
+      releasePreviewAudioElement(audio);
+      return;
+    }
 
     return () => {
       audioRef.current = null;
-      // Disconnect per-element nodes; shared AudioContext is reused.
       sourceNodeRef.current?.disconnect();
-      gainNodeRef.current?.disconnect();
-      gainNodeRef.current = null;
       sourceNodeRef.current = null;
+      graph.dispose();
+      graphRef.current = null;
       if (preWarmTimerRef.current !== null) {
         clearTimeout(preWarmTimerRef.current);
         preWarmTimerRef.current = null;
@@ -140,45 +146,10 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
 
   // Update volume. Use native audio.volume for <= 1, lazily promote to Web Audio gain for boosts.
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio) return;
-
+    const graph = graphRef.current;
+    if (!graph) return;
     const clampedVolume = muted ? 0 : Math.max(0, finalVolume);
-
-    // Existing graph: keep using gain node regardless of current value.
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = clampedVolume;
-      return;
-    }
-
-    // Fast path: native volume is cheaper and avoids allocating Web Audio nodes.
-    if (clampedVolume <= 1) {
-      audio.volume = clampedVolume;
-      return;
-    }
-
-    // Promote to Web Audio graph only when boost above 1 is actually required.
-    const audioContext = getSharedAudioContext();
-    if (!audioContext) {
-      audio.volume = 1;
-      return;
-    }
-
-    try {
-      const gainNode = audioContext.createGain();
-      const sourceNode = audioContext.createMediaElementSource(audio);
-      markPreviewAudioElementUsesWebAudio(audio);
-      sourceNode.connect(gainNode);
-      gainNode.connect(audioContext.destination);
-
-      gainNodeRef.current = gainNode;
-      sourceNodeRef.current = sourceNode;
-      audio.volume = 1;
-      gainNode.gain.value = clampedVolume;
-    } catch {
-      // Fallback if graph connection fails (e.g., browser restrictions).
-      audio.volume = 1;
-    }
+    rampPreviewClipGain(graph, clampedVolume);
   }, [finalVolume, muted]);
 
   // Sync playback with Composition timeline
@@ -274,7 +245,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
           const onSeeked = () => {
             audio.removeEventListener('seeked', onSeeked);
             if (usePlaybackStore.getState().isPlaying && audio.paused) {
-              const ctx = gainNodeRef.current ? getSharedAudioContext() : null;
+              const ctx = graphRef.current?.context;
               if (ctx?.state === 'suspended') ctx.resume();
               audio.play().catch(() => {});
             }
@@ -283,7 +254,7 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
           return; // Don't play yet
         }
         // Resume shared context when this clip is using Web Audio gain.
-        const sharedContext = gainNodeRef.current ? getSharedAudioContext() : null;
+        const sharedContext = graphRef.current?.context;
         if (sharedContext?.state === 'suspended') {
           sharedContext.resume();
         }
@@ -319,17 +290,30 @@ export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.mem
           preWarmTimerRef.current = null;
           const a = audioRef.current;
           if (a && a.paused && a.readyState >= 2 && !usePlaybackStore.getState().isPlaying) {
-            const prevVolume = a.volume;
-            a.volume = 0;
+            const graph = graphRef.current;
+            const previousGain = graph?.outputGainNode.gain.value ?? 0;
+            if (graph) {
+              setPreviewClipGain(graph, 0);
+            } else {
+              a.volume = 0;
+            }
             a.play().then(() => {
               if (!usePlaybackStore.getState().isPlaying) {
                 a.pause();
-                a.volume = prevVolume;
+                if (graph) {
+                  setPreviewClipGain(graph, previousGain);
+                } else {
+                  a.volume = previousGain;
+                }
               }
               // If playback started, leave volume to the volume sync effect
             }).catch(() => {
               if (!usePlaybackStore.getState().isPlaying) {
-                a.volume = prevVolume;
+                if (graph) {
+                  setPreviewClipGain(graph, previousGain);
+                } else {
+                  a.volume = previousGain;
+                }
               }
             });
           }

@@ -9,9 +9,14 @@ import {
 import { createLogger } from '@/shared/logging/logger';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
+import {
+  createPreviewClipAudioGraph,
+  PREVIEW_AUDIO_GAIN_RAMP_SECONDS,
+  rampPreviewClipGain,
+  type PreviewClipAudioGraph,
+} from '../utils/preview-audio-graph';
 
 const log = createLogger('CustomDecoderBufferedAudio');
-const GAIN_RAMP_SECONDS = 0.008;
 const STOP_GRACE_SECONDS = 0.002;
 const PARTIAL_BUFFER_HEADROOM_SECONDS = 0.25;
 const DRIFT_RESYNC_MIN_ELAPSED_SECONDS = 1.0;
@@ -25,21 +30,6 @@ const PARTIAL_BUFFER_EXTENSION_READY_SECONDS = 3;
 // the background. This keeps custom-decoded formats like Vorbis responsive on
 // first play after import/refresh instead of waiting for the whole file.
 const WAIT_FOR_FULL_DECODE_BEFORE_PLAYBACK = false;
-
-let sharedCtx: AudioContext | null = null;
-
-function getSharedAudioContext(): AudioContext | null {
-  if (typeof window === 'undefined') return null;
-
-  const Ctor = window.AudioContext ??
-    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctor) return null;
-
-  if (sharedCtx === null || sharedCtx.state === 'closed') {
-    sharedCtx = new Ctor();
-  }
-  return sharedCtx;
-}
 
 interface CustomDecoderBufferedAudioProps extends AudioPlaybackProps {
   src: string;
@@ -125,7 +115,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
 
   const [audioSlice, setAudioSlice] = useState<PlaybackAudioSlice | null>(null);
 
-  const gainNodeRef = useRef<GainNode | null>(null);
+  const graphRef = useRef<PreviewClipAudioGraph | null>(null);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioVolumeRef = useRef<number>(audioVolume);
   const startRequestIdRef = useRef<number>(0);
@@ -298,13 +288,9 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, [audioSlice, frame, fps, mediaId, playbackRate, playing, sourceFps, src, trimBefore]);
 
   useEffect(() => {
-    const ctx = getSharedAudioContext();
-    if (!ctx) return;
-
-    const gain = ctx.createGain();
-    gain.gain.value = 0;
-    gain.connect(ctx.destination);
-    gainNodeRef.current = gain;
+    const graph = createPreviewClipAudioGraph();
+    if (!graph) return;
+    graphRef.current = graph;
 
     return () => {
       if (sourceRef.current) {
@@ -312,16 +298,16 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         sourceRef.current.disconnect();
         sourceRef.current = null;
       }
-      gain.disconnect();
-      gainNodeRef.current = null;
+      graph.dispose();
+      graphRef.current = null;
     };
   }, []);
 
   useEffect(() => {
     const resume = () => {
-      const ctx = getSharedAudioContext();
-      if (ctx && ctx.state === 'suspended') {
-        void ctx.resume().catch(() => undefined);
+      const graph = graphRef.current;
+      if (graph?.context.state === 'suspended') {
+        void graph.context.resume().catch(() => undefined);
       }
     };
 
@@ -342,7 +328,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const markForegrounded = () => {
       if (!wasBackgroundedRef.current) return;
       backgroundResyncGraceUntilRef.current = performance.now() + BACKGROUND_RESYNC_GRACE_MS;
-      const ctx = getSharedAudioContext();
+      const ctx = graphRef.current?.context;
       if (ctx?.state === 'suspended') {
         void ctx.resume().catch(() => undefined);
       }
@@ -385,16 +371,12 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   }, []);
 
   useEffect(() => {
-    const ctx = getSharedAudioContext();
-    const gain = gainNodeRef.current;
-    if (!ctx || !gain) return;
+    const graph = graphRef.current;
+    if (!graph) return;
 
     const safeVolume = Number.isFinite(audioVolume) ? Math.max(0, audioVolume) : 0;
     audioVolumeRef.current = safeVolume;
-    const now = ctx.currentTime;
-    gain.gain.cancelScheduledValues(now);
-    gain.gain.setValueAtTime(gain.gain.value, now);
-    gain.gain.linearRampToValueAtTime(safeVolume, now + GAIN_RAMP_SECONDS);
+    rampPreviewClipGain(graph, safeVolume);
   }, [audioVolume]);
 
   const stopSource = useCallback((fadeOut: boolean = true) => {
@@ -404,15 +386,13 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     if (!source) return;
     sourceRef.current = null;
 
-    const ctx = getSharedAudioContext();
-    const gain = gainNodeRef.current;
+    const graph = graphRef.current;
+    const ctx = graph?.context ?? null;
 
-    if (fadeOut && ctx && gain) {
+    if (fadeOut && ctx && graph) {
       const now = ctx.currentTime;
-      const stopAt = now + GAIN_RAMP_SECONDS;
-      gain.gain.cancelScheduledValues(now);
-      gain.gain.setValueAtTime(gain.gain.value, now);
-      gain.gain.linearRampToValueAtTime(0, stopAt);
+      const stopAt = now + PREVIEW_AUDIO_GAIN_RAMP_SECONDS;
+      rampPreviewClipGain(graph, 0, now);
       try {
         source.stop(stopAt + STOP_GRACE_SECONDS);
       } catch {
@@ -428,9 +408,9 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
     const audioBuffer = audioSlice?.buffer ?? null;
     if (!audioBuffer) return;
 
-    const ctx = getSharedAudioContext();
-    const gain = gainNodeRef.current;
-    if (!ctx || !gain) return;
+    const graph = graphRef.current;
+    const ctx = graph?.context ?? null;
+    if (!ctx || !graph) return;
 
     const isPremounted = frame < 0;
     const effectiveSourceFps = sourceFps ?? fps;
@@ -509,13 +489,13 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         resumePromise.then(() => {
           if (startRequestId !== startRequestIdRef.current) return;
 
-          const liveGain = gainNodeRef.current;
-          if (ctx.state !== 'running' || !liveGain) return;
+          const liveGraph = graphRef.current;
+          if (ctx.state !== 'running' || !liveGraph) return;
 
           const source = ctx.createBufferSource();
           source.buffer = audioBuffer;
           source.playbackRate.value = playbackRate;
-          source.connect(liveGain);
+          source.connect(liveGraph.sourceInputNode);
           source.onended = () => {
             source.disconnect();
             if (sourceRef.current === source) {
@@ -526,9 +506,10 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
           const clampedOffset = Math.max(0, Math.min(targetOffsetInBuffer, audioBuffer.duration - 0.01));
           const startAt = ctx.currentTime;
           const startVolume = Math.max(0, audioVolumeRef.current);
-          liveGain.gain.cancelScheduledValues(startAt);
-          liveGain.gain.setValueAtTime(0, startAt);
-          liveGain.gain.linearRampToValueAtTime(startVolume, startAt + GAIN_RAMP_SECONDS);
+          const gainParam = liveGraph.outputGainNode.gain;
+          gainParam.cancelScheduledValues(startAt);
+          gainParam.setValueAtTime(0, startAt);
+          gainParam.linearRampToValueAtTime(startVolume, startAt + PREVIEW_AUDIO_GAIN_RAMP_SECONDS);
 
           source.start(startAt, clampedOffset);
           sourceRef.current = source;
