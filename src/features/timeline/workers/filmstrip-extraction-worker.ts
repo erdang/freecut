@@ -24,6 +24,7 @@ export interface ExtractRequest {
   requestId: string;
   mediaId: string;
   blobUrl: string;
+  blob?: Blob;
   duration: number;
   width: number;
   height: number;
@@ -118,7 +119,7 @@ async function extractAndSave(
   state: { aborted: boolean }
 ): Promise<void> {
   const {
-    requestId, mediaId, blobUrl, duration, width, height, skipIndices, priorityIndices, targetIndices,
+    requestId, mediaId, blobUrl, blob, duration, width, height, skipIndices, priorityIndices, targetIndices,
     startIndex, endIndex, totalFrames: totalFramesOverride, maxParallelSaves
   } = request;
 
@@ -183,7 +184,7 @@ async function extractAndSave(
   const dir = await getFilmstripDir(mediaId);
 
   // Load mediabunny
-  const { Input, UrlSource, CanvasSink, ALL_FORMATS } = await loadMediabunny();
+  const { Input, UrlSource, BlobSource, CanvasSink, ALL_FORMATS } = await loadMediabunny();
 
   let input: InstanceType<typeof Input> | null = null;
   let sink: InstanceType<typeof CanvasSink> | null = null;
@@ -191,7 +192,7 @@ async function extractAndSave(
   try {
     // Create input from blob URL
     input = new Input({
-      source: new UrlSource(blobUrl),
+      source: blob ? new BlobSource(blob) : new UrlSource(blobUrl),
       formats: ALL_FORMATS,
     });
 

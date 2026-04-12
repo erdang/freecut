@@ -409,12 +409,13 @@ export function backgroundBatchPreseek(
   src: string,
   timestamps: number[],
 ): Promise<Map<number, ImageBitmap>> {
-  if (timestamps.length === 0) return Promise.resolve(new Map());
+  const uniqueTimestamps = [...new Set(timestamps)].sort((a, b) => a - b);
+  if (uniqueTimestamps.length === 0) return Promise.resolve(new Map());
   // For single timestamps, fall back to the simpler path
-  if (timestamps.length === 1) {
-    return backgroundPreseek(src, timestamps[0]!).then((bitmap) => {
+  if (uniqueTimestamps.length === 1) {
+    return backgroundPreseek(src, uniqueTimestamps[0]!).then((bitmap) => {
       const map = new Map<number, ImageBitmap>();
-      if (bitmap) map.set(timestamps[0]!, bitmap);
+      if (bitmap) map.set(uniqueTimestamps[0]!, bitmap);
       return map;
     });
   }
@@ -456,8 +457,8 @@ export function backgroundBatchPreseek(
       }
       decoderPrewarmMetrics.workerPosts += 1;
       const msg = blob
-        ? { type: 'batch_preseek', id, src, timestamps, keyframeTimestamps, blob }
-        : { type: 'batch_preseek', id, src, timestamps, keyframeTimestamps };
+        ? { type: 'batch_preseek', id, src, timestamps: uniqueTimestamps, keyframeTimestamps, blob }
+        : { type: 'batch_preseek', id, src, timestamps: uniqueTimestamps, keyframeTimestamps };
       w.postMessage(msg);
     };
 

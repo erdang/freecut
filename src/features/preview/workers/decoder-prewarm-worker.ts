@@ -211,6 +211,7 @@ async function ensureSampleForTimestamp(state: ExtractorState, timestamp: number
   } else if (
     state.lastRequestedTimestamp !== null
     && timestamp + TIMESTAMP_EPSILON < state.lastRequestedTimestamp
+    && !currentSampleCoversTimestamp(state, timestamp)
   ) {
     resetSampleIterator(state, timestamp, src);
   } else if (
@@ -243,6 +244,23 @@ async function ensureSampleForTimestamp(state: ExtractorState, timestamp: number
     }
     break;
   }
+}
+
+function currentSampleCoversTimestamp(state: ExtractorState, timestamp: number): boolean {
+  const sample = state.currentSample as { timestamp?: number; duration?: number } | null;
+  if (!sample || typeof sample.timestamp !== 'number') {
+    return false;
+  }
+
+  if (sample.timestamp > timestamp + TIMESTAMP_EPSILON) {
+    return false;
+  }
+
+  if (typeof sample.duration !== 'number' || !Number.isFinite(sample.duration) || sample.duration <= 0) {
+    return true;
+  }
+
+  return sample.timestamp + sample.duration >= timestamp - TIMESTAMP_EPSILON;
 }
 
 function getOrCreateCurrentVideoFrame(state: ExtractorState): VideoFrame | null {

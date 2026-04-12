@@ -12,6 +12,7 @@ export interface WaveformRequest {
   type: 'generate';
   requestId: string;
   blobUrl: string;
+  blob?: Blob;
   samplesPerSecond: number;
   binDurationSec?: number;
 }
@@ -79,7 +80,7 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
   if (type !== 'generate') return;
 
-  const { requestId, blobUrl, samplesPerSecond, binDurationSec = 30 } = event.data;
+  const { requestId, blobUrl, blob, samplesPerSecond, binDurationSec = 30 } = event.data;
   const state = { aborted: false };
   activeRequests.set(requestId, state);
 
@@ -91,13 +92,13 @@ self.onmessage = async (event: MessageEvent<WaveformWorkerMessage>) => {
 
     // Load mediabunny. Register AC-3 decoder lazily only for matching codecs.
     const mediabunny = await getMediabunny();
-    const { Input, UrlSource, AudioSampleSink, ALL_FORMATS } = mediabunny;
+    const { Input, UrlSource, BlobSource, AudioSampleSink, ALL_FORMATS } = mediabunny;
 
     if (state.aborted) throw new Error('Aborted');
 
     // Create input from blob URL
     const input = new Input({
-      source: new UrlSource(blobUrl),
+      source: blob ? new BlobSource(blob) : new UrlSource(blobUrl),
       formats: ALL_FORMATS,
     });
     disposeInput = input as { dispose?: () => void };
