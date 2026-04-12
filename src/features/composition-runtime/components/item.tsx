@@ -2,6 +2,7 @@ import React from 'react';
 import { AbsoluteFill } from '@/features/composition-runtime/deps/player';
 import { useDebugStore } from '@/features/composition-runtime/deps/stores';
 import type { AudioItem, TimelineItem, ShapeItem } from '@/types/timeline';
+import type { ResolvedAudioEqSettings } from '@/types/audio';
 import type { TransformProperties } from '@/types/transform';
 import { DebugOverlay } from './debug-overlay';
 import { PitchCorrectedAudio } from './pitch-corrected-audio';
@@ -24,6 +25,7 @@ import {
 import { isGifUrl, isWebpUrl } from '@/utils/media-utils';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
 import { createLogger } from '@/shared/logging/logger';
+import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 function getLogger() { return createLogger('CompositionItem'); }
 
@@ -48,6 +50,7 @@ interface ItemProps {
   compositionRenderMode?: 'full' | 'visual-only' | 'audio-only';
   audioGainMultiplier?: number;
   audioGainLiveItemIds?: string[];
+  audioEqStages?: ResolvedAudioEqSettings[];
 }
 
 /**
@@ -64,7 +67,7 @@ interface ItemProps {
  *
  * Memoized to prevent unnecessary re-renders when parent (MainComposition) updates.
  */
-export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds }) => {
+export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true, masks = [], renderDepth = 0, compositionRenderMode = 'full', audioGainMultiplier = 1, audioGainLiveItemIds, audioEqStages }) => {
   // Use muted prop directly - MainComposition already passes track.muted
   // Avoiding store subscription here prevents re-render issues with @legacy-video/media Audio
 
@@ -73,6 +76,29 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
   const { fps: timelineFps } = useVideoConfig();
   const mediaSourceFps = useMediaLibraryStore((s) =>
     item.mediaId ? s.mediaItems.find((m) => m.id === item.mediaId)?.fps : undefined
+  );
+  const itemAudioEqStages = React.useMemo(
+    () => appendResolvedAudioEqStage(audioEqStages, getAudioEqSettings(item)),
+    [
+      audioEqStages,
+      item.audioEqLowCutEnabled,
+      item.audioEqLowCutFrequencyHz,
+      item.audioEqLowCutSlopeDbPerOct,
+      item.audioEqHighGainDb,
+      item.audioEqHighCutEnabled,
+      item.audioEqHighCutFrequencyHz,
+      item.audioEqHighCutSlopeDbPerOct,
+      item.audioEqHighFrequencyHz,
+      item.audioEqHighMidGainDb,
+      item.audioEqHighMidFrequencyHz,
+      item.audioEqHighMidQ,
+      item.audioEqLowGainDb,
+      item.audioEqLowFrequencyHz,
+      item.audioEqLowMidGainDb,
+      item.audioEqLowMidFrequencyHz,
+      item.audioEqLowMidQ,
+      item.audioEqMidGainDb,
+    ],
   );
 
   if (item.type === 'video') {
@@ -181,6 +207,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           safeTrimBefore={safeTrimBefore}
           playbackRate={playbackRate}
           sourceFps={sourceFps}
+          audioEqStages={itemAudioEqStages}
           forceCssComposite={masks.length > 0}
         />
         {showDebugOverlay && (
@@ -235,6 +262,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           renderMode="audio-only"
           audioGainMultiplier={audioGainMultiplier}
           audioGainLiveItemIds={audioGainLiveItemIds}
+          audioEqStages={itemAudioEqStages}
         />
       );
     }
@@ -273,6 +301,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
         audioFadeOutCurve={item.audioFadeOutCurve}
         audioFadeInCurveX={item.audioFadeInCurveX}
         audioFadeOutCurveX={item.audioFadeOutCurveX}
+        audioEqStages={itemAudioEqStages}
         liveGainItemIds={audioGainLiveItemIds}
         volumeMultiplier={audioGainMultiplier}
       />
@@ -393,6 +422,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
           renderMode={compositionRenderMode}
           audioGainMultiplier={audioGainMultiplier}
           audioGainLiveItemIds={audioGainLiveItemIds}
+          audioEqStages={itemAudioEqStages}
         />
       </ItemVisualWrapper>
     );

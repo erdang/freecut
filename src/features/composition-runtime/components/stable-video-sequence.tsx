@@ -33,6 +33,7 @@ import {
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
+import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
@@ -133,7 +134,24 @@ function areGroupPropsEqual(
         prevItem.cornerPin !== nextItem.cornerPin ||
         prevItem.blendMode !== nextItem.blendMode ||
         prevItem.src !== nextItem.src ||
-        prevItem.audioSrc !== nextItem.audioSrc) {
+        prevItem.audioSrc !== nextItem.audioSrc ||
+        prevItem.audioEqLowCutEnabled !== nextItem.audioEqLowCutEnabled ||
+        prevItem.audioEqLowCutFrequencyHz !== nextItem.audioEqLowCutFrequencyHz ||
+        prevItem.audioEqLowCutSlopeDbPerOct !== nextItem.audioEqLowCutSlopeDbPerOct ||
+        prevItem.audioEqLowGainDb !== nextItem.audioEqLowGainDb ||
+        prevItem.audioEqLowFrequencyHz !== nextItem.audioEqLowFrequencyHz ||
+        prevItem.audioEqLowMidGainDb !== nextItem.audioEqLowMidGainDb ||
+        prevItem.audioEqLowMidFrequencyHz !== nextItem.audioEqLowMidFrequencyHz ||
+        prevItem.audioEqLowMidQ !== nextItem.audioEqLowMidQ ||
+        prevItem.audioEqMidGainDb !== nextItem.audioEqMidGainDb ||
+        prevItem.audioEqHighMidGainDb !== nextItem.audioEqHighMidGainDb ||
+        prevItem.audioEqHighMidFrequencyHz !== nextItem.audioEqHighMidFrequencyHz ||
+        prevItem.audioEqHighMidQ !== nextItem.audioEqHighMidQ ||
+        prevItem.audioEqHighGainDb !== nextItem.audioEqHighGainDb ||
+        prevItem.audioEqHighFrequencyHz !== nextItem.audioEqHighFrequencyHz ||
+        prevItem.audioEqHighCutEnabled !== nextItem.audioEqHighCutEnabled ||
+        prevItem.audioEqHighCutFrequencyHz !== nextItem.audioEqHighCutFrequencyHz ||
+        prevItem.audioEqHighCutSlopeDbPerOct !== nextItem.audioEqHighCutSlopeDbPerOct) {
       return false;
     }
   }
@@ -156,6 +174,19 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
   const mediaSourceFps = useMediaLibraryStore((s) => (
     item.mediaId ? s.mediaItems.find((media) => media.id === item.mediaId)?.fps : undefined
   ));
+
+  const audioEqStages = useMemo(
+    () => appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
+    [
+      item.audioEqLowCutEnabled, item.audioEqLowCutFrequencyHz, item.audioEqLowCutSlopeDbPerOct,
+      item.audioEqLowGainDb, item.audioEqLowFrequencyHz,
+      item.audioEqLowMidGainDb, item.audioEqLowMidFrequencyHz, item.audioEqLowMidQ,
+      item.audioEqMidGainDb,
+      item.audioEqHighMidGainDb, item.audioEqHighMidFrequencyHz, item.audioEqHighMidQ,
+      item.audioEqHighGainDb, item.audioEqHighFrequencyHz,
+      item.audioEqHighCutEnabled, item.audioEqHighCutFrequencyHz, item.audioEqHighCutSlopeDbPerOct,
+    ],
+  );
 
   if (!item.src) {
     return null;
@@ -181,6 +212,7 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
         safeTrimBefore={safeTrimBefore}
         playbackRate={playbackRate}
         sourceFps={sourceFps}
+        audioEqStages={audioEqStages}
       />
     </div>
   );
