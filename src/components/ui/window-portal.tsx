@@ -10,11 +10,11 @@ export interface WindowPortalProps {
   children: ReactNode;
   /** Window title */
   title: string;
-  /** Window width */
+  /** Window width (inner/content-area pixels) */
   width?: number;
-  /** Window height */
+  /** Window height (inner/content-area pixels) */
   height?: number;
-  /** localStorage key for persisting window position/size */
+  /** localStorage key for persisting window position */
   storageKey?: string;
   /** Reuse an already-opened window (useful for pop-out actions initiated by a click) */
   externalWindow?: Window | null;
@@ -27,28 +27,26 @@ export interface WindowPortalProps {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — position only (size comes from props)
 // ---------------------------------------------------------------------------
 
-interface WindowBounds {
+interface WindowPosition {
   left: number;
   top: number;
-  width: number;
-  height: number;
 }
 
-function loadBounds(key: string, fallback: WindowBounds): WindowBounds {
+function loadPosition(key: string, fallback: WindowPosition): WindowPosition {
   try {
     const raw = localStorage.getItem(key);
     if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<WindowBounds>;
-    if (
-      typeof parsed.left === 'number' &&
-      typeof parsed.top === 'number' &&
-      typeof parsed.width === 'number' &&
-      typeof parsed.height === 'number'
-    ) {
-      return { left: parsed.left, top: parsed.top, width: parsed.width, height: parsed.height };
+    const parsed = JSON.parse(raw) as Partial<WindowPosition>;
+    if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
+      const sw = window.screen.availWidth;
+      const sh = window.screen.availHeight;
+      return {
+        left: Math.max(0, Math.min(parsed.left, sw - 200)),
+        top: Math.max(0, Math.min(parsed.top, sh - 100)),
+      };
     }
   } catch {
     // ignore
@@ -56,9 +54,9 @@ function loadBounds(key: string, fallback: WindowBounds): WindowBounds {
   return fallback;
 }
 
-function saveBounds(key: string, bounds: WindowBounds): void {
+function savePosition(key: string, pos: WindowPosition): void {
   try {
-    localStorage.setItem(key, JSON.stringify(bounds));
+    localStorage.setItem(key, JSON.stringify(pos));
   } catch {
     // ignore
   }
@@ -137,23 +135,20 @@ export function WindowPortal({
   useEffect(() => {
     mountedRef.current = true;
 
+    const defaultPos: WindowPosition = {
+      left: window.screenX + 100,
+      top: window.screenY + 100,
+    };
+    const pos = storageKey ? loadPosition(storageKey, defaultPos) : defaultPos;
+
     // Reuse a provided window or one from a previous mount (survives StrictMode double-mount)
     let externalWindow = providedExternalWindow ?? externalWindowRef.current;
     if (!(externalWindow && !externalWindow.closed)) {
-      // Open fresh window
-      const defaultBounds: WindowBounds = {
-        left: window.screenX + 100,
-        top: window.screenY + 100,
-        width,
-        height,
-      };
-      const bounds = storageKey ? loadBounds(storageKey, defaultBounds) : defaultBounds;
-
       const features = [
-        `width=${bounds.width}`,
-        `height=${bounds.height}`,
-        `left=${bounds.left}`,
-        `top=${bounds.top}`,
+        `width=${width}`,
+        `height=${height}`,
+        `left=${pos.left}`,
+        `top=${pos.top}`,
         'menubar=no',
         'toolbar=no',
         'location=no',
@@ -191,21 +186,26 @@ export function WindowPortal({
     }
     setContainer(root);
 
+    // Force correct size — window.open() features are unreliable on Windows Chrome.
+    try {
+      const chromeW = Math.max(0, externalWindow.outerWidth - externalWindow.innerWidth);
+      const chromeH = Math.max(0, externalWindow.outerHeight - externalWindow.innerHeight);
+      externalWindow.resizeTo(width + chromeW, (autoHeight ? externalWindow.outerHeight : height + chromeH));
+      externalWindow.moveTo(pos.left, pos.top);
+    } catch {
+      // ignore
+    }
+
     const win = externalWindow;
 
-    const persistBounds = () => {
+    const persistPosition = () => {
       if (!storageKey || !win || win.closed) return;
-      saveBounds(storageKey, {
-        left: win.screenX,
-        top: win.screenY,
-        width: win.outerWidth,
-        height: win.outerHeight,
-      });
+      savePosition(storageKey, { left: win.screenX, top: win.screenY });
     };
 
     // Child window closed by user
     const handleUnload = () => {
-      persistBounds();
+      persistPosition();
       externalWindowRef.current = null;
       setContainer(null);
       onCloseRef.current();
@@ -217,7 +217,6 @@ export function WindowPortal({
     };
 
     win.addEventListener('beforeunload', handleUnload);
-    win.addEventListener('resize', persistBounds);
     window.addEventListener('beforeunload', handleParentUnload);
 
     // autoHeight: wait for stylesheets to load, then measure content and resize
@@ -228,7 +227,7 @@ export function WindowPortal({
         if (cancelled || win.closed) return;
         const contentHeight = rootEl.scrollHeight;
         if (contentHeight > 0) {
-          const chromeHeight = win.outerHeight - win.innerHeight;
+          const chromeHeight = Math.max(0, win.outerHeight - win.innerHeight);
           win.resizeTo(win.outerWidth, contentHeight + chromeHeight);
         }
       };
@@ -236,14 +235,12 @@ export function WindowPortal({
       const links = Array.from(win.document.querySelectorAll('link[rel="stylesheet"]'));
       const pending = links.filter((link) => !(link as HTMLLinkElement).sheet);
       if (pending.length === 0) {
-        // Styles already loaded — measure after React paints
         setTimeout(fitWindowToContent, 50);
       } else {
         let remaining = pending.length;
         const onDone = () => {
           remaining--;
           if (remaining <= 0) {
-            // Styles loaded — wait a frame for reflow, then measure
             setTimeout(fitWindowToContent, 50);
           }
         };
@@ -262,7 +259,7 @@ export function WindowPortal({
         if (cancelled || win.closed) return;
         const contentHeight = rootEl.scrollHeight;
         if (contentHeight > 0) {
-          const chromeHeight = win.outerHeight - win.innerHeight;
+          const chromeHeight = Math.max(0, win.outerHeight - win.innerHeight);
           win.resizeTo(win.outerWidth, contentHeight + chromeHeight);
         }
       });
@@ -274,9 +271,8 @@ export function WindowPortal({
       cancelled = true;
       resizeObserver?.disconnect();
       win.removeEventListener('beforeunload', handleUnload);
-      win.removeEventListener('resize', persistBounds);
       window.removeEventListener('beforeunload', handleParentUnload);
-      persistBounds();
+      persistPosition();
       // Don't close the window here — it may be a StrictMode remount.
       // Schedule a deferred close that only fires if the component
       // doesn't remount (i.e. it was a real unmount).
