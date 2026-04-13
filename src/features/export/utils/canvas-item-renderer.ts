@@ -58,6 +58,7 @@ import {
   rotatePath,
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime';
+import { timelineToSourceFrames } from '@/features/export/deps/timeline';
 import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
 
 const log = createLogger('CanvasItemRenderer');
@@ -392,6 +393,21 @@ function getTier2VideoFrameToleranceSeconds(sourceFps: number): number {
   return (1 / normalizedSourceFps) * TIER2_VIDEO_FRAME_TOLERANCE_FACTOR;
 }
 
+function clampVideoSourceTime(
+  sourceTime: number,
+  sourceFps: number,
+  sourceDurationFrames: number | undefined,
+): number {
+  const clampedToStart = Math.max(0, sourceTime);
+  if (sourceDurationFrames === undefined || !Number.isFinite(sourceDurationFrames) || sourceDurationFrames <= 0) {
+    return clampedToStart;
+  }
+
+  const lastFrame = Math.max(0, sourceDurationFrames - 1);
+  const maxTime = (lastFrame + 1e-4) / sourceFps;
+  return Math.min(clampedToStart, maxTime);
+}
+
 function drawTier2VideoFrame(
   ctx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D,
   frame: ImageBitmap | VideoFrame,
@@ -511,7 +527,11 @@ async function renderVideoItem(
   // Snap to nearest source frame boundary to avoid floating-point drift
   // that can cause Math.floor(sourceTime * sourceFps) to land on the wrong frame.
   const adjustedSourceStart = sourceStart + sourceFrameOffset;
-  const rawSourceTime = adjustedSourceStart / sourceFps + localTime * speed;
+  const rawSourceTime = clampVideoSourceTime(
+    adjustedSourceStart / sourceFps + localTime * speed,
+    sourceFps,
+    item.sourceDuration,
+  );
   const snappedSourceFrame = Math.round(rawSourceTime * sourceFps);
   const sourceTime = Math.abs(rawSourceTime * sourceFps - snappedSourceFrame) < 1e-6
     ? (snappedSourceFrame + 1e-4) / sourceFps
@@ -1598,6 +1618,27 @@ function resolveTransitionParticipantFrameWindow<TItem extends TimelineItem>(
   };
 }
 
+function getTransitionParticipantSourceStart<TItem extends TimelineItem>(
+  clip: TItem,
+  transitionWindow: TransitionParticipantFrameWindow,
+  fps: number,
+): number | undefined {
+  if (clip.type !== 'video' && clip.type !== 'audio' && clip.type !== 'composition') {
+    return undefined;
+  }
+
+  const beforeFrames = Math.max(0, clip.from - transitionWindow.from);
+  if (beforeFrames <= 0) {
+    return clip.sourceStart;
+  }
+
+  const sourceStart = clip.sourceStart ?? clip.trimStart ?? 0;
+  const speed = clip.speed ?? 1;
+  const sourceFps = clip.sourceFps ?? fps;
+  const prerollSourceFrames = timelineToSourceFrames(beforeFrames, speed, fps, sourceFps);
+  return Math.max(0, sourceStart - prerollSourceFrames);
+}
+
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(
   clip: TItem,
   activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
@@ -1607,6 +1648,7 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
 ): TransitionParticipantRenderState<TItem> {
   const currentClip = rctx.getCurrentItemSnapshot?.(clip) ?? clip;
   const transitionWindow = resolveTransitionParticipantFrameWindow(currentClip, activeTransition);
+  const transitionSourceStart = getTransitionParticipantSourceStart(currentClip, transitionWindow, rctx.fps);
   const transitionClip = (
     transitionWindow.from === currentClip.from
       && transitionWindow.durationInFrames === currentClip.durationInFrames
@@ -1616,6 +1658,9 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
       ...currentClip,
       from: transitionWindow.from,
       durationInFrames: transitionWindow.durationInFrames,
+      ...(transitionSourceStart !== undefined
+        ? { sourceStart: transitionSourceStart }
+        : {}),
     } as TItem;
   const itemKeyframes = rctx.getCurrentKeyframes?.(currentClip.id) ?? rctx.keyframesMap.get(currentClip.id);
   let transform = getAnimatedTransform(transitionClip, itemKeyframes, frame, rctx.canvasSettings);
