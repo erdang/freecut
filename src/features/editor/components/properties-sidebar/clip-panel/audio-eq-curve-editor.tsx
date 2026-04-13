@@ -39,46 +39,48 @@ interface AudioEqCurveEditorProps {
   onChange: (patch: AudioEqPatch) => void;
 }
 
-interface GainHandleDefinition {
-  id: 'low' | 'low-mid' | 'high-mid' | 'high';
-  kind: 'gain';
+type AudioEqHandleId = 'band1' | 'band2' | 'band3' | 'band4' | 'band5' | 'band6';
+type AudioEqGainField =
+  | 'audioEqBand1GainDb'
+  | 'audioEqLowGainDb'
+  | 'audioEqLowMidGainDb'
+  | 'audioEqHighMidGainDb'
+  | 'audioEqHighGainDb'
+  | 'audioEqBand6GainDb';
+type AudioEqFrequencyField =
+  | 'audioEqBand1FrequencyHz'
+  | 'audioEqLowFrequencyHz'
+  | 'audioEqLowMidFrequencyHz'
+  | 'audioEqHighMidFrequencyHz'
+  | 'audioEqHighFrequencyHz'
+  | 'audioEqBand6FrequencyHz';
+type AudioEqActivateField = 'audioEqBand1Enabled' | 'audioEqBand6Enabled';
+
+interface BaseHandleDefinition {
+  id: AudioEqHandleId;
+  kind: 'gain' | 'cut' | 'notch';
   label: string;
   bandNumber: 1 | 2 | 3 | 4 | 5 | 6;
   description: string;
-  frequencyField?:
-    | 'audioEqLowFrequencyHz'
-    | 'audioEqLowMidFrequencyHz'
-    | 'audioEqHighMidFrequencyHz'
-    | 'audioEqHighFrequencyHz';
-  gainField:
-    | 'audioEqLowGainDb'
-    | 'audioEqLowMidGainDb'
-    | 'audioEqHighMidGainDb'
-    | 'audioEqHighGainDb';
-  fixedFrequency?: boolean;
+  frequencyField: AudioEqFrequencyField;
   minFrequencyHz: number;
   maxFrequencyHz: number;
   defaultFrequencyHz: number;
   getFrequencyHz: (settings: ResolvedAudioEqSettings) => number;
+  activateField?: AudioEqActivateField;
+}
+
+interface GainHandleDefinition extends BaseHandleDefinition {
+  kind: 'gain';
+  gainField: AudioEqGainField;
   getGainDb: (settings: ResolvedAudioEqSettings) => number;
 }
 
-interface CutHandleDefinition {
-  id: 'low-cut' | 'high-cut';
-  kind: 'cut';
-  label: string;
-  bandNumber: 1 | 2 | 3 | 4 | 5 | 6;
-  description: string;
-  enabledField: 'audioEqLowCutEnabled' | 'audioEqHighCutEnabled';
-  frequencyField: 'audioEqLowCutFrequencyHz' | 'audioEqHighCutFrequencyHz';
-  minFrequencyHz: number;
-  maxFrequencyHz: number;
-  defaultFrequencyHz: number;
-  getEnabled: (settings: ResolvedAudioEqSettings) => boolean;
-  getFrequencyHz: (settings: ResolvedAudioEqSettings) => number;
-}
+type StaticHandleDefinition = BaseHandleDefinition & {
+  kind: 'cut' | 'notch';
+};
 
-type AudioEqHandleDefinition = GainHandleDefinition | CutHandleDefinition;
+type AudioEqHandleDefinition = GainHandleDefinition | StaticHandleDefinition;
 
 const CURVE_WIDTH = 320;
 const CURVE_HEIGHT = 240;
@@ -96,92 +98,176 @@ const KEYBOARD_GAIN_STEP_DB = 0.5;
 const KEYBOARD_FREQUENCY_RATIO = 1.06;
 const KEYBOARD_FREQUENCY_RATIO_FAST = 1.16;
 
-const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
-  {
-    id: 'low-cut',
-    kind: 'cut',
-    label: 'Band 1',
-    bandNumber: 1,
-    description: 'Low Cut',
-    enabledField: 'audioEqLowCutEnabled',
-    frequencyField: 'audioEqLowCutFrequencyHz',
-    minFrequencyHz: AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
-    getEnabled: (settings) => settings.lowCutEnabled,
-    getFrequencyHz: (settings) => settings.lowCutFrequencyHz,
-  },
-  {
-    id: 'low',
-    kind: 'gain',
-    label: 'Band 2',
-    bandNumber: 2,
-    description: 'Low Shelf',
-    frequencyField: 'audioEqLowFrequencyHz',
-    gainField: 'audioEqLowGainDb',
-    minFrequencyHz: AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_LOW_FREQUENCY_HZ,
-    getFrequencyHz: (settings) => settings.lowFrequencyHz,
-    getGainDb: (settings) => settings.lowGainDb,
-  },
-  {
-    id: 'low-mid',
-    kind: 'gain',
-    label: 'Band 3',
-    bandNumber: 3,
-    description: 'Low Mid',
-    frequencyField: 'audioEqLowMidFrequencyHz',
-    gainField: 'audioEqLowMidGainDb',
-    minFrequencyHz: AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
-    getFrequencyHz: (settings) => settings.lowMidFrequencyHz,
-    getGainDb: (settings) => settings.lowMidGainDb,
-  },
-  {
-    id: 'high-mid',
-    kind: 'gain',
-    label: 'Band 4',
-    bandNumber: 4,
-    description: 'High Mid',
-    frequencyField: 'audioEqHighMidFrequencyHz',
-    gainField: 'audioEqHighMidGainDb',
-    minFrequencyHz: AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_HIGH_MID_MAX_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
-    getFrequencyHz: (settings) => settings.highMidFrequencyHz,
-    getGainDb: (settings) => settings.highMidGainDb,
-  },
-  {
-    id: 'high',
-    kind: 'gain',
-    label: 'Band 5',
-    bandNumber: 5,
-    description: 'High Shelf',
-    frequencyField: 'audioEqHighFrequencyHz',
-    gainField: 'audioEqHighGainDb',
-    minFrequencyHz: AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_HIGH_FREQUENCY_HZ,
-    getFrequencyHz: (settings) => settings.highFrequencyHz,
-    getGainDb: (settings) => settings.highGainDb,
-  },
-  {
-    id: 'high-cut',
-    kind: 'cut',
-    label: 'Band 6',
-    bandNumber: 6,
-    description: 'High Cut',
-    enabledField: 'audioEqHighCutEnabled',
-    frequencyField: 'audioEqHighCutFrequencyHz',
-    minFrequencyHz: AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
-    getEnabled: (settings) => settings.highCutEnabled,
-    getFrequencyHz: (settings) => settings.highCutFrequencyHz,
-  },
-]);
+function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<AudioEqHandleDefinition> {
+  return [
+    settings.band1Type === 'high-pass'
+      ? {
+        id: 'band1',
+        kind: 'cut',
+        label: 'Band 1',
+        bandNumber: 1,
+        description: 'High Pass',
+        frequencyField: 'audioEqBand1FrequencyHz',
+        activateField: 'audioEqBand1Enabled',
+        minFrequencyHz: AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.band1FrequencyHz,
+      }
+      : {
+        id: 'band1',
+        kind: 'gain',
+        label: 'Band 1',
+        bandNumber: 1,
+        description: settings.band1Type === 'low-shelf' ? 'Low Shelf' : settings.band1Type === 'high-shelf' ? 'High Shelf' : 'Peak',
+        frequencyField: 'audioEqBand1FrequencyHz',
+        gainField: 'audioEqBand1GainDb',
+        activateField: 'audioEqBand1Enabled',
+        minFrequencyHz: AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.band1FrequencyHz,
+        getGainDb: (resolved) => resolved.band1GainDb,
+      },
+    settings.lowType === 'notch'
+      ? {
+        id: 'band2',
+        kind: 'notch',
+        label: 'Band 2',
+        bandNumber: 2,
+        description: 'Notch',
+        frequencyField: 'audioEqLowFrequencyHz',
+        minFrequencyHz: AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_LOW_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.lowFrequencyHz,
+      }
+      : {
+        id: 'band2',
+        kind: 'gain',
+        label: 'Band 2',
+        bandNumber: 2,
+        description: settings.lowType === 'high-shelf' ? 'High Shelf' : settings.lowType === 'peaking' ? 'Peak' : 'Low Shelf',
+        frequencyField: 'audioEqLowFrequencyHz',
+        gainField: 'audioEqLowGainDb',
+        minFrequencyHz: AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_LOW_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.lowFrequencyHz,
+        getGainDb: (resolved) => resolved.lowGainDb,
+      },
+    settings.lowMidType === 'notch'
+      ? {
+        id: 'band3',
+        kind: 'notch',
+        label: 'Band 3',
+        bandNumber: 3,
+        description: 'Notch',
+        frequencyField: 'audioEqLowMidFrequencyHz',
+        minFrequencyHz: AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.lowMidFrequencyHz,
+      }
+      : {
+        id: 'band3',
+        kind: 'gain',
+        label: 'Band 3',
+        bandNumber: 3,
+        description: settings.lowMidType === 'high-shelf' ? 'High Shelf' : settings.lowMidType === 'peaking' ? 'Peak' : 'Low Shelf',
+        frequencyField: 'audioEqLowMidFrequencyHz',
+        gainField: 'audioEqLowMidGainDb',
+        minFrequencyHz: AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.lowMidFrequencyHz,
+        getGainDb: (resolved) => resolved.lowMidGainDb,
+      },
+    settings.highMidType === 'notch'
+      ? {
+        id: 'band4',
+        kind: 'notch',
+        label: 'Band 4',
+        bandNumber: 4,
+        description: 'Notch',
+        frequencyField: 'audioEqHighMidFrequencyHz',
+        minFrequencyHz: AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_HIGH_MID_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.highMidFrequencyHz,
+      }
+      : {
+        id: 'band4',
+        kind: 'gain',
+        label: 'Band 4',
+        bandNumber: 4,
+        description: settings.highMidType === 'high-shelf' ? 'High Shelf' : settings.highMidType === 'peaking' ? 'Peak' : 'Low Shelf',
+        frequencyField: 'audioEqHighMidFrequencyHz',
+        gainField: 'audioEqHighMidGainDb',
+        minFrequencyHz: AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_HIGH_MID_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.highMidFrequencyHz,
+        getGainDb: (resolved) => resolved.highMidGainDb,
+      },
+    settings.highType === 'notch'
+      ? {
+        id: 'band5',
+        kind: 'notch',
+        label: 'Band 5',
+        bandNumber: 5,
+        description: 'Notch',
+        frequencyField: 'audioEqHighFrequencyHz',
+        minFrequencyHz: AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_HIGH_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.highFrequencyHz,
+      }
+      : {
+        id: 'band5',
+        kind: 'gain',
+        label: 'Band 5',
+        bandNumber: 5,
+        description: settings.highType === 'low-shelf' ? 'Low Shelf' : settings.highType === 'peaking' ? 'Peak' : 'High Shelf',
+        frequencyField: 'audioEqHighFrequencyHz',
+        gainField: 'audioEqHighGainDb',
+        minFrequencyHz: AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_HIGH_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.highFrequencyHz,
+        getGainDb: (resolved) => resolved.highGainDb,
+      },
+    settings.band6Type === 'low-pass'
+      ? {
+        id: 'band6',
+        kind: 'cut',
+        label: 'Band 6',
+        bandNumber: 6,
+        description: 'Low Pass',
+        frequencyField: 'audioEqBand6FrequencyHz',
+        activateField: 'audioEqBand6Enabled',
+        minFrequencyHz: AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.band6FrequencyHz,
+      }
+      : {
+        id: 'band6',
+        kind: 'gain',
+        label: 'Band 6',
+        bandNumber: 6,
+        description: settings.band6Type === 'low-shelf' ? 'Low Shelf' : settings.band6Type === 'high-shelf' ? 'High Shelf' : 'Peak',
+        frequencyField: 'audioEqBand6FrequencyHz',
+        gainField: 'audioEqBand6GainDb',
+        activateField: 'audioEqBand6Enabled',
+        minFrequencyHz: AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+        maxFrequencyHz: AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+        defaultFrequencyHz: AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
+        getFrequencyHz: (resolved) => resolved.band6FrequencyHz,
+        getGainDb: (resolved) => resolved.band6GainDb,
+      },
+  ];
+}
 
 function clampEqGainDb(value: number): number {
   return Math.round(clampAudioEqGainDb(value) * 10) / 10;
@@ -263,8 +349,8 @@ function mergeDisplayedSettings(
   return resolveAudioEqSettings(merged as unknown as ResolvedAudioEqSettings);
 }
 
-function getCutHandleY(enabled: boolean): number {
-  return displayDbToY(enabled ? CURVE_DISPLAY_DB_MIN : CURVE_DISPLAY_EQ_BASELINE_DB);
+function getCutHandleY(): number {
+  return displayDbToY(CURVE_DISPLAY_EQ_BASELINE_DB);
 }
 
 function createPatchForPointer(
@@ -279,36 +365,42 @@ function createPatchForPointer(
     handle.defaultFrequencyHz,
   ));
 
-  if (handle.kind === 'cut') {
+  if (handle.kind === 'cut' || handle.kind === 'notch') {
     return {
-      [handle.enabledField]: true,
+      ...(handle.activateField ? { [handle.activateField]: true } : {}),
       [handle.frequencyField]: frequencyHz,
     };
   }
 
+  const gainHandle = handle as GainHandleDefinition;
   const patch: AudioEqPatch = {
-    [handle.gainField]: yToGain(localY),
+    ...(gainHandle.activateField ? { [gainHandle.activateField]: true } : {}),
+    [gainHandle.gainField]: yToGain(localY),
   };
-  if (handle.frequencyField) {
-    patch[handle.frequencyField] = frequencyHz;
-  }
+  patch[gainHandle.frequencyField] = frequencyHz;
   return patch;
 }
 
 function getResetPatch(handle: AudioEqHandleDefinition): AudioEqPatch {
   if (handle.kind === 'cut') {
     return {
-      [handle.enabledField]: false,
+      ...(handle.activateField ? { [handle.activateField]: false } : {}),
       [handle.frequencyField]: handle.defaultFrequencyHz,
     };
   }
 
-  const patch: AudioEqPatch = {
-    [handle.gainField]: 0,
-  };
-  if (handle.frequencyField) {
-    patch[handle.frequencyField] = handle.defaultFrequencyHz;
+  if (handle.kind === 'notch') {
+    return {
+      [handle.frequencyField]: handle.defaultFrequencyHz,
+    };
   }
+
+  const gainHandle = handle as GainHandleDefinition;
+  const patch: AudioEqPatch = {
+    ...(gainHandle.activateField ? { [gainHandle.activateField]: false } : {}),
+    [gainHandle.gainField]: 0,
+  };
+  patch[gainHandle.frequencyField] = gainHandle.defaultFrequencyHz;
   return patch;
 }
 
@@ -348,6 +440,10 @@ export function AudioEqCurveEditor({
       .join(' '),
     [responsePoints],
   );
+  const handles = useMemo(
+    () => getAudioEqHandles(displayedSettings),
+    [displayedSettings],
+  );
 
   const getLocalPointer = useCallback((clientX: number, clientY: number) => {
     const root = rootRef.current;
@@ -380,13 +476,13 @@ export function AudioEqCurveEditor({
     const localPointer = getLocalPointer(clientX, clientY);
     if (!localPointer) return;
 
-    const handle = AUDIO_EQ_HANDLES.find((entry) => entry.id === dragState.handleId);
+    const handle = handles.find((entry) => entry.id === dragState.handleId);
     if (!handle) return;
 
     const patch = createPatchForPointer(handle, localPointer.x, localPointer.y);
     setDraftPatch(patch);
     onLiveChange(patch);
-  }, [dragState, getLocalPointer, onLiveChange]);
+  }, [dragState, getLocalPointer, handles, onLiveChange]);
 
   const finishDrag = useCallback((pointerId?: number) => {
     if (!dragState) return;
@@ -414,7 +510,7 @@ export function AudioEqCurveEditor({
   const handleBandKeyDown = useCallback((handle: AudioEqHandleDefinition, event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
 
-    if (handle.kind === 'cut') {
+    if (handle.kind === 'cut' || handle.kind === 'notch') {
       if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
       event.preventDefault();
       event.stopPropagation();
@@ -422,7 +518,7 @@ export function AudioEqCurveEditor({
       const patch = event.key === 'Home'
         ? getResetPatch(handle)
         : {
-          [handle.enabledField]: true,
+          ...(handle.activateField ? { [handle.activateField]: true } : {}),
           [handle.frequencyField]: nudgeFrequency(
             handle.getFrequencyHz(displayedSettings),
             event.key === 'ArrowLeft' ? -1 : 1,
@@ -440,25 +536,27 @@ export function AudioEqCurveEditor({
     event.preventDefault();
     event.stopPropagation();
 
-    const currentFrequencyHz = handle.getFrequencyHz(displayedSettings);
-    const currentGainDb = handle.getGainDb(displayedSettings);
+    const gainHandle = handle as GainHandleDefinition;
+    const currentFrequencyHz = gainHandle.getFrequencyHz(displayedSettings);
+    const currentGainDb = gainHandle.getGainDb(displayedSettings);
 
     const patch: AudioEqPatch = event.key === 'Home'
-      ? getResetPatch(handle)
+      ? getResetPatch(gainHandle)
       : {
-        [handle.gainField]: event.key === 'ArrowUp' || event.key === 'ArrowDown'
+        ...(gainHandle.activateField ? { [gainHandle.activateField]: true } : {}),
+        [gainHandle.gainField]: event.key === 'ArrowUp' || event.key === 'ArrowDown'
           ? clampEqGainDb(currentGainDb + (event.key === 'ArrowUp' ? 1 : -1) * (event.shiftKey ? 1 : KEYBOARD_GAIN_STEP_DB))
           : currentGainDb,
       };
 
-    if (!handle.fixedFrequency && handle.frequencyField && event.key !== 'Home') {
-      patch[handle.frequencyField] = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
+    if (event.key !== 'Home') {
+      patch[gainHandle.frequencyField] = event.key === 'ArrowLeft' || event.key === 'ArrowRight'
         ? nudgeFrequency(
           currentFrequencyHz,
           event.key === 'ArrowLeft' ? -1 : 1,
           event.shiftKey,
-          handle.minFrequencyHz,
-          handle.maxFrequencyHz,
+          gainHandle.minFrequencyHz,
+          gainHandle.maxFrequencyHz,
         )
         : currentFrequencyHz;
     }
@@ -552,15 +650,20 @@ export function AudioEqCurveEditor({
           </div>
         ))}
 
-        {AUDIO_EQ_HANDLES.map((handle) => {
+        {handles.map((handle) => {
           const frequencyHz = handle.getFrequencyHz(displayedSettings);
           const isActive = dragState?.handleId === handle.id;
-          const top = handle.kind === 'cut'
-            ? getCutHandleY(handle.getEnabled(displayedSettings))
-            : gainToY(handle.getGainDb(displayedSettings));
-          const title = handle.kind === 'cut'
-            ? `${handle.label} ${handle.description} ${handle.getEnabled(displayedSettings) ? 'on' : 'off'} ${formatFrequencyLabel(frequencyHz)}`
-            : `${handle.label} ${handle.description} ${handle.getGainDb(displayedSettings) > 0 ? '+' : ''}${handle.getGainDb(displayedSettings).toFixed(1)} dB @ ${formatFrequencyLabel(frequencyHz)}`;
+          const isMutedHandle = handle.activateField === 'audioEqBand1Enabled'
+            ? !displayedSettings.band1Enabled
+            : handle.activateField === 'audioEqBand6Enabled'
+              ? !displayedSettings.band6Enabled
+              : false;
+          const top = handle.kind === 'cut' || handle.kind === 'notch'
+            ? getCutHandleY()
+            : gainToY((handle as GainHandleDefinition).getGainDb(displayedSettings));
+          const title = handle.kind === 'cut' || handle.kind === 'notch'
+            ? `${handle.label} ${handle.description} ${formatFrequencyLabel(frequencyHz)}`
+            : `${handle.label} ${handle.description} ${(handle as GainHandleDefinition).getGainDb(displayedSettings) > 0 ? '+' : ''}${(handle as GainHandleDefinition).getGainDb(displayedSettings).toFixed(1)} dB @ ${formatFrequencyLabel(frequencyHz)}`;
 
           return (
             <button
@@ -571,7 +674,7 @@ export function AudioEqCurveEditor({
               className={cn(
                 'absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-background shadow-sm transition-[transform,background-color,color] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 flex items-center justify-center font-mono font-semibold leading-none',
                 isActive ? 'h-5 w-5 scale-110 bg-foreground text-background' : 'h-[18px] w-[18px] bg-primary text-primary-foreground',
-                handle.kind === 'cut' && !handle.getEnabled(displayedSettings) && 'bg-muted-foreground/60 text-background/80',
+                isMutedHandle && 'bg-muted-foreground/60 text-background/80',
                 disabled && 'pointer-events-none',
               )}
               style={{

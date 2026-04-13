@@ -84,26 +84,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
   const mediaSourceFps = mediaItem?.fps;
   const itemAudioEqStages = React.useMemo(
     () => appendResolvedAudioEqStage(audioEqStages, getAudioEqSettings(item)),
-    [
-      audioEqStages,
-      item.audioEqLowCutEnabled,
-      item.audioEqLowCutFrequencyHz,
-      item.audioEqLowCutSlopeDbPerOct,
-      item.audioEqHighGainDb,
-      item.audioEqHighCutEnabled,
-      item.audioEqHighCutFrequencyHz,
-      item.audioEqHighCutSlopeDbPerOct,
-      item.audioEqHighFrequencyHz,
-      item.audioEqHighMidGainDb,
-      item.audioEqHighMidFrequencyHz,
-      item.audioEqHighMidQ,
-      item.audioEqLowGainDb,
-      item.audioEqLowFrequencyHz,
-      item.audioEqLowMidGainDb,
-      item.audioEqLowMidFrequencyHz,
-      item.audioEqLowMidQ,
-      item.audioEqMidGainDb,
-    ],
+    [audioEqStages, item],
   );
   const itemLocalPitchShiftSemitones = React.useMemo(
     () => getAudioPitchShiftSemitones(item),

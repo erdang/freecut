@@ -36,20 +36,38 @@ type BaseTimelineItem = {
   audioFadeOutCurveX?: number; // Audio fade out curve horizontal bias (0..1, default: ~0.52)
   audioPitchSemitones?: number; // Clip pitch offset in semitones (-12..12)
   audioPitchCents?: number; // Fine pitch offset in cents (-100..100)
+  audioEqBand1Enabled?: boolean; // Outer left EQ band on/off
+  audioEqBand1Type?: import('@/types/audio').AudioEqBand1Type;
+  audioEqBand1FrequencyHz?: number;
+  audioEqBand1GainDb?: number;
+  audioEqBand1Q?: number;
+  audioEqBand1SlopeDbPerOct?: 6 | 12 | 18 | 24;
   audioEqLowCutEnabled?: boolean; // Enable low cut / high-pass filter
   audioEqLowCutFrequencyHz?: number; // Low cut frequency in Hz
   audioEqLowCutSlopeDbPerOct?: 6 | 12 | 18 | 24; // Low cut slope
+  audioEqLowType?: import('@/types/audio').AudioEqInnerBandType;
   audioEqLowGainDb?: number; // Low shelf EQ gain in dB (default: 0)
   audioEqLowFrequencyHz?: number; // Low shelf center frequency in Hz
+  audioEqLowQ?: number; // Low band Q for peak/notch/shelf shape
+  audioEqLowMidType?: import('@/types/audio').AudioEqInnerBandType;
   audioEqLowMidGainDb?: number; // Low-mid peaking EQ gain in dB (default: 0)
   audioEqLowMidFrequencyHz?: number; // Low-mid center frequency in Hz
   audioEqLowMidQ?: number; // Low-mid bandwidth/Q
   audioEqMidGainDb?: number; // Legacy center band gain in dB (default: 0)
+  audioEqHighMidType?: import('@/types/audio').AudioEqInnerBandType;
   audioEqHighMidGainDb?: number; // High-mid peaking EQ gain in dB (default: 0)
   audioEqHighMidFrequencyHz?: number; // High-mid center frequency in Hz
   audioEqHighMidQ?: number; // High-mid bandwidth/Q
+  audioEqHighType?: import('@/types/audio').AudioEqInnerBandType;
   audioEqHighGainDb?: number; // High shelf EQ gain in dB (default: 0)
   audioEqHighFrequencyHz?: number; // High shelf center frequency in Hz
+  audioEqHighQ?: number; // High band Q for peak/notch/shelf shape
+  audioEqBand6Enabled?: boolean; // Outer right EQ band on/off
+  audioEqBand6Type?: import('@/types/audio').AudioEqBand6Type;
+  audioEqBand6FrequencyHz?: number;
+  audioEqBand6GainDb?: number;
+  audioEqBand6Q?: number;
+  audioEqBand6SlopeDbPerOct?: 6 | 12 | 18 | 24;
   audioEqHighCutEnabled?: boolean; // Enable high cut / low-pass filter
   audioEqHighCutFrequencyHz?: number; // High cut frequency in Hz
   audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24; // High cut slope

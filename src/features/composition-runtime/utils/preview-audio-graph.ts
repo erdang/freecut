@@ -10,12 +10,22 @@ export const PREVIEW_AUDIO_GAIN_RAMP_SECONDS = 0.008;
 export const PREVIEW_AUDIO_EQ_RAMP_SECONDS = 0.012;
 
 interface PreviewClipAudioEqStageNodes {
+  band1BypassNode: GainNode;
+  band1PassNodes: IIRFilterNode[];
+  band1BiquadNode: BiquadFilterNode;
   lowCutNodes: IIRFilterNode[];
+  lowNode: BiquadFilterNode;
   lowShelfNode: BiquadFilterNode;
+  lowMidNode: BiquadFilterNode;
   lowMidPeakingNode: BiquadFilterNode;
   midPeakingNode: BiquadFilterNode;
+  highMidNode: BiquadFilterNode;
   highMidPeakingNode: BiquadFilterNode;
+  highNode: BiquadFilterNode;
   highShelfNode: BiquadFilterNode;
+  band6BypassNode: GainNode;
+  band6BiquadNode: BiquadFilterNode;
+  band6PassNodes: IIRFilterNode[];
   highCutNodes: IIRFilterNode[];
   resolvedStage: ResolvedAudioEqSettings;
 }
@@ -64,48 +74,152 @@ function createPassNodes(
   ));
 }
 
-function getStageEntryNode(stageNodes: PreviewClipAudioEqStageNodes): AudioNode {
-  return stageNodes.lowCutNodes[0] ?? stageNodes.lowShelfNode;
+function isPreviewPassBand1(stage: ResolvedAudioEqSettings): boolean {
+  return stage.band1Enabled && stage.band1Type === 'high-pass';
 }
 
-function getStageExitNode(stageNodes: PreviewClipAudioEqStageNodes): AudioNode {
-  return stageNodes.highCutNodes.at(-1) ?? stageNodes.highShelfNode;
+function isPreviewPassBand6(stage: ResolvedAudioEqSettings): boolean {
+  return stage.band6Enabled && stage.band6Type === 'low-pass';
+}
+
+function applyNodeType(node: BiquadFilterNode, type: BiquadFilterType): void {
+  if (node.type !== type) {
+    node.type = type;
+  }
+}
+
+function configureFilterNode(
+  node: BiquadFilterNode,
+  type: BiquadFilterType,
+  frequencyHz: number,
+  gainDb: number,
+  q: number,
+  write: (param: AudioParam, value: number) => void,
+): void {
+  applyNodeType(node, type);
+  write(node.frequency, frequencyHz);
+  write(node.gain, type === 'highpass' || type === 'lowpass' || type === 'notch' ? 0 : gainDb);
+  write(node.Q, q);
+}
+
+function configureStageBiquads(
+  stageNodes: PreviewClipAudioEqStageNodes,
+  targetStage: ResolvedAudioEqSettings,
+  write: (param: AudioParam, value: number) => void,
+): void {
+  configureFilterNode(
+    stageNodes.band1BiquadNode,
+    targetStage.band1Type === 'low-shelf' ? 'lowshelf' : targetStage.band1Type === 'high-shelf' ? 'highshelf' : 'peaking',
+    targetStage.band1FrequencyHz,
+    targetStage.band1GainDb,
+    targetStage.band1Q,
+    write,
+  );
+  configureFilterNode(
+    stageNodes.lowNode,
+    targetStage.lowType === 'low-shelf' ? 'lowshelf' : targetStage.lowType === 'high-shelf' ? 'highshelf' : targetStage.lowType === 'notch' ? 'notch' : 'peaking',
+    targetStage.lowFrequencyHz,
+    targetStage.lowGainDb,
+    targetStage.lowQ,
+    write,
+  );
+  configureFilterNode(
+    stageNodes.lowMidNode,
+    targetStage.lowMidType === 'low-shelf' ? 'lowshelf' : targetStage.lowMidType === 'high-shelf' ? 'highshelf' : targetStage.lowMidType === 'notch' ? 'notch' : 'peaking',
+    targetStage.lowMidFrequencyHz,
+    targetStage.lowMidGainDb,
+    targetStage.lowMidQ,
+    write,
+  );
+  configureFilterNode(
+    stageNodes.midPeakingNode,
+    'peaking',
+    AUDIO_EQ_MID_FREQUENCY_HZ,
+    targetStage.midGainDb,
+    AUDIO_EQ_MID_Q,
+    write,
+  );
+  configureFilterNode(
+    stageNodes.highMidNode,
+    targetStage.highMidType === 'low-shelf' ? 'lowshelf' : targetStage.highMidType === 'high-shelf' ? 'highshelf' : targetStage.highMidType === 'notch' ? 'notch' : 'peaking',
+    targetStage.highMidFrequencyHz,
+    targetStage.highMidGainDb,
+    targetStage.highMidQ,
+    write,
+  );
+  configureFilterNode(
+    stageNodes.highNode,
+    targetStage.highType === 'low-shelf' ? 'lowshelf' : targetStage.highType === 'high-shelf' ? 'highshelf' : targetStage.highType === 'notch' ? 'notch' : 'peaking',
+    targetStage.highFrequencyHz,
+    targetStage.highGainDb,
+    targetStage.highQ,
+    write,
+  );
+  configureFilterNode(
+    stageNodes.band6BiquadNode,
+    targetStage.band6Type === 'low-shelf' ? 'lowshelf' : targetStage.band6Type === 'high-shelf' ? 'highshelf' : 'peaking',
+    targetStage.band6FrequencyHz,
+    targetStage.band6GainDb,
+    targetStage.band6Q,
+    write,
+  );
+}
+
+function getBand1EntryNode(stageNodes: PreviewClipAudioEqStageNodes, stage = stageNodes.resolvedStage): AudioNode {
+  if (!stage.band1Enabled) return stageNodes.band1BypassNode;
+  return isPreviewPassBand1(stage)
+    ? (stageNodes.band1PassNodes[0] ?? stageNodes.band1BypassNode)
+    : stageNodes.band1BiquadNode;
+}
+
+function getBand1ExitNode(stageNodes: PreviewClipAudioEqStageNodes, stage = stageNodes.resolvedStage): AudioNode {
+  if (!stage.band1Enabled) return stageNodes.band1BypassNode;
+  return isPreviewPassBand1(stage)
+    ? (stageNodes.band1PassNodes.at(-1) ?? stageNodes.band1BypassNode)
+    : stageNodes.band1BiquadNode;
+}
+
+function getBand6EntryNode(stageNodes: PreviewClipAudioEqStageNodes, stage = stageNodes.resolvedStage): AudioNode {
+  if (!stage.band6Enabled) return stageNodes.band6BypassNode;
+  return isPreviewPassBand6(stage)
+    ? (stageNodes.band6PassNodes[0] ?? stageNodes.band6BypassNode)
+    : stageNodes.band6BiquadNode;
+}
+
+function getBand6ExitNode(stageNodes: PreviewClipAudioEqStageNodes, stage = stageNodes.resolvedStage): AudioNode {
+  if (!stage.band6Enabled) return stageNodes.band6BypassNode;
+  return isPreviewPassBand6(stage)
+    ? (stageNodes.band6PassNodes.at(-1) ?? stageNodes.band6BypassNode)
+    : stageNodes.band6BiquadNode;
 }
 
 function connectStageInternals(stageNodes: PreviewClipAudioEqStageNodes): void {
-  let previousNode: AudioNode | null = null;
-
-  for (const node of stageNodes.lowCutNodes) {
-    if (previousNode) previousNode.connect(node);
-    previousNode = node;
+  for (let i = 1; i < stageNodes.band1PassNodes.length; i++) {
+    stageNodes.band1PassNodes[i - 1]!.connect(stageNodes.band1PassNodes[i]!);
   }
-
-  const lowShelfInput = stageNodes.lowShelfNode;
-  if (previousNode) {
-    previousNode.connect(lowShelfInput);
+  for (let i = 1; i < stageNodes.band6PassNodes.length; i++) {
+    stageNodes.band6PassNodes[i - 1]!.connect(stageNodes.band6PassNodes[i]!);
   }
-  stageNodes.lowShelfNode.connect(stageNodes.lowMidPeakingNode);
-  stageNodes.lowMidPeakingNode.connect(stageNodes.midPeakingNode);
-  stageNodes.midPeakingNode.connect(stageNodes.highMidPeakingNode);
-  stageNodes.highMidPeakingNode.connect(stageNodes.highShelfNode);
-
-  previousNode = stageNodes.highShelfNode;
-  for (const node of stageNodes.highCutNodes) {
-    previousNode.connect(node);
-    previousNode = node;
-  }
+  stageNodes.lowNode.connect(stageNodes.lowMidNode);
+  stageNodes.lowMidNode.connect(stageNodes.midPeakingNode);
+  stageNodes.midPeakingNode.connect(stageNodes.highMidNode);
+  stageNodes.highMidNode.connect(stageNodes.highNode);
 }
 
 function disconnectStageInternals(stageNodes: PreviewClipAudioEqStageNodes): void {
-  for (const node of stageNodes.lowCutNodes) {
+  stageNodes.band1BypassNode.disconnect();
+  for (const node of stageNodes.band1PassNodes) {
     node.disconnect();
   }
-  stageNodes.lowShelfNode.disconnect();
-  stageNodes.lowMidPeakingNode.disconnect();
+  stageNodes.band1BiquadNode.disconnect();
+  stageNodes.lowNode.disconnect();
+  stageNodes.lowMidNode.disconnect();
   stageNodes.midPeakingNode.disconnect();
-  stageNodes.highMidPeakingNode.disconnect();
-  stageNodes.highShelfNode.disconnect();
-  for (const node of stageNodes.highCutNodes) {
+  stageNodes.highMidNode.disconnect();
+  stageNodes.highNode.disconnect();
+  stageNodes.band6BypassNode.disconnect();
+  stageNodes.band6BiquadNode.disconnect();
+  for (const node of stageNodes.band6PassNodes) {
     node.disconnect();
   }
 }
@@ -114,57 +228,49 @@ function createPreviewClipAudioEqStage(
   context: AudioContext,
   resolvedStage: ResolvedAudioEqSettings = DEFAULT_AUDIO_EQ_SETTINGS,
 ): PreviewClipAudioEqStageNodes {
-  const lowShelfNode = context.createBiquadFilter();
-  lowShelfNode.type = 'lowshelf';
-  lowShelfNode.frequency.value = resolvedStage.lowFrequencyHz;
-  lowShelfNode.gain.value = resolvedStage.lowGainDb;
-
-  const lowMidPeakingNode = context.createBiquadFilter();
-  lowMidPeakingNode.type = 'peaking';
-  lowMidPeakingNode.frequency.value = resolvedStage.lowMidFrequencyHz;
-  lowMidPeakingNode.Q.value = resolvedStage.lowMidQ;
-  lowMidPeakingNode.gain.value = resolvedStage.lowMidGainDb;
-
+  const lowNode = context.createBiquadFilter();
+  const lowMidNode = context.createBiquadFilter();
   const midPeakingNode = context.createBiquadFilter();
-  midPeakingNode.type = 'peaking';
-  midPeakingNode.frequency.value = AUDIO_EQ_MID_FREQUENCY_HZ;
-  midPeakingNode.Q.value = AUDIO_EQ_MID_Q;
-  midPeakingNode.gain.value = resolvedStage.midGainDb;
-
-  const highMidPeakingNode = context.createBiquadFilter();
-  highMidPeakingNode.type = 'peaking';
-  highMidPeakingNode.frequency.value = resolvedStage.highMidFrequencyHz;
-  highMidPeakingNode.Q.value = resolvedStage.highMidQ;
-  highMidPeakingNode.gain.value = resolvedStage.highMidGainDb;
-
-  const highShelfNode = context.createBiquadFilter();
-  highShelfNode.type = 'highshelf';
-  highShelfNode.frequency.value = resolvedStage.highFrequencyHz;
-  highShelfNode.gain.value = resolvedStage.highGainDb;
-
+  const highMidNode = context.createBiquadFilter();
+  const highNode = context.createBiquadFilter();
   const stageNodes: PreviewClipAudioEqStageNodes = {
-    lowCutNodes: createPassNodes(
+    band1BypassNode: context.createGain(),
+    band1PassNodes: createPassNodes(
       context,
       'highpass',
-      resolvedStage.lowCutEnabled,
-      resolvedStage.lowCutFrequencyHz,
-      resolvedStage.lowCutSlopeDbPerOct,
+      isPreviewPassBand1(resolvedStage),
+      resolvedStage.band1FrequencyHz,
+      resolvedStage.band1SlopeDbPerOct,
     ),
-    lowShelfNode,
-    lowMidPeakingNode,
+    band1BiquadNode: context.createBiquadFilter(),
+    lowCutNodes: [],
+    lowNode,
+    lowShelfNode: lowNode,
+    lowMidNode,
+    lowMidPeakingNode: lowMidNode,
     midPeakingNode,
-    highMidPeakingNode,
-    highShelfNode,
-    highCutNodes: createPassNodes(
+    highMidNode,
+    highMidPeakingNode: highMidNode,
+    highNode,
+    highShelfNode: highNode,
+    band6BypassNode: context.createGain(),
+    band6BiquadNode: context.createBiquadFilter(),
+    band6PassNodes: createPassNodes(
       context,
       'lowpass',
-      resolvedStage.highCutEnabled,
-      resolvedStage.highCutFrequencyHz,
-      resolvedStage.highCutSlopeDbPerOct,
+      isPreviewPassBand6(resolvedStage),
+      resolvedStage.band6FrequencyHz,
+      resolvedStage.band6SlopeDbPerOct,
     ),
+    highCutNodes: [],
     resolvedStage,
   };
+  stageNodes.lowCutNodes = stageNodes.band1PassNodes;
+  stageNodes.highCutNodes = stageNodes.band6PassNodes;
 
+  configureStageBiquads(stageNodes, resolvedStage, (param, value) => {
+    param.value = value;
+  });
   connectStageInternals(stageNodes);
   return stageNodes;
 }
@@ -178,8 +284,14 @@ function reconnectPreviewClipAudioGraph(graph: PreviewClipAudioGraph): void {
 
   let previousNode: AudioNode = graph.sourceInputNode;
   for (const stageNodes of graph.eqStageNodes) {
-    previousNode.connect(getStageEntryNode(stageNodes));
-    previousNode = getStageExitNode(stageNodes);
+    const band1Entry = getBand1EntryNode(stageNodes);
+    const band1Exit = getBand1ExitNode(stageNodes);
+    const band6Entry = getBand6EntryNode(stageNodes);
+    const band6Exit = getBand6ExitNode(stageNodes);
+    previousNode.connect(band1Entry);
+    band1Exit.connect(stageNodes.lowNode);
+    stageNodes.highNode.connect(band6Entry);
+    previousNode = band6Exit;
   }
 
   previousNode.connect(graph.outputGainNode);
@@ -190,12 +302,20 @@ function shouldRebuildStageTopology(
   nextStage: ResolvedAudioEqSettings,
 ): boolean {
   return (
-    currentStage.lowCutEnabled !== nextStage.lowCutEnabled
-    || currentStage.lowCutFrequencyHz !== nextStage.lowCutFrequencyHz
-    || currentStage.lowCutSlopeDbPerOct !== nextStage.lowCutSlopeDbPerOct
-    || currentStage.highCutEnabled !== nextStage.highCutEnabled
-    || currentStage.highCutFrequencyHz !== nextStage.highCutFrequencyHz
-    || currentStage.highCutSlopeDbPerOct !== nextStage.highCutSlopeDbPerOct
+    currentStage.band1Enabled !== nextStage.band1Enabled
+    || currentStage.band1Type !== nextStage.band1Type
+    || ((isPreviewPassBand1(currentStage) || isPreviewPassBand1(nextStage))
+      && (
+        currentStage.band1FrequencyHz !== nextStage.band1FrequencyHz
+        || currentStage.band1SlopeDbPerOct !== nextStage.band1SlopeDbPerOct
+      ))
+    || currentStage.band6Enabled !== nextStage.band6Enabled
+    || currentStage.band6Type !== nextStage.band6Type
+    || ((isPreviewPassBand6(currentStage) || isPreviewPassBand6(nextStage))
+      && (
+        currentStage.band6FrequencyHz !== nextStage.band6FrequencyHz
+        || currentStage.band6SlopeDbPerOct !== nextStage.band6SlopeDbPerOct
+      ))
   );
 }
 
@@ -224,17 +344,7 @@ function applyStageParams(
       rampAudioParam(param, targetValue, startAt, rampSeconds);
     };
 
-  write(stageNodes.lowShelfNode.frequency, targetStage.lowFrequencyHz);
-  write(stageNodes.lowShelfNode.gain, targetStage.lowGainDb);
-  write(stageNodes.lowMidPeakingNode.frequency, targetStage.lowMidFrequencyHz);
-  write(stageNodes.lowMidPeakingNode.Q, targetStage.lowMidQ);
-  write(stageNodes.lowMidPeakingNode.gain, targetStage.lowMidGainDb);
-  write(stageNodes.midPeakingNode.gain, targetStage.midGainDb);
-  write(stageNodes.highMidPeakingNode.frequency, targetStage.highMidFrequencyHz);
-  write(stageNodes.highMidPeakingNode.Q, targetStage.highMidQ);
-  write(stageNodes.highMidPeakingNode.gain, targetStage.highMidGainDb);
-  write(stageNodes.highShelfNode.frequency, targetStage.highFrequencyHz);
-  write(stageNodes.highShelfNode.gain, targetStage.highGainDb);
+  configureStageBiquads(stageNodes, targetStage, write);
   stageNodes.resolvedStage = targetStage;
 }
 

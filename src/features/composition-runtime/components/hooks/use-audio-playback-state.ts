@@ -129,26 +129,7 @@ export function useAudioPlaybackState({
 
   const resolvedAudioEqStages = useMemo(
     () => resolvePreviewAudioEqStages(audioEqStages, preview),
-    [
-      audioEqStages,
-      preview?.audioEqLowCutEnabled,
-      preview?.audioEqLowCutFrequencyHz,
-      preview?.audioEqLowCutSlopeDbPerOct,
-      preview?.audioEqLowGainDb,
-      preview?.audioEqLowFrequencyHz,
-      preview?.audioEqLowMidGainDb,
-      preview?.audioEqLowMidFrequencyHz,
-      preview?.audioEqLowMidQ,
-      preview?.audioEqMidGainDb,
-      preview?.audioEqHighMidGainDb,
-      preview?.audioEqHighMidFrequencyHz,
-      preview?.audioEqHighMidQ,
-      preview?.audioEqHighGainDb,
-      preview?.audioEqHighFrequencyHz,
-      preview?.audioEqHighCutEnabled,
-      preview?.audioEqHighCutFrequencyHz,
-      preview?.audioEqHighCutSlopeDbPerOct,
-    ],
+    [audioEqStages, preview],
   );
 
   return {

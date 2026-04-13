@@ -127,13 +127,17 @@ describe('preview-audio-graph', () => {
     expect(firstStage.highShelfNode.frequency.value).toBe(AUDIO_EQ_HIGH_FREQUENCY_HZ);
     expect(firstStage.highCutNodes).toHaveLength(0);
 
-    expect(getConnections(graph!.sourceInputNode)).toEqual([firstStage.lowShelfNode]);
+    expect(getConnections(graph!.sourceInputNode)).toEqual([firstStage.band1BypassNode]);
+    expect(getConnections(firstStage.band1BypassNode)).toEqual([firstStage.lowShelfNode]);
     expect(getConnections(firstStage.lowShelfNode)).toEqual([firstStage.lowMidPeakingNode]);
     expect(getConnections(firstStage.lowMidPeakingNode)).toEqual([firstStage.midPeakingNode]);
     expect(getConnections(firstStage.midPeakingNode)).toEqual([firstStage.highMidPeakingNode]);
     expect(getConnections(firstStage.highMidPeakingNode)).toEqual([firstStage.highShelfNode]);
-    expect(getConnections(firstStage.highShelfNode)).toEqual([secondStage.lowShelfNode]);
-    expect(getConnections(secondStage.highShelfNode)).toEqual([graph!.outputGainNode]);
+    expect(getConnections(firstStage.highShelfNode)).toEqual([firstStage.band6BypassNode]);
+    expect(getConnections(firstStage.band6BypassNode)).toEqual([secondStage.band1BypassNode]);
+    expect(getConnections(secondStage.band1BypassNode)).toEqual([secondStage.lowShelfNode]);
+    expect(getConnections(secondStage.highShelfNode)).toEqual([secondStage.band6BypassNode]);
+    expect(getConnections(secondStage.band6BypassNode)).toEqual([graph!.outputGainNode]);
   });
 
   it('creates cut nodes when needed and ramps frequency, gain, and Q parameters', () => {

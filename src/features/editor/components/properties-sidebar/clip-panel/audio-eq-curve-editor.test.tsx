@@ -20,7 +20,7 @@ describe('AudioEqCurveEditor', () => {
     );
 
     const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null;
-    const highMidHandle = document.querySelector('[data-eq-band="high-mid"]') as HTMLButtonElement | null;
+    const highMidHandle = document.querySelector('[data-eq-band="band4"]') as HTMLButtonElement | null;
 
     expect(root).not.toBeNull();
     expect(highMidHandle).not.toBeNull();
@@ -74,7 +74,7 @@ describe('AudioEqCurveEditor', () => {
 
     expect(screen.getByText('Mixed EQ values')).toBeInTheDocument();
 
-    const lowCutHandle = document.querySelector('[data-eq-band="low-cut"]') as HTMLButtonElement | null;
+    const lowCutHandle = document.querySelector('[data-eq-band="band1"]') as HTMLButtonElement | null;
     fireEvent.pointerDown(lowCutHandle!, { pointerId: 2, clientX: 24, clientY: 120 });
 
     expect(onLiveChange).not.toHaveBeenCalled();
@@ -90,9 +90,9 @@ describe('AudioEqCurveEditor', () => {
       />,
     );
 
-    expect(document.querySelector('[data-eq-band="low-cut"] [data-eq-band-number="1"]')).not.toBeNull();
-    expect(document.querySelector('[data-eq-band="high-mid"] [data-eq-band-number="4"]')).not.toBeNull();
-    expect(document.querySelector('[data-eq-band="high-cut"] [data-eq-band-number="6"]')).not.toBeNull();
+    expect(document.querySelector('[data-eq-band="band1"] [data-eq-band-number="1"]')).not.toBeNull();
+    expect(document.querySelector('[data-eq-band="band4"] [data-eq-band-number="4"]')).not.toBeNull();
+    expect(document.querySelector('[data-eq-band="band6"] [data-eq-band-number="6"]')).not.toBeNull();
     expect(document.querySelector('[data-eq-band="mid"]')).toBeNull();
     expect(screen.getByText('-80')).toBeInTheDocument();
   });
@@ -110,7 +110,7 @@ describe('AudioEqCurveEditor', () => {
     );
 
     const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null;
-    const lowHandle = document.querySelector('[data-eq-band="low"]') as HTMLButtonElement | null;
+    const lowHandle = document.querySelector('[data-eq-band="band2"]') as HTMLButtonElement | null;
 
     expect(root).not.toBeNull();
     expect(lowHandle).not.toBeNull();
@@ -154,8 +154,8 @@ describe('AudioEqCurveEditor', () => {
       />,
     );
 
-    const lowHandle = document.querySelector('[data-eq-band="low"]') as HTMLButtonElement | null;
-    const highHandle = document.querySelector('[data-eq-band="high"]') as HTMLButtonElement | null;
+    const lowHandle = document.querySelector('[data-eq-band="band2"]') as HTMLButtonElement | null;
+    const highHandle = document.querySelector('[data-eq-band="band5"]') as HTMLButtonElement | null;
 
     expect(lowHandle).not.toBeNull();
     expect(highHandle).not.toBeNull();
@@ -166,7 +166,7 @@ describe('AudioEqCurveEditor', () => {
     expect(parseFloat(highHandle!.style.left)).toBeLessThanOrEqual(100);
   });
 
-  it('drops enabled cut handles to the bottom edge of the graph', () => {
+  it('keeps cut handles on the baseline when toggled on', () => {
     const { rerender } = render(
       <AudioEqCurveEditor
         settings={DEFAULT_SETTINGS}
@@ -175,7 +175,7 @@ describe('AudioEqCurveEditor', () => {
       />,
     );
 
-    const lowCutHandle = document.querySelector('[data-eq-band="low-cut"]') as HTMLButtonElement | null;
+    const lowCutHandle = document.querySelector('[data-eq-band="band1"]') as HTMLButtonElement | null;
     const disabledTop = parseFloat(lowCutHandle!.style.top);
 
     rerender(
@@ -189,11 +189,11 @@ describe('AudioEqCurveEditor', () => {
       />,
     );
 
-    const enabledLowCutHandle = document.querySelector('[data-eq-band="low-cut"]') as HTMLButtonElement | null;
-    const enabledHighCutHandle = document.querySelector('[data-eq-band="high-cut"]') as HTMLButtonElement | null;
+    const enabledLowCutHandle = document.querySelector('[data-eq-band="band1"]') as HTMLButtonElement | null;
+    const enabledHighCutHandle = document.querySelector('[data-eq-band="band6"]') as HTMLButtonElement | null;
 
-    expect(parseFloat(enabledLowCutHandle!.style.top)).toBeGreaterThan(disabledTop);
-    expect(parseFloat(enabledHighCutHandle!.style.top)).toBeGreaterThan(disabledTop);
+    expect(parseFloat(enabledLowCutHandle!.style.top)).toBeCloseTo(disabledTop, 4);
+    expect(parseFloat(enabledHighCutHandle!.style.top)).toBeCloseTo(disabledTop, 4);
   });
 
   it('keeps untouched handles fixed while a band is being dragged', () => {
@@ -222,8 +222,8 @@ describe('AudioEqCurveEditor', () => {
     render(<Harness />);
 
     const root = document.querySelector('[data-eq-curve-root="true"]') as HTMLDivElement | null;
-    const lowMidHandle = document.querySelector('[data-eq-band="low-mid"]') as HTMLButtonElement | null;
-    const highHandle = document.querySelector('[data-eq-band="high"]') as HTMLButtonElement | null;
+    const lowMidHandle = document.querySelector('[data-eq-band="band3"]') as HTMLButtonElement | null;
+    const highHandle = document.querySelector('[data-eq-band="band5"]') as HTMLButtonElement | null;
 
     expect(root).not.toBeNull();
     expect(lowMidHandle).not.toBeNull();

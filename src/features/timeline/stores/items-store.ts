@@ -90,6 +90,16 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     audioFadeOutCurveX: item.audioFadeOutCurveX === undefined ? undefined : clampAudioFadeCurveX(item.audioFadeOutCurveX),
     audioPitchSemitones: item.audioPitchSemitones === undefined ? undefined : clampAudioPitchSemitones(item.audioPitchSemitones),
     audioPitchCents: item.audioPitchCents === undefined ? undefined : clampAudioPitchCents(item.audioPitchCents),
+    audioEqBand1Enabled: item.audioEqBand1Enabled === undefined ? undefined : !!item.audioEqBand1Enabled,
+    audioEqBand1Type: item.audioEqBand1Type,
+    audioEqBand1FrequencyHz: item.audioEqBand1FrequencyHz === undefined
+      ? undefined
+      : clampAudioEqFrequencyHz(item.audioEqBand1FrequencyHz, AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ, AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ, AUDIO_EQ_LOW_CUT_FREQUENCY_HZ),
+    audioEqBand1GainDb: item.audioEqBand1GainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqBand1GainDb),
+    audioEqBand1Q: item.audioEqBand1Q === undefined ? undefined : clampAudioEqQ(item.audioEqBand1Q, AUDIO_EQ_LOW_MID_Q),
+    audioEqBand1SlopeDbPerOct: item.audioEqBand1SlopeDbPerOct === undefined
+      ? undefined
+      : clampAudioEqCutSlopeDbPerOct(item.audioEqBand1SlopeDbPerOct),
     audioEqLowCutEnabled: item.audioEqLowCutEnabled === undefined ? undefined : !!item.audioEqLowCutEnabled,
     audioEqLowCutFrequencyHz: item.audioEqLowCutFrequencyHz === undefined
       ? undefined
@@ -97,25 +107,41 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
     audioEqLowCutSlopeDbPerOct: item.audioEqLowCutSlopeDbPerOct === undefined
       ? undefined
       : clampAudioEqCutSlopeDbPerOct(item.audioEqLowCutSlopeDbPerOct),
+    audioEqLowType: item.audioEqLowType,
     audioEqLowGainDb: item.audioEqLowGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqLowGainDb),
     audioEqLowFrequencyHz: item.audioEqLowFrequencyHz === undefined
       ? undefined
       : clampAudioEqFrequencyHz(item.audioEqLowFrequencyHz, AUDIO_EQ_LOW_MIN_FREQUENCY_HZ, AUDIO_EQ_LOW_MAX_FREQUENCY_HZ, AUDIO_EQ_LOW_FREQUENCY_HZ),
+    audioEqLowQ: item.audioEqLowQ === undefined ? undefined : clampAudioEqQ(item.audioEqLowQ, AUDIO_EQ_LOW_MID_Q),
+    audioEqLowMidType: item.audioEqLowMidType,
     audioEqLowMidGainDb: item.audioEqLowMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqLowMidGainDb),
     audioEqLowMidFrequencyHz: item.audioEqLowMidFrequencyHz === undefined
       ? undefined
       : clampAudioEqFrequencyHz(item.audioEqLowMidFrequencyHz, AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ, AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ, AUDIO_EQ_LOW_MID_FREQUENCY_HZ),
     audioEqLowMidQ: item.audioEqLowMidQ === undefined ? undefined : clampAudioEqQ(item.audioEqLowMidQ, AUDIO_EQ_LOW_MID_Q),
     audioEqMidGainDb: item.audioEqMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqMidGainDb),
+    audioEqHighMidType: item.audioEqHighMidType,
     audioEqHighMidGainDb: item.audioEqHighMidGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqHighMidGainDb),
     audioEqHighMidFrequencyHz: item.audioEqHighMidFrequencyHz === undefined
       ? undefined
       : clampAudioEqFrequencyHz(item.audioEqHighMidFrequencyHz, AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ, AUDIO_EQ_HIGH_MID_MAX_FREQUENCY_HZ, AUDIO_EQ_HIGH_MID_FREQUENCY_HZ),
     audioEqHighMidQ: item.audioEqHighMidQ === undefined ? undefined : clampAudioEqQ(item.audioEqHighMidQ, AUDIO_EQ_HIGH_MID_Q),
+    audioEqHighType: item.audioEqHighType,
     audioEqHighGainDb: item.audioEqHighGainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqHighGainDb),
     audioEqHighFrequencyHz: item.audioEqHighFrequencyHz === undefined
       ? undefined
       : clampAudioEqFrequencyHz(item.audioEqHighFrequencyHz, AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ, AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ, AUDIO_EQ_HIGH_FREQUENCY_HZ),
+    audioEqHighQ: item.audioEqHighQ === undefined ? undefined : clampAudioEqQ(item.audioEqHighQ, AUDIO_EQ_HIGH_MID_Q),
+    audioEqBand6Enabled: item.audioEqBand6Enabled === undefined ? undefined : !!item.audioEqBand6Enabled,
+    audioEqBand6Type: item.audioEqBand6Type,
+    audioEqBand6FrequencyHz: item.audioEqBand6FrequencyHz === undefined
+      ? undefined
+      : clampAudioEqFrequencyHz(item.audioEqBand6FrequencyHz, AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ, AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ, AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ),
+    audioEqBand6GainDb: item.audioEqBand6GainDb === undefined ? undefined : clampAudioEqGainDb(item.audioEqBand6GainDb),
+    audioEqBand6Q: item.audioEqBand6Q === undefined ? undefined : clampAudioEqQ(item.audioEqBand6Q, AUDIO_EQ_HIGH_MID_Q),
+    audioEqBand6SlopeDbPerOct: item.audioEqBand6SlopeDbPerOct === undefined
+      ? undefined
+      : clampAudioEqCutSlopeDbPerOct(item.audioEqBand6SlopeDbPerOct),
     audioEqHighCutEnabled: item.audioEqHighCutEnabled === undefined ? undefined : !!item.audioEqHighCutEnabled,
     audioEqHighCutFrequencyHz: item.audioEqHighCutFrequencyHz === undefined
       ? undefined
@@ -174,6 +200,26 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
   if (normalized.audioPitchCents !== undefined) {
     normalized.audioPitchCents = clampAudioPitchCents(normalized.audioPitchCents);
   }
+  if (normalized.audioEqBand1Enabled !== undefined) {
+    normalized.audioEqBand1Enabled = !!normalized.audioEqBand1Enabled;
+  }
+  if (normalized.audioEqBand1FrequencyHz !== undefined) {
+    normalized.audioEqBand1FrequencyHz = clampAudioEqFrequencyHz(
+      normalized.audioEqBand1FrequencyHz,
+      AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+      AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+      AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
+    );
+  }
+  if (normalized.audioEqBand1GainDb !== undefined) {
+    normalized.audioEqBand1GainDb = clampAudioEqGainDb(normalized.audioEqBand1GainDb);
+  }
+  if (normalized.audioEqBand1Q !== undefined) {
+    normalized.audioEqBand1Q = clampAudioEqQ(normalized.audioEqBand1Q, AUDIO_EQ_LOW_MID_Q);
+  }
+  if (normalized.audioEqBand1SlopeDbPerOct !== undefined) {
+    normalized.audioEqBand1SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqBand1SlopeDbPerOct);
+  }
   if (normalized.audioEqLowCutEnabled !== undefined) {
     normalized.audioEqLowCutEnabled = !!normalized.audioEqLowCutEnabled;
   }
@@ -198,6 +244,9 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
       AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
       AUDIO_EQ_LOW_FREQUENCY_HZ,
     );
+  }
+  if (normalized.audioEqLowQ !== undefined) {
+    normalized.audioEqLowQ = clampAudioEqQ(normalized.audioEqLowQ, AUDIO_EQ_LOW_MID_Q);
   }
   if (normalized.audioEqLowMidGainDb !== undefined) {
     normalized.audioEqLowMidGainDb = clampAudioEqGainDb(normalized.audioEqLowMidGainDb);
@@ -240,6 +289,29 @@ function normalizeItemUpdates(updates: Partial<TimelineItem>): Partial<TimelineI
       AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
       AUDIO_EQ_HIGH_FREQUENCY_HZ,
     );
+  }
+  if (normalized.audioEqHighQ !== undefined) {
+    normalized.audioEqHighQ = clampAudioEqQ(normalized.audioEqHighQ, AUDIO_EQ_HIGH_MID_Q);
+  }
+  if (normalized.audioEqBand6Enabled !== undefined) {
+    normalized.audioEqBand6Enabled = !!normalized.audioEqBand6Enabled;
+  }
+  if (normalized.audioEqBand6FrequencyHz !== undefined) {
+    normalized.audioEqBand6FrequencyHz = clampAudioEqFrequencyHz(
+      normalized.audioEqBand6FrequencyHz,
+      AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+      AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+      AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
+    );
+  }
+  if (normalized.audioEqBand6GainDb !== undefined) {
+    normalized.audioEqBand6GainDb = clampAudioEqGainDb(normalized.audioEqBand6GainDb);
+  }
+  if (normalized.audioEqBand6Q !== undefined) {
+    normalized.audioEqBand6Q = clampAudioEqQ(normalized.audioEqBand6Q, AUDIO_EQ_HIGH_MID_Q);
+  }
+  if (normalized.audioEqBand6SlopeDbPerOct !== undefined) {
+    normalized.audioEqBand6SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqBand6SlopeDbPerOct);
   }
   if (normalized.audioEqHighCutEnabled !== undefined) {
     normalized.audioEqHighCutEnabled = !!normalized.audioEqHighCutEnabled;
