@@ -840,6 +840,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       storageKey={FLOATING_MIXER_STORAGE_KEY}
       onClose={() => setMixerFloating(false)}
       headerExtra={modeDropdown}
+      autoWidth
     >
       <AudioMixerView
         tracks={mixerTracks}

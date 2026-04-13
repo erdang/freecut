@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject } from 'react';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/shared/ui/editor-layout';
 import { linearLevelToPercent, setLiveTrackVolumeOverride, clearLiveTrackVolumeOverride, setLiveBusVolumeOverride, clearLiveBusVolumeOverride } from './audio-meter-utils';
 import { getMixerLiveGain, setMixerLiveGains } from '@/shared/state/mixer-live-gain';
@@ -915,6 +915,168 @@ const ScaleColumn = memo(function ScaleColumn() {
 });
 
 // ---------------------------------------------------------------------------
+// Tracks resize handle — drag to tuck channel strips behind the bus
+// ---------------------------------------------------------------------------
+
+const TRACKS_PEEK_WIDTH = 4; // min visible sliver when fully tucked
+
+interface MixerBodyProps {
+  tracks: AudioMixerTrack[];
+  perTrackLevels: AudioMixerViewProps['perTrackLevels'];
+  masterEstimate: AudioMixerViewProps['masterEstimate'];
+  isPlaying: boolean;
+  expanded?: boolean;
+  masterVolumeDb: number;
+  masterMuted: boolean;
+  allItemIds: string[];
+  onMasterVolumeChange: (volumeDb: number) => void;
+  onMasterMuteToggle: () => void;
+  onTrackVolumeChange: (trackId: string, volumeDb: number) => void;
+  onTrackMuteToggle: (trackId: string) => void;
+  onTrackSoloToggle: (trackId: string) => void;
+  onTrackEqToggle?: (trackId: string) => void;
+  onBusEqToggle?: () => void;
+  busEqEnabled?: boolean;
+}
+
+const MixerBody = memo(function MixerBody({
+  tracks,
+  perTrackLevels,
+  masterEstimate,
+  isPlaying,
+  expanded,
+  masterVolumeDb,
+  masterMuted,
+  allItemIds,
+  onMasterVolumeChange,
+  onMasterMuteToggle,
+  onTrackVolumeChange,
+  onTrackMuteToggle,
+  onTrackSoloToggle,
+  onTrackEqToggle,
+  onBusEqToggle,
+  busEqEnabled,
+}: MixerBodyProps) {
+  const stripPx = expanded ? 68 : 52;
+  // Channel strips + trailing border (scale column is outside the tuckable area)
+  const naturalWidth = tracks.length * stripPx + (tracks.length > 0 ? 2 : 0);
+  const [tracksWidth, setTracksWidth] = useState<number | null>(null); // null = natural
+  const [animating, setAnimating] = useState(false);
+  const dragRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const didDragRef = useRef(false);
+
+  // Reset to natural width when track count changes
+  useEffect(() => {
+    setTracksWidth(null);
+  }, [tracks.length]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    setAnimating(false); // kill transition during drag
+    const current = tracksWidth ?? naturalWidth;
+    dragRef.current = { startX: e.clientX, startWidth: current };
+    didDragRef.current = false;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  }, [tracksWidth, naturalWidth]);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dx = e.clientX - drag.startX;
+    if (Math.abs(dx) > 2) didDragRef.current = true;
+    // Left-edge resize: drag left = wider, drag right = narrower
+    const next = Math.max(TRACKS_PEEK_WIDTH, Math.min(naturalWidth, drag.startWidth - dx));
+    setTracksWidth(next);
+  }, [naturalWidth]);
+
+  const handlePointerUp = useCallback(() => {
+    dragRef.current = null;
+  }, []);
+
+  const effectiveWidth = tracksWidth ?? naturalWidth;
+  const isTucked = effectiveWidth < naturalWidth;
+
+  const handleClick = useCallback(() => {
+    if (didDragRef.current) return; // don't toggle after a drag
+    setAnimating(true);
+    setTracksWidth(isTucked ? null : TRACKS_PEEK_WIDTH);
+  }, [isTucked]);
+
+  return (
+    <div className={`flex-1 min-h-0 flex ${expanded ? 'px-1 py-1.5' : 'px-0.5 py-1'} gap-0.5`}>
+      {/* Drag handle — left edge of the mixer, click to toggle */}
+      {tracks.length > 0 && (
+        <div
+          className="w-[5px] shrink-0 flex items-center justify-center cursor-col-resize select-none group"
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerUp}
+          onClick={handleClick}
+        >
+          <div className={`w-[2px] h-8 rounded-full transition-colors ${
+            isTucked
+              ? 'bg-primary/70 group-hover:bg-primary'
+              : 'bg-primary/30 group-hover:bg-primary/60'
+          }`} />
+        </div>
+      )}
+
+      {/* dB scale — always visible */}
+      <ScaleColumn />
+
+      {/* Channel strips — tuckable from the right (rightmost tracks hide first) */}
+      <div
+        className={`min-h-0 overflow-hidden shrink-0 ${animating ? 'transition-[width] duration-200 ease-out' : ''}`}
+        style={{ width: effectiveWidth }}
+        onTransitionEnd={() => setAnimating(false)}
+      >
+        <div className="flex h-full">
+          {tracks.map((track) => (
+            <ChannelStrip
+              key={track.id}
+              track={track}
+              level={perTrackLevels.get(track.id)}
+              isPlaying={isPlaying}
+              expanded={expanded}
+              onVolumeChange={onTrackVolumeChange}
+              onMuteToggle={onTrackMuteToggle}
+              onSoloToggle={onTrackSoloToggle}
+              onEqToggle={onTrackEqToggle}
+              eqActive={!!track.eqEnabled}
+            />
+          ))}
+
+          {/* Trailing border after last strip */}
+          {tracks.length > 0 && (
+            <div className="w-[2px] shrink-0 bg-border/40" />
+          )}
+
+          {tracks.length === 0 && (
+            <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/30 italic">
+              No audio tracks
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Bus / master strip — ml-auto pins it to the right when tracks are tucked */}
+      <BusMeter
+        masterEstimate={masterEstimate}
+        isPlaying={isPlaying}
+        volumeDb={masterVolumeDb}
+        muted={masterMuted}
+        allItemIds={allItemIds}
+        onVolumeChange={onMasterVolumeChange}
+        onMuteToggle={onMasterMuteToggle}
+        onEqToggle={onBusEqToggle}
+        eqActive={!!busEqEnabled}
+      />
+    </div>
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Main mixer view
 // ---------------------------------------------------------------------------
 
@@ -936,9 +1098,8 @@ export const AudioMixerView = memo(function AudioMixerView({
   headerExtra,
   expanded,
 }: AudioMixerViewProps) {
-  // When expanded (floating), fill the panel; when docked, size to content
   const outerClassName = expanded
-    ? 'panel-bg flex h-full flex-col overflow-hidden'
+    ? 'panel-bg flex h-full flex-col overflow-hidden w-fit'
     : 'panel-bg border-l border-border flex h-full flex-col overflow-hidden w-fit';
 
   const allItemIds = useMemo(
@@ -970,54 +1131,24 @@ export const AudioMixerView = memo(function AudioMixerView({
       )}
 
       {/* Mixer body */}
-      <div className={`flex-1 min-h-0 flex ${expanded ? 'px-1 py-1.5' : 'px-0.5 py-1'} gap-0.5`}>
-        {/* dB scale column */}
-        <ScaleColumn />
-
-        {/* Channel strips (scrollable) */}
-        <div className={`${expanded ? 'flex-1' : ''} min-w-0 overflow-x-auto overflow-y-hidden`}>
-          <div className="flex h-full">
-            {tracks.map((track) => (
-              <ChannelStrip
-                key={track.id}
-                track={track}
-                level={perTrackLevels.get(track.id)}
-                isPlaying={isPlaying}
-                expanded={expanded}
-                onVolumeChange={onTrackVolumeChange}
-                onMuteToggle={onTrackMuteToggle}
-                onSoloToggle={onTrackSoloToggle}
-                onEqToggle={onTrackEqToggle}
-                eqActive={!!track.eqEnabled}
-              />
-            ))}
-
-            {/* Trailing border after last strip */}
-            {tracks.length > 0 && (
-              <div className="w-[2px] shrink-0 bg-border/40" />
-            )}
-
-            {tracks.length === 0 && (
-              <div className="flex-1 flex items-center justify-center text-[10px] text-muted-foreground/30 italic">
-                No audio tracks
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Bus / master strip */}
-        <BusMeter
-          masterEstimate={masterEstimate}
-          isPlaying={isPlaying}
-          volumeDb={masterVolumeDb}
-          muted={masterMuted}
-          allItemIds={allItemIds}
-          onVolumeChange={onMasterVolumeChange}
-          onMuteToggle={onMasterMuteToggle}
-          onEqToggle={onBusEqToggle}
-          eqActive={!!busEqEnabled}
-        />
-      </div>
+      <MixerBody
+        tracks={tracks}
+        perTrackLevels={perTrackLevels}
+        masterEstimate={masterEstimate}
+        isPlaying={isPlaying}
+        expanded={expanded}
+        masterVolumeDb={masterVolumeDb}
+        masterMuted={masterMuted}
+        allItemIds={allItemIds}
+        onMasterVolumeChange={onMasterVolumeChange}
+        onMasterMuteToggle={onMasterMuteToggle}
+        onTrackVolumeChange={onTrackVolumeChange}
+        onTrackMuteToggle={onTrackMuteToggle}
+        onTrackSoloToggle={onTrackSoloToggle}
+        onTrackEqToggle={onTrackEqToggle}
+        onBusEqToggle={onBusEqToggle}
+        busEqEnabled={busEqEnabled}
+      />
     </aside>
   );
 });
