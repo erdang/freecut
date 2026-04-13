@@ -38,6 +38,8 @@ export interface FloatingPanelProps {
   resizable?: boolean;
   /** When true, panel height fits content instead of using a fixed value */
   autoHeight?: boolean;
+  /** When true, panel width fits content instead of using a fixed value */
+  autoWidth?: boolean;
   /** Called when the panel requests to close / dock */
   onClose?: () => void;
   /** Additional className on the outer container */
@@ -115,22 +117,24 @@ export const FloatingPanel = memo(function FloatingPanel({
   storageKey,
   resizable = true,
   autoHeight = false,
+  autoWidth = false,
   onClose,
   className = '',
 }: FloatingPanelProps) {
   const [bounds, setBounds] = useState<FloatingPanelBounds>(() => {
     const initial = storageKey ? loadBounds(storageKey, defaultBounds) : defaultBounds;
-    // When autoHeight, use a small placeholder height for initial Y positioning
-    // so the panel isn't clamped too far up. Actual height comes from content.
+    // When autoHeight/autoWidth, use small placeholders for positioning
+    // so the panel isn't clamped too far. Actual size comes from content.
     const heightForLayout = autoHeight ? 100 : initial.height;
+    const widthForLayout = autoWidth ? 200 : initial.width;
     const resolved = {
       ...initial,
-      x: initial.x < 0 ? window.innerWidth - initial.width - EDGE_MARGIN * 4 : initial.x,
+      x: initial.x < 0 ? window.innerWidth - widthForLayout - EDGE_MARGIN * 4 : initial.x,
       y: initial.y < 0 ? window.innerHeight - heightForLayout - EDGE_MARGIN * 4 : initial.y,
     };
     return clampToViewport({
       ...resolved,
-      width: Math.max(minWidth, resolved.width),
+      width: autoWidth ? widthForLayout : Math.max(minWidth, resolved.width),
       height: autoHeight ? heightForLayout : Math.max(minHeight, initial.height),
     });
   });
@@ -158,26 +162,30 @@ export const FloatingPanel = memo(function FloatingPanel({
         const effectiveHeight = autoHeight && panelRef.current
           ? panelRef.current.offsetHeight
           : prev.height;
-        return clampToViewport({ ...prev, height: effectiveHeight });
+        const effectiveWidth = autoWidth && panelRef.current
+          ? panelRef.current.offsetWidth
+          : prev.width;
+        return clampToViewport({ ...prev, width: effectiveWidth, height: effectiveHeight });
       });
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, [autoHeight]);
+  }, [autoHeight, autoWidth]);
 
   useEffect(() => {
-    if (!autoHeight || !panelRef.current) return;
+    if ((!autoHeight && !autoWidth) || !panelRef.current) return;
     const ro = new ResizeObserver(() => {
       if (!panelRef.current) return;
-      const contentHeight = panelRef.current.offsetHeight;
-      setBounds((prev) => clampToViewport({
-        ...prev,
-        height: contentHeight,
-      }));
+      setBounds((prev) => {
+        const next = { ...prev };
+        if (autoHeight) next.height = panelRef.current!.offsetHeight;
+        if (autoWidth) next.width = panelRef.current!.offsetWidth;
+        return clampToViewport(next);
+      });
     });
     ro.observe(panelRef.current);
     return () => ro.disconnect();
-  }, [autoHeight]);
+  }, [autoHeight, autoWidth]);
 
   useEffect(() => {
     const handlePointerMove = (e: PointerEvent) => {
@@ -200,8 +208,8 @@ export const FloatingPanel = memo(function FloatingPanel({
       let { x, y, width, height } = s;
       const edge = drag.edge!;
 
-      if (edge.includes('e')) width = Math.max(minWidth, s.width + dx);
-      if (edge.includes('w')) {
+      if (!autoWidth && edge.includes('e')) width = Math.max(minWidth, s.width + dx);
+      if (!autoWidth && edge.includes('w')) {
         const newWidth = Math.max(minWidth, s.width - dx);
         x = s.x + (s.width - newWidth);
         width = newWidth;
@@ -266,7 +274,7 @@ export const FloatingPanel = memo(function FloatingPanel({
       style={{
         left: bounds.x,
         top: bounds.y,
-        width: bounds.width,
+        ...(autoWidth ? { maxWidth: window.innerWidth - bounds.x - EDGE_MARGIN } : { width: bounds.width }),
         ...(autoHeight ? {} : { height: bounds.height }),
       }}
     >
@@ -274,12 +282,12 @@ export const FloatingPanel = memo(function FloatingPanel({
         <>
           {resizeHandle('n', 'top-0 left-2 right-2 h-[4px]')}
           {resizeHandle('s', 'bottom-0 left-2 right-2 h-[4px]')}
-          {resizeHandle('e', 'right-0 top-2 bottom-2 w-[4px]')}
-          {resizeHandle('w', 'left-0 top-2 bottom-2 w-[4px]')}
-          {resizeHandle('nw', 'top-0 left-0 w-[8px] h-[8px]')}
-          {resizeHandle('ne', 'top-0 right-0 w-[8px] h-[8px]')}
-          {resizeHandle('sw', 'bottom-0 left-0 w-[8px] h-[8px]')}
-          {resizeHandle('se', 'bottom-0 right-0 w-[8px] h-[8px]')}
+          {!autoWidth && resizeHandle('e', 'right-0 top-2 bottom-2 w-[4px]')}
+          {!autoWidth && resizeHandle('w', 'left-0 top-2 bottom-2 w-[4px]')}
+          {resizeHandle('nw', autoWidth ? 'top-0 left-0 w-[8px] h-[8px] !cursor-ns-resize' : 'top-0 left-0 w-[8px] h-[8px]')}
+          {resizeHandle('ne', autoWidth ? 'top-0 right-0 w-[8px] h-[8px] !cursor-ns-resize' : 'top-0 right-0 w-[8px] h-[8px]')}
+          {resizeHandle('sw', autoWidth ? 'bottom-0 left-0 w-[8px] h-[8px] !cursor-ns-resize' : 'bottom-0 left-0 w-[8px] h-[8px]')}
+          {resizeHandle('se', autoWidth ? 'bottom-0 right-0 w-[8px] h-[8px] !cursor-ns-resize' : 'bottom-0 right-0 w-[8px] h-[8px]')}
         </>
       ) : null}
 

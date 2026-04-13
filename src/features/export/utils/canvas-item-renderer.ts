@@ -188,6 +188,11 @@ export interface TransitionParticipantRenderState<TItem extends TimelineItem = T
   effects: ItemEffect[];
 }
 
+interface TransitionParticipantFrameWindow {
+  from: number;
+  durationInFrames: number;
+}
+
 // ---------------------------------------------------------------------------
 // Core item dispatch
 // ---------------------------------------------------------------------------
@@ -1502,8 +1507,8 @@ export async function renderTransitionToCanvas(
 ): Promise<void> {
   const { canvasPool, canvasSettings } = rctx;
   const { leftClip, rightClip } = activeTransition;
-  const leftParticipant = resolveTransitionParticipantRenderState(leftClip, frame, trackOrder, rctx);
-  const rightParticipant = resolveTransitionParticipantRenderState(rightClip, frame, trackOrder, rctx);
+  const leftParticipant = resolveTransitionParticipantRenderState(leftClip, activeTransition, frame, trackOrder, rctx);
+  const rightParticipant = resolveTransitionParticipantRenderState(rightClip, activeTransition, frame, trackOrder, rctx);
 
   // === PERFORMANCE: Render both clips in parallel ===
   // Video decode (mediabunny or DOM zero-copy) is the bottleneck.
@@ -1579,15 +1584,41 @@ export async function renderTransitionToCanvas(
   canvasPool.release(rightCanvas);
 }
 
+function resolveTransitionParticipantFrameWindow<TItem extends TimelineItem>(
+  clip: TItem,
+  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
+): TransitionParticipantFrameWindow {
+  const beforeFrames = Math.max(0, clip.from - activeTransition.transitionStart);
+  const clipEnd = clip.from + clip.durationInFrames;
+  const afterFrames = Math.max(0, activeTransition.transitionEnd - clipEnd);
+
+  return {
+    from: clip.from - beforeFrames,
+    durationInFrames: clip.durationInFrames + beforeFrames + afterFrames,
+  };
+}
+
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(
   clip: TItem,
+  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
   frame: number,
   trackOrder: number,
   rctx: ItemRenderContext,
 ): TransitionParticipantRenderState<TItem> {
   const currentClip = rctx.getCurrentItemSnapshot?.(clip) ?? clip;
+  const transitionWindow = resolveTransitionParticipantFrameWindow(currentClip, activeTransition);
+  const transitionClip = (
+    transitionWindow.from === currentClip.from
+      && transitionWindow.durationInFrames === currentClip.durationInFrames
+  )
+    ? currentClip
+    : {
+      ...currentClip,
+      from: transitionWindow.from,
+      durationInFrames: transitionWindow.durationInFrames,
+    } as TItem;
   const itemKeyframes = rctx.getCurrentKeyframes?.(currentClip.id) ?? rctx.keyframesMap.get(currentClip.id);
-  let transform = getAnimatedTransform(currentClip, itemKeyframes, frame, rctx.canvasSettings);
+  let transform = getAnimatedTransform(transitionClip, itemKeyframes, frame, rctx.canvasSettings);
 
   if (rctx.renderMode === 'preview') {
     const previewOverride = rctx.getPreviewTransformOverride?.(currentClip.id);
@@ -1600,12 +1631,12 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
     }
   }
 
-  let effectiveClip = currentClip;
+  let effectiveClip = transitionClip;
   if (rctx.renderMode === 'preview') {
     const cornerPinOverride = rctx.getPreviewCornerPinOverride?.(currentClip.id);
     if (cornerPinOverride !== undefined) {
       effectiveClip = {
-        ...currentClip,
+        ...transitionClip,
         cornerPin: cornerPinOverride,
       } as TItem;
     }

@@ -93,43 +93,11 @@ const EMPTY_PER_TRACK_LEVELS = new Map<string, AudioMeterEstimate>();
 
 const FLOATING_MIXER_STORAGE_KEY = 'editor:floatingMixerBounds';
 const FLOATING_MIXER_DEFAULT_BOUNDS = { x: -1, y: -1, width: 420, height: 500 };
-const DETACHED_EQ_STORAGE_KEY = 'editor:detachedEqBounds:v6';
+const DETACHED_EQ_STORAGE_KEY = 'editor:detachedEqPos';
 const DETACHED_EQ_DEFAULT_BOUNDS = {
   width: 780,
   height: 660,
 };
-
-interface DetachedWindowBounds {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
-}
-
-function loadDetachedWindowBounds(storageKey: string, fallback: DetachedWindowBounds): DetachedWindowBounds {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw) as Partial<DetachedWindowBounds>;
-    if (
-      typeof parsed.left === 'number' &&
-      typeof parsed.top === 'number' &&
-      typeof parsed.width === 'number' &&
-      typeof parsed.height === 'number'
-    ) {
-      return {
-        left: parsed.left,
-        top: parsed.top,
-        width: parsed.width,
-        height: parsed.height,
-      };
-    }
-  } catch {
-    // Ignore invalid persisted window bounds.
-  }
-
-  return fallback;
-}
 
 interface AudioEqPanelSurfaceProps {
   targetLabel: string;
@@ -643,21 +611,17 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       return true;
     }
 
-    const fallbackBounds: DetachedWindowBounds = {
-      left: window.screenX + 120,
-      top: window.screenY + 80,
-      width: DETACHED_EQ_DEFAULT_BOUNDS.width,
-      height: DETACHED_EQ_DEFAULT_BOUNDS.height,
-    };
-    const bounds = loadDetachedWindowBounds(DETACHED_EQ_STORAGE_KEY, fallbackBounds);
+    // Size is fixed from DETACHED_EQ_DEFAULT_BOUNDS; position is a hint —
+    // WindowPortal will apply the persisted position and force correct size
+    // via resizeTo on mount.
     const nextWindow = window.open(
       '',
       '',
       [
-        `width=${bounds.width}`,
-        `height=${bounds.height}`,
-        `left=${bounds.left}`,
-        `top=${bounds.top}`,
+        `width=${DETACHED_EQ_DEFAULT_BOUNDS.width}`,
+        `height=${DETACHED_EQ_DEFAULT_BOUNDS.height}`,
+        `left=${window.screenX + 120}`,
+        `top=${window.screenY + 80}`,
         'menubar=no',
         'toolbar=no',
         'location=no',
@@ -876,6 +840,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       storageKey={FLOATING_MIXER_STORAGE_KEY}
       onClose={() => setMixerFloating(false)}
       headerExtra={modeDropdown}
+      autoWidth
     >
       <AudioMixerView
         tracks={mixerTracks}

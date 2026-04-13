@@ -1,3 +1,4 @@
+import { SCALE_UV_WGSL } from '../common';
 import type { GpuTransitionDefinition } from '../types';
 
 export const iris: GpuTransitionDefinition = {
@@ -20,10 +21,22 @@ struct IrisParams {
 @group(0) @binding(2) var rightTex: texture_2d<f32>;
 @group(0) @binding(3) var<uniform> params: IrisParams;
 
+${SCALE_UV_WGSL}
+
+fn circleMask(distanceFromCenter: f32, radius: f32, feather: f32) -> f32 {
+  if (radius <= 0.0) {
+    return 0.0;
+  }
+  if (feather <= 0.001) {
+    return select(0.0, 1.0, distanceFromCenter <= radius);
+  }
+  return 1.0 - smoothstep(radius - feather, radius + feather, distanceFromCenter);
+}
+
 @fragment
 fn irisFragment(input: VertexOutput) -> @location(0) vec4f {
   let uv = input.uv;
-  let p = params.progress;
+  let p = clamp(params.progress, 0.0, 1.0);
 
   // Compute distance from center in pixel space
   let pixelPos = uv * vec2f(params.width, params.height);
@@ -35,22 +48,23 @@ fn irisFragment(input: VertexOutput) -> @location(0) vec4f {
   // Max radius = diagonal from center to corner * 1.2 (matches CPU)
   let maxRadius = sqrt(halfW * halfW + halfH * halfH) * 1.2;
   let radius = p * maxRadius;
-
-  // Alpha envelopes matching CPU implementation
-  let inAlpha = 0.85 + 0.15 * p;
-  let outAlpha = 1.0 - 0.1 * p;
+  let feather = max(0.0, min(params.edgeSoftness, min(radius, maxRadius - radius)));
+  let outgoingScale = 1.0 - (0.04 * p);
+  let incomingScale = 1.04 - (0.04 * p);
+  let outgoingOpacity = 1.0 - (0.1 * p);
+  let incomingOpacity = 0.85 + (0.15 * p);
+  let leftUv = scaleUv(uv, outgoingScale);
+  let rightUv = scaleUv(uv, incomingScale);
 
   // Sample both textures upfront (uniform control flow required)
-  let left = textureSample(leftTex, texSampler, uv);
-  let right = textureSample(rightTex, texSampler, uv);
+  let left = textureSample(leftTex, texSampler, leftUv);
+  let right = textureSample(rightTex, texSampler, rightUv);
+  let outgoingColor = vec4f(left.rgb * outgoingOpacity, left.a * outgoingOpacity);
+  let incomingColor = vec4f(right.rgb * incomingOpacity, right.a * incomingOpacity);
 
-  // Edge softness in pixels
-  let edge = params.edgeSoftness;
   // Inside circle with soft edge: incoming; outside: outgoing
-  let inside = 1.0 - smoothstep(max(radius - edge, 0.0), radius + edge, dist);
-  let inColor = vec4f(right.rgb * inAlpha, 1.0);
-  let outColor = vec4f(left.rgb * outAlpha, 1.0);
-  return mix(outColor, inColor, inside);
+  let inside = circleMask(dist, radius, feather);
+  return mix(outgoingColor, incomingColor, inside);
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
     const edgeSoftness = (properties?.edgeSoftness as number) ?? 6.0;

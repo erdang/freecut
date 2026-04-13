@@ -30,11 +30,47 @@ function getIrisMaxRadius(width: number, height: number): number {
   return Math.sqrt(Math.pow(width / 2, 2) + Math.pow(height / 2, 2)) * 1.2;
 }
 
+function getEndpointSafeSoftness(edgeSoftness: number, distanceFromStart: number, distanceToEnd: number): number {
+  return Math.max(0, Math.min(edgeSoftness, distanceFromStart, distanceToEnd));
+}
+
+export function getClockWipeMaskState(progress: number, edgeSoftness: number): {
+  degrees: number;
+  effectiveEdgeSoftness: number;
+} {
+  const degrees = clamp01(progress) * 360;
+  return {
+    degrees,
+    effectiveEdgeSoftness: getEndpointSafeSoftness(edgeSoftness, degrees, 360 - degrees),
+  };
+}
+
+export function getIrisMaskState(
+  progress: number,
+  width: number,
+  height: number,
+  edgeSoftness: number
+): {
+  maxRadius: number;
+  radius: number;
+  effectiveEdgeSoftness: number;
+} {
+  const maxRadius = getIrisMaxRadius(width, height);
+  const radius = clamp01(progress) * maxRadius;
+  return {
+    maxRadius,
+    radius,
+    effectiveEdgeSoftness: getEndpointSafeSoftness(edgeSoftness, radius, maxRadius - radius),
+  };
+}
+
 
 // ============================================================================
 // Clock Wipe
 // ============================================================================
 
+// The CSS preview mirrors mask geometry and opacity only. The production WebGPU
+// shaders also apply a subtle UV zoom envelope that is intentionally shader-only.
 const clockWipeRenderer: TransitionRenderer = {
   gpuTransitionId: 'clockWipe',
   calculateStyles(progress, isOutgoing, _cw, _ch, _dir, properties): TransitionStyleCalculation {
@@ -42,9 +78,17 @@ const clockWipeRenderer: TransitionRenderer = {
     const edgeSoftness = Math.max(0, getNumericProperty(properties, 'edgeSoftness', 8));
 
     if (isOutgoing) {
-      const degrees = p * 360;
-      const featherStart = Math.max(0, degrees - edgeSoftness);
-      const maskImage = `conic-gradient(from -90deg, transparent ${featherStart}deg, rgba(0,0,0,0.8) ${degrees}deg, black ${Math.min(360, degrees + edgeSoftness)}deg)`;
+      if (p <= 0) {
+        return { opacity: 1 };
+      }
+      if (p >= 1) {
+        return { opacity: 0 };
+      }
+
+      const { degrees, effectiveEdgeSoftness } = getClockWipeMaskState(p, edgeSoftness);
+      const featherStart = Math.max(0, degrees - effectiveEdgeSoftness);
+      const featherEnd = Math.min(360, degrees + effectiveEdgeSoftness);
+      const maskImage = `conic-gradient(from -90deg, transparent ${featherStart}deg, rgba(0,0,0,0.8) ${degrees}deg, black ${featherEnd}deg)`;
       return {
         maskImage,
         webkitMaskImage: maskImage,
@@ -110,10 +154,16 @@ const irisRenderer: TransitionRenderer = {
     const edgeSoftness = Math.max(0, getNumericProperty(properties, 'edgeSoftness', 6));
 
     if (isOutgoing) {
-      const maxRadius = getIrisMaxRadius(canvasWidth, canvasHeight);
-      const radius = p * maxRadius;
-      const inner = Math.max(0, radius - edgeSoftness);
-      const outer = radius + edgeSoftness;
+      if (p <= 0) {
+        return { opacity: 1 };
+      }
+      if (p >= 1) {
+        return { opacity: 0 };
+      }
+
+      const { radius, effectiveEdgeSoftness } = getIrisMaskState(p, canvasWidth, canvasHeight, edgeSoftness);
+      const inner = Math.max(0, radius - effectiveEdgeSoftness);
+      const outer = radius + effectiveEdgeSoftness;
       const maskImage = `radial-gradient(circle at center, transparent ${inner}px, rgba(0,0,0,0.85) ${radius}px, black ${outer}px)`;
       return {
         maskImage,
