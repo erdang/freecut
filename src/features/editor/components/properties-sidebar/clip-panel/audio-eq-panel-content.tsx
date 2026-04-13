@@ -77,7 +77,7 @@ interface AudioEqPanelContentProps {
   onTrackEqChange?: (patch: AudioEqPatch) => void;
   onEnabledChange?: (enabled: boolean) => void;
   portalContainer?: HTMLElement | null;
-  layoutMode?: 'floating' | 'detached';
+  layoutMode?: 'floating' | 'detached' | 'compact';
 }
 
 type FilterType = 'low-shelf' | 'peaking' | 'high-shelf' | 'high-pass' | 'low-pass' | 'notch';
@@ -460,6 +460,97 @@ function BandCard({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Compact row-based band controls (Davinci-style)
+// ---------------------------------------------------------------------------
+
+type CompactBandRowsProps = {
+  eqBand1Type: FilterType | 'mixed'; eqBand1Enabled: boolean | 'mixed'; eqBand1FrequencyHz: number | 'mixed'; eqBand1GainDb: number | 'mixed'; eqBand1Q: number | 'mixed';
+  eqLowType: FilterType | 'mixed'; eqLowEnabled: boolean | 'mixed'; eqLowFrequencyHz: number | 'mixed'; eqLow: number | 'mixed'; eqLowQ: number | 'mixed'; lowRange: { minFrequencyHz: number; maxFrequencyHz: number };
+  eqLowMidType: FilterType | 'mixed'; eqLowMidEnabled: boolean | 'mixed'; eqLowMidFrequencyHz: number | 'mixed'; eqLowMid: number | 'mixed'; eqLowMidQ: number | 'mixed'; lowMidRange: { minFrequencyHz: number; maxFrequencyHz: number };
+  eqHighMidType: FilterType | 'mixed'; eqHighMidEnabled: boolean | 'mixed'; eqHighMidFrequencyHz: number | 'mixed'; eqHighMid: number | 'mixed'; eqHighMidQ: number | 'mixed'; highMidRange: { minFrequencyHz: number; maxFrequencyHz: number };
+  eqHighType: FilterType | 'mixed'; eqHighEnabled: boolean | 'mixed'; eqHighFrequencyHz: number | 'mixed'; eqHigh: number | 'mixed'; eqHighQ: number | 'mixed'; highRange: { minFrequencyHz: number; maxFrequencyHz: number };
+  eqBand6Type: FilterType | 'mixed'; eqBand6Enabled: boolean | 'mixed'; eqBand6FrequencyHz: number | 'mixed'; eqBand6GainDb: number | 'mixed'; eqBand6Q: number | 'mixed';
+  onFieldChange: <K extends keyof AudioEqPatch>(field: K, value: NonNullable<AudioEqPatch[K]>) => void;
+  onLiveChange: (patch: AudioEqPatch) => void;
+  portalContainer?: HTMLElement | null;
+};
+
+function CompactBandRows(props: CompactBandRowsProps) {
+  const { onFieldChange, onLiveChange, portalContainer } = props;
+  const b1Type = (props.eqBand1Type === 'mixed' ? 'high-pass' : props.eqBand1Type) as FilterType;
+  const b2Type = (props.eqLowType === 'mixed' ? 'low-shelf' : props.eqLowType) as FilterType;
+  const b3Type = (props.eqLowMidType === 'mixed' ? 'peaking' : props.eqLowMidType) as FilterType;
+  const b4Type = (props.eqHighMidType === 'mixed' ? 'peaking' : props.eqHighMidType) as FilterType;
+  const b5Type = (props.eqHighType === 'mixed' ? 'high-shelf' : props.eqHighType) as FilterType;
+  const b6Type = (props.eqBand6Type === 'mixed' ? 'low-pass' : props.eqBand6Type) as FilterType;
+  const showGain = (t: FilterType) => t !== 'high-pass' && t !== 'low-pass' && t !== 'notch';
+  const showQ = (t: FilterType) => t === 'peaking';
+  const anyGain = showGain(b1Type) || showGain(b2Type) || showGain(b3Type) || showGain(b4Type) || showGain(b5Type) || showGain(b6Type);
+  const anyQ = showQ(b1Type) || showQ(b2Type) || showQ(b3Type) || showQ(b4Type) || showQ(b5Type) || showQ(b6Type);
+
+  return (
+    <div className="space-y-1 px-2 pb-2">
+      {/* Band toggle buttons */}
+      <div className="grid grid-cols-6 gap-1">
+        {([
+          { label: 'B 1', active: props.eqBand1Enabled === 'mixed' ? false : props.eqBand1Enabled, field: 'audioEqBand1Enabled' as const, current: props.eqBand1Enabled },
+          { label: 'B 2', active: props.eqLowEnabled === 'mixed' ? false : props.eqLowEnabled, field: 'audioEqLowEnabled' as const, current: props.eqLowEnabled },
+          { label: 'B 3', active: props.eqLowMidEnabled === 'mixed' ? false : props.eqLowMidEnabled, field: 'audioEqLowMidEnabled' as const, current: props.eqLowMidEnabled },
+          { label: 'B 4', active: props.eqHighMidEnabled === 'mixed' ? false : props.eqHighMidEnabled, field: 'audioEqHighMidEnabled' as const, current: props.eqHighMidEnabled },
+          { label: 'B 5', active: props.eqHighEnabled === 'mixed' ? false : props.eqHighEnabled, field: 'audioEqHighEnabled' as const, current: props.eqHighEnabled },
+          { label: 'B 6', active: props.eqBand6Enabled === 'mixed' ? false : props.eqBand6Enabled, field: 'audioEqBand6Enabled' as const, current: props.eqBand6Enabled },
+        ] as const).map((band) => (
+          <button key={band.label} type="button" onClick={() => onFieldChange(band.field, band.current === 'mixed' ? true : !band.current)}
+            className={cn('h-7 rounded-[4px] border text-[11px] font-semibold transition-colors', band.active ? 'border-primary bg-primary text-primary-foreground' : 'border-[#2e2e31] bg-[#212124] text-muted-foreground hover:bg-[#2a2a2d]')}>
+            {band.label}
+          </button>
+        ))}
+      </div>
+      {/* Filter type selectors */}
+      <div className="grid grid-cols-6 gap-1">
+        <FilterTypeSelect value={b1Type} options={BAND1_FILTER_OPTIONS} onChange={(v) => onFieldChange('audioEqBand1Type', v as typeof BAND1_FILTER_OPTIONS[number])} portalContainer={portalContainer} />
+        <FilterTypeSelect value={b2Type} options={INNER_FILTER_OPTIONS} onChange={(v) => onFieldChange('audioEqLowType', v === 'low-pass' || v === 'high-pass' ? 'low-shelf' : v)} portalContainer={portalContainer} />
+        <FilterTypeSelect value={b3Type} options={INNER_FILTER_OPTIONS} onChange={(v) => onFieldChange('audioEqLowMidType', v === 'low-pass' || v === 'high-pass' ? 'peaking' : v)} portalContainer={portalContainer} />
+        <FilterTypeSelect value={b4Type} options={INNER_FILTER_OPTIONS} onChange={(v) => onFieldChange('audioEqHighMidType', v === 'low-pass' || v === 'high-pass' ? 'peaking' : v)} portalContainer={portalContainer} />
+        <FilterTypeSelect value={b5Type} options={INNER_FILTER_OPTIONS} onChange={(v) => onFieldChange('audioEqHighType', v === 'low-pass' || v === 'high-pass' ? 'high-shelf' : v)} portalContainer={portalContainer} />
+        <FilterTypeSelect value={b6Type} options={BAND6_FILTER_OPTIONS} onChange={(v) => onFieldChange('audioEqBand6Type', v === 'high-pass' || v === 'notch' ? 'low-pass' : v)} portalContainer={portalContainer} />
+      </div>
+      {/* Frequency row */}
+      <div className="grid grid-cols-6 gap-1">
+        <NumberInput value={props.eqBand1FrequencyHz} onChange={(v) => onFieldChange('audioEqBand1FrequencyHz', v)} onLiveChange={(v) => onLiveChange({ audioEqBand1FrequencyHz: v })} unit="Hz" min={AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ} max={AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ} step={1} />
+        <NumberInput value={props.eqLowFrequencyHz} onChange={(v) => onFieldChange('audioEqLowFrequencyHz', v)} onLiveChange={(v) => onLiveChange({ audioEqLowFrequencyHz: v })} unit="Hz" min={props.lowRange.minFrequencyHz} max={props.lowRange.maxFrequencyHz} step={1} />
+        <NumberInput value={props.eqLowMidFrequencyHz} onChange={(v) => onFieldChange('audioEqLowMidFrequencyHz', v)} onLiveChange={(v) => onLiveChange({ audioEqLowMidFrequencyHz: v })} unit="Hz" min={props.lowMidRange.minFrequencyHz} max={props.lowMidRange.maxFrequencyHz} step={1} />
+        <NumberInput value={props.eqHighMidFrequencyHz} onChange={(v) => onFieldChange('audioEqHighMidFrequencyHz', v)} onLiveChange={(v) => onLiveChange({ audioEqHighMidFrequencyHz: v })} unit="Hz" min={props.highMidRange.minFrequencyHz} max={props.highMidRange.maxFrequencyHz} step={1} />
+        <NumberInput value={props.eqHighFrequencyHz} onChange={(v) => onFieldChange('audioEqHighFrequencyHz', v)} onLiveChange={(v) => onLiveChange({ audioEqHighFrequencyHz: v })} unit="Hz" min={props.highRange.minFrequencyHz} max={props.highRange.maxFrequencyHz} step={1} />
+        <NumberInput value={props.eqBand6FrequencyHz} onChange={(v) => onFieldChange('audioEqBand6FrequencyHz', v)} onLiveChange={(v) => onLiveChange({ audioEqBand6FrequencyHz: v })} unit="Hz" min={AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ} max={AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ} step={1} />
+      </div>
+      {/* Gain row */}
+      {anyGain ? (
+        <div className="grid grid-cols-6 gap-1">
+          {showGain(b1Type) ? <NumberInput value={props.eqBand1GainDb} onChange={(v) => onFieldChange('audioEqBand1GainDb', v)} onLiveChange={(v) => onLiveChange({ audioEqBand1GainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} /> : <div />}
+          {showGain(b2Type) ? <NumberInput value={props.eqLow} onChange={(v) => onFieldChange('audioEqLowGainDb', v)} onLiveChange={(v) => onLiveChange({ audioEqLowGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} /> : <div />}
+          {showGain(b3Type) ? <NumberInput value={props.eqLowMid} onChange={(v) => onFieldChange('audioEqLowMidGainDb', v)} onLiveChange={(v) => onLiveChange({ audioEqLowMidGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} /> : <div />}
+          {showGain(b4Type) ? <NumberInput value={props.eqHighMid} onChange={(v) => onFieldChange('audioEqHighMidGainDb', v)} onLiveChange={(v) => onLiveChange({ audioEqHighMidGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} /> : <div />}
+          {showGain(b5Type) ? <NumberInput value={props.eqHigh} onChange={(v) => onFieldChange('audioEqHighGainDb', v)} onLiveChange={(v) => onLiveChange({ audioEqHighGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} /> : <div />}
+          {showGain(b6Type) ? <NumberInput value={props.eqBand6GainDb} onChange={(v) => onFieldChange('audioEqBand6GainDb', v)} onLiveChange={(v) => onLiveChange({ audioEqBand6GainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} /> : <div />}
+        </div>
+      ) : null}
+      {/* Q factor row */}
+      {anyQ ? (
+        <div className="grid grid-cols-6 gap-1">
+          {showQ(b1Type) ? <NumberInput value={props.eqBand1Q} onChange={(v) => onFieldChange('audioEqBand1Q', v)} onLiveChange={(v) => onLiveChange({ audioEqBand1Q: v })} unit="Q" min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} /> : <div />}
+          {showQ(b2Type) ? <NumberInput value={props.eqLowQ} onChange={(v) => onFieldChange('audioEqLowQ', v)} onLiveChange={(v) => onLiveChange({ audioEqLowQ: v })} unit="Q" min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} /> : <div />}
+          {showQ(b3Type) ? <NumberInput value={props.eqLowMidQ} onChange={(v) => onFieldChange('audioEqLowMidQ', v)} onLiveChange={(v) => onLiveChange({ audioEqLowMidQ: v })} unit="Q" min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} /> : <div />}
+          {showQ(b4Type) ? <NumberInput value={props.eqHighMidQ} onChange={(v) => onFieldChange('audioEqHighMidQ', v)} onLiveChange={(v) => onLiveChange({ audioEqHighMidQ: v })} unit="Q" min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} /> : <div />}
+          {showQ(b5Type) ? <NumberInput value={props.eqHighQ} onChange={(v) => onFieldChange('audioEqHighQ', v)} onLiveChange={(v) => onLiveChange({ audioEqHighQ: v })} unit="Q" min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} /> : <div />}
+          {showQ(b6Type) ? <NumberInput value={props.eqBand6Q} onChange={(v) => onFieldChange('audioEqBand6Q', v)} onLiveChange={(v) => onLiveChange({ audioEqBand6Q: v })} unit="Q" min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} /> : <div />}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function AudioEqPanelContent({
   items,
   targetLabel,
@@ -472,6 +563,7 @@ export function AudioEqPanelContent({
 }: AudioEqPanelContentProps) {
   const isTrackMode = onTrackEqChange !== undefined;
   const isDetachedLayout = layoutMode === 'detached';
+  const isCompactLayout = layoutMode === 'compact';
   const eqEnabled = enabled !== false;
   const updateItem = useTimelineStore((s) => s.updateItem);
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew);
@@ -745,7 +837,7 @@ export function AudioEqPanelContent({
 
   return (
     <div className="flex flex-col bg-[#18181b] text-zinc-100">
-      <div className="flex items-center gap-3 border-b border-[#2a2a2d] px-3 py-2">
+      {!isCompactLayout ? <div className="flex items-center gap-3 border-b border-[#2a2a2d] px-3 py-2">
         {onEnabledChange ? (
           <Switch
             checked={eqEnabled}
@@ -787,7 +879,7 @@ export function AudioEqPanelContent({
             Reset EQ
           </Button>
         </div>
-      </div>
+      </div> : null}
 
       <div className="flex-1 overflow-auto">
         <div className="relative border-b border-[#2e2e31]">
@@ -810,16 +902,29 @@ export function AudioEqPanelContent({
                 onChange={handleEqPatchChange}
               />
             </div>
-            <EqOutputGainControl
-              value={eqOutputGainDb}
-              disabled={hasMixedEqSettings}
-              compact={!isDetachedLayout}
-              onLiveChange={(value) => handleEqPatchLiveChange({ audioEqOutputGainDb: value })}
-              onChange={(value) => handleEqFieldChange('audioEqOutputGainDb', value)}
-            />
+            {!isCompactLayout ? (
+              <EqOutputGainControl
+                value={eqOutputGainDb}
+                disabled={hasMixedEqSettings}
+                compact={!isDetachedLayout}
+                onLiveChange={(value) => handleEqPatchLiveChange({ audioEqOutputGainDb: value })}
+                onChange={(value) => handleEqFieldChange('audioEqOutputGainDb', value)}
+              />
+            ) : null}
           </div>
         </div>
 
+        {isCompactLayout ? (
+          <CompactBandRows
+            eqBand1Type={eqBand1Type} eqBand1Enabled={eqBand1Enabled} eqBand1FrequencyHz={eqBand1FrequencyHz} eqBand1GainDb={eqBand1GainDb} eqBand1Q={eqBand1Q}
+            eqLowType={eqLowType} eqLowEnabled={eqLowEnabled} eqLowFrequencyHz={eqLowFrequencyHz} eqLow={eqLow} eqLowQ={eqLowQ} lowRange={lowRange}
+            eqLowMidType={eqLowMidType} eqLowMidEnabled={eqLowMidEnabled} eqLowMidFrequencyHz={eqLowMidFrequencyHz} eqLowMid={eqLowMid} eqLowMidQ={eqLowMidQ} lowMidRange={lowMidRange}
+            eqHighMidType={eqHighMidType} eqHighMidEnabled={eqHighMidEnabled} eqHighMidFrequencyHz={eqHighMidFrequencyHz} eqHighMid={eqHighMid} eqHighMidQ={eqHighMidQ} highMidRange={highMidRange}
+            eqHighType={eqHighType} eqHighEnabled={eqHighEnabled} eqHighFrequencyHz={eqHighFrequencyHz} eqHigh={eqHigh} eqHighQ={eqHighQ} highRange={highRange}
+            eqBand6Type={eqBand6Type} eqBand6Enabled={eqBand6Enabled} eqBand6FrequencyHz={eqBand6FrequencyHz} eqBand6GainDb={eqBand6GainDb} eqBand6Q={eqBand6Q}
+            onFieldChange={handleEqFieldChange} onLiveChange={handleEqPatchLiveChange} portalContainer={portalContainer}
+          />
+        ) : (
         <div className={cn(isDetachedLayout ? 'space-y-3 p-3' : 'space-y-2 p-2')}>
           <div className={cn(isDetachedLayout && 'overflow-x-auto pb-1')}>
             <div
@@ -834,7 +939,7 @@ export function AudioEqPanelContent({
               title="Band 1"
               filterType={eqBand1Type === 'mixed' ? 'high-pass' : eqBand1Type}
               filterOptions={BAND1_FILTER_OPTIONS}
-              onFilterTypeChange={(value) => handleEqFieldChange('audioEqBand1Type', value)}
+              onFilterTypeChange={(value) => handleEqFieldChange('audioEqBand1Type', value as typeof BAND1_FILTER_OPTIONS[number])}
               portalContainer={portalContainer}
               compact={!isDetachedLayout}
               active={eqBand1Enabled === 'mixed' ? false : eqBand1Enabled}
@@ -1088,6 +1193,7 @@ export function AudioEqPanelContent({
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );
