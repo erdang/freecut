@@ -15,6 +15,7 @@ export interface AudioMixerTrack {
   muted: boolean;
   solo: boolean;
   volume: number; // dB, -60 to +12
+  eqEnabled?: boolean;
   itemIds: string[]; // item IDs on this track (for live gain during fader drag)
 }
 
@@ -40,6 +41,11 @@ export interface AudioMixerViewProps {
   onTrackVolumeChange: (trackId: string, volumeDb: number) => void;
   onTrackMuteToggle: (trackId: string) => void;
   onTrackSoloToggle: (trackId: string) => void;
+  onTrackEqToggle?: (trackId: string) => void;
+  onBusEqToggle?: () => void;
+  activeEqTrackId?: string | null;
+  busEqActive?: boolean;
+  busEqEnabled?: boolean;
   headerExtra?: ReactNode;
   /** Expanded layout for floating panel — wider strips, bigger meters */
   expanded?: boolean;
@@ -94,7 +100,7 @@ interface SegmentedMeterBarProps {
   /** Additional className for the outer container */
   className?: string;
   /** Optional attributes for the active fill element */
-  fillProps?: HTMLAttributes<HTMLDivElement>;
+  fillProps?: HTMLAttributes<HTMLDivElement> & Record<`data-${string}`, string | undefined>;
   /** Imperative ref used for smooth local meter preview during fader drag */
   fillRef?: RefObject<HTMLDivElement | null>;
 }
@@ -400,6 +406,8 @@ interface ChannelStripProps {
   onVolumeChange: (trackId: string, volumeDb: number) => void;
   onMuteToggle: (trackId: string) => void;
   onSoloToggle: (trackId: string) => void;
+  onEqToggle?: (trackId: string) => void;
+  eqActive?: boolean;
 }
 
 const ChannelStrip = memo(function ChannelStrip({
@@ -410,6 +418,8 @@ const ChannelStrip = memo(function ChannelStrip({
   onVolumeChange,
   onMuteToggle,
   onSoloToggle,
+  onEqToggle,
+  eqActive = false,
 }: ChannelStripProps) {
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
   const leftBarRef = useRef<HTMLDivElement | null>(null);
@@ -423,6 +433,10 @@ const ChannelStrip = memo(function ChannelStrip({
   const handleSoloClick = useCallback(() => {
     onSoloToggle(track.id);
   }, [onSoloToggle, track.id]);
+
+  const handleEqClick = useCallback(() => {
+    onEqToggle?.(track.id);
+  }, [onEqToggle, track.id]);
 
   const fallbackPercent = level
     ? getMeterFallbackPercent({
@@ -475,6 +489,22 @@ const ChannelStrip = memo(function ChannelStrip({
           title={track.name}
         >
           {track.name}
+        </div>
+
+        <div className="flex w-full justify-center py-0.5 shrink-0">
+          <button
+            type="button"
+            className={`min-w-[28px] rounded-[3px] px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em] transition-colors ${
+              eqActive
+                ? 'border border-sky-400/50 bg-sky-500/15 text-sky-300 shadow-[0_0_10px_rgba(56,189,248,0.22)]'
+                : 'border border-transparent bg-muted/30 text-muted-foreground/45 hover:bg-sky-500/10 hover:text-sky-300'
+            } ${!onEqToggle ? 'pointer-events-none opacity-50' : ''}`}
+            onClick={handleEqClick}
+            aria-label={`EQ ${track.name}`}
+            aria-pressed={eqActive}
+          >
+            EQ
+          </button>
         </div>
 
         {/* Solo / Mute buttons */}
@@ -564,9 +594,21 @@ interface BusMeterProps {
   allItemIds: string[];
   onVolumeChange: (volumeDb: number) => void;
   onMuteToggle: () => void;
+  onEqToggle?: () => void;
+  eqActive?: boolean;
 }
 
-const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, muted, allItemIds, onVolumeChange, onMuteToggle }: BusMeterProps) {
+const BusMeter = memo(function BusMeter({
+  masterEstimate,
+  isPlaying,
+  volumeDb,
+  muted,
+  allItemIds,
+  onVolumeChange,
+  onMuteToggle,
+  onEqToggle,
+  eqActive = false,
+}: BusMeterProps) {
   const leftBarRef = useRef<HTMLDivElement | null>(null);
   const rightBarRef = useRef<HTMLDivElement | null>(null);
   const dbReadoutRef = useRef<HTMLDivElement | null>(null);
@@ -710,6 +752,21 @@ const BusMeter = memo(function BusMeter({ masterEstimate, isPlaying, volumeDb, m
         {/* Label */}
         <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 py-1 leading-tight font-mono whitespace-nowrap">
           Bus 1
+        </div>
+        <div className="flex justify-center py-0.5 shrink-0">
+          <button
+            type="button"
+            className={`min-w-[28px] rounded-[3px] px-2 py-0.5 text-[9px] font-semibold tracking-[0.14em] transition-colors ${
+              eqActive
+                ? 'border border-sky-400/50 bg-sky-500/15 text-sky-300 shadow-[0_0_10px_rgba(56,189,248,0.22)]'
+                : 'border border-transparent bg-muted/30 text-muted-foreground/45 hover:bg-sky-500/10 hover:text-sky-300'
+            } ${!onEqToggle ? 'pointer-events-none opacity-50' : ''}`}
+            onClick={onEqToggle}
+            aria-label="EQ Bus 1"
+            aria-pressed={eqActive}
+          >
+            EQ
+          </button>
         </div>
 
         {/* Mute button — aligned with S/M row */}
@@ -873,6 +930,9 @@ export const AudioMixerView = memo(function AudioMixerView({
   onTrackVolumeChange,
   onTrackMuteToggle,
   onTrackSoloToggle,
+  onTrackEqToggle,
+  onBusEqToggle,
+  busEqEnabled,
   headerExtra,
   expanded,
 }: AudioMixerViewProps) {
@@ -927,6 +987,8 @@ export const AudioMixerView = memo(function AudioMixerView({
                 onVolumeChange={onTrackVolumeChange}
                 onMuteToggle={onTrackMuteToggle}
                 onSoloToggle={onTrackSoloToggle}
+                onEqToggle={onTrackEqToggle}
+                eqActive={!!track.eqEnabled}
               />
             ))}
 
@@ -944,7 +1006,17 @@ export const AudioMixerView = memo(function AudioMixerView({
         </div>
 
         {/* Bus / master strip */}
-        <BusMeter masterEstimate={masterEstimate} isPlaying={isPlaying} volumeDb={masterVolumeDb} muted={masterMuted} allItemIds={allItemIds} onVolumeChange={onMasterVolumeChange} onMuteToggle={onMasterMuteToggle} />
+        <BusMeter
+          masterEstimate={masterEstimate}
+          isPlaying={isPlaying}
+          volumeDb={masterVolumeDb}
+          muted={masterMuted}
+          allItemIds={allItemIds}
+          onVolumeChange={onMasterVolumeChange}
+          onMuteToggle={onMasterMuteToggle}
+          onEqToggle={onBusEqToggle}
+          eqActive={!!busEqEnabled}
+        />
       </div>
     </aside>
   );

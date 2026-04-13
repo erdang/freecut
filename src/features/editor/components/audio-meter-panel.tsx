@@ -20,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { FloatingPanel } from '@/components/ui/floating-panel';
+import { WindowPortal } from '@/components/ui/window-portal';
 import { MoreHorizontal } from 'lucide-react';
 import {
   AUDIO_METER_SCALE_MARKS,
@@ -39,9 +40,17 @@ import {
   type AudioMeterWaveform,
 } from './audio-meter-utils';
 import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view';
+import { AudioEqPanelContent } from './properties-sidebar/clip-panel/audio-eq-panel-content';
+import { type AudioEqPatch } from './properties-sidebar/clip-panel/audio-eq-curve-editor';
+import { getSparseAudioEqSettings } from '@/shared/utils/audio-eq';
 import { clearMixerLiveGainLayer, setMixerLiveGainLayer } from '@/shared/state/mixer-live-gain';
+import { type AudioEqSettings } from '@/types/audio';
 
 type PanelMode = 'meter' | 'mixer';
+type EqPanelTarget =
+  | { kind: 'track'; trackId: string }
+  | { kind: 'bus' };
+
 const MUTE_SOLO_GAIN_LAYER_ID = 'audio-meter-mute-solo';
 
 function toWaveformSnapshot(
@@ -84,12 +93,89 @@ const EMPTY_PER_TRACK_LEVELS = new Map<string, AudioMeterEstimate>();
 
 const FLOATING_MIXER_STORAGE_KEY = 'editor:floatingMixerBounds';
 const FLOATING_MIXER_DEFAULT_BOUNDS = { x: -1, y: -1, width: 420, height: 500 };
+const DETACHED_EQ_STORAGE_KEY = 'editor:detachedEqBounds:v6';
+const DETACHED_EQ_DEFAULT_BOUNDS = {
+  width: 780,
+  height: 660,
+};
+
+interface DetachedWindowBounds {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+function loadDetachedWindowBounds(storageKey: string, fallback: DetachedWindowBounds): DetachedWindowBounds {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<DetachedWindowBounds>;
+    if (
+      typeof parsed.left === 'number' &&
+      typeof parsed.top === 'number' &&
+      typeof parsed.width === 'number' &&
+      typeof parsed.height === 'number'
+    ) {
+      return {
+        left: parsed.left,
+        top: parsed.top,
+        width: parsed.width,
+        height: parsed.height,
+      };
+    }
+  } catch {
+    // Ignore invalid persisted window bounds.
+  }
+
+  return fallback;
+}
+
+interface AudioEqPanelSurfaceProps {
+  targetLabel: string;
+  trackEq?: AudioEqSettings;
+  enabled: boolean;
+  onTrackEqChange?: (patch: AudioEqPatch) => void;
+  onEnabledChange?: (enabled: boolean) => void;
+  layoutMode?: 'floating' | 'detached';
+}
+
+const AudioEqPanelSurface = memo(function AudioEqPanelSurface({
+  targetLabel,
+  trackEq,
+  enabled,
+  onTrackEqChange,
+  onEnabledChange,
+  layoutMode = 'floating',
+}: AudioEqPanelSurfaceProps) {
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
+
+  const handleRootRef = useCallback((node: HTMLDivElement | null) => {
+    setPortalContainer(node?.ownerDocument.body ?? null);
+  }, []);
+
+  return (
+    <div ref={handleRootRef} className="bg-background text-foreground">
+      <AudioEqPanelContent
+        targetLabel={targetLabel}
+        trackEq={trackEq}
+        enabled={enabled}
+        onTrackEqChange={onTrackEqChange}
+        onEnabledChange={onEnabledChange}
+        portalContainer={portalContainer}
+        layoutMode={layoutMode}
+      />
+    </div>
+  );
+});
 
 export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const [panelMode, setPanelMode] = useState<PanelMode>('meter');
+  const [eqPanelTarget, setEqPanelTarget] = useState<EqPanelTarget | null>(null);
   const mixerFloating = useEditorStore((s) => s.mixerFloating);
   const setMixerFloating = useEditorStore((s) => s.setMixerFloating);
   const [trackSnapshotVersion, setTrackSnapshotVersion] = useState(0);
+  const eqDetachedWindowRef = useRef<Window | null>(null);
 
   const tracks = useTimelineStore((s) => s.tracks);
   const transitions = useTimelineStore((s) => s.transitions);
@@ -105,6 +191,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const setVolume = usePlaybackStore((s) => s.setVolume);
   const muted = usePlaybackStore((s) => s.muted);
   const toggleMute = usePlaybackStore((s) => s.toggleMute);
+  const busAudioEq = usePlaybackStore((s) => s.busAudioEq);
+  const setBusAudioEq = usePlaybackStore((s) => s.setBusAudioEq);
 
   const [waveformsByMediaId, setWaveformsByMediaId] = useState<Map<string, AudioMeterWaveform | null>>(new Map());
   const meterVisualRootRef = useRef<HTMLDivElement | null>(null);
@@ -374,9 +462,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // ---------------------------------------------------------------------------
 
   const mixerSourceTracks = useMemo(() => {
-    if (panelMode !== 'mixer') return [];
     return combinedTracks.filter((track) => isAudioMixerTrack(track, combinedTimelineItems));
-  }, [combinedTimelineItems, combinedTracks, panelMode]);
+  }, [combinedTimelineItems, combinedTracks]);
 
   const mixerTracks = useMemo<AudioMixerTrack[]>(() => {
     return mixerSourceTracks.map((track) => ({
@@ -387,19 +474,49 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       muted: track.muted,
       solo: track.solo,
       volume: track.volume || 0,
+      eqEnabled: !!track.audioEq && track.audioEq.enabled !== false,
       itemIds: track.items.map((item) => item.id),
     }));
   }, [mixerSourceTracks]);
 
   const perTrackLevels = useMemo(() => {
-    if (panelMode !== 'mixer' || perTrackSources.length === 0) return EMPTY_PER_TRACK_LEVELS;
+    if ((panelMode !== 'mixer' && !mixerFloating) || perTrackSources.length === 0) return EMPTY_PER_TRACK_LEVELS;
     return estimatePerTrackLevels({
       tracks: combinedTracks,
       sources: perTrackSources,
       waveformsByMediaId,
       targetTrackIds: mixerSourceTracks.map((track) => track.id),
     });
-  }, [combinedTracks, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
+  }, [combinedTracks, mixerFloating, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
+
+  const eqPanelDescriptor = useMemo(() => {
+    if (!eqPanelTarget) return null;
+
+    if (eqPanelTarget.kind === 'track') {
+      const track = mixerSourceTracks.find((entry) => entry.id === eqPanelTarget.trackId);
+      if (!track) return null;
+      return {
+        title: track.name,
+        targetLabel: track.name,
+        trackId: track.id,
+        trackEq: track.audioEq,
+        eqEnabled: track.audioEq?.enabled !== false,
+      };
+    }
+
+    return {
+      title: 'Bus 1',
+      targetLabel: 'Bus 1',
+      busEq: busAudioEq,
+      eqEnabled: busAudioEq?.enabled !== false,
+    };
+  }, [busAudioEq, eqPanelTarget, mixerSourceTracks]);
+
+  useEffect(() => {
+    if (eqPanelTarget && !eqPanelDescriptor) {
+      setEqPanelTarget(null);
+    }
+  }, [eqPanelDescriptor, eqPanelTarget]);
 
   // Commit track volume in place to avoid preview playback stalls during active playback.
   // Undo remains correct because we add an explicit pre-mutation snapshot entry.
@@ -445,6 +562,117 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     );
     setTrackSnapshotVersion((version) => version + 1);
   }, []);
+
+  const handleTrackEqChange = useCallback((trackId: string, patch: AudioEqPatch) => {
+    const itemsState = useItemsStore.getState();
+    const currentTracks = itemsState.tracks;
+    const targetTrack = currentTracks.find((track) => track.id === trackId);
+    if (!targetTrack) return;
+    const snapshot = captureSnapshot();
+    const beforeSnapshot = {
+      ...snapshot,
+      tracks: snapshot.tracks.map((track) => ({ ...track })),
+    };
+    const eqPatch = getSparseAudioEqSettings(patch);
+    const nextTrackEq = { ...targetTrack.audioEq, ...eqPatch, midGainDb: 0 };
+    const nextTracks = currentTracks.map((track) => (
+      track.id === trackId
+        ? { ...track, audioEq: nextTrackEq }
+        : track
+    ));
+    itemsState.setTracks(nextTracks);
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_TRACK_EQ', payload: { id: trackId } },
+      beforeSnapshot,
+    );
+    setTrackSnapshotVersion((version) => version + 1);
+  }, []);
+
+  const handleTrackEqEnabledChange = useCallback((trackId: string, enabled: boolean) => {
+    const itemsState = useItemsStore.getState();
+    const currentTracks = itemsState.tracks;
+    const targetTrack = currentTracks.find((track) => track.id === trackId);
+    if (!targetTrack) return;
+    const snapshot = captureSnapshot();
+    const beforeSnapshot = {
+      ...snapshot,
+      tracks: snapshot.tracks.map((track) => ({ ...track })),
+    };
+    const nextTracks = currentTracks.map((track) => (
+      track.id === trackId
+        ? { ...track, audioEq: { ...(track.audioEq ?? {}), enabled } }
+        : track
+    ));
+    itemsState.setTracks(nextTracks);
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_TRACK_EQ_ENABLED', payload: { id: trackId } },
+      beforeSnapshot,
+    );
+    setTrackSnapshotVersion((version) => version + 1);
+  }, []);
+
+  const handleBusEqChange = useCallback((patch: AudioEqPatch) => {
+    const snapshot = captureSnapshot();
+    const eqPatch = getSparseAudioEqSettings(patch);
+    const current = usePlaybackStore.getState().busAudioEq;
+    setBusAudioEq({ ...current, ...eqPatch, midGainDb: 0 });
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_BUS_EQ', payload: {} },
+      snapshot,
+    );
+  }, [setBusAudioEq]);
+
+  const handleBusEqEnabledChange = useCallback((enabled: boolean) => {
+    const snapshot = captureSnapshot();
+    const current = usePlaybackStore.getState().busAudioEq;
+    setBusAudioEq({ ...(current ?? {}), enabled });
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_BUS_EQ_ENABLED', payload: {} },
+      snapshot,
+    );
+  }, [setBusAudioEq]);
+
+  const ensureDetachedEqWindow = useCallback(() => {
+    const existingWindow = eqDetachedWindowRef.current;
+    if (existingWindow && !existingWindow.closed) {
+      existingWindow.focus();
+      return true;
+    }
+
+    const fallbackBounds: DetachedWindowBounds = {
+      left: window.screenX + 120,
+      top: window.screenY + 80,
+      width: DETACHED_EQ_DEFAULT_BOUNDS.width,
+      height: DETACHED_EQ_DEFAULT_BOUNDS.height,
+    };
+    const bounds = loadDetachedWindowBounds(DETACHED_EQ_STORAGE_KEY, fallbackBounds);
+    const nextWindow = window.open(
+      '',
+      '',
+      [
+        `width=${bounds.width}`,
+        `height=${bounds.height}`,
+        `left=${bounds.left}`,
+        `top=${bounds.top}`,
+        'menubar=no',
+        'toolbar=no',
+        'location=no',
+        'status=no',
+      ].join(','),
+    );
+
+    if (!nextWindow) {
+      return false;
+    }
+
+    eqDetachedWindowRef.current = nextWindow;
+    return true;
+  }, []);
+
 
   // Collect all item IDs for a track (needed for live gain bridging)
   const getTrackItemIds = useCallback((trackId: string): string[] => {
@@ -524,6 +752,41 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     setTrackSnapshotVersion((version) => version + 1);
   }, [applyMuteSoloLiveGains]);
 
+  const handleTrackEqToggle = useCallback((trackId: string) => {
+    if (eqPanelTarget?.kind === 'track' && eqPanelTarget.trackId === trackId) {
+      setEqPanelTarget(null);
+      return;
+    }
+
+    if (!ensureDetachedEqWindow()) {
+      return;
+    }
+
+    const targetTrack = useItemsStore.getState().tracks.find((track) => track.id === trackId);
+    if (targetTrack && !targetTrack.audioEq) {
+      handleTrackEqEnabledChange(trackId, true);
+    }
+
+    setEqPanelTarget({ kind: 'track', trackId });
+  }, [ensureDetachedEqWindow, eqPanelTarget, handleTrackEqEnabledChange]);
+
+  const handleBusEqToggle = useCallback(() => {
+    if (eqPanelTarget?.kind === 'bus') {
+      setEqPanelTarget(null);
+      return;
+    }
+
+    if (!ensureDetachedEqWindow()) {
+      return;
+    }
+
+    if (!usePlaybackStore.getState().busAudioEq) {
+      handleBusEqEnabledChange(true);
+    }
+
+    setEqPanelTarget({ kind: 'bus' });
+  }, [ensureDetachedEqWindow, eqPanelTarget, handleBusEqEnabledChange]);
+
   // ---------------------------------------------------------------------------
   // Master volume (dB <-> linear gain for bus fader)
   // ---------------------------------------------------------------------------
@@ -576,6 +839,30 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     </DropdownMenu>
   );
 
+  const eqPanelContentProps = useMemo(() => {
+    if (!eqPanelDescriptor) return null;
+
+    return {
+      targetLabel: eqPanelDescriptor.targetLabel,
+      trackEq: 'trackEq' in eqPanelDescriptor
+        ? eqPanelDescriptor.trackEq
+        : ('busEq' in eqPanelDescriptor ? eqPanelDescriptor.busEq : undefined),
+      enabled: eqPanelDescriptor.eqEnabled,
+      onTrackEqChange: 'trackId' in eqPanelDescriptor
+        ? (patch: AudioEqPatch) => handleTrackEqChange(eqPanelDescriptor.trackId, patch)
+        : ('busEq' in eqPanelDescriptor ? handleBusEqChange : undefined),
+      onEnabledChange: 'trackId' in eqPanelDescriptor
+        ? (enabled: boolean) => handleTrackEqEnabledChange(eqPanelDescriptor.trackId, enabled)
+        : ('busEq' in eqPanelDescriptor ? handleBusEqEnabledChange : undefined),
+    };
+  }, [
+    eqPanelDescriptor,
+    handleBusEqChange,
+    handleBusEqEnabledChange,
+    handleTrackEqChange,
+    handleTrackEqEnabledChange,
+  ]);
+
   // ---------------------------------------------------------------------------
   // Floating mixer (rendered via portal, independent of panel mode)
   // ---------------------------------------------------------------------------
@@ -602,9 +889,36 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         onTrackVolumeChange={handleTrackVolumeChange}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}
+        onTrackEqToggle={handleTrackEqToggle}
+        onBusEqToggle={handleBusEqToggle}
+        busEqEnabled={!!busAudioEq && busAudioEq.enabled !== false}
         expanded
       />
     </FloatingPanel>
+  ) : null;
+
+  const detachedEqPanel = eqPanelDescriptor && eqPanelContentProps ? (
+    <WindowPortal
+      title={`Equalizer - ${eqPanelDescriptor.title}`}
+      width={DETACHED_EQ_DEFAULT_BOUNDS.width}
+      height={DETACHED_EQ_DEFAULT_BOUNDS.height}
+      storageKey={DETACHED_EQ_STORAGE_KEY}
+      externalWindow={eqDetachedWindowRef.current}
+      autoHeight
+      onBlocked={() => {
+        eqDetachedWindowRef.current = null;
+        setEqPanelTarget(null);
+      }}
+      onClose={() => {
+        eqDetachedWindowRef.current = null;
+        setEqPanelTarget(null);
+      }}
+    >
+      <AudioEqPanelSurface
+        layoutMode="floating"
+        {...eqPanelContentProps}
+      />
+    </WindowPortal>
   ) : null;
 
   // ---------------------------------------------------------------------------
@@ -613,20 +927,26 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   if (panelMode === 'mixer' && !mixerFloating) {
     return (
-      <AudioMixerView
-        tracks={mixerTracks}
-        perTrackLevels={perTrackLevels}
-        masterEstimate={estimate}
-        isPlaying={isPlaying}
-        masterVolumeDb={masterVolumeDb}
-        masterMuted={muted}
-        onMasterVolumeChange={handleMasterVolumeChange}
-        onMasterMuteToggle={toggleMute}
-        onTrackVolumeChange={handleTrackVolumeChange}
-        onTrackMuteToggle={handleTrackMuteToggle}
-        onTrackSoloToggle={handleTrackSoloToggle}
-        headerExtra={modeDropdown}
-      />
+      <>
+        {detachedEqPanel}
+        <AudioMixerView
+          tracks={mixerTracks}
+          perTrackLevels={perTrackLevels}
+          masterEstimate={estimate}
+          isPlaying={isPlaying}
+          masterVolumeDb={masterVolumeDb}
+          masterMuted={muted}
+          onMasterVolumeChange={handleMasterVolumeChange}
+          onMasterMuteToggle={toggleMute}
+          onTrackVolumeChange={handleTrackVolumeChange}
+          onTrackMuteToggle={handleTrackMuteToggle}
+          onTrackSoloToggle={handleTrackSoloToggle}
+          onTrackEqToggle={handleTrackEqToggle}
+          onBusEqToggle={handleBusEqToggle}
+          busEqEnabled={!!busAudioEq && busAudioEq.enabled !== false}
+          headerExtra={modeDropdown}
+        />
+      </>
     );
   }
 
@@ -641,6 +961,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   return (
     <>
+    {detachedEqPanel}
     {floatingMixer}
     <aside
       className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"

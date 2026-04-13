@@ -1,4 +1,5 @@
 import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
+import type { AudioEqSettings } from './audio';
 import type { Transition } from './transition';
 import type { CropSettings } from './transform';
 
@@ -43,12 +44,14 @@ export interface ProjectTimeline {
     muted: boolean;
     solo: boolean;
     volume?: number;
+    audioEq?: AudioEqSettings;
     color?: string;
     order: number;
     parentTrackId?: string;
     isGroup?: boolean;
     isCollapsed?: boolean;
   }>;
+  busAudioEq?: AudioEqSettings;
   items: Array<{
     id: string;
     trackId: string;
@@ -113,20 +116,45 @@ export interface ProjectTimeline {
     audioFadeOutCurve?: number;
     audioFadeInCurveX?: number;
     audioFadeOutCurveX?: number;
+    audioPitchSemitones?: number;
+    audioPitchCents?: number;
+    audioEqOutputGainDb?: number;
+    audioEqBand1Enabled?: boolean;
+    audioEqBand1Type?: import('./audio').AudioEqBand1Type;
+    audioEqBand1FrequencyHz?: number;
+    audioEqBand1GainDb?: number;
+    audioEqBand1Q?: number;
+    audioEqBand1SlopeDbPerOct?: 6 | 12 | 18 | 24;
     audioEqLowCutEnabled?: boolean;
     audioEqLowCutFrequencyHz?: number;
     audioEqLowCutSlopeDbPerOct?: 6 | 12 | 18 | 24;
+    audioEqLowEnabled?: boolean;
+    audioEqLowType?: import('./audio').AudioEqInnerBandType;
     audioEqLowGainDb?: number;
     audioEqLowFrequencyHz?: number;
+    audioEqLowQ?: number;
+    audioEqLowMidEnabled?: boolean;
+    audioEqLowMidType?: import('./audio').AudioEqInnerBandType;
     audioEqLowMidGainDb?: number;
     audioEqLowMidFrequencyHz?: number;
     audioEqLowMidQ?: number;
     audioEqMidGainDb?: number;
+    audioEqHighMidEnabled?: boolean;
+    audioEqHighMidType?: import('./audio').AudioEqInnerBandType;
     audioEqHighMidGainDb?: number;
     audioEqHighMidFrequencyHz?: number;
     audioEqHighMidQ?: number;
+    audioEqHighEnabled?: boolean;
+    audioEqHighType?: import('./audio').AudioEqInnerBandType;
     audioEqHighGainDb?: number;
     audioEqHighFrequencyHz?: number;
+    audioEqHighQ?: number;
+    audioEqBand6Enabled?: boolean;
+    audioEqBand6Type?: import('./audio').AudioEqBand6Type;
+    audioEqBand6FrequencyHz?: number;
+    audioEqBand6GainDb?: number;
+    audioEqBand6Q?: number;
+    audioEqBand6SlopeDbPerOct?: 6 | 12 | 18 | 24;
     audioEqHighCutEnabled?: boolean;
     audioEqHighCutFrequencyHz?: number;
     audioEqHighCutSlopeDbPerOct?: 6 | 12 | 18 | 24;
@@ -163,6 +191,7 @@ export interface ProjectTimeline {
     height: number;
     durationInFrames: number;
     backgroundColor?: string;
+    busAudioEq?: AudioEqSettings;
   }>;
   // Keyframe animations
   keyframes?: Array<{

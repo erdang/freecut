@@ -4,7 +4,8 @@ import type { Transition } from '@/types/transition';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/composition-runtime/deps/timeline';
 import { resolveTransitionWindowsForItems } from './scene-assembly';
 import type { AudioClipFadeSpan } from '@/shared/utils/audio-fade-curve';
-import { appendResolvedAudioEqStage, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { appendResolvedAudioEqSources, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { clampAudioPitchCents, clampAudioPitchSemitones, getAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch';
 
 type ContinuousAudioItem = {
   id: string;
@@ -25,12 +26,14 @@ type ContinuousAudioItem = {
 type StandaloneAudioItem = AudioItem & {
   muted: boolean;
   trackVolumeDb: number;
+  trackAudioEq?: import('@/types/audio').AudioEqSettings;
   trackVisible: boolean;
 };
 
 type TransitionAudioItem = (VideoItem | AudioItem) & {
   muted: boolean;
   trackVolumeDb: number;
+  trackAudioEq?: import('@/types/audio').AudioEqSettings;
   trackVisible: boolean;
 };
 
@@ -52,6 +55,8 @@ export interface AudioSegment {
   audioFadeOutCurve: number;
   audioFadeInCurveX: number;
   audioFadeOutCurveX: number;
+  audioPitchSemitones: number;
+  audioPitchCents: number;
   audioEqStages: ResolvedAudioEqSettings[];
   clipFadeSpans?: AudioClipFadeSpan[];
 }
@@ -75,6 +80,7 @@ export interface CompoundAudioSegment {
   sourceFps?: number;
   volumeDb: number;
   muted: boolean;
+  audioPitchShiftSemitones: number;
   crossfadeFadeIn?: number;
   crossfadeFadeOut?: number;
 }
@@ -238,7 +244,9 @@ export function buildStandaloneAudioSegments(
       audioFadeOutCurve: item.audioFadeOutCurve ?? 0,
       audioFadeInCurveX: item.audioFadeInCurveX ?? 0.52,
       audioFadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
-      audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
+      audioPitchSemitones: clampAudioPitchSemitones(item.audioPitchSemitones ?? 0),
+      audioPitchCents: clampAudioPitchCents(item.audioPitchCents ?? 0),
+      audioEqStages: appendResolvedAudioEqSources(undefined, item.trackAudioEq, getAudioEqSettings(item)),
       clipFadeSpans: [buildClipFadeSpan({
         startFrame: 0,
         durationInFrames: item.durationInFrames,
@@ -267,6 +275,8 @@ export function buildStandaloneAudioSegments(
       && Math.abs(active.playbackRate - segment.playbackRate) <= 0.0001
       && Math.abs(active.volumeDb - segment.volumeDb) <= 0.0001
       && active.muted === segment.muted
+      && active.audioPitchSemitones === segment.audioPitchSemitones
+      && active.audioPitchCents === segment.audioPitchCents
       && areAudioEqStagesEqual(active.audioEqStages, segment.audioEqStages);
 
     if (canMerge) {
@@ -301,6 +311,8 @@ export function buildStandaloneAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioPitchSemitones: active.audioPitchSemitones,
+      audioPitchCents: active.audioPitchCents,
       audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
     });
@@ -326,6 +338,8 @@ export function buildStandaloneAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioPitchSemitones: active.audioPitchSemitones,
+      audioPitchCents: active.audioPitchCents,
       audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
     });
@@ -431,7 +445,9 @@ export function buildTransitionVideoAudioSegments(
       audioFadeOutCurve: item.audioFadeOutCurve ?? 0,
       audioFadeInCurveX: item.audioFadeInCurveX ?? 0.52,
       audioFadeOutCurveX: item.audioFadeOutCurveX ?? 0.52,
-      audioEqStages: appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
+      audioPitchSemitones: clampAudioPitchSemitones(item.audioPitchSemitones ?? 0),
+      audioPitchCents: clampAudioPitchCents(item.audioPitchCents ?? 0),
+      audioEqStages: appendResolvedAudioEqSources(undefined, item.trackAudioEq, getAudioEqSettings(item)),
       clipFadeSpans: [buildClipFadeSpan({
         startFrame: before,
         durationInFrames: item.durationInFrames,
@@ -471,6 +487,8 @@ export function buildTransitionVideoAudioSegments(
       && Math.abs(active.playbackRate - segment.playbackRate) <= 0.0001
       && Math.abs(active.volumeDb - segment.volumeDb) <= 0.0001
       && active.muted === segment.muted
+      && active.audioPitchSemitones === segment.audioPitchSemitones
+      && active.audioPitchCents === segment.audioPitchCents
       && areAudioEqStagesEqual(active.audioEqStages, segment.audioEqStages)
       && active.afterFrames === 0
       && segment.beforeFrames === 0;
@@ -511,6 +529,8 @@ export function buildTransitionVideoAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioPitchSemitones: active.audioPitchSemitones,
+      audioPitchCents: active.audioPitchCents,
       audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
       contentStartOffsetFrames: active.contentStartOffsetFrames,
@@ -542,6 +562,8 @@ export function buildTransitionVideoAudioSegments(
       audioFadeOutCurve: active.audioFadeOutCurve,
       audioFadeInCurveX: active.audioFadeInCurveX,
       audioFadeOutCurveX: active.audioFadeOutCurveX,
+      audioPitchSemitones: active.audioPitchSemitones,
+      audioPitchCents: active.audioPitchCents,
       audioEqStages: active.audioEqStages,
       clipFadeSpans: active.clipFadeSpans,
       contentStartOffsetFrames: active.contentStartOffsetFrames,
@@ -560,6 +582,7 @@ type CompoundTransitionAudioItem = AudioItem & {
   compositionId: string;
   muted: boolean;
   trackVolumeDb: number;
+  trackAudioEq?: import('@/types/audio').AudioEqSettings;
   trackVisible: boolean;
 };
 
@@ -632,6 +655,7 @@ export function buildCompoundAudioTransitionSegments(
       sourceFps: item.sourceFps,
       volumeDb: (item.volume ?? 0) + (item.trackVolumeDb ?? 0),
       muted: item.muted || !item.trackVisible,
+      audioPitchShiftSemitones: getAudioPitchShiftSemitones(item),
       crossfadeFadeIn: extension.overlapFadeIn > 0 ? extension.overlapFadeIn : (before > 0 ? before : undefined),
       crossfadeFadeOut: extension.overlapFadeOut > 0 ? extension.overlapFadeOut : (after > 0 ? after : undefined),
     } satisfies CompoundAudioSegment;

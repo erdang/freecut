@@ -1,24 +1,51 @@
 import type {
+  AudioEqBand1Type,
+  AudioEqBand6Type,
   AudioEqCutSlopeDbPerOct,
+  AudioEqInnerBandType,
   AudioEqSettings,
   ResolvedAudioEqSettings,
 } from '@/types/audio';
 
 export interface AudioEqFieldSource {
+  audioEqEnabled?: boolean;
+  audioEqOutputGainDb?: number;
+  audioEqBand1Enabled?: boolean;
+  audioEqBand1Type?: AudioEqBand1Type;
+  audioEqBand1FrequencyHz?: number;
+  audioEqBand1GainDb?: number;
+  audioEqBand1Q?: number;
+  audioEqBand1SlopeDbPerOct?: AudioEqCutSlopeDbPerOct;
   audioEqLowCutEnabled?: boolean;
   audioEqLowCutFrequencyHz?: number;
   audioEqLowCutSlopeDbPerOct?: AudioEqCutSlopeDbPerOct;
+  audioEqLowEnabled?: boolean;
+  audioEqLowType?: AudioEqInnerBandType;
   audioEqLowGainDb?: number;
   audioEqLowFrequencyHz?: number;
+  audioEqLowQ?: number;
+  audioEqLowMidEnabled?: boolean;
+  audioEqLowMidType?: AudioEqInnerBandType;
   audioEqLowMidGainDb?: number;
   audioEqLowMidFrequencyHz?: number;
   audioEqLowMidQ?: number;
   audioEqMidGainDb?: number;
+  audioEqHighMidEnabled?: boolean;
+  audioEqHighMidType?: AudioEqInnerBandType;
   audioEqHighMidGainDb?: number;
   audioEqHighMidFrequencyHz?: number;
   audioEqHighMidQ?: number;
+  audioEqHighEnabled?: boolean;
+  audioEqHighType?: AudioEqInnerBandType;
   audioEqHighGainDb?: number;
   audioEqHighFrequencyHz?: number;
+  audioEqHighQ?: number;
+  audioEqBand6Enabled?: boolean;
+  audioEqBand6Type?: AudioEqBand6Type;
+  audioEqBand6FrequencyHz?: number;
+  audioEqBand6GainDb?: number;
+  audioEqBand6Q?: number;
+  audioEqBand6SlopeDbPerOct?: AudioEqCutSlopeDbPerOct;
   audioEqHighCutEnabled?: boolean;
   audioEqHighCutFrequencyHz?: number;
   audioEqHighCutSlopeDbPerOct?: AudioEqCutSlopeDbPerOct;
@@ -71,29 +98,32 @@ interface OnePoleCoefficients {
   a1: number;
 }
 
-export const AUDIO_EQ_GAIN_DB_MIN = -18;
-export const AUDIO_EQ_GAIN_DB_MAX = 18;
+export const AUDIO_EQ_GAIN_DB_MIN = -20;
+export const AUDIO_EQ_GAIN_DB_MAX = 20;
 export const AUDIO_EQ_Q_MIN = 0.3;
-export const AUDIO_EQ_Q_MAX = 8;
+export const AUDIO_EQ_Q_MAX = 10.3;
+export const AUDIO_EQ_BAND1_TYPES = ['low-shelf', 'peaking', 'high-shelf', 'high-pass'] as const satisfies ReadonlyArray<AudioEqBand1Type>;
+export const AUDIO_EQ_INNER_BAND_TYPES = ['low-shelf', 'peaking', 'high-shelf', 'notch'] as const satisfies ReadonlyArray<AudioEqInnerBandType>;
+export const AUDIO_EQ_BAND6_TYPES = ['low-pass', 'low-shelf', 'peaking', 'high-shelf'] as const satisfies ReadonlyArray<AudioEqBand6Type>;
 export const AUDIO_EQ_CUT_SLOPES_DB_PER_OCT = [6, 12, 18, 24] as const;
 export const AUDIO_EQ_LOW_CUT_FREQUENCY_HZ = 30;
-export const AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ = 30;
+export const AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ = 20;
 export const AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ = 399;
 export const AUDIO_EQ_LOW_FREQUENCY_HZ = 120;
-export const AUDIO_EQ_LOW_MIN_FREQUENCY_HZ = 30;
-export const AUDIO_EQ_LOW_MAX_FREQUENCY_HZ = 399;
+export const AUDIO_EQ_LOW_MIN_FREQUENCY_HZ = 20;
+export const AUDIO_EQ_LOW_MAX_FREQUENCY_HZ = 22000;
 export const AUDIO_EQ_LOW_MID_FREQUENCY_HZ = 400;
-export const AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ = 100;
-export const AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ = 1500;
+export const AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ = 20;
+export const AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ = 22000;
 export const AUDIO_EQ_MID_FREQUENCY_HZ = 1000;
 export const AUDIO_EQ_MID_Q = 0.9;
 export const AUDIO_EQ_LOW_MID_Q = 1.1;
 export const AUDIO_EQ_HIGH_MID_FREQUENCY_HZ = 1600;
-export const AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ = 450;
-export const AUDIO_EQ_HIGH_MID_MAX_FREQUENCY_HZ = 8000;
+export const AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ = 20;
+export const AUDIO_EQ_HIGH_MID_MAX_FREQUENCY_HZ = 22000;
 export const AUDIO_EQ_HIGH_MID_Q = 1.1;
 export const AUDIO_EQ_HIGH_FREQUENCY_HZ = 2800;
-export const AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ = 1400;
+export const AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ = 20;
 export const AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ = 22000;
 export const AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ = 22000;
 export const AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ = 1400;
@@ -101,22 +131,49 @@ export const AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ = 22000;
 
 const AUDIO_EQ_SHELF_SLOPE = 1;
 const AUDIO_EQ_ACTIVE_EPSILON = 0.001;
+const AUDIO_EQ_BAND1_Q = 1.1;
+const AUDIO_EQ_LOW_Q = 2.3;
+const AUDIO_EQ_HIGH_Q = 2.3;
+const AUDIO_EQ_BAND6_Q = 1.1;
 
 export const DEFAULT_AUDIO_EQ_SETTINGS: Readonly<ResolvedAudioEqSettings> = Object.freeze({
+  outputGainDb: 0,
+  band1Enabled: false,
+  band1Type: 'high-pass',
+  band1FrequencyHz: AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
+  band1GainDb: 0,
+  band1Q: AUDIO_EQ_BAND1_Q,
+  band1SlopeDbPerOct: 12,
   lowCutEnabled: false,
   lowCutFrequencyHz: AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
   lowCutSlopeDbPerOct: 12,
+  lowEnabled: true,
+  lowType: 'low-shelf',
   lowGainDb: 0,
   lowFrequencyHz: AUDIO_EQ_LOW_FREQUENCY_HZ,
+  lowQ: AUDIO_EQ_LOW_Q,
+  lowMidEnabled: true,
+  lowMidType: 'peaking',
   lowMidGainDb: 0,
   lowMidFrequencyHz: AUDIO_EQ_LOW_MID_FREQUENCY_HZ,
   lowMidQ: AUDIO_EQ_LOW_MID_Q,
   midGainDb: 0,
+  highMidEnabled: true,
+  highMidType: 'peaking',
   highMidGainDb: 0,
   highMidFrequencyHz: AUDIO_EQ_HIGH_MID_FREQUENCY_HZ,
   highMidQ: AUDIO_EQ_HIGH_MID_Q,
+  highEnabled: true,
+  highType: 'high-shelf',
   highGainDb: 0,
   highFrequencyHz: AUDIO_EQ_HIGH_FREQUENCY_HZ,
+  highQ: AUDIO_EQ_HIGH_Q,
+  band6Enabled: false,
+  band6Type: 'low-pass',
+  band6FrequencyHz: AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
+  band6GainDb: 0,
+  band6Q: AUDIO_EQ_BAND6_Q,
+  band6SlopeDbPerOct: 12,
   highCutEnabled: false,
   highCutFrequencyHz: AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
   highCutSlopeDbPerOct: 12,
@@ -134,6 +191,33 @@ export function clampAudioEqGainDb(value: number): number {
 export function clampAudioEqQ(value: number, fallback = AUDIO_EQ_LOW_MID_Q): number {
   if (!Number.isFinite(value)) return fallback;
   return Math.max(AUDIO_EQ_Q_MIN, Math.min(AUDIO_EQ_Q_MAX, value));
+}
+
+function clampAudioEqBand1Type(
+  value: unknown,
+  fallback = DEFAULT_AUDIO_EQ_SETTINGS.band1Type,
+): AudioEqBand1Type {
+  return AUDIO_EQ_BAND1_TYPES.includes(value as AudioEqBand1Type)
+    ? value as AudioEqBand1Type
+    : fallback;
+}
+
+function clampAudioEqInnerBandType(
+  value: unknown,
+  fallback = DEFAULT_AUDIO_EQ_SETTINGS.lowMidType,
+): AudioEqInnerBandType {
+  return AUDIO_EQ_INNER_BAND_TYPES.includes(value as AudioEqInnerBandType)
+    ? value as AudioEqInnerBandType
+    : fallback;
+}
+
+function clampAudioEqBand6Type(
+  value: unknown,
+  fallback = DEFAULT_AUDIO_EQ_SETTINGS.band6Type,
+): AudioEqBand6Type {
+  return AUDIO_EQ_BAND6_TYPES.includes(value as AudioEqBand6Type)
+    ? value as AudioEqBand6Type
+    : fallback;
 }
 
 export function clampAudioEqFrequencyHz(
@@ -159,6 +243,15 @@ function resolveBoolean(value: boolean | undefined, fallback: boolean): boolean 
   return value === undefined ? fallback : value;
 }
 
+function isAudioEqSourceDisabled(
+  source?: AudioEqSettings | AudioEqFieldSource | null,
+): boolean {
+  if (source == null) return false;
+  if ('audioEqEnabled' in source && source.audioEqEnabled === false) return true;
+  if ('enabled' in source && source.enabled === false) return true;
+  return false;
+}
+
 function getSettingsValue<
   TSettingsKey extends keyof AudioEqSettings,
   TFieldKey extends keyof AudioEqFieldSource,
@@ -173,24 +266,97 @@ function getSettingsValue<
 
 export function getAudioEqSettings(source?: AudioEqFieldSource | null): AudioEqSettings {
   return {
+    enabled: source?.audioEqEnabled,
+    outputGainDb: source?.audioEqOutputGainDb,
+    band1Enabled: source?.audioEqBand1Enabled,
+    band1Type: source?.audioEqBand1Type,
+    band1FrequencyHz: source?.audioEqBand1FrequencyHz,
+    band1GainDb: source?.audioEqBand1GainDb,
+    band1Q: source?.audioEqBand1Q,
+    band1SlopeDbPerOct: source?.audioEqBand1SlopeDbPerOct,
     lowCutEnabled: source?.audioEqLowCutEnabled,
     lowCutFrequencyHz: source?.audioEqLowCutFrequencyHz,
     lowCutSlopeDbPerOct: source?.audioEqLowCutSlopeDbPerOct,
+    lowEnabled: source?.audioEqLowEnabled,
+    lowType: source?.audioEqLowType,
     lowGainDb: source?.audioEqLowGainDb,
     lowFrequencyHz: source?.audioEqLowFrequencyHz,
+    lowQ: source?.audioEqLowQ,
+    lowMidEnabled: source?.audioEqLowMidEnabled,
+    lowMidType: source?.audioEqLowMidType,
     lowMidGainDb: source?.audioEqLowMidGainDb,
     lowMidFrequencyHz: source?.audioEqLowMidFrequencyHz,
     lowMidQ: source?.audioEqLowMidQ,
     midGainDb: source?.audioEqMidGainDb,
+    highMidEnabled: source?.audioEqHighMidEnabled,
+    highMidType: source?.audioEqHighMidType,
     highMidGainDb: source?.audioEqHighMidGainDb,
     highMidFrequencyHz: source?.audioEqHighMidFrequencyHz,
     highMidQ: source?.audioEqHighMidQ,
+    highEnabled: source?.audioEqHighEnabled,
+    highType: source?.audioEqHighType,
     highGainDb: source?.audioEqHighGainDb,
     highFrequencyHz: source?.audioEqHighFrequencyHz,
+    highQ: source?.audioEqHighQ,
+    band6Enabled: source?.audioEqBand6Enabled,
+    band6Type: source?.audioEqBand6Type,
+    band6FrequencyHz: source?.audioEqBand6FrequencyHz,
+    band6GainDb: source?.audioEqBand6GainDb,
+    band6Q: source?.audioEqBand6Q,
+    band6SlopeDbPerOct: source?.audioEqBand6SlopeDbPerOct,
     highCutEnabled: source?.audioEqHighCutEnabled,
     highCutFrequencyHz: source?.audioEqHighCutFrequencyHz,
     highCutSlopeDbPerOct: source?.audioEqHighCutSlopeDbPerOct,
   };
+}
+
+export function getSparseAudioEqSettings(source?: AudioEqFieldSource | null): AudioEqSettings {
+  const settings = getAudioEqSettings(source);
+  const sparse = Object.fromEntries(
+    Object.entries(settings).filter(([, value]) => value !== undefined),
+  ) as AudioEqSettings;
+
+  const hasLegacyBand1Patch = source && (
+    source.audioEqLowCutEnabled !== undefined
+    || source.audioEqLowCutFrequencyHz !== undefined
+    || source.audioEqLowCutSlopeDbPerOct !== undefined
+  );
+  if (hasLegacyBand1Patch) {
+    if (source?.audioEqBand1Enabled === undefined && sparse.lowCutEnabled !== undefined) {
+      sparse.band1Enabled = sparse.lowCutEnabled;
+    }
+    if (source?.audioEqBand1FrequencyHz === undefined && sparse.lowCutFrequencyHz !== undefined) {
+      sparse.band1FrequencyHz = sparse.lowCutFrequencyHz;
+    }
+    if (source?.audioEqBand1SlopeDbPerOct === undefined && sparse.lowCutSlopeDbPerOct !== undefined) {
+      sparse.band1SlopeDbPerOct = sparse.lowCutSlopeDbPerOct;
+    }
+    if (source?.audioEqBand1Type === undefined) {
+      sparse.band1Type = 'high-pass';
+    }
+  }
+
+  const hasLegacyBand6Patch = source && (
+    source.audioEqHighCutEnabled !== undefined
+    || source.audioEqHighCutFrequencyHz !== undefined
+    || source.audioEqHighCutSlopeDbPerOct !== undefined
+  );
+  if (hasLegacyBand6Patch) {
+    if (source?.audioEqBand6Enabled === undefined && sparse.highCutEnabled !== undefined) {
+      sparse.band6Enabled = sparse.highCutEnabled;
+    }
+    if (source?.audioEqBand6FrequencyHz === undefined && sparse.highCutFrequencyHz !== undefined) {
+      sparse.band6FrequencyHz = sparse.highCutFrequencyHz;
+    }
+    if (source?.audioEqBand6SlopeDbPerOct === undefined && sparse.highCutSlopeDbPerOct !== undefined) {
+      sparse.band6SlopeDbPerOct = sparse.highCutSlopeDbPerOct;
+    }
+    if (source?.audioEqBand6Type === undefined) {
+      sparse.band6Type = 'low-pass';
+    }
+  }
+
+  return sparse;
 }
 
 export function resolveAudioEqSettings(
@@ -199,20 +365,122 @@ export function resolveAudioEqSettings(
   const settings = source as AudioEqSettings | null | undefined;
   const fields = source as AudioEqFieldSource | null | undefined;
 
+  const legacyLowCutEnabled = resolveBoolean(
+    getSettingsValue(settings, fields, 'lowCutEnabled', 'audioEqLowCutEnabled'),
+    DEFAULT_AUDIO_EQ_SETTINGS.lowCutEnabled,
+  );
+  const legacyLowCutFrequencyHz = clampAudioEqFrequencyHz(
+    Number(getSettingsValue(settings, fields, 'lowCutFrequencyHz', 'audioEqLowCutFrequencyHz')),
+    AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+    AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+    DEFAULT_AUDIO_EQ_SETTINGS.lowCutFrequencyHz,
+  );
+  const legacyLowCutSlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(
+    Number(getSettingsValue(settings, fields, 'lowCutSlopeDbPerOct', 'audioEqLowCutSlopeDbPerOct')),
+    DEFAULT_AUDIO_EQ_SETTINGS.lowCutSlopeDbPerOct,
+  );
+  const band1EnabledSource = getSettingsValue(settings, fields, 'band1Enabled', 'audioEqBand1Enabled');
+  const band1TypeSource = getSettingsValue(settings, fields, 'band1Type', 'audioEqBand1Type');
+  const band1FrequencySource = getSettingsValue(settings, fields, 'band1FrequencyHz', 'audioEqBand1FrequencyHz');
+  const band1GainSource = getSettingsValue(settings, fields, 'band1GainDb', 'audioEqBand1GainDb');
+  const band1QSource = getSettingsValue(settings, fields, 'band1Q', 'audioEqBand1Q');
+  const band1SlopeSource = getSettingsValue(settings, fields, 'band1SlopeDbPerOct', 'audioEqBand1SlopeDbPerOct');
+  const hasExplicitBand1 = [
+    band1EnabledSource,
+    band1TypeSource,
+    band1FrequencySource,
+    band1GainSource,
+    band1QSource,
+    band1SlopeSource,
+  ].some((value) => value !== undefined);
+  const band1Type = hasExplicitBand1
+    ? clampAudioEqBand1Type(band1TypeSource, DEFAULT_AUDIO_EQ_SETTINGS.band1Type)
+    : 'high-pass';
+  const band1Enabled = resolveBoolean(
+    hasExplicitBand1 ? band1EnabledSource : legacyLowCutEnabled,
+    DEFAULT_AUDIO_EQ_SETTINGS.band1Enabled,
+  );
+  const band1FrequencyHz = clampAudioEqFrequencyHz(
+    Number(hasExplicitBand1 ? band1FrequencySource : legacyLowCutFrequencyHz),
+    AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+    AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+    DEFAULT_AUDIO_EQ_SETTINGS.band1FrequencyHz,
+  );
+  const band1GainDb = clampAudioEqGainDb(Number(band1GainSource));
+  const band1Q = clampAudioEqQ(Number(band1QSource), DEFAULT_AUDIO_EQ_SETTINGS.band1Q);
+  const band1SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(
+    Number(hasExplicitBand1 ? band1SlopeSource : legacyLowCutSlopeDbPerOct),
+    DEFAULT_AUDIO_EQ_SETTINGS.band1SlopeDbPerOct,
+  );
+
+  const legacyHighCutEnabled = resolveBoolean(
+    getSettingsValue(settings, fields, 'highCutEnabled', 'audioEqHighCutEnabled'),
+    DEFAULT_AUDIO_EQ_SETTINGS.highCutEnabled,
+  );
+  const legacyHighCutFrequencyHz = clampAudioEqFrequencyHz(
+    Number(getSettingsValue(settings, fields, 'highCutFrequencyHz', 'audioEqHighCutFrequencyHz')),
+    AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+    AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+    DEFAULT_AUDIO_EQ_SETTINGS.highCutFrequencyHz,
+  );
+  const legacyHighCutSlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(
+    Number(getSettingsValue(settings, fields, 'highCutSlopeDbPerOct', 'audioEqHighCutSlopeDbPerOct')),
+    DEFAULT_AUDIO_EQ_SETTINGS.highCutSlopeDbPerOct,
+  );
+  const band6EnabledSource = getSettingsValue(settings, fields, 'band6Enabled', 'audioEqBand6Enabled');
+  const band6TypeSource = getSettingsValue(settings, fields, 'band6Type', 'audioEqBand6Type');
+  const band6FrequencySource = getSettingsValue(settings, fields, 'band6FrequencyHz', 'audioEqBand6FrequencyHz');
+  const band6GainSource = getSettingsValue(settings, fields, 'band6GainDb', 'audioEqBand6GainDb');
+  const band6QSource = getSettingsValue(settings, fields, 'band6Q', 'audioEqBand6Q');
+  const band6SlopeSource = getSettingsValue(settings, fields, 'band6SlopeDbPerOct', 'audioEqBand6SlopeDbPerOct');
+  const hasExplicitBand6 = [
+    band6EnabledSource,
+    band6TypeSource,
+    band6FrequencySource,
+    band6GainSource,
+    band6QSource,
+    band6SlopeSource,
+  ].some((value) => value !== undefined);
+  const band6Type = hasExplicitBand6
+    ? clampAudioEqBand6Type(band6TypeSource, DEFAULT_AUDIO_EQ_SETTINGS.band6Type)
+    : 'low-pass';
+  const band6Enabled = resolveBoolean(
+    hasExplicitBand6 ? band6EnabledSource : legacyHighCutEnabled,
+    DEFAULT_AUDIO_EQ_SETTINGS.band6Enabled,
+  );
+  const band6FrequencyHz = clampAudioEqFrequencyHz(
+    Number(hasExplicitBand6 ? band6FrequencySource : legacyHighCutFrequencyHz),
+    AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+    AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+    DEFAULT_AUDIO_EQ_SETTINGS.band6FrequencyHz,
+  );
+  const band6GainDb = clampAudioEqGainDb(Number(band6GainSource));
+  const band6Q = clampAudioEqQ(Number(band6QSource), DEFAULT_AUDIO_EQ_SETTINGS.band6Q);
+  const band6SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(
+    Number(hasExplicitBand6 ? band6SlopeSource : legacyHighCutSlopeDbPerOct),
+    DEFAULT_AUDIO_EQ_SETTINGS.band6SlopeDbPerOct,
+  );
+
   return {
-    lowCutEnabled: resolveBoolean(
-      getSettingsValue(settings, fields, 'lowCutEnabled', 'audioEqLowCutEnabled'),
-      DEFAULT_AUDIO_EQ_SETTINGS.lowCutEnabled,
+    outputGainDb: clampAudioEqGainDb(
+      Number(getSettingsValue(settings, fields, 'outputGainDb', 'audioEqOutputGainDb')),
     ),
-    lowCutFrequencyHz: clampAudioEqFrequencyHz(
-      Number(getSettingsValue(settings, fields, 'lowCutFrequencyHz', 'audioEqLowCutFrequencyHz')),
-      AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
-      AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
-      DEFAULT_AUDIO_EQ_SETTINGS.lowCutFrequencyHz,
+    band1Enabled,
+    band1Type,
+    band1FrequencyHz,
+    band1GainDb,
+    band1Q,
+    band1SlopeDbPerOct,
+    lowCutEnabled: band1Enabled && band1Type === 'high-pass',
+    lowCutFrequencyHz: band1FrequencyHz,
+    lowCutSlopeDbPerOct: band1SlopeDbPerOct,
+    lowEnabled: resolveBoolean(
+      getSettingsValue(settings, fields, 'lowEnabled', 'audioEqLowEnabled'),
+      DEFAULT_AUDIO_EQ_SETTINGS.lowEnabled,
     ),
-    lowCutSlopeDbPerOct: clampAudioEqCutSlopeDbPerOct(
-      Number(getSettingsValue(settings, fields, 'lowCutSlopeDbPerOct', 'audioEqLowCutSlopeDbPerOct')),
-      DEFAULT_AUDIO_EQ_SETTINGS.lowCutSlopeDbPerOct,
+    lowType: clampAudioEqInnerBandType(
+      getSettingsValue(settings, fields, 'lowType', 'audioEqLowType'),
+      DEFAULT_AUDIO_EQ_SETTINGS.lowType,
     ),
     lowGainDb: clampAudioEqGainDb(
       Number(getSettingsValue(settings, fields, 'lowGainDb', 'audioEqLowGainDb')),
@@ -222,6 +490,18 @@ export function resolveAudioEqSettings(
       AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
       AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
       DEFAULT_AUDIO_EQ_SETTINGS.lowFrequencyHz,
+    ),
+    lowQ: clampAudioEqQ(
+      Number(getSettingsValue(settings, fields, 'lowQ', 'audioEqLowQ')),
+      DEFAULT_AUDIO_EQ_SETTINGS.lowQ,
+    ),
+    lowMidEnabled: resolveBoolean(
+      getSettingsValue(settings, fields, 'lowMidEnabled', 'audioEqLowMidEnabled'),
+      DEFAULT_AUDIO_EQ_SETTINGS.lowMidEnabled,
+    ),
+    lowMidType: clampAudioEqInnerBandType(
+      getSettingsValue(settings, fields, 'lowMidType', 'audioEqLowMidType'),
+      DEFAULT_AUDIO_EQ_SETTINGS.lowMidType,
     ),
     lowMidGainDb: clampAudioEqGainDb(
       Number(getSettingsValue(settings, fields, 'lowMidGainDb', 'audioEqLowMidGainDb')),
@@ -239,6 +519,14 @@ export function resolveAudioEqSettings(
     midGainDb: clampAudioEqGainDb(
       Number(getSettingsValue(settings, fields, 'midGainDb', 'audioEqMidGainDb')),
     ),
+    highMidEnabled: resolveBoolean(
+      getSettingsValue(settings, fields, 'highMidEnabled', 'audioEqHighMidEnabled'),
+      DEFAULT_AUDIO_EQ_SETTINGS.highMidEnabled,
+    ),
+    highMidType: clampAudioEqInnerBandType(
+      getSettingsValue(settings, fields, 'highMidType', 'audioEqHighMidType'),
+      DEFAULT_AUDIO_EQ_SETTINGS.highMidType,
+    ),
     highMidGainDb: clampAudioEqGainDb(
       Number(getSettingsValue(settings, fields, 'highMidGainDb', 'audioEqHighMidGainDb')),
     ),
@@ -252,6 +540,14 @@ export function resolveAudioEqSettings(
       Number(getSettingsValue(settings, fields, 'highMidQ', 'audioEqHighMidQ')),
       DEFAULT_AUDIO_EQ_SETTINGS.highMidQ,
     ),
+    highEnabled: resolveBoolean(
+      getSettingsValue(settings, fields, 'highEnabled', 'audioEqHighEnabled'),
+      DEFAULT_AUDIO_EQ_SETTINGS.highEnabled,
+    ),
+    highType: clampAudioEqInnerBandType(
+      getSettingsValue(settings, fields, 'highType', 'audioEqHighType'),
+      DEFAULT_AUDIO_EQ_SETTINGS.highType,
+    ),
     highGainDb: clampAudioEqGainDb(
       Number(getSettingsValue(settings, fields, 'highGainDb', 'audioEqHighGainDb')),
     ),
@@ -261,20 +557,19 @@ export function resolveAudioEqSettings(
       AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
       DEFAULT_AUDIO_EQ_SETTINGS.highFrequencyHz,
     ),
-    highCutEnabled: resolveBoolean(
-      getSettingsValue(settings, fields, 'highCutEnabled', 'audioEqHighCutEnabled'),
-      DEFAULT_AUDIO_EQ_SETTINGS.highCutEnabled,
+    highQ: clampAudioEqQ(
+      Number(getSettingsValue(settings, fields, 'highQ', 'audioEqHighQ')),
+      DEFAULT_AUDIO_EQ_SETTINGS.highQ,
     ),
-    highCutFrequencyHz: clampAudioEqFrequencyHz(
-      Number(getSettingsValue(settings, fields, 'highCutFrequencyHz', 'audioEqHighCutFrequencyHz')),
-      AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
-      AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
-      DEFAULT_AUDIO_EQ_SETTINGS.highCutFrequencyHz,
-    ),
-    highCutSlopeDbPerOct: clampAudioEqCutSlopeDbPerOct(
-      Number(getSettingsValue(settings, fields, 'highCutSlopeDbPerOct', 'audioEqHighCutSlopeDbPerOct')),
-      DEFAULT_AUDIO_EQ_SETTINGS.highCutSlopeDbPerOct,
-    ),
+    band6Enabled,
+    band6Type,
+    band6FrequencyHz,
+    band6GainDb,
+    band6Q,
+    band6SlopeDbPerOct,
+    highCutEnabled: band6Enabled && band6Type === 'low-pass',
+    highCutFrequencyHz: band6FrequencyHz,
+    highCutSlopeDbPerOct: band6SlopeDbPerOct,
   };
 }
 
@@ -282,7 +577,62 @@ export function appendResolvedAudioEqStage(
   stages: ReadonlyArray<ResolvedAudioEqSettings> | undefined,
   source?: AudioEqSettings | AudioEqFieldSource | null,
 ): ResolvedAudioEqSettings[] {
+  if (source == null || isAudioEqSourceDisabled(source)) {
+    return [...(stages ?? [])];
+  }
+
   return [...(stages ?? []), resolveAudioEqSettings(source)];
+}
+
+export function appendOptionalResolvedAudioEqStage(
+  stages: ReadonlyArray<ResolvedAudioEqSettings> | undefined,
+  source?: AudioEqSettings | AudioEqFieldSource | null,
+): ResolvedAudioEqSettings[] {
+  if (source == null || isAudioEqSourceDisabled(source)) {
+    return [...(stages ?? [])];
+  }
+
+  return appendResolvedAudioEqStage(stages, source);
+}
+
+export function appendResolvedAudioEqSources(
+  stages: ReadonlyArray<ResolvedAudioEqSettings> | undefined,
+  ...sources: Array<AudioEqSettings | AudioEqFieldSource | null | undefined>
+): ResolvedAudioEqSettings[] {
+  let nextStages = [...(stages ?? [])];
+
+  for (const source of sources) {
+    if (source == null) continue;
+    nextStages = appendResolvedAudioEqStage(nextStages, source);
+  }
+
+  return nextStages;
+}
+
+export function prependResolvedAudioEqSources(
+  stages: ReadonlyArray<ResolvedAudioEqSettings> | undefined,
+  ...sources: Array<AudioEqSettings | AudioEqFieldSource | null | undefined>
+): ResolvedAudioEqSettings[] {
+  const prefixStages = appendResolvedAudioEqSources(undefined, ...sources);
+
+  if (prefixStages.length === 0) {
+    return [...(stages ?? [])];
+  }
+
+  return [...prefixStages, ...(stages ?? [])];
+}
+
+export function normalizeAudioEqSettings(
+  source?: AudioEqSettings | AudioEqFieldSource | null,
+): AudioEqSettings | undefined {
+  if (source == null) {
+    return undefined;
+  }
+
+  return {
+    ...(source && 'enabled' in source && source.enabled !== undefined ? { enabled: !!source.enabled } : {}),
+    ...resolveAudioEqSettings(source),
+  };
 }
 
 export function resolvePreviewAudioEqStages(
@@ -293,25 +643,9 @@ export function resolvePreviewAudioEqStages(
     ? [...baseStages]
     : [resolveAudioEqSettings()];
   const fallbackOwnStage = stages[stages.length - 1] ?? DEFAULT_AUDIO_EQ_SETTINGS;
-
   stages[stages.length - 1] = resolveAudioEqSettings({
-    lowCutEnabled: previewSource?.audioEqLowCutEnabled ?? fallbackOwnStage.lowCutEnabled,
-    lowCutFrequencyHz: previewSource?.audioEqLowCutFrequencyHz ?? fallbackOwnStage.lowCutFrequencyHz,
-    lowCutSlopeDbPerOct: previewSource?.audioEqLowCutSlopeDbPerOct ?? fallbackOwnStage.lowCutSlopeDbPerOct,
-    lowGainDb: previewSource?.audioEqLowGainDb ?? fallbackOwnStage.lowGainDb,
-    lowFrequencyHz: previewSource?.audioEqLowFrequencyHz ?? fallbackOwnStage.lowFrequencyHz,
-    lowMidGainDb: previewSource?.audioEqLowMidGainDb ?? fallbackOwnStage.lowMidGainDb,
-    lowMidFrequencyHz: previewSource?.audioEqLowMidFrequencyHz ?? fallbackOwnStage.lowMidFrequencyHz,
-    lowMidQ: previewSource?.audioEqLowMidQ ?? fallbackOwnStage.lowMidQ,
-    midGainDb: previewSource?.audioEqMidGainDb ?? fallbackOwnStage.midGainDb,
-    highMidGainDb: previewSource?.audioEqHighMidGainDb ?? fallbackOwnStage.highMidGainDb,
-    highMidFrequencyHz: previewSource?.audioEqHighMidFrequencyHz ?? fallbackOwnStage.highMidFrequencyHz,
-    highMidQ: previewSource?.audioEqHighMidQ ?? fallbackOwnStage.highMidQ,
-    highGainDb: previewSource?.audioEqHighGainDb ?? fallbackOwnStage.highGainDb,
-    highFrequencyHz: previewSource?.audioEqHighFrequencyHz ?? fallbackOwnStage.highFrequencyHz,
-    highCutEnabled: previewSource?.audioEqHighCutEnabled ?? fallbackOwnStage.highCutEnabled,
-    highCutFrequencyHz: previewSource?.audioEqHighCutFrequencyHz ?? fallbackOwnStage.highCutFrequencyHz,
-    highCutSlopeDbPerOct: previewSource?.audioEqHighCutSlopeDbPerOct ?? fallbackOwnStage.highCutSlopeDbPerOct,
+    ...fallbackOwnStage,
+    ...getSparseAudioEqSettings(previewSource),
   });
 
   return stages;
@@ -320,13 +654,21 @@ export function resolvePreviewAudioEqStages(
 export function isAudioEqStageActive(stage?: AudioEqSettings | ResolvedAudioEqSettings | null): boolean {
   if (!stage) return false;
   return (
-    !!stage.lowCutEnabled
-    || !!stage.highCutEnabled
-    || Math.abs(stage.lowGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
-    || Math.abs(stage.lowMidGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
+    Math.abs(stage.outputGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
+    ||
+    (!!stage.band1Enabled && stage.band1Type === 'high-pass')
+    || (!!stage.band1Enabled && stage.band1Type !== 'high-pass' && Math.abs(stage.band1GainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON)
+    || (!!stage.lowEnabled && stage.lowType === 'notch')
+    || (!!stage.lowEnabled && Math.abs(stage.lowGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON)
+    || (!!stage.lowMidEnabled && stage.lowMidType === 'notch')
+    || (!!stage.lowMidEnabled && Math.abs(stage.lowMidGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON)
     || Math.abs(stage.midGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
-    || Math.abs(stage.highMidGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
-    || Math.abs(stage.highGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON
+    || (!!stage.highMidEnabled && stage.highMidType === 'notch')
+    || (!!stage.highMidEnabled && Math.abs(stage.highMidGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON)
+    || (!!stage.highEnabled && stage.highType === 'notch')
+    || (!!stage.highEnabled && Math.abs(stage.highGainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON)
+    || (!!stage.band6Enabled && stage.band6Type === 'low-pass')
+    || (!!stage.band6Enabled && stage.band6Type !== 'low-pass' && Math.abs(stage.band6GainDb ?? 0) > AUDIO_EQ_ACTIVE_EPSILON)
   );
 }
 
@@ -343,20 +685,44 @@ export function areAudioEqStagesEqual(
     const rightStage = right[i];
     if (!leftStage || !rightStage) return false;
     if (
-      leftStage.lowCutEnabled !== rightStage.lowCutEnabled
+      leftStage.outputGainDb !== rightStage.outputGainDb
+      ||
+      leftStage.band1Enabled !== rightStage.band1Enabled
+      || leftStage.band1Type !== rightStage.band1Type
+      || leftStage.band1FrequencyHz !== rightStage.band1FrequencyHz
+      || leftStage.band1GainDb !== rightStage.band1GainDb
+      || leftStage.band1Q !== rightStage.band1Q
+      || leftStage.band1SlopeDbPerOct !== rightStage.band1SlopeDbPerOct
+      || leftStage.lowCutEnabled !== rightStage.lowCutEnabled
       || leftStage.lowCutFrequencyHz !== rightStage.lowCutFrequencyHz
       || leftStage.lowCutSlopeDbPerOct !== rightStage.lowCutSlopeDbPerOct
+      || leftStage.lowEnabled !== rightStage.lowEnabled
+      || leftStage.lowType !== rightStage.lowType
       || leftStage.lowGainDb !== rightStage.lowGainDb
       || leftStage.lowFrequencyHz !== rightStage.lowFrequencyHz
+      || leftStage.lowQ !== rightStage.lowQ
+      || leftStage.lowMidEnabled !== rightStage.lowMidEnabled
+      || leftStage.lowMidType !== rightStage.lowMidType
       || leftStage.lowMidGainDb !== rightStage.lowMidGainDb
       || leftStage.lowMidFrequencyHz !== rightStage.lowMidFrequencyHz
       || leftStage.lowMidQ !== rightStage.lowMidQ
       || leftStage.midGainDb !== rightStage.midGainDb
+      || leftStage.highMidEnabled !== rightStage.highMidEnabled
+      || leftStage.highMidType !== rightStage.highMidType
       || leftStage.highMidGainDb !== rightStage.highMidGainDb
       || leftStage.highMidFrequencyHz !== rightStage.highMidFrequencyHz
       || leftStage.highMidQ !== rightStage.highMidQ
+      || leftStage.highEnabled !== rightStage.highEnabled
+      || leftStage.highType !== rightStage.highType
       || leftStage.highGainDb !== rightStage.highGainDb
       || leftStage.highFrequencyHz !== rightStage.highFrequencyHz
+      || leftStage.highQ !== rightStage.highQ
+      || leftStage.band6Enabled !== rightStage.band6Enabled
+      || leftStage.band6Type !== rightStage.band6Type
+      || leftStage.band6FrequencyHz !== rightStage.band6FrequencyHz
+      || leftStage.band6GainDb !== rightStage.band6GainDb
+      || leftStage.band6Q !== rightStage.band6Q
+      || leftStage.band6SlopeDbPerOct !== rightStage.band6SlopeDbPerOct
       || leftStage.highCutEnabled !== rightStage.highCutEnabled
       || leftStage.highCutFrequencyHz !== rightStage.highCutFrequencyHz
       || leftStage.highCutSlopeDbPerOct !== rightStage.highCutSlopeDbPerOct
@@ -626,6 +992,32 @@ function buildPeakingCoefficients(
   };
 }
 
+function buildNotchCoefficients(
+  frequencyHz: number,
+  sampleRate: number,
+  q: number,
+): BiquadCoefficients {
+  const frequency = clampFrequencyForSampleRate(frequencyHz, sampleRate);
+  const safeQ = clampAudioEqQ(q, AUDIO_EQ_LOW_MID_Q);
+  const w0 = 2 * Math.PI * (frequency / sampleRate);
+  const cosW0 = Math.cos(w0);
+  const alpha = Math.sin(w0) / (2 * safeQ);
+  const b0 = 1;
+  const b1 = -2 * cosW0;
+  const b2 = 1;
+  const a0 = 1 + alpha;
+  const a1 = -2 * cosW0;
+  const a2 = 1 - alpha;
+
+  return {
+    b0: b0 / a0,
+    b1: b1 / a0,
+    b2: b2 / a0,
+    a1: a1 / a0,
+    a2: a2 / a0,
+  };
+}
+
 function buildShelfCoefficients(
   type: 'lowshelf' | 'highshelf',
   frequencyHz: number,
@@ -670,6 +1062,73 @@ function buildShelfCoefficients(
     a1: a1 / a0,
     a2: a2 / a0,
   };
+}
+
+type AudioEqBiquadType = 'lowshelf' | 'highshelf' | 'peaking' | 'notch';
+
+function isPassBand1Type(type: AudioEqBand1Type): type is 'high-pass' {
+  return type === 'high-pass';
+}
+
+function isPassBand6Type(type: AudioEqBand6Type): type is 'low-pass' {
+  return type === 'low-pass';
+}
+
+function getBand1BiquadType(type: AudioEqBand1Type): AudioEqBiquadType | null {
+  switch (type) {
+    case 'low-shelf':
+      return 'lowshelf';
+    case 'peaking':
+      return 'peaking';
+    case 'high-shelf':
+      return 'highshelf';
+    default:
+      return null;
+  }
+}
+
+function getBand6BiquadType(type: AudioEqBand6Type): AudioEqBiquadType | null {
+  switch (type) {
+    case 'low-shelf':
+      return 'lowshelf';
+    case 'peaking':
+      return 'peaking';
+    case 'high-shelf':
+      return 'highshelf';
+    default:
+      return null;
+  }
+}
+
+function getInnerBandBiquadType(type: AudioEqInnerBandType): AudioEqBiquadType {
+  switch (type) {
+    case 'low-shelf':
+      return 'lowshelf';
+    case 'high-shelf':
+      return 'highshelf';
+    case 'notch':
+      return 'notch';
+    default:
+      return 'peaking';
+  }
+}
+
+function buildEqBiquadCoefficients(
+  type: AudioEqBiquadType,
+  frequencyHz: number,
+  gainDb: number,
+  sampleRate: number,
+  q: number,
+): BiquadCoefficients {
+  switch (type) {
+    case 'lowshelf':
+    case 'highshelf':
+      return buildShelfCoefficients(type, frequencyHz, gainDb, sampleRate);
+    case 'notch':
+      return buildNotchCoefficients(frequencyHz, sampleRate, q);
+    default:
+      return buildPeakingCoefficients(frequencyHz, gainDb, sampleRate, q);
+  }
 }
 
 function buildOnePolePassCoefficients(
@@ -765,24 +1224,33 @@ function getResolvedAudioEqResponseGainDb(
 ): number {
   let gainDb = 0;
 
-  if (stage.lowCutEnabled) {
-    const coefficients = buildOnePolePassCoefficients('highpass', stage.lowCutFrequencyHz, sampleRate);
+  if (stage.band1Enabled && isPassBand1Type(stage.band1Type)) {
+    const coefficients = buildOnePolePassCoefficients('highpass', stage.band1FrequencyHz, sampleRate);
     for (let i = 0; i < getCutFilterStageCount(stage.lowCutSlopeDbPerOct); i++) {
       gainDb += evaluateOnePoleMagnitudeDb(coefficients, frequencyHz, sampleRate);
     }
+  } else if (stage.band1Enabled) {
+    const biquadType = getBand1BiquadType(stage.band1Type);
+    if (biquadType) {
+      gainDb += evaluateBiquadMagnitudeDb(
+        buildEqBiquadCoefficients(biquadType, stage.band1FrequencyHz, stage.band1GainDb, sampleRate, stage.band1Q),
+        frequencyHz,
+        sampleRate,
+      );
+    }
   }
 
-  if (Math.abs(stage.lowGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.lowEnabled && (stage.lowType === 'notch' || Math.abs(stage.lowGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     gainDb += evaluateBiquadMagnitudeDb(
-      buildShelfCoefficients('lowshelf', stage.lowFrequencyHz, stage.lowGainDb, sampleRate),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.lowType), stage.lowFrequencyHz, stage.lowGainDb, sampleRate, stage.lowQ),
       frequencyHz,
       sampleRate,
     );
   }
 
-  if (Math.abs(stage.lowMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.lowMidEnabled && (stage.lowMidType === 'notch' || Math.abs(stage.lowMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     gainDb += evaluateBiquadMagnitudeDb(
-      buildPeakingCoefficients(stage.lowMidFrequencyHz, stage.lowMidGainDb, sampleRate, stage.lowMidQ),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.lowMidType), stage.lowMidFrequencyHz, stage.lowMidGainDb, sampleRate, stage.lowMidQ),
       frequencyHz,
       sampleRate,
     );
@@ -796,26 +1264,35 @@ function getResolvedAudioEqResponseGainDb(
     );
   }
 
-  if (Math.abs(stage.highMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.highMidEnabled && (stage.highMidType === 'notch' || Math.abs(stage.highMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     gainDb += evaluateBiquadMagnitudeDb(
-      buildPeakingCoefficients(stage.highMidFrequencyHz, stage.highMidGainDb, sampleRate, stage.highMidQ),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.highMidType), stage.highMidFrequencyHz, stage.highMidGainDb, sampleRate, stage.highMidQ),
       frequencyHz,
       sampleRate,
     );
   }
 
-  if (Math.abs(stage.highGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.highEnabled && (stage.highType === 'notch' || Math.abs(stage.highGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     gainDb += evaluateBiquadMagnitudeDb(
-      buildShelfCoefficients('highshelf', stage.highFrequencyHz, stage.highGainDb, sampleRate),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.highType), stage.highFrequencyHz, stage.highGainDb, sampleRate, stage.highQ),
       frequencyHz,
       sampleRate,
     );
   }
 
-  if (stage.highCutEnabled) {
-    const coefficients = buildOnePolePassCoefficients('lowpass', stage.highCutFrequencyHz, sampleRate);
+  if (stage.band6Enabled && isPassBand6Type(stage.band6Type)) {
+    const coefficients = buildOnePolePassCoefficients('lowpass', stage.band6FrequencyHz, sampleRate);
     for (let i = 0; i < getCutFilterStageCount(stage.highCutSlopeDbPerOct); i++) {
       gainDb += evaluateOnePoleMagnitudeDb(coefficients, frequencyHz, sampleRate);
+    }
+  } else if (stage.band6Enabled) {
+    const biquadType = getBand6BiquadType(stage.band6Type);
+    if (biquadType) {
+      gainDb += evaluateBiquadMagnitudeDb(
+        buildEqBiquadCoefficients(biquadType, stage.band6FrequencyHz, stage.band6GainDb, sampleRate, stage.band6Q),
+        frequencyHz,
+        sampleRate,
+      );
     }
   }
 
@@ -898,6 +1375,18 @@ function applyOnePole(samples: Float32Array, coefficients: OnePoleCoefficients):
   return output;
 }
 
+function applyLinearGain(samples: Float32Array, gain: number): Float32Array {
+  if (Math.abs(gain - 1) <= AUDIO_EQ_ACTIVE_EPSILON) {
+    return samples;
+  }
+
+  const output = new Float32Array(samples.length);
+  for (let i = 0; i < samples.length; i++) {
+    output[i] = (samples[i] ?? 0) * gain;
+  }
+  return output;
+}
+
 function applyCutFilter(
   samples: Float32Array,
   type: 'highpass' | 'lowpass',
@@ -922,21 +1411,29 @@ function applyAudioEqStage(
 ): Float32Array {
   let output = samples;
 
-  if (stage.lowCutEnabled) {
-    output = applyCutFilter(output, 'highpass', stage.lowCutFrequencyHz, stage.lowCutSlopeDbPerOct, sampleRate);
+  if (stage.band1Enabled && isPassBand1Type(stage.band1Type)) {
+    output = applyCutFilter(output, 'highpass', stage.band1FrequencyHz, stage.band1SlopeDbPerOct, sampleRate);
+  } else if (stage.band1Enabled) {
+    const biquadType = getBand1BiquadType(stage.band1Type);
+    if (biquadType) {
+      output = applyBiquad(
+        output,
+        buildEqBiquadCoefficients(biquadType, stage.band1FrequencyHz, stage.band1GainDb, sampleRate, stage.band1Q),
+      );
+    }
   }
 
-  if (Math.abs(stage.lowGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.lowEnabled && (stage.lowType === 'notch' || Math.abs(stage.lowGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     output = applyBiquad(
       output,
-      buildShelfCoefficients('lowshelf', stage.lowFrequencyHz, stage.lowGainDb, sampleRate),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.lowType), stage.lowFrequencyHz, stage.lowGainDb, sampleRate, stage.lowQ),
     );
   }
 
-  if (Math.abs(stage.lowMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.lowMidEnabled && (stage.lowMidType === 'notch' || Math.abs(stage.lowMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     output = applyBiquad(
       output,
-      buildPeakingCoefficients(stage.lowMidFrequencyHz, stage.lowMidGainDb, sampleRate, stage.lowMidQ),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.lowMidType), stage.lowMidFrequencyHz, stage.lowMidGainDb, sampleRate, stage.lowMidQ),
     );
   }
 
@@ -947,22 +1444,34 @@ function applyAudioEqStage(
     );
   }
 
-  if (Math.abs(stage.highMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.highMidEnabled && (stage.highMidType === 'notch' || Math.abs(stage.highMidGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     output = applyBiquad(
       output,
-      buildPeakingCoefficients(stage.highMidFrequencyHz, stage.highMidGainDb, sampleRate, stage.highMidQ),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.highMidType), stage.highMidFrequencyHz, stage.highMidGainDb, sampleRate, stage.highMidQ),
     );
   }
 
-  if (Math.abs(stage.highGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+  if (stage.highEnabled && (stage.highType === 'notch' || Math.abs(stage.highGainDb) > AUDIO_EQ_ACTIVE_EPSILON)) {
     output = applyBiquad(
       output,
-      buildShelfCoefficients('highshelf', stage.highFrequencyHz, stage.highGainDb, sampleRate),
+      buildEqBiquadCoefficients(getInnerBandBiquadType(stage.highType), stage.highFrequencyHz, stage.highGainDb, sampleRate, stage.highQ),
     );
   }
 
-  if (stage.highCutEnabled) {
-    output = applyCutFilter(output, 'lowpass', stage.highCutFrequencyHz, stage.highCutSlopeDbPerOct, sampleRate);
+  if (stage.band6Enabled && isPassBand6Type(stage.band6Type)) {
+    output = applyCutFilter(output, 'lowpass', stage.band6FrequencyHz, stage.band6SlopeDbPerOct, sampleRate);
+  } else if (stage.band6Enabled) {
+    const biquadType = getBand6BiquadType(stage.band6Type);
+    if (biquadType) {
+      output = applyBiquad(
+        output,
+        buildEqBiquadCoefficients(biquadType, stage.band6FrequencyHz, stage.band6GainDb, sampleRate, stage.band6Q),
+      );
+    }
+  }
+
+  if (Math.abs(stage.outputGainDb) > AUDIO_EQ_ACTIVE_EPSILON) {
+    output = applyLinearGain(output, Math.pow(10, stage.outputGainDb / 20));
   }
 
   return output;

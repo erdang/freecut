@@ -43,7 +43,12 @@ import {
   clampAudioEqFrequencyHz,
   clampAudioEqGainDb,
   clampAudioEqQ,
+  normalizeAudioEqSettings,
 } from '@/shared/utils/audio-eq';
+import {
+  clampAudioPitchCents,
+  clampAudioPitchSemitones,
+} from '@/shared/utils/audio-pitch';
 
 /**
  * Normalize a track to ensure all fields have valid values.
@@ -69,6 +74,7 @@ function normalizeTrack(
     volume: normalizedVolume === undefined
       ? 0
       : Math.max(-60, Math.min(12, normalizedVolume)),
+    audioEq: normalizeAudioEqSettings(track.audioEq),
     kind: normalizedKind,
     // Ensure order is set (fallback to index if missing)
     order: track.order ?? index,
@@ -128,6 +134,35 @@ function normalizeItem(
   if (normalized.audioFadeOut !== undefined) {
     normalized.audioFadeOut = Math.max(0, normalized.audioFadeOut);
   }
+  if (normalized.audioPitchSemitones !== undefined) {
+    normalized.audioPitchSemitones = clampAudioPitchSemitones(normalized.audioPitchSemitones);
+  }
+  if (normalized.audioPitchCents !== undefined) {
+    normalized.audioPitchCents = clampAudioPitchCents(normalized.audioPitchCents);
+  }
+  if (normalized.audioEqOutputGainDb !== undefined) {
+    normalized.audioEqOutputGainDb = clampAudioEqGainDb(normalized.audioEqOutputGainDb);
+  }
+  if (normalized.audioEqBand1Enabled !== undefined) {
+    normalized.audioEqBand1Enabled = !!normalized.audioEqBand1Enabled;
+  }
+  if (normalized.audioEqBand1FrequencyHz !== undefined) {
+    normalized.audioEqBand1FrequencyHz = clampAudioEqFrequencyHz(
+      normalized.audioEqBand1FrequencyHz,
+      AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
+      AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ,
+      AUDIO_EQ_LOW_CUT_FREQUENCY_HZ,
+    );
+  }
+  if (normalized.audioEqBand1GainDb !== undefined) {
+    normalized.audioEqBand1GainDb = clampAudioEqGainDb(normalized.audioEqBand1GainDb);
+  }
+  if (normalized.audioEqBand1Q !== undefined) {
+    normalized.audioEqBand1Q = clampAudioEqQ(normalized.audioEqBand1Q);
+  }
+  if (normalized.audioEqBand1SlopeDbPerOct !== undefined) {
+    normalized.audioEqBand1SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqBand1SlopeDbPerOct);
+  }
   if (normalized.audioEqLowCutEnabled !== undefined) {
     normalized.audioEqLowCutEnabled = !!normalized.audioEqLowCutEnabled;
   }
@@ -142,6 +177,9 @@ function normalizeItem(
   if (normalized.audioEqLowCutSlopeDbPerOct !== undefined) {
     normalized.audioEqLowCutSlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqLowCutSlopeDbPerOct);
   }
+  if (normalized.audioEqLowEnabled !== undefined) {
+    normalized.audioEqLowEnabled = !!normalized.audioEqLowEnabled;
+  }
   if (normalized.audioEqLowGainDb !== undefined) {
     normalized.audioEqLowGainDb = clampAudioEqGainDb(normalized.audioEqLowGainDb);
   }
@@ -152,6 +190,12 @@ function normalizeItem(
       AUDIO_EQ_LOW_MAX_FREQUENCY_HZ,
       AUDIO_EQ_LOW_FREQUENCY_HZ,
     );
+  }
+  if (normalized.audioEqLowQ !== undefined) {
+    normalized.audioEqLowQ = clampAudioEqQ(normalized.audioEqLowQ);
+  }
+  if (normalized.audioEqLowMidEnabled !== undefined) {
+    normalized.audioEqLowMidEnabled = !!normalized.audioEqLowMidEnabled;
   }
   if (normalized.audioEqLowMidGainDb !== undefined) {
     normalized.audioEqLowMidGainDb = clampAudioEqGainDb(normalized.audioEqLowMidGainDb);
@@ -170,6 +214,9 @@ function normalizeItem(
   if (normalized.audioEqMidGainDb !== undefined) {
     normalized.audioEqMidGainDb = clampAudioEqGainDb(normalized.audioEqMidGainDb);
   }
+  if (normalized.audioEqHighMidEnabled !== undefined) {
+    normalized.audioEqHighMidEnabled = !!normalized.audioEqHighMidEnabled;
+  }
   if (normalized.audioEqHighMidGainDb !== undefined) {
     normalized.audioEqHighMidGainDb = clampAudioEqGainDb(normalized.audioEqHighMidGainDb);
   }
@@ -184,6 +231,9 @@ function normalizeItem(
   if (normalized.audioEqHighMidQ !== undefined) {
     normalized.audioEqHighMidQ = clampAudioEqQ(normalized.audioEqHighMidQ, AUDIO_EQ_HIGH_MID_Q);
   }
+  if (normalized.audioEqHighEnabled !== undefined) {
+    normalized.audioEqHighEnabled = !!normalized.audioEqHighEnabled;
+  }
   if (normalized.audioEqHighGainDb !== undefined) {
     normalized.audioEqHighGainDb = clampAudioEqGainDb(normalized.audioEqHighGainDb);
   }
@@ -194,6 +244,29 @@ function normalizeItem(
       AUDIO_EQ_HIGH_MAX_FREQUENCY_HZ,
       AUDIO_EQ_HIGH_FREQUENCY_HZ,
     );
+  }
+  if (normalized.audioEqHighQ !== undefined) {
+    normalized.audioEqHighQ = clampAudioEqQ(normalized.audioEqHighQ);
+  }
+  if (normalized.audioEqBand6Enabled !== undefined) {
+    normalized.audioEqBand6Enabled = !!normalized.audioEqBand6Enabled;
+  }
+  if (normalized.audioEqBand6FrequencyHz !== undefined) {
+    normalized.audioEqBand6FrequencyHz = clampAudioEqFrequencyHz(
+      normalized.audioEqBand6FrequencyHz,
+      AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
+      AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ,
+      AUDIO_EQ_HIGH_CUT_FREQUENCY_HZ,
+    );
+  }
+  if (normalized.audioEqBand6GainDb !== undefined) {
+    normalized.audioEqBand6GainDb = clampAudioEqGainDb(normalized.audioEqBand6GainDb);
+  }
+  if (normalized.audioEqBand6Q !== undefined) {
+    normalized.audioEqBand6Q = clampAudioEqQ(normalized.audioEqBand6Q);
+  }
+  if (normalized.audioEqBand6SlopeDbPerOct !== undefined) {
+    normalized.audioEqBand6SlopeDbPerOct = clampAudioEqCutSlopeDbPerOct(normalized.audioEqBand6SlopeDbPerOct);
   }
   if (normalized.audioEqHighCutEnabled !== undefined) {
     normalized.audioEqHighCutEnabled = !!normalized.audioEqHighCutEnabled;
@@ -343,6 +416,7 @@ function normalizeTimeline(timeline: ProjectTimeline): ProjectTimeline {
     ...timeline,
     // Normalize tracks
     tracks: normalizedTracks,
+    busAudioEq: normalizeAudioEqSettings(timeline.busAudioEq),
     // Normalize items and repair overlaps
     items: repairOverlappingItems(normalizedItems, normalizedTransitions),
     // Normalize transitions if present
@@ -354,6 +428,7 @@ function normalizeTimeline(timeline: ProjectTimeline): ProjectTimeline {
       return {
         ...comp,
         tracks: flattenTrackGroups(comp.tracks.map((track, index) => normalizeTrack(track, index))),
+        busAudioEq: normalizeAudioEqSettings(comp.busAudioEq),
         items: repairOverlappingItems(compItems, compTransitions),
         transitions: compTransitions,
       };

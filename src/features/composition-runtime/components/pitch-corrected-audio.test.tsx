@@ -1,5 +1,6 @@
 import { render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_AUDIO_EQ_SETTINGS } from '@/shared/utils/audio-eq';
 
 const audioDecodeMocks = vi.hoisted(() => ({
   getOrDecodeAudio: vi.fn(),
@@ -12,6 +13,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     fps: 30,
     playing: false,
     resolvedVolume: 1,
+    resolvedPitchShiftSemitones: 0,
     resolvedAudioEqStages: [],
   },
 }));
@@ -82,20 +84,32 @@ const previewGraphMocks = vi.hoisted(() => {
   };
 });
 
+const storeMocks = vi.hoisted(() => {
+  const gizmoState = { activeGizmo: null, preview: null };
+  const useGizmoStore = Object.assign(
+    vi.fn((selector?: (state: typeof gizmoState) => unknown) => (
+      selector ? selector(gizmoState) : gizmoState
+    )),
+    {
+      getState: () => gizmoState,
+    },
+  );
+
+  return {
+    useGizmoStore,
+    usePlaybackStore: {
+      getState: () => ({ isPlaying: false, previewFrame: null }),
+    },
+  };
+});
+
 vi.mock('../utils/audio-decode-cache', () => audioDecodeMocks);
 vi.mock('./hooks/use-audio-playback-state', () => ({
   useAudioPlaybackState: vi.fn(() => playbackStateMocks.current),
 }));
 vi.mock('../utils/preview-audio-element-pool', () => previewAudioMocks);
 vi.mock('../utils/preview-audio-graph', () => previewGraphMocks);
-vi.mock('@/features/composition-runtime/deps/stores', () => ({
-  useGizmoStore: {
-    getState: () => ({ activeGizmo: null }),
-  },
-  usePlaybackStore: {
-    getState: () => ({ isPlaying: false, previewFrame: null }),
-  },
-}));
+vi.mock('@/features/composition-runtime/deps/stores', () => storeMocks);
 vi.mock('./soundtouch-worklet-audio', () => ({
   SoundTouchWorkletAudio: ({
     audioBuffer,
@@ -134,6 +148,7 @@ describe('PitchCorrectedAudio', () => {
       fps: 30,
       playing: false,
       resolvedVolume: 1,
+      resolvedPitchShiftSemitones: 0,
       resolvedAudioEqStages: [],
     };
   });
@@ -156,6 +171,49 @@ describe('PitchCorrectedAudio', () => {
     expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
     expect(audioDecodeMocks.getOrDecodeAudio).not.toHaveBeenCalled();
     expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
+  });
+
+  it('keeps the native preview graph alive while EQ stages change', async () => {
+    const { rerender } = render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        volumeMultiplier={1}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+    });
+
+    playbackStateMocks.current = {
+      ...playbackStateMocks.current,
+      resolvedAudioEqStages: [DEFAULT_AUDIO_EQ_SETTINGS],
+    };
+
+    rerender(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        volumeMultiplier={1.01}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(previewGraphMocks.rampPreviewClipEq).toHaveBeenLastCalledWith(
+        previewGraphMocks.graph,
+        [DEFAULT_AUDIO_EQ_SETTINGS],
+      );
+    });
+
+    expect(previewGraphMocks.createPreviewClipAudioGraph).toHaveBeenCalledTimes(1);
+    expect(previewAudioMocks.acquirePreviewAudioElement).toHaveBeenCalledTimes(1);
   });
 
   it('uses playback-first decode for stretched clips with media ids', async () => {
@@ -198,7 +256,14 @@ describe('PitchCorrectedAudio', () => {
     expect(audioDecodeMocks.getOrDecodeAudio).toHaveBeenCalledWith('media-1', 'blob:audio');
   });
 
-  it('falls back to native playback when no media id is available', async () => {
+  it('uses a synthetic decode key when pitch correction is needed without a media id', async () => {
+    audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockResolvedValue({
+      buffer: makeAudioBuffer(2),
+      startTime: 0,
+      isComplete: false,
+    });
+    audioDecodeMocks.getOrDecodeAudio.mockReturnValue(new Promise<AudioBuffer>(() => {}));
+
     render(
       <PitchCorrectedAudio
         src="blob:audio"
@@ -209,11 +274,42 @@ describe('PitchCorrectedAudio', () => {
     );
 
     await waitFor(() => {
-      expect(previewAudioMocks.acquirePreviewAudioElement).toHaveBeenCalledWith('blob:audio');
+      expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledWith(
+        'legacy-src:blob:audio',
+        'blob:audio',
+        expect.objectContaining({
+          minReadySeconds: 2,
+          waitTimeoutMs: 6000,
+        }),
+      );
     });
 
-    expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).not.toHaveBeenCalled();
-    expect(audioDecodeMocks.getOrDecodeAudio).not.toHaveBeenCalled();
-    expect(document.querySelector('[data-testid="pitch"]')).toBeNull();
+    expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument();
+  });
+
+  it('uses the decoded path for pitch-only shifts at 1x playback', async () => {
+    audioDecodeMocks.getOrDecodeAudioSliceForPlayback.mockResolvedValue({
+      buffer: makeAudioBuffer(2),
+      startTime: 0,
+      isComplete: false,
+    });
+    audioDecodeMocks.getOrDecodeAudio.mockReturnValue(new Promise<AudioBuffer>(() => {}));
+
+    render(
+      <PitchCorrectedAudio
+        src="blob:audio"
+        mediaId="media-1"
+        itemId="item-1"
+        durationInFrames={120}
+        playbackRate={1}
+        audioPitchSemitones={4}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(audioDecodeMocks.getOrDecodeAudioSliceForPlayback).toHaveBeenCalledTimes(1);
+    });
+
+    expect(document.querySelector('[data-testid="pitch"]')).toBeInTheDocument();
   });
 });

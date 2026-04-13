@@ -104,6 +104,7 @@ export function captureSnapshot(): TimelineSnapshot {
     scrollPosition: settingsState.scrollPosition,
     snapEnabled: settingsState.snapEnabled,
     currentFrame: playbackState.currentFrame,
+    busAudioEq: playbackState.busAudioEq,
     projectId: currentProject?.id ?? null,
     projectMetadata: currentProject
       ? { ...currentProject.metadata }
@@ -147,6 +148,7 @@ export function restoreSnapshot(snapshot: TimelineSnapshot): void {
 
   // Restore playhead position
   usePlaybackStore.getState().setCurrentFrame(snapshot.currentFrame);
+  usePlaybackStore.getState().setBusAudioEq(snapshot.busAudioEq);
 
   // Restore current project metadata so canvas/project changes undo with the editor history.
   restoreProjectMetadata(snapshot);
@@ -154,7 +156,8 @@ export function restoreSnapshot(snapshot: TimelineSnapshot): void {
 
 /**
  * Check if two snapshots are equal (for deduplication).
- * Uses reference equality for performance.
+ * Uses reference equality for most fields; busAudioEq uses JSON.stringify
+ * for deep comparison because it may be structurally equal across restores.
  */
 export function snapshotsEqual(a: TimelineSnapshot, b: TimelineSnapshot): boolean {
   return (
@@ -170,6 +173,7 @@ export function snapshotsEqual(a: TimelineSnapshot, b: TimelineSnapshot): boolea
     a.scrollPosition === b.scrollPosition &&
     a.snapEnabled === b.snapEnabled &&
     a.currentFrame === b.currentFrame &&
+    JSON.stringify(a.busAudioEq ?? null) === JSON.stringify(b.busAudioEq ?? null) &&
     a.projectId === b.projectId &&
     projectMetadataEqual(a.projectMetadata, b.projectMetadata)
   );

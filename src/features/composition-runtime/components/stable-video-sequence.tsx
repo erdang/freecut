@@ -20,6 +20,7 @@ import {
 import { useVideoConfig } from '../hooks/use-player-compat';
 import { useTransitionParticipantSync } from '../hooks/use-transition-participant-sync';
 import type { TimelineItem, VideoItem } from '@/types/timeline';
+import type { AudioEqSettings } from '@/types/audio';
 import type { ResolvedTransitionWindow } from '@/domain/timeline/transitions/transition-planner';
 import { VideoContent } from './video-content';
 import {
@@ -33,7 +34,7 @@ import {
 import { buildTransitionShadowWarmupRequests } from '../utils/transition-shadow-warmup';
 import { createLogger } from '@/shared/logging/logger';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
-import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { appendResolvedAudioEqSources, areAudioEqStagesEqual, getAudioEqSettings } from '@/shared/utils/audio-eq';
 
 const warmupLog = createLogger('StableVideoWarmup');
 const SAME_ORIGIN_SHADOW_MOUNT_LOOKAHEAD_FRAMES = 8;
@@ -45,6 +46,7 @@ const TRANSITION_WARMUP_LOOKAHEAD_SECONDS = 1.5;
 export type StableVideoSequenceItem = VideoItem & {
   zIndex: number;
   muted: boolean;
+  trackAudioEq?: AudioEqSettings;
   trackOrder: number;
   trackVisible: boolean;
   _sequenceFrameOffset?: number;
@@ -135,23 +137,12 @@ function areGroupPropsEqual(
         prevItem.blendMode !== nextItem.blendMode ||
         prevItem.src !== nextItem.src ||
         prevItem.audioSrc !== nextItem.audioSrc ||
-        prevItem.audioEqLowCutEnabled !== nextItem.audioEqLowCutEnabled ||
-        prevItem.audioEqLowCutFrequencyHz !== nextItem.audioEqLowCutFrequencyHz ||
-        prevItem.audioEqLowCutSlopeDbPerOct !== nextItem.audioEqLowCutSlopeDbPerOct ||
-        prevItem.audioEqLowGainDb !== nextItem.audioEqLowGainDb ||
-        prevItem.audioEqLowFrequencyHz !== nextItem.audioEqLowFrequencyHz ||
-        prevItem.audioEqLowMidGainDb !== nextItem.audioEqLowMidGainDb ||
-        prevItem.audioEqLowMidFrequencyHz !== nextItem.audioEqLowMidFrequencyHz ||
-        prevItem.audioEqLowMidQ !== nextItem.audioEqLowMidQ ||
-        prevItem.audioEqMidGainDb !== nextItem.audioEqMidGainDb ||
-        prevItem.audioEqHighMidGainDb !== nextItem.audioEqHighMidGainDb ||
-        prevItem.audioEqHighMidFrequencyHz !== nextItem.audioEqHighMidFrequencyHz ||
-        prevItem.audioEqHighMidQ !== nextItem.audioEqHighMidQ ||
-        prevItem.audioEqHighGainDb !== nextItem.audioEqHighGainDb ||
-        prevItem.audioEqHighFrequencyHz !== nextItem.audioEqHighFrequencyHz ||
-        prevItem.audioEqHighCutEnabled !== nextItem.audioEqHighCutEnabled ||
-        prevItem.audioEqHighCutFrequencyHz !== nextItem.audioEqHighCutFrequencyHz ||
-        prevItem.audioEqHighCutSlopeDbPerOct !== nextItem.audioEqHighCutSlopeDbPerOct) {
+        (prevItem.audioPitchSemitones ?? 0) !== (nextItem.audioPitchSemitones ?? 0) ||
+        (prevItem.audioPitchCents ?? 0) !== (nextItem.audioPitchCents ?? 0) ||
+        !areAudioEqStagesEqual(
+          appendResolvedAudioEqSources(undefined, prevItem.trackAudioEq, getAudioEqSettings(prevItem)),
+          appendResolvedAudioEqSources(undefined, nextItem.trackAudioEq, getAudioEqSettings(nextItem)),
+        )) {
       return false;
     }
   }
@@ -176,16 +167,8 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
   ));
 
   const audioEqStages = useMemo(
-    () => appendResolvedAudioEqStage(undefined, getAudioEqSettings(item)),
-    [
-      item.audioEqLowCutEnabled, item.audioEqLowCutFrequencyHz, item.audioEqLowCutSlopeDbPerOct,
-      item.audioEqLowGainDb, item.audioEqLowFrequencyHz,
-      item.audioEqLowMidGainDb, item.audioEqLowMidFrequencyHz, item.audioEqLowMidQ,
-      item.audioEqMidGainDb,
-      item.audioEqHighMidGainDb, item.audioEqHighMidFrequencyHz, item.audioEqHighMidQ,
-      item.audioEqHighGainDb, item.audioEqHighFrequencyHz,
-      item.audioEqHighCutEnabled, item.audioEqHighCutFrequencyHz, item.audioEqHighCutSlopeDbPerOct,
-    ],
+    () => appendResolvedAudioEqSources(undefined, item.trackAudioEq, getAudioEqSettings(item)),
+    [item.trackAudioEq, item],
   );
 
   if (!item.src) {

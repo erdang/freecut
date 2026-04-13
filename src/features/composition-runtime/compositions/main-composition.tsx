@@ -44,7 +44,8 @@ import {
   hasLinkedAudioCompanion,
   isCompositionAudioItem,
 } from '@/shared/utils/linked-media';
-import { appendResolvedAudioEqStage, getAudioEqSettings } from '@/shared/utils/audio-eq';
+import { appendResolvedAudioEqSources, getAudioEqSettings, prependResolvedAudioEqSources } from '@/shared/utils/audio-eq';
+import { getAudioPitchShiftSemitones } from '@/shared/utils/audio-pitch';
 
 const TRANSITION_AUDIO_PREMOUNT_SECONDS = 0.5;
 const STANDALONE_AUDIO_PREMOUNT_SECONDS = 2;
@@ -132,6 +133,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
   transitions = [],
   backgroundColor = '#000000',
   keyframes,
+  busAudioEq,
   width: compositionWidth,
   height: compositionHeight,
   useProxyMedia = false,
@@ -283,6 +285,20 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
     () => [...videoAudioSegments, ...linkedAudioTransitionSegments],
     [videoAudioSegments, linkedAudioTransitionSegments],
   );
+  const previewTransitionAudioSegments = useMemo(
+    () => transitionAudioSegments.map((segment) => ({
+      ...segment,
+      audioEqStages: prependResolvedAudioEqSources(segment.audioEqStages, busAudioEq),
+    })),
+    [busAudioEq, transitionAudioSegments],
+  );
+  const previewAudioSegments = useMemo(
+    () => audioSegments.map((segment) => ({
+      ...segment,
+      audioEqStages: prependResolvedAudioEqSources(segment.audioEqStages, busAudioEq),
+    })),
+    [audioSegments, busAudioEq],
+  );
 
   // Look up which video audio segments need custom decoding (AC-3/E-AC-3)
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
@@ -383,7 +399,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
           {/* AUDIO LAYER - rendered outside visual layers to prevent re-renders from mask/visual changes */}
           {/* Video audio is decoupled from visual video elements for transition stability */}
           {/* Custom-decoded segments (AC-3/E-AC-3, Vorbis, PCM endian variants) use mediabunny instead of native <audio>. */}
-          {transitionAudioSegments.map((segment) => {
+          {previewTransitionAudioSegments.map((segment) => {
             const useCustomDecoder = shouldUseCustomDecoder(segment);
             const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
             return (
@@ -402,6 +418,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -428,6 +446,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -451,7 +471,7 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
           })}
 
           {/* Standalone audio items - merged across split boundaries for stable playback */}
-          {audioSegments.map((segment) => {
+          {previewAudioSegments.map((segment) => {
             const useCustomDecoder = shouldUseCustomDecoder(segment);
             const decodeMediaId = segment.mediaId ?? `legacy-src:${segment.src}`;
             return (
@@ -470,6 +490,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -490,6 +512,8 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                     sourceFps={segment.sourceFps}
                     volume={segment.volumeDb}
                     playbackRate={segment.playbackRate}
+                    audioPitchSemitones={segment.audioPitchSemitones}
+                    audioPitchCents={segment.audioPitchCents}
                     muted={segment.muted}
                     durationInFrames={segment.durationInFrames}
                     audioFadeIn={segment.audioFadeIn}
@@ -536,7 +560,13 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                   parentMuted={segment.muted}
                   renderMode="audio-only"
                   audioGainMultiplier={Math.pow(10, segment.volumeDb / 20)}
-                  audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(compoundItem))}
+                  audioEqStages={appendResolvedAudioEqSources(
+                    undefined,
+                    busAudioEq,
+                    compoundItem.trackAudioEq,
+                    getAudioEqSettings(compoundItem),
+                  )}
+                  audioPitchShiftSemitones={segment.audioPitchShiftSemitones}
                   crossfadeFadeInFrames={segment.crossfadeFadeIn}
                   crossfadeFadeOutFrames={segment.crossfadeFadeOut}
                 />
@@ -556,7 +586,13 @@ export const MainComposition: React.FC<MainCompositionProps> = ({
                 parentMuted={item.muted || !item.trackVisible}
                 renderMode="audio-only"
                 audioGainMultiplier={Math.pow(10, ((item.volume ?? 0) + (item.trackVolumeDb ?? 0)) / 20)}
-                audioEqStages={appendResolvedAudioEqStage(undefined, getAudioEqSettings(item))}
+                audioEqStages={appendResolvedAudioEqSources(
+                  undefined,
+                  busAudioEq,
+                  item.trackAudioEq,
+                  getAudioEqSettings(item),
+                )}
+                audioPitchShiftSemitones={getAudioPitchShiftSemitones(item)}
               />
             </Sequence>
           ))}

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createLogger } from '@/shared/logging/logger';
 import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import { usePlaybackStore } from '@/features/composition-runtime/deps/stores';
@@ -22,6 +22,10 @@ import {
 import { SoundTouchWorkletAudio } from './soundtouch-worklet-audio';
 import type { AudioPlaybackProps } from './audio-playback-props';
 import { useAudioPlaybackState } from './hooks/use-audio-playback-state';
+import {
+  isAudioPitchShiftActive,
+  resolvePreviewAudioPitchShiftSemitones,
+} from '@/shared/utils/audio-pitch';
 
 const log = createLogger('PitchCorrectedAudio');
 const PLAYBACK_RATE_TOLERANCE = 0.0001;
@@ -135,7 +139,8 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
 
   useEffect(() => {
     const audio = acquirePreviewAudioElement(src);
-    const graph = createPreviewClipAudioGraph({ eqStageCount: resolvedAudioEqStages.length });
+    // Keep the media element and graph alive across EQ toggles; the EQ stages ramp in place below.
+    const graph = createPreviewClipAudioGraph();
     if (!graph) {
       releasePreviewAudioElement(audio);
       return;
@@ -170,7 +175,7 @@ export const NativePitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = Rea
       }
       releasePreviewAudioElement(audio);
     };
-  }, [resolvedAudioEqStages.length, src]);
+  }, [src]);
 
   useEffect(() => {
     if (audioRef.current) {
@@ -533,6 +538,9 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
       isComplete={decodedSource.isComplete}
       volume={volume}
       playbackRate={playbackRate}
+      audioPitchSemitones={props.audioPitchSemitones}
+      audioPitchCents={props.audioPitchCents}
+      audioPitchShiftSemitones={props.audioPitchShiftSemitones}
       muted={muted}
       durationInFrames={durationInFrames}
       audioFadeIn={audioFadeIn}
@@ -557,10 +565,23 @@ const DecodedPitchCorrectedAudio: React.FC<DecodedPitchCorrectedAudioProps> = Re
 
 export const PitchCorrectedAudio: React.FC<PitchCorrectedAudioProps> = React.memo((props) => {
   const playbackRate = props.playbackRate ?? 1;
+  const itemPreview = useGizmoStore(
+    useCallback((state) => state.preview?.[props.itemId], [props.itemId]),
+  );
+  const resolvedPitchShiftSemitones = resolvePreviewAudioPitchShiftSemitones({
+    base: {
+      audioPitchSemitones: props.audioPitchSemitones,
+      audioPitchCents: props.audioPitchCents,
+    },
+    preview: itemPreview?.properties,
+    additionalSemitones: props.audioPitchShiftSemitones,
+  });
+  const requiresPitchCorrection = isAudioPitchShiftActive(resolvedPitchShiftSemitones);
+  const decodeMediaId = props.mediaId ?? `legacy-src:${props.src}`;
 
-  if (Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE || !props.mediaId) {
+  if (!requiresPitchCorrection && Math.abs(playbackRate - 1) <= PLAYBACK_RATE_TOLERANCE) {
     return <NativePitchCorrectedAudio {...props} playbackRate={playbackRate} />;
   }
 
-  return <DecodedPitchCorrectedAudio {...props} mediaId={props.mediaId} playbackRate={playbackRate} />;
+  return <DecodedPitchCorrectedAudio {...props} mediaId={decodeMediaId} playbackRate={playbackRate} />;
 });
