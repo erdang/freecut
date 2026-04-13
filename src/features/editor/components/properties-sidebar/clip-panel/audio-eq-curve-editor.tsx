@@ -21,7 +21,6 @@ import {
   AUDIO_EQ_LOW_MID_MAX_FREQUENCY_HZ,
   AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ,
   AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
-  AUDIO_EQ_MID_FREQUENCY_HZ,
   clampAudioEqFrequencyHz,
   clampAudioEqGainDb,
   getAudioEqSettings,
@@ -37,14 +36,17 @@ interface AudioEqCurveEditorProps {
   settings: ResolvedAudioEqSettings;
   disabled?: boolean;
   className?: string;
+  graphClassName?: string;
   onLiveChange: (patch: AudioEqPatch) => void;
   onChange: (patch: AudioEqPatch) => void;
 }
 
 interface GainHandleDefinition {
-  id: 'low' | 'low-mid' | 'mid' | 'high-mid' | 'high';
+  id: 'low' | 'low-mid' | 'high-mid' | 'high';
   kind: 'gain';
   label: string;
+  bandNumber: 1 | 2 | 3 | 4 | 5 | 6;
+  description: string;
   frequencyField?:
     | 'audioEqLowFrequencyHz'
     | 'audioEqLowMidFrequencyHz'
@@ -53,7 +55,6 @@ interface GainHandleDefinition {
   gainField:
     | 'audioEqLowGainDb'
     | 'audioEqLowMidGainDb'
-    | 'audioEqMidGainDb'
     | 'audioEqHighMidGainDb'
     | 'audioEqHighGainDb';
   fixedFrequency?: boolean;
@@ -68,6 +69,8 @@ interface CutHandleDefinition {
   id: 'low-cut' | 'high-cut';
   kind: 'cut';
   label: string;
+  bandNumber: 1 | 2 | 3 | 4 | 5 | 6;
+  description: string;
   enabledField: 'audioEqLowCutEnabled' | 'audioEqHighCutEnabled';
   frequencyField: 'audioEqLowCutFrequencyHz' | 'audioEqHighCutFrequencyHz';
   minFrequencyHz: number;
@@ -80,12 +83,12 @@ interface CutHandleDefinition {
 type AudioEqHandleDefinition = GainHandleDefinition | CutHandleDefinition;
 
 const CURVE_WIDTH = 320;
-const CURVE_HEIGHT = 140;
-const CURVE_PADDING_X = 12;
-const CURVE_PADDING_TOP = 10;
-const CURVE_PADDING_BOTTOM = 22;
-const CURVE_MIN_FREQUENCY_HZ = 30;
-const CURVE_MAX_FREQUENCY_HZ = 22000;
+const CURVE_HEIGHT = 200;
+const CURVE_PADDING_X = 2;
+const CURVE_PADDING_TOP = 2;
+const CURVE_PADDING_BOTTOM = 20;
+const CURVE_MIN_FREQUENCY_HZ = 20;
+const CURVE_MAX_FREQUENCY_HZ = 24000;
 const CURVE_GRID_LEVELS_DB = [18, 9, 0, -9, -18] as const;
 const CURVE_GRID_FREQUENCIES_HZ = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000] as const;
 const KEYBOARD_GAIN_STEP_DB = 0.5;
@@ -96,7 +99,9 @@ const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
   {
     id: 'low-cut',
     kind: 'cut',
-    label: 'Low Cut',
+    label: 'Band 1',
+    bandNumber: 1,
+    description: 'Low Cut',
     enabledField: 'audioEqLowCutEnabled',
     frequencyField: 'audioEqLowCutFrequencyHz',
     minFrequencyHz: AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
@@ -108,7 +113,9 @@ const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
   {
     id: 'low',
     kind: 'gain',
-    label: 'Low',
+    label: 'Band 2',
+    bandNumber: 2,
+    description: 'Low Shelf',
     frequencyField: 'audioEqLowFrequencyHz',
     gainField: 'audioEqLowGainDb',
     minFrequencyHz: AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
@@ -120,7 +127,9 @@ const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
   {
     id: 'low-mid',
     kind: 'gain',
-    label: 'Low Mid',
+    label: 'Band 3',
+    bandNumber: 3,
+    description: 'Low Mid',
     frequencyField: 'audioEqLowMidFrequencyHz',
     gainField: 'audioEqLowMidGainDb',
     minFrequencyHz: AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ,
@@ -130,21 +139,11 @@ const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
     getGainDb: (settings) => settings.lowMidGainDb,
   },
   {
-    id: 'mid',
-    kind: 'gain',
-    label: 'Mid',
-    gainField: 'audioEqMidGainDb',
-    fixedFrequency: true,
-    minFrequencyHz: AUDIO_EQ_MID_FREQUENCY_HZ,
-    maxFrequencyHz: AUDIO_EQ_MID_FREQUENCY_HZ,
-    defaultFrequencyHz: AUDIO_EQ_MID_FREQUENCY_HZ,
-    getFrequencyHz: () => AUDIO_EQ_MID_FREQUENCY_HZ,
-    getGainDb: (settings) => settings.midGainDb,
-  },
-  {
     id: 'high-mid',
     kind: 'gain',
-    label: 'High Mid',
+    label: 'Band 4',
+    bandNumber: 4,
+    description: 'High Mid',
     frequencyField: 'audioEqHighMidFrequencyHz',
     gainField: 'audioEqHighMidGainDb',
     minFrequencyHz: AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ,
@@ -156,7 +155,9 @@ const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
   {
     id: 'high',
     kind: 'gain',
-    label: 'High',
+    label: 'Band 5',
+    bandNumber: 5,
+    description: 'High Shelf',
     frequencyField: 'audioEqHighFrequencyHz',
     gainField: 'audioEqHighGainDb',
     minFrequencyHz: AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ,
@@ -168,7 +169,9 @@ const AUDIO_EQ_HANDLES: ReadonlyArray<AudioEqHandleDefinition> = Object.freeze([
   {
     id: 'high-cut',
     kind: 'cut',
-    label: 'High Cut',
+    label: 'Band 6',
+    bandNumber: 6,
+    description: 'High Cut',
     enabledField: 'audioEqHighCutEnabled',
     frequencyField: 'audioEqHighCutFrequencyHz',
     minFrequencyHz: AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
@@ -253,8 +256,8 @@ function mergeDisplayedSettings(
   return resolveAudioEqSettings(merged as unknown as ResolvedAudioEqSettings);
 }
 
-function getCutHandleY(enabled: boolean): number {
-  return enabled ? CURVE_HEIGHT - CURVE_PADDING_BOTTOM + 1 : CURVE_HEIGHT - CURVE_PADDING_BOTTOM + 6;
+function getCutHandleY(): number {
+  return gainToY(0);
 }
 
 function createPatchForPointer(
@@ -306,6 +309,7 @@ export function AudioEqCurveEditor({
   settings,
   disabled = false,
   className,
+  graphClassName,
   onLiveChange,
   onChange,
 }: AudioEqCurveEditorProps) {
@@ -455,7 +459,8 @@ export function AudioEqCurveEditor({
         ref={rootRef}
         data-eq-curve-root="true"
         className={cn(
-          'relative h-[140px] w-full overflow-hidden rounded-md border border-border/60 bg-muted/20 touch-none select-none',
+          'relative w-full overflow-hidden touch-none select-none',
+          graphClassName ?? 'h-[140px] rounded-md border border-border/60 bg-muted/20',
           disabled ? 'opacity-60' : 'cursor-move',
         )}
         onPointerMove={(event) => {
@@ -471,54 +476,34 @@ export function AudioEqCurveEditor({
       >
         <svg
           viewBox={`0 0 ${CURVE_WIDTH} ${CURVE_HEIGHT}`}
+          preserveAspectRatio="none"
           className="h-full w-full"
           aria-label="EQ curve editor"
         >
           {CURVE_GRID_LEVELS_DB.map((level) => (
-            <g key={level}>
-              <line
-                x1={CURVE_PADDING_X}
-                y1={gainToY(level)}
-                x2={CURVE_WIDTH - CURVE_PADDING_X}
-                y2={gainToY(level)}
-                stroke="currentColor"
-                strokeOpacity={level === 0 ? 0.28 : 0.12}
-                strokeDasharray={level === 0 ? undefined : '3 4'}
-              />
-              <text
-                x={4}
-                y={gainToY(level) + 3}
-                fontSize="9"
-                fill="currentColor"
-                opacity={0.45}
-              >
-                {level > 0 ? `+${level}` : level}
-              </text>
-            </g>
+            <line
+              key={level}
+              x1={CURVE_PADDING_X}
+              y1={gainToY(level)}
+              x2={CURVE_WIDTH - CURVE_PADDING_X}
+              y2={gainToY(level)}
+              stroke="currentColor"
+              strokeOpacity={level === 0 ? 0.3 : 0.1}
+              strokeDasharray={level === 0 ? undefined : '2 3'}
+            />
           ))}
 
           {CURVE_GRID_FREQUENCIES_HZ.map((frequencyHz) => (
-            <g key={frequencyHz}>
-              <line
-                x1={frequencyToX(frequencyHz)}
-                y1={CURVE_PADDING_TOP}
-                x2={frequencyToX(frequencyHz)}
-                y2={CURVE_HEIGHT - CURVE_PADDING_BOTTOM}
-                stroke="currentColor"
-                strokeOpacity={0.1}
-                strokeDasharray="3 4"
-              />
-              <text
-                x={frequencyToX(frequencyHz)}
-                y={CURVE_HEIGHT - 6}
-                textAnchor="middle"
-                fontSize="9"
-                fill="currentColor"
-                opacity={0.5}
-              >
-                {formatFrequencyLabel(frequencyHz)}
-              </text>
-            </g>
+            <line
+              key={frequencyHz}
+              x1={frequencyToX(frequencyHz)}
+              y1={CURVE_PADDING_TOP}
+              x2={frequencyToX(frequencyHz)}
+              y2={CURVE_HEIGHT - CURVE_PADDING_BOTTOM}
+              stroke="currentColor"
+              strokeOpacity={0.08}
+              strokeDasharray="2 3"
+            />
           ))}
 
           <path
@@ -530,15 +515,38 @@ export function AudioEqCurveEditor({
           />
         </svg>
 
+        {CURVE_GRID_LEVELS_DB.map((level) => (
+          <div
+            key={`db-${level}`}
+            className="pointer-events-none absolute left-1.5 -translate-y-1/2 text-[10px] leading-none text-current opacity-40"
+            style={{ top: `${(gainToY(level) / CURVE_HEIGHT) * 100}%` }}
+          >
+            {level > 0 ? `+${level}` : level}
+          </div>
+        ))}
+
+        {CURVE_GRID_FREQUENCIES_HZ.map((frequencyHz) => (
+          <div
+            key={`freq-${frequencyHz}`}
+            className="pointer-events-none absolute -translate-x-1/2 text-[10px] leading-none text-current opacity-45"
+            style={{
+              left: `${(frequencyToX(frequencyHz) / CURVE_WIDTH) * 100}%`,
+              bottom: '3px',
+            }}
+          >
+            {formatFrequencyLabel(frequencyHz)}
+          </div>
+        ))}
+
         {AUDIO_EQ_HANDLES.map((handle) => {
           const frequencyHz = handle.getFrequencyHz(displayedSettings);
           const isActive = dragState?.handleId === handle.id;
           const top = handle.kind === 'cut'
-            ? getCutHandleY(handle.getEnabled(displayedSettings))
+            ? getCutHandleY()
             : gainToY(handle.getGainDb(displayedSettings));
           const title = handle.kind === 'cut'
-            ? `${handle.label} ${handle.getEnabled(displayedSettings) ? 'on' : 'off'} ${formatFrequencyLabel(frequencyHz)}`
-            : `${handle.label} ${handle.getGainDb(displayedSettings) > 0 ? '+' : ''}${handle.getGainDb(displayedSettings).toFixed(1)} dB @ ${formatFrequencyLabel(frequencyHz)}`;
+            ? `${handle.label} ${handle.description} ${handle.getEnabled(displayedSettings) ? 'on' : 'off'} ${formatFrequencyLabel(frequencyHz)}`
+            : `${handle.label} ${handle.description} ${handle.getGainDb(displayedSettings) > 0 ? '+' : ''}${handle.getGainDb(displayedSettings).toFixed(1)} dB @ ${formatFrequencyLabel(frequencyHz)}`;
 
           return (
             <button
@@ -547,9 +555,9 @@ export function AudioEqCurveEditor({
               data-eq-band={handle.id}
               aria-label={`${handle.label} EQ handle`}
               className={cn(
-                'absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-background shadow-sm transition-[transform,background-color] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1',
-                isActive ? 'h-4 w-4 scale-110 bg-foreground' : 'h-3.5 w-3.5 bg-primary',
-                handle.kind === 'cut' && !handle.getEnabled(displayedSettings) && 'bg-muted-foreground/60',
+                'absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-background shadow-sm transition-[transform,background-color,color] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 flex items-center justify-center font-mono font-semibold leading-none',
+                isActive ? 'h-5 w-5 scale-110 bg-foreground text-background' : 'h-[18px] w-[18px] bg-primary text-primary-foreground',
+                handle.kind === 'cut' && !handle.getEnabled(displayedSettings) && 'bg-muted-foreground/60 text-background/80',
                 disabled && 'pointer-events-none',
               )}
               style={{
@@ -567,7 +575,11 @@ export function AudioEqCurveEditor({
                 handleBandKeyDown(handle, event);
               }}
               title={title}
-            />
+            >
+              <span className="text-[8px]" data-eq-band-number={handle.bandNumber}>
+                {handle.bandNumber}
+              </span>
+            </button>
           );
         })}
 

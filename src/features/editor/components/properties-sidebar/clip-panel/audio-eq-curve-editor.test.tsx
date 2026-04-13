@@ -79,4 +79,19 @@ describe('AudioEqCurveEditor', () => {
     expect(onLiveChange).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
   });
+
+  it('renders Resolve-style numbered band dots', () => {
+    render(
+      <AudioEqCurveEditor
+        settings={DEFAULT_SETTINGS}
+        onLiveChange={() => undefined}
+        onChange={() => undefined}
+      />,
+    );
+
+    expect(document.querySelector('[data-eq-band="low-cut"] [data-eq-band-number="1"]')).not.toBeNull();
+    expect(document.querySelector('[data-eq-band="high-mid"] [data-eq-band-number="4"]')).not.toBeNull();
+    expect(document.querySelector('[data-eq-band="high-cut"] [data-eq-band-number="6"]')).not.toBeNull();
+    expect(document.querySelector('[data-eq-band="mid"]')).toBeNull();
+  });
 });

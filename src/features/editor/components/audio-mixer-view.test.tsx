@@ -645,4 +645,56 @@ describe('AudioMixerView', () => {
     expect(handleTrackVolumeChange).toHaveBeenCalledTimes(1);
     expect(handleTrackVolumeChange.mock.calls[0]?.[1]).toBeGreaterThan(-10);
   });
+
+  it('routes EQ button clicks for tracks and bus strips', () => {
+    const handleTrackEqToggle = vi.fn();
+    const handleBusEqToggle = vi.fn();
+
+    const { container } = render(
+      <AudioMixerView
+        tracks={[
+          {
+            id: 'track-1',
+            name: 'A1',
+            kind: 'audio',
+            muted: false,
+            solo: false,
+            volume: 0,
+            itemIds: ['item-1'],
+          },
+        ]}
+        perTrackLevels={new Map()}
+        masterEstimate={{
+          left: 0,
+          right: 0,
+          unresolvedSourceCount: 0,
+          resolvedSourceCount: 0,
+        }}
+        isPlaying={false}
+        onTrackVolumeChange={() => undefined}
+        onTrackMuteToggle={() => undefined}
+        onTrackSoloToggle={() => undefined}
+        onTrackEqToggle={handleTrackEqToggle}
+        onBusEqToggle={handleBusEqToggle}
+        activeEqTrackId={null}
+        busEqActive={false}
+        masterVolumeDb={0}
+        masterMuted={false}
+        onMasterVolumeChange={() => undefined}
+        onMasterMuteToggle={() => undefined}
+      />,
+    );
+
+    const trackEqButton = container.querySelector('[aria-label="EQ A1"]') as HTMLButtonElement | null;
+    const busEqButton = container.querySelector('[aria-label="EQ Bus 1"]') as HTMLButtonElement | null;
+
+    expect(trackEqButton).not.toBeNull();
+    expect(busEqButton).not.toBeNull();
+
+    fireEvent.click(trackEqButton!);
+    fireEvent.click(busEqButton!);
+
+    expect(handleTrackEqToggle).toHaveBeenCalledWith('track-1');
+    expect(handleBusEqToggle).toHaveBeenCalledTimes(1);
+  });
 });

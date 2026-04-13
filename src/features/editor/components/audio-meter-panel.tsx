@@ -39,9 +39,16 @@ import {
   type AudioMeterWaveform,
 } from './audio-meter-utils';
 import { AudioMixerView, type AudioMixerTrack } from './audio-mixer-view';
+import { AudioEqPanelContent } from './properties-sidebar/clip-panel/audio-eq-panel-content';
+import { type AudioEqPatch } from './properties-sidebar/clip-panel/audio-eq-curve-editor';
+import { getAudioEqSettings } from '@/shared/utils/audio-eq';
 import { clearMixerLiveGainLayer, setMixerLiveGainLayer } from '@/shared/state/mixer-live-gain';
 
 type PanelMode = 'meter' | 'mixer';
+type EqPanelTarget =
+  | { kind: 'track'; trackId: string }
+  | { kind: 'bus' };
+
 const MUTE_SOLO_GAIN_LAYER_ID = 'audio-meter-mute-solo';
 
 function toWaveformSnapshot(
@@ -84,9 +91,12 @@ const EMPTY_PER_TRACK_LEVELS = new Map<string, AudioMeterEstimate>();
 
 const FLOATING_MIXER_STORAGE_KEY = 'editor:floatingMixerBounds';
 const FLOATING_MIXER_DEFAULT_BOUNDS = { x: -1, y: -1, width: 420, height: 500 };
+const FLOATING_EQ_STORAGE_KEY = 'editor:floatingEqBounds';
+const FLOATING_EQ_DEFAULT_BOUNDS = { x: -1, y: -1, width: 980, height: 620 };
 
 export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const [panelMode, setPanelMode] = useState<PanelMode>('meter');
+  const [eqPanelTarget, setEqPanelTarget] = useState<EqPanelTarget | null>(null);
   const mixerFloating = useEditorStore((s) => s.mixerFloating);
   const setMixerFloating = useEditorStore((s) => s.setMixerFloating);
   const [trackSnapshotVersion, setTrackSnapshotVersion] = useState(0);
@@ -374,9 +384,8 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   // ---------------------------------------------------------------------------
 
   const mixerSourceTracks = useMemo(() => {
-    if (panelMode !== 'mixer') return [];
     return combinedTracks.filter((track) => isAudioMixerTrack(track, combinedTimelineItems));
-  }, [combinedTimelineItems, combinedTracks, panelMode]);
+  }, [combinedTimelineItems, combinedTracks]);
 
   const mixerTracks = useMemo<AudioMixerTrack[]>(() => {
     return mixerSourceTracks.map((track) => ({
@@ -392,14 +401,54 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   }, [mixerSourceTracks]);
 
   const perTrackLevels = useMemo(() => {
-    if (panelMode !== 'mixer' || perTrackSources.length === 0) return EMPTY_PER_TRACK_LEVELS;
+    if ((panelMode !== 'mixer' && !mixerFloating) || perTrackSources.length === 0) return EMPTY_PER_TRACK_LEVELS;
     return estimatePerTrackLevels({
       tracks: combinedTracks,
       sources: perTrackSources,
       waveformsByMediaId,
       targetTrackIds: mixerSourceTracks.map((track) => track.id),
     });
-  }, [combinedTracks, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
+  }, [combinedTracks, mixerFloating, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
+
+  const activeEqTrackId = eqPanelTarget?.kind === 'track'
+    ? eqPanelTarget.trackId
+    : null;
+  const busEqActive = eqPanelTarget?.kind === 'bus';
+
+  const eqPanelDescriptor = useMemo(() => {
+    if (!eqPanelTarget) return null;
+
+    if (eqPanelTarget.kind === 'track') {
+      const track = mixerSourceTracks.find((entry) => entry.id === eqPanelTarget.trackId);
+      if (!track) return null;
+      return {
+        title: track.name,
+        targetLabel: track.name,
+        trackId: track.id,
+        trackEq: track.audioEq,
+      };
+    }
+
+    // Bus EQ: aggregate all track EQs (no dedicated bus EQ store yet)
+    const seenItemIds = new Set<string>();
+    const busItems = mixerSourceTracks.flatMap((track) => track.items).filter((item) => {
+      if (seenItemIds.has(item.id)) return false;
+      seenItemIds.add(item.id);
+      return true;
+    });
+
+    return {
+      title: 'Bus 1',
+      targetLabel: 'Bus 1',
+      items: busItems,
+    };
+  }, [eqPanelTarget, mixerSourceTracks]);
+
+  useEffect(() => {
+    if (eqPanelTarget && !eqPanelDescriptor) {
+      setEqPanelTarget(null);
+    }
+  }, [eqPanelDescriptor, eqPanelTarget]);
 
   // Commit track volume in place to avoid preview playback stalls during active playback.
   // Undo remains correct because we add an explicit pre-mutation snapshot entry.
@@ -441,6 +490,25 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_TRACK_VOLUME', payload: { id: trackId } },
+      beforeSnapshot,
+    );
+    setTrackSnapshotVersion((version) => version + 1);
+  }, []);
+
+  const handleTrackEqChange = useCallback((trackId: string, patch: AudioEqPatch) => {
+    const currentTracks = useItemsStore.getState().tracks;
+    const targetTrack = currentTracks.find((track) => track.id === trackId);
+    if (!targetTrack) return;
+    const snapshot = captureSnapshot();
+    const beforeSnapshot = {
+      ...snapshot,
+      tracks: snapshot.tracks.map((track) => ({ ...track })),
+    };
+    const eqPatch = getAudioEqSettings(patch);
+    (targetTrack as { audioEq: typeof targetTrack.audioEq }).audioEq = { ...targetTrack.audioEq, ...eqPatch };
+    useTimelineStore.getState().markDirty();
+    useTimelineCommandStore.getState().addUndoEntry(
+      { type: 'UPDATE_TRACK_EQ', payload: { id: trackId } },
       beforeSnapshot,
     );
     setTrackSnapshotVersion((version) => version + 1);
@@ -524,6 +592,22 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     setTrackSnapshotVersion((version) => version + 1);
   }, [applyMuteSoloLiveGains]);
 
+  const handleTrackEqToggle = useCallback((trackId: string) => {
+    setEqPanelTarget((current) => (
+      current?.kind === 'track' && current.trackId === trackId
+        ? null
+        : { kind: 'track', trackId }
+    ));
+  }, []);
+
+  const handleBusEqToggle = useCallback(() => {
+    setEqPanelTarget((current) => (
+      current?.kind === 'bus'
+        ? null
+        : { kind: 'bus' }
+    ));
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Master volume (dB <-> linear gain for bus fader)
   // ---------------------------------------------------------------------------
@@ -602,7 +686,30 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         onTrackVolumeChange={handleTrackVolumeChange}
         onTrackMuteToggle={handleTrackMuteToggle}
         onTrackSoloToggle={handleTrackSoloToggle}
+        onTrackEqToggle={handleTrackEqToggle}
+        onBusEqToggle={handleBusEqToggle}
+        activeEqTrackId={activeEqTrackId}
+        busEqActive={busEqActive}
         expanded
+      />
+    </FloatingPanel>
+  ) : null;
+
+  const floatingEqPanel = eqPanelDescriptor ? (
+    <FloatingPanel
+      title={`Equalizer - ${eqPanelDescriptor.title}`}
+      defaultBounds={FLOATING_EQ_DEFAULT_BOUNDS}
+      minWidth={760}
+      minHeight={460}
+      storageKey={FLOATING_EQ_STORAGE_KEY}
+      onClose={() => setEqPanelTarget(null)}
+      className="rounded-[6px] border-[#3a3d45] bg-[#1c1f25]"
+    >
+      <AudioEqPanelContent
+        items={'items' in eqPanelDescriptor ? eqPanelDescriptor.items : undefined}
+        targetLabel={eqPanelDescriptor.targetLabel}
+        trackEq={'trackEq' in eqPanelDescriptor ? eqPanelDescriptor.trackEq : undefined}
+        onTrackEqChange={'trackId' in eqPanelDescriptor ? (patch) => handleTrackEqChange((eqPanelDescriptor as { trackId: string }).trackId, patch) : undefined}
       />
     </FloatingPanel>
   ) : null;
@@ -613,20 +720,27 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   if (panelMode === 'mixer' && !mixerFloating) {
     return (
-      <AudioMixerView
-        tracks={mixerTracks}
-        perTrackLevels={perTrackLevels}
-        masterEstimate={estimate}
-        isPlaying={isPlaying}
-        masterVolumeDb={masterVolumeDb}
-        masterMuted={muted}
-        onMasterVolumeChange={handleMasterVolumeChange}
-        onMasterMuteToggle={toggleMute}
-        onTrackVolumeChange={handleTrackVolumeChange}
-        onTrackMuteToggle={handleTrackMuteToggle}
-        onTrackSoloToggle={handleTrackSoloToggle}
-        headerExtra={modeDropdown}
-      />
+      <>
+        {floatingEqPanel}
+        <AudioMixerView
+          tracks={mixerTracks}
+          perTrackLevels={perTrackLevels}
+          masterEstimate={estimate}
+          isPlaying={isPlaying}
+          masterVolumeDb={masterVolumeDb}
+          masterMuted={muted}
+          onMasterVolumeChange={handleMasterVolumeChange}
+          onMasterMuteToggle={toggleMute}
+          onTrackVolumeChange={handleTrackVolumeChange}
+          onTrackMuteToggle={handleTrackMuteToggle}
+          onTrackSoloToggle={handleTrackSoloToggle}
+          onTrackEqToggle={handleTrackEqToggle}
+          onBusEqToggle={handleBusEqToggle}
+          activeEqTrackId={activeEqTrackId}
+          busEqActive={busEqActive}
+          headerExtra={modeDropdown}
+        />
+      </>
     );
   }
 
@@ -641,6 +755,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   return (
     <>
+    {floatingEqPanel}
     {floatingMixer}
     <aside
       className="panel-bg border-l border-border flex h-full flex-col overflow-hidden"

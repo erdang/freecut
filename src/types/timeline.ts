@@ -1,6 +1,7 @@
 import type { CropSettings, TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
 import type { BlendMode } from './blend-modes';
+import type { AudioEqSettings } from './audio';
 
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
@@ -191,6 +192,7 @@ export interface TimelineTrack {
   muted: boolean; // Audio muting (Volume icon)
   solo: boolean;
   volume?: number; // Track gain in dB (default: 0)
+  audioEq?: AudioEqSettings; // Per-track EQ (separate from per-clip EQ)
   color?: string; // Optional - tracks are generic containers, items have colors
   order: number;
   items: TimelineItem[];

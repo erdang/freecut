@@ -29,6 +29,7 @@ import {
 import { getMixedValue } from '../utils';
 import { getAudioSectionItems } from './audio-section-utils';
 import { AudioEqCurveEditor, type AudioEqPatch } from './audio-eq-curve-editor';
+import { buildTimelineEqPatchFromResolvedSettings, normalizeUiEqPatch, toTimelineEqPatch } from './audio-eq-ui';
 import {
   AUDIO_EQ_GAIN_DB_MAX,
   AUDIO_EQ_GAIN_DB_MIN,
@@ -72,34 +73,6 @@ interface AudioSectionProps {
 const AUDIO_GAIN_DB_MIN = -60;
 const AUDIO_GAIN_DB_MAX = 12;
 const AUDIO_EQ_SLOPE_OPTIONS = [6, 12, 18, 24] as const;
-
-function buildTimelineEqPatchFromResolvedSettings(settings: ReturnType<typeof resolveAudioEqSettings>): Partial<TimelineItem> {
-  return {
-    audioEqLowCutEnabled: settings.lowCutEnabled,
-    audioEqLowCutFrequencyHz: settings.lowCutFrequencyHz,
-    audioEqLowCutSlopeDbPerOct: settings.lowCutSlopeDbPerOct,
-    audioEqLowGainDb: settings.lowGainDb,
-    audioEqLowFrequencyHz: settings.lowFrequencyHz,
-    audioEqLowMidGainDb: settings.lowMidGainDb,
-    audioEqLowMidFrequencyHz: settings.lowMidFrequencyHz,
-    audioEqLowMidQ: settings.lowMidQ,
-    audioEqMidGainDb: settings.midGainDb,
-    audioEqHighMidGainDb: settings.highMidGainDb,
-    audioEqHighMidFrequencyHz: settings.highMidFrequencyHz,
-    audioEqHighMidQ: settings.highMidQ,
-    audioEqHighGainDb: settings.highGainDb,
-    audioEqHighFrequencyHz: settings.highFrequencyHz,
-    audioEqHighCutEnabled: settings.highCutEnabled,
-    audioEqHighCutFrequencyHz: settings.highCutFrequencyHz,
-    audioEqHighCutSlopeDbPerOct: settings.highCutSlopeDbPerOct,
-  };
-}
-
-function eqResetPatch(
-  patch: AudioEqPatch,
-): Partial<TimelineItem> {
-  return patch as Partial<TimelineItem>;
-}
 
 /**
  * Audio section - volume, EQ, and audio fades.
@@ -417,9 +390,10 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   const handleEqPatchLiveChange = useCallback(
     (patch: AudioEqPatch) => {
+      const normalizedPatch = normalizeUiEqPatch(patch);
       const previews: Record<string, AudioEqPatch> = {};
       itemIds.forEach((id) => {
-        previews[id] = patch;
+        previews[id] = normalizedPatch;
       });
       setPropertiesPreviewNew(previews);
     },
@@ -428,7 +402,8 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   const handleEqPatchChange = useCallback(
     (patch: AudioEqPatch) => {
-      itemIds.forEach((id) => updateItem(id, eqResetPatch(patch)));
+      const normalizedPatch = toTimelineEqPatch(patch);
+      itemIds.forEach((id) => updateItem(id, normalizedPatch));
       queueMicrotask(() => clearPreview());
     },
     [clearPreview, itemIds, updateItem],
