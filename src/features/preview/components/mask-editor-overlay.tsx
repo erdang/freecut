@@ -62,6 +62,8 @@ import {
 } from './mask-editor-overlay-utils';
 import {
   findBestCanvasDropPlacement,
+  createClassicTrack,
+  getTrackKind,
   resolveEffectiveTrackStates,
 } from '../deps/timeline-utils';
 import {
@@ -1001,17 +1003,25 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const minOrder = tracks.length > 0
         ? Math.min(...tracks.map((track) => track.order ?? 0))
         : 0;
-      const newTrack: TimelineTrack = {
-        id: `track-${Date.now()}`,
-        name: getNextTrackName(tracks),
-        height: referenceTrack?.height ?? 72,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: minOrder - 1,
-        items: [],
-      };
+      const usesClassicTrackKinds = tracks.some((track) => getTrackKind(track) !== null);
+      const newTrack: TimelineTrack = usesClassicTrackKinds
+        ? createClassicTrack({
+          tracks,
+          kind: 'video',
+          order: minOrder - 1,
+          height: referenceTrack?.height ?? 72,
+        })
+        : {
+          id: `track-${Date.now()}`,
+          name: getNextTrackName(tracks),
+          height: referenceTrack?.height ?? 72,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: minOrder - 1,
+          items: [],
+        };
 
       setTracks([newTrack, ...tracks]);
       placement = {

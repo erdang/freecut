@@ -63,6 +63,37 @@ const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
 
 type TrackScrollbarSection = 'video' | 'audio' | 'single';
 
+function revealTrackInScrollContainer(
+  container: HTMLDivElement | null,
+  trackId: string
+): boolean {
+  if (!container) {
+    return false;
+  }
+
+  const trackElement = Array.from(container.querySelectorAll<HTMLElement>('[data-track-id]'))
+    .find((element) => element.getAttribute('data-track-id') === trackId);
+
+  if (!trackElement) {
+    return false;
+  }
+
+  const containerRect = container.getBoundingClientRect();
+  const trackRect = trackElement.getBoundingClientRect();
+  const trackTop = trackRect.top - containerRect.top + container.scrollTop;
+  const trackBottom = trackTop + trackRect.height;
+  const viewTop = container.scrollTop;
+  const viewBottom = viewTop + container.clientHeight;
+
+  if (trackTop < viewTop) {
+    container.scrollTop = Math.max(0, trackTop);
+  } else if (trackBottom > viewBottom) {
+    container.scrollTop = Math.max(0, trackBottom - container.clientHeight);
+  }
+
+  return true;
+}
+
 /**
  * Tracks whether a scroll container has vertical overflow.
  * Only re-renders the parent when overflow state changes (resize/content change),
@@ -490,6 +521,7 @@ export const TimelineContent = memo(function TimelineContent({
   const selectItems = useSelectionStore((s) => s.selectItems);
   const selectMarker = useSelectionStore((s) => s.selectMarker);
   const clearItemSelection = useSelectionStore((s) => s.clearItemSelection);
+  const activeTrackId = useSelectionStore((s) => s.activeTrackId);
   // Granular selectors for drag state - avoid subscribing to entire dragState object
   const isDragging = useSelectionStore((s) => !!s.dragState?.isDragging);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -730,6 +762,24 @@ export const TimelineContent = memo(function TimelineContent({
     container.scrollLeft = Math.max(0, frameX - vw / 2);
     syncViewportFromContainer();
   }, [pendingScrollToFrame, syncViewportFromContainer]);
+
+  useLayoutEffect(() => {
+    if (!activeTrackId) {
+      return;
+    }
+
+    const scrollContainers = [
+      videoTracksScrollRef?.current ?? null,
+      audioTracksScrollRef?.current ?? null,
+      allTracksScrollRef?.current ?? null,
+    ];
+
+    for (const container of scrollContainers) {
+      if (revealTrackInScrollContainer(container, activeTrackId)) {
+        break;
+      }
+    }
+  }, [activeTrackId, videoTracks.length, audioTracks.length, tracks.length]);
 
   // Marquee selection - create items array for getBoundingRect lookups
   // Use derived selector for item IDs only (doesn't re-render when positions change)

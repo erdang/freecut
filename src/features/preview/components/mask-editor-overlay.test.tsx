@@ -357,6 +357,96 @@ describe('MaskEditorOverlay shape pen flow', () => {
     expect(useSelectionStore.getState().activeTrackId).toBe(newTrack?.id ?? null);
   });
 
+  it('creates a video track when pen masks spill into a new classic track lane', async () => {
+    useMaskEditorStore.getState().startShapePenMode();
+    usePlaybackStore.getState().setCurrentFrame(120);
+    useSelectionStore.getState().setActiveTrack('track-v1');
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-v1',
+        name: 'V1',
+        kind: 'video',
+        height: 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-a1',
+        name: 'A1',
+        kind: 'audio',
+        height: 72,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'busy-video-track',
+        type: 'shape',
+        trackId: 'track-v1',
+        from: 100,
+        durationInFrames: 120,
+        label: 'Busy',
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+      },
+    ]);
+
+    const coordParams: CoordinateParams = {
+      containerRect: createRect(),
+      playerSize: PLAYER_SIZE,
+      projectSize: PROJECT_SIZE,
+      zoom: 1,
+    };
+
+    const { container } = render(
+      <MaskEditorOverlay
+        coordParams={coordParams}
+        playerSize={PLAYER_SIZE}
+        itemTransform={FULL_CANVAS_TRANSFORM}
+      />
+    );
+
+    const canvas = container.querySelector('canvas');
+    expect(canvas).toBeTruthy();
+
+    vi.spyOn(canvas!, 'getBoundingClientRect').mockReturnValue(createRect());
+
+    const clickPoint = (x: number, y: number, pointerId: number) => {
+      fireEvent.pointerDown(canvas!, { clientX: x, clientY: y, pointerId });
+      fireEvent.pointerUp(canvas!, { clientX: x, clientY: y, pointerId });
+    };
+
+    clickPoint(20, 20, 1);
+    clickPoint(120, 20, 2);
+    clickPoint(120, 80, 3);
+    clickPoint(20, 20, 4);
+
+    await waitFor(() => {
+      expect(useMaskEditorStore.getState().isEditing).toBe(false);
+    });
+
+    const tracks = useItemsStore.getState().tracks;
+    const newTrack = tracks.find((track) => track.id !== 'track-v1' && track.id !== 'track-a1');
+    const shape = useItemsStore.getState().items.find((item) => item.id !== 'busy-video-track');
+
+    expect(newTrack).toBeDefined();
+    expect(newTrack?.kind).toBe('video');
+    expect(newTrack?.name).toBe('V2');
+    expect(newTrack?.order).toBeLessThan(0);
+    expect(shape?.trackId).toBe(newTrack?.id);
+    expect(shape?.from).toBe(120);
+    expect(useSelectionStore.getState().activeTrackId).toBe(newTrack?.id ?? null);
+  });
+
   it('creates a new track to keep the mask at the playhead when all tracks are occupied', async () => {
     useMaskEditorStore.getState().startShapePenMode();
     usePlaybackStore.getState().setCurrentFrame(120);
