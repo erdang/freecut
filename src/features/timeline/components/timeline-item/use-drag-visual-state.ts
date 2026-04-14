@@ -4,7 +4,6 @@ import type { MutableRefObject, RefObject } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { useItemsStore } from '../../stores/items-store';
 import { useSelectionStore } from '@/shared/state/selection';
-import { DRAG_OPACITY } from '../../constants';
 import { dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import {
   getTimelineItemDragParticipation,
@@ -122,7 +121,6 @@ export function useDragVisualState({
       if (transformRef.current) {
         transformRef.current.style.transition = 'none';
         transformRef.current.style.transform = '';
-        transformRef.current.style.opacity = '';
         transformRef.current.style.pointerEvents = '';
         transformRef.current.style.zIndex = '';
       }
@@ -148,7 +146,6 @@ export function useDragVisualState({
 
       if (isAltPreviewDrag) {
         transformRef.current.style.transform = '';
-        transformRef.current.style.opacity = '';
         transformRef.current.style.transition = 'none';
         transformRef.current.style.pointerEvents = 'none';
 
@@ -158,7 +155,6 @@ export function useDragVisualState({
         }
       } else {
         transformRef.current.style.transform = `translate(${offset.x}px, ${offset.y}px)`;
-        transformRef.current.style.opacity = String(DRAG_OPACITY);
         transformRef.current.style.transition = 'none';
         transformRef.current.style.pointerEvents = 'none';
         transformRef.current.style.zIndex = '50';

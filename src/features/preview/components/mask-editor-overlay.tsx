@@ -62,6 +62,8 @@ import {
 } from './mask-editor-overlay-utils';
 import {
   findBestCanvasDropPlacement,
+  createClassicTrack,
+  getTrackKind,
   resolveEffectiveTrackStates,
 } from '../deps/timeline-utils';
 import {
@@ -84,6 +86,7 @@ const DRAG_THRESHOLD = 3;
 const PEN_BEZIER_DRAG_THRESHOLD = 10;
 /** Segment sampling density for interior hit testing on curved paths */
 const CURVE_HIT_TEST_STEPS = 16;
+const DEFAULT_PATH_SHAPE_DURATION_SECONDS = 5;
 type PenInteraction =
   | {
       type: 'create';
@@ -919,7 +922,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     [hitTestPen, penVertices, setPenVertices, setHover]
   );
 
-  /** Commit pen vertices as a new ShapeItem with shapeType='path' and isMask=true */
+  /** Commit pen vertices as a new ShapeItem with shapeType='path'. */
   const commitShapePenPath = useCallback((verts: MaskVertex[]) => {
     const bounds = getPathBounds(verts);
     if (!bounds) {
@@ -964,7 +967,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     const items = useItemsStore.getState().items;
     const { activeTrackId, selectItems, setActiveTrack } = useSelectionStore.getState();
     const currentFrame = usePlaybackStore.getState().currentFrame;
-    const durationInFrames = fps * 60;
+    const durationInFrames = Math.max(1, Math.round(fps * DEFAULT_PATH_SHAPE_DURATION_SECONDS));
     let placement = findBestCanvasDropPlacement({
       tracks,
       items,
@@ -981,7 +984,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
 
     const placementTrackId = placement.trackId;
     const eligibleTracks = resolveEffectiveTrackStates(tracks).filter(
-      (track) => track.visible !== false && !track.locked && !track.muted && !track.isGroup
+      (track) => !track.locked && !track.isGroup
     );
     const activeTrack = activeTrackId
       ? eligibleTracks.find((track) => track.id === activeTrackId)
@@ -1001,17 +1004,25 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       const minOrder = tracks.length > 0
         ? Math.min(...tracks.map((track) => track.order ?? 0))
         : 0;
-      const newTrack: TimelineTrack = {
-        id: `track-${Date.now()}`,
-        name: getNextTrackName(tracks),
-        height: referenceTrack?.height ?? 72,
-        locked: false,
-        visible: true,
-        muted: false,
-        solo: false,
-        order: minOrder - 1,
-        items: [],
-      };
+      const usesClassicTrackKinds = tracks.some((track) => getTrackKind(track) !== null);
+      const newTrack: TimelineTrack = usesClassicTrackKinds
+        ? createClassicTrack({
+          tracks,
+          kind: 'video',
+          order: minOrder - 1,
+          height: referenceTrack?.height ?? 72,
+        })
+        : {
+          id: `track-${Date.now()}`,
+          name: getNextTrackName(tracks),
+          height: referenceTrack?.height ?? 72,
+          locked: false,
+          visible: true,
+          muted: false,
+          solo: false,
+          order: minOrder - 1,
+          items: [],
+        };
 
       setTracks([newTrack, ...tracks]);
       placement = {
@@ -1027,12 +1038,11 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       trackId: placement.trackId,
       from: placement.from,
       durationInFrames,
-      label: 'Path Mask',
+      label: 'Path',
       shapeType: 'path',
       pathVertices: localVerts,
-      fillColor: '#ffffff',
-      isMask: true,
-      maskType: 'alpha',
+      fillColor: '#3b82f6',
+      isMask: false,
       transform: {
         x: centerX,
         y: centerY,

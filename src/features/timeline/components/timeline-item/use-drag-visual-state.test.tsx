@@ -4,6 +4,7 @@ import { useRef } from 'react';
 import type { VideoItem } from '@/types/timeline';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useItemsStore } from '../../stores/items-store';
+import { DRAG_OPACITY } from '@/features/timeline/constants';
 import { dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useDragVisualState } from './use-drag-visual-state';
 
@@ -24,9 +25,11 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
 function DragVisualHarness({
   item,
   isDragging = false,
+  initialOpacity = '0.3',
 }: {
   item: VideoItem;
   isDragging?: boolean;
+  initialOpacity?: string;
 }) {
   const transformRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
@@ -40,7 +43,11 @@ function DragVisualHarness({
 
   return (
     <>
-      <div data-testid="body" ref={transformRef} />
+      <div
+        data-testid="body"
+        ref={transformRef}
+        style={{ opacity: dragVisualState.shouldDimForDrag ? String(DRAG_OPACITY) : initialOpacity }}
+      />
       <div data-testid="ghost" ref={ghostRef} />
       <div data-testid="join-state">
         {String(dragVisualState.dragAffectsJoin.left)}
@@ -95,9 +102,18 @@ describe('useDragVisualState', () => {
     expect(screen.getByTestId('join-state')).toHaveTextContent('false:false');
   });
 
+  it('preserves the host opacity when no drag visuals are active', async () => {
+    const item = makeVideoItem();
+    render(<DragVisualHarness item={item} initialOpacity="0.3" />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('body').style.opacity).toBe('0.3');
+    });
+  });
+
   it('applies follower transforms during move drags and cleans them up when the drag ends', async () => {
     const item = makeVideoItem();
-    render(<DragVisualHarness item={item} />);
+    render(<DragVisualHarness item={item} initialOpacity="0.3" />);
 
     dragOffsetRef.current = { x: 18, y: 6 };
     setDragState([item.id]);
@@ -105,7 +121,7 @@ describe('useDragVisualState', () => {
     const body = screen.getByTestId('body');
     await waitFor(() => {
       expect(body.style.transform).toBe('translate(18px, 6px)');
-      expect(body.style.opacity).toBe('0.8');
+      expect(body.style.opacity).toBe(String(DRAG_OPACITY));
       expect(body.style.pointerEvents).toBe('none');
       expect(body.style.zIndex).toBe('50');
     });
@@ -116,7 +132,7 @@ describe('useDragVisualState', () => {
 
     await waitFor(() => {
       expect(body.style.transform).toBe('');
-      expect(body.style.opacity).toBe('');
+      expect(body.style.opacity).toBe('0.3');
       expect(body.style.pointerEvents).toBe('');
       expect(body.style.zIndex).toBe('');
     });
@@ -135,10 +151,33 @@ describe('useDragVisualState', () => {
     const ghost = screen.getByTestId('ghost');
     await waitFor(() => {
       expect(body.style.transform).toBe('');
-      expect(body.style.opacity).toBe('');
+      expect(body.style.opacity).toBe('0.3');
       expect(body.style.pointerEvents).toBe('none');
       expect(ghost.style.display).toBe('block');
       expect(ghost.style.transform).toBe('translate(11px, 7px)');
+    });
+  });
+
+  it('honors updated host opacity after a drop into a dimmed track', async () => {
+    const item = makeVideoItem();
+    const { rerender } = render(<DragVisualHarness item={item} initialOpacity="1" />);
+
+    dragOffsetRef.current = { x: 12, y: 4 };
+    setDragState([item.id]);
+
+    const body = screen.getByTestId('body');
+    await waitFor(() => {
+      expect(body.style.opacity).toBe(String(DRAG_OPACITY));
+    });
+
+    rerender(<DragVisualHarness item={item} initialOpacity="0.3" />);
+
+    act(() => {
+      useSelectionStore.getState().setDragState(null);
+    });
+
+    await waitFor(() => {
+      expect(body.style.opacity).toBe('0.3');
     });
   });
 });

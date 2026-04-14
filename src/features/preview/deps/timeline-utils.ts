@@ -7,6 +7,8 @@ export { resolveEffectiveTrackStates } from './timeline-contract';
 export {
   findBestCanvasDropPlacement,
   buildDroppedMediaTimelineItem,
+  createClassicTrack,
   getDroppedMediaDurationInFrames,
+  getTrackKind,
   type DroppableMediaType,
 } from './timeline-contract';

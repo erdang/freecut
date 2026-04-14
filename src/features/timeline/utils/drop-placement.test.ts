@@ -105,10 +105,10 @@ describe('findBestCanvasDropPlacement', () => {
     });
   });
 
-  it('skips muted tracks', () => {
+  it('allows disabled tracks when they are not locked', () => {
     const placement = findBestCanvasDropPlacement({
       tracks: [
-        makeTrack('track-1', 0, { muted: true }),
+        makeTrack('track-1', 0, { kind: 'video', visible: false }),
         makeTrack('track-2', 1),
       ],
       items: [],
@@ -119,18 +119,38 @@ describe('findBestCanvasDropPlacement', () => {
     });
 
     expect(placement).toEqual({
-      trackId: 'track-2',
+      trackId: 'track-1',
       from: 0,
       preservedTime: true,
     });
   });
 
-  it('returns null when all tracks are disabled', () => {
+  it('never targets group header tracks', () => {
+    const placement = findBestCanvasDropPlacement({
+      tracks: [
+        makeTrack('group-1', 0, { isGroup: true }),
+        makeTrack('track-1', 1, { kind: 'video' }),
+      ],
+      items: [],
+      activeTrackId: 'group-1',
+      proposedFrame: 24,
+      durationInFrames: 30,
+      itemType: 'video',
+    });
+
+    expect(placement).toEqual({
+      trackId: 'track-1',
+      from: 24,
+      preservedTime: true,
+    });
+  });
+
+  it('returns null when every compatible track is locked', () => {
     const placement = findBestCanvasDropPlacement({
       tracks: [
         makeTrack('track-1', 0, { locked: true }),
-        makeTrack('track-2', 1, { muted: true }),
-        makeTrack('track-3', 2, { visible: false }),
+        makeTrack('track-2', 1, { locked: true, muted: true }),
+        makeTrack('track-3', 2, { locked: true, visible: false }),
       ],
       items: [],
       activeTrackId: 'track-1',
