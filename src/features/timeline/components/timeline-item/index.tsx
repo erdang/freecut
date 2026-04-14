@@ -121,6 +121,9 @@ const EDGE_HOVER_ZONE = SMART_TRIM_EDGE_ZONE_PX;
 const TRACK_PUSH_MIN_PX = 6;
 const TRACK_PUSH_MAX_PX = 14;
 const TRACK_PUSH_ZOOM_THRESHOLD = 120;
+const COMPACT_CLIP_MAX_WIDTH_PX = 36;
+const JOIN_INDICATOR_MIN_ZOOM_PPS = 30;
+const SPEED_BADGE_EPSILON = 0.005;
 
 function getPixelsPerSecondNow(): number {
   return useZoomStore.getState().pixelsPerSecond;
@@ -221,6 +224,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const linkedSelectionEnabled = useEditorStore((s) => s.linkedSelectionEnabled);
   const segmentOverlays = useTimelineItemOverlayStore(
     useCallback((s) => s.overlaysByItemId[item.id] ?? EMPTY_SEGMENT_OVERLAYS, [item.id])
+  );
+  const showJoinIndicators = useZoomStore(
+    (s) => s.pixelsPerSecond >= JOIN_INDICATOR_MIN_ZOOM_PPS
   );
 
   // O(1) lookup via keyframesByItemId index instead of O(n) array scan
@@ -853,6 +859,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   ]);
   const visualLeft = Math.round(frameToPixelsNow(visualLeftFrame));
   const visualWidth = Math.round(frameToPixelsNow(visualWidthFrames));
+  // Early width check — used to short-circuit expensive computations below.
+  // The full useCompactClipShell (which also checks interaction/badge state) is computed later for JSX gating.
+  const isCompactWidth = visualWidth > 0 && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX;
 
   const toolOperationOverlay = useMemo(() => {
     if (visualWidth <= 0) return null;
@@ -1519,43 +1528,43 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     : 0;
   const clipFadeDurationFrames = Math.max(1, Math.round(visualWidthFrames));
   const videoFadeInRatio = useMemo(
-    () => isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeIn, fps, clipFadeDurationFrames) : 0,
-    [clipFadeDurationFrames, displayedVideoFadeIn, fps, isVisualFadeItem]
+    () => isCompactWidth ? 0 : (isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeIn, fps, clipFadeDurationFrames) : 0),
+    [isCompactWidth, clipFadeDurationFrames, displayedVideoFadeIn, fps, isVisualFadeItem]
   );
   const videoFadeOutRatio = useMemo(
-    () => isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeOut, fps, clipFadeDurationFrames) : 0,
-    [clipFadeDurationFrames, displayedVideoFadeOut, fps, isVisualFadeItem]
+    () => isCompactWidth ? 0 : (isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeOut, fps, clipFadeDurationFrames) : 0),
+    [isCompactWidth, clipFadeDurationFrames, displayedVideoFadeOut, fps, isVisualFadeItem]
   );
   const videoFadeLineYPercent = 50;
   const audioFadeInRatio = useMemo(
-    () => item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeIn, fps, clipFadeDurationFrames) : 0,
-    [clipFadeDurationFrames, displayedAudioFadeIn, fps, item.type]
+    () => isCompactWidth ? 0 : (item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeIn, fps, clipFadeDurationFrames) : 0),
+    [isCompactWidth, clipFadeDurationFrames, displayedAudioFadeIn, fps, item.type]
   );
   const audioFadeOutRatio = useMemo(
-    () => item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeOut, fps, clipFadeDurationFrames) : 0,
-    [clipFadeDurationFrames, displayedAudioFadeOut, fps, item.type]
+    () => isCompactWidth ? 0 : (item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeOut, fps, clipFadeDurationFrames) : 0),
+    [isCompactWidth, clipFadeDurationFrames, displayedAudioFadeOut, fps, item.type]
   );
   const audioFadeInHoverLabel = useMemo(
-    () => `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
-    [displayedAudioFadeIn]
+    () => isCompactWidth ? '' : `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
+    [isCompactWidth, displayedAudioFadeIn]
   );
   const audioFadeOutHoverLabel = useMemo(
-    () => `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
-    [displayedAudioFadeOut]
+    () => isCompactWidth ? '' : `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
+    [isCompactWidth, displayedAudioFadeOut]
   );
   const videoFadeInHoverLabel = useMemo(
-    () => `Fade In ${displayedVideoFadeIn.toFixed(2)}s`,
-    [displayedVideoFadeIn]
+    () => isCompactWidth ? '' : `Fade In ${displayedVideoFadeIn.toFixed(2)}s`,
+    [isCompactWidth, displayedVideoFadeIn]
   );
   const videoFadeOutHoverLabel = useMemo(
-    () => `Fade Out ${displayedVideoFadeOut.toFixed(2)}s`,
-    [displayedVideoFadeOut]
+    () => isCompactWidth ? '' : `Fade Out ${displayedVideoFadeOut.toFixed(2)}s`,
+    [isCompactWidth, displayedVideoFadeOut]
   );
   const audioVolumeEditLabel = useMemo(() => {
-    if (!audioVolumeEdit) return null;
+    if (isCompactWidth || !audioVolumeEdit) return null;
     const previewVolume = audioVolumePreviewRef.current;
     return `Volume ${previewVolume >= 0 ? '+' : ''}${previewVolume.toFixed(1)} dB`;
-  }, [audioVolumeEdit]);
+  }, [isCompactWidth, audioVolumeEdit]);
   const audioVolumeLineY = useMemo(
     () => item.type === 'audio' ? getAudioVolumeLineY(displayedAudioVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) : AUDIO_ENVELOPE_VIEWBOX_HEIGHT / 2,
     [displayedAudioVolumeDb, item.type]
@@ -1577,64 +1586,64 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const videoFadeInViewboxWidth = videoFadeInRatio * FADE_VIEWBOX_WIDTH;
   const videoFadeOutViewboxWidth = videoFadeOutRatio * FADE_VIEWBOX_WIDTH;
   const audioFadeInCurvePoint = useMemo(
-    () => getAudioFadeCurveControlPoint({
+    () => isCompactWidth ? null : getAudioFadeCurveControlPoint({
       handle: 'in',
       fadePixels: audioFadeInViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeInCurve,
       curveX: displayedAudioFadeInCurveX,
     }),
-    [audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
+    [isCompactWidth, audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
   );
   const audioFadeOutCurvePoint = useMemo(
-    () => getAudioFadeCurveControlPoint({
+    () => isCompactWidth ? null : getAudioFadeCurveControlPoint({
       handle: 'out',
       fadePixels: audioFadeOutViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeOutCurve,
       curveX: displayedAudioFadeOutCurveX,
     }),
-    [audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
+    [isCompactWidth, audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
   );
   const audioFadeInCurvePath = useMemo(
-    () => getAudioFadeCurvePath({
+    () => isCompactWidth ? '' : getAudioFadeCurvePath({
       handle: 'in',
       fadePixels: audioFadeInViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeInCurve,
       curveX: displayedAudioFadeInCurveX,
     }),
-    [audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
+    [isCompactWidth, audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
   );
   const audioFadeOutCurvePath = useMemo(
-    () => getAudioFadeCurvePath({
+    () => isCompactWidth ? '' : getAudioFadeCurvePath({
       handle: 'out',
       fadePixels: audioFadeOutViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeOutCurve,
       curveX: displayedAudioFadeOutCurveX,
     }),
-    [audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
+    [isCompactWidth, audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
   );
   const videoFadeInPath = useMemo(
-    () => getAudioFadeCurvePath({
+    () => isCompactWidth ? '' : getAudioFadeCurvePath({
       handle: 'in',
       fadePixels: videoFadeInViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: 0,
       curveX: 0.52,
     }),
-    [videoFadeInViewboxWidth]
+    [isCompactWidth, videoFadeInViewboxWidth]
   );
   const videoFadeOutPath = useMemo(
-    () => getAudioFadeCurvePath({
+    () => isCompactWidth ? '' : getAudioFadeCurvePath({
       handle: 'out',
       fadePixels: videoFadeOutViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: 0,
       curveX: 0.52,
     }),
-    [videoFadeOutViewboxWidth]
+    [isCompactWidth, videoFadeOutViewboxWidth]
   );
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
@@ -2279,6 +2288,39 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       ? getLinkedSyncOffsetFrames([linkedSyncPreviewItem, ...linkedItemsForSync], linkedSyncPreviewItem.id, fps, linkedSyncPreviewUpdatesById)
       : null
   ), [linkedItemsForSync, linkedSyncPreviewItem, fps, linkedSyncPreviewUpdatesById, suppressLinkedSyncBadge]);
+  const hasDetailBadges =
+    hasKeyframes
+    || isBroken
+    || Math.abs(currentSpeed - 1) > SPEED_BADGE_EPSILON
+    || linkedSyncOffsetFrames !== null
+    || (item.type === 'shape' && (item.isMask ?? false));
+  const hasActiveClipInteraction =
+    isSelected
+    || isBeingDragged
+    || isPartOfDrag
+    || isTrimming
+    || isStretching
+    || isSlipSlideActive
+    || isTrackPushActive
+    || isEffectDropTarget
+    || videoFadeEdit !== null
+    || audioFadeEdit !== null
+    || audioFadeCurveEdit !== null
+    || audioVolumeEdit !== null
+    || transitionDropGhost !== null
+    || draggedTransition !== null
+    || pointerHint !== null
+    || hoveredEdge !== null
+    || smartTrimIntent !== null
+    || smartBodyIntent !== null
+    || rollHoverEdge !== null
+    || activeEdges !== null;
+  const useCompactClipShell =
+    activeTool === 'select'
+    && visualWidth > 0
+    && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX
+    && !hasDetailBadges
+    && !hasActiveClipInteraction;
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -2452,6 +2494,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         <div
           ref={transformRef}
           data-item-id={item.id}
+          data-compact-clip={useCompactClipShell ? 'true' : undefined}
           className={cn(
             "absolute inset-y-px rounded overflow-visible group/timeline-item",
             itemColorClasses,
@@ -2509,67 +2552,71 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           )}
 
           <div className="absolute inset-px rounded-[3px] overflow-hidden">
-            <SegmentStatusOverlays overlays={segmentOverlays} />
+            {!useCompactClipShell && (
+              <>
+                <SegmentStatusOverlays overlays={segmentOverlays} />
 
-            {isVisualFadeItem && (
-              <div
-                ref={videoControlsRef}
-                className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
-                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-              >
-                <svg
-                  className="absolute inset-0 h-full w-full"
-                  viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
-                  preserveAspectRatio="none"
-                >
-                  {videoFadeInRatio > 0 && (
-                    <path
-                      d={videoFadeInPath}
-                      fill="rgba(15,23,42,0.46)"
-                    />
-                  )}
-                  {videoFadeOutRatio > 0 && (
-                    <path
-                      d={videoFadeOutPath}
-                      fill="rgba(15,23,42,0.46)"
-                    />
-                  )}
-                </svg>
-              </div>
-            )}
+                {isVisualFadeItem && (
+                  <div
+                    ref={videoControlsRef}
+                    className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
+                    style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+                  >
+                    <svg
+                      className="absolute inset-0 h-full w-full"
+                      viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
+                      preserveAspectRatio="none"
+                    >
+                      {videoFadeInRatio > 0 && (
+                        <path
+                          d={videoFadeInPath}
+                          fill="rgba(15,23,42,0.46)"
+                        />
+                      )}
+                      {videoFadeOutRatio > 0 && (
+                        <path
+                          d={videoFadeOutPath}
+                          fill="rgba(15,23,42,0.46)"
+                        />
+                      )}
+                    </svg>
+                  </div>
+                )}
 
-            {item.type === 'audio' && (
-              <div
-                ref={audioControlsRef}
-                className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
-                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
-              >
-                <div
-                  className="absolute left-0 right-0 h-px -translate-y-1/2 pointer-events-none"
-                  style={{
-                    top: `var(--timeline-audio-volume-line-y, ${audioVolumeLineYPercent}%)`,
-                    backgroundColor: audioVolumeLineStroke,
-                  }}
-                />
-                <svg
-                  className="absolute inset-0 h-full w-full"
-                  viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
-                  preserveAspectRatio="none"
-                >
-                  {audioFadeInRatio > 0 && (
-                    <path
-                      d={audioFadeInCurvePath}
-                      fill="rgba(0,0,0,0.5)"
+                {item.type === 'audio' && (
+                  <div
+                    ref={audioControlsRef}
+                    className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
+                    style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+                  >
+                    <div
+                      className="absolute left-0 right-0 h-px -translate-y-1/2 pointer-events-none"
+                      style={{
+                        top: `var(--timeline-audio-volume-line-y, ${audioVolumeLineYPercent}%)`,
+                        backgroundColor: audioVolumeLineStroke,
+                      }}
                     />
-                  )}
-                  {audioFadeOutRatio > 0 && (
-                    <path
-                      d={audioFadeOutCurvePath}
-                      fill="rgba(0,0,0,0.5)"
-                    />
-                  )}
-                </svg>
-              </div>
+                    <svg
+                      className="absolute inset-0 h-full w-full"
+                      viewBox={`0 0 ${FADE_VIEWBOX_WIDTH} ${AUDIO_ENVELOPE_VIEWBOX_HEIGHT}`}
+                      preserveAspectRatio="none"
+                    >
+                      {audioFadeInRatio > 0 && (
+                        <path
+                          d={audioFadeInCurvePath}
+                          fill="rgba(0,0,0,0.5)"
+                        />
+                      )}
+                      {audioFadeOutRatio > 0 && (
+                        <path
+                          d={audioFadeOutCurvePath}
+                          fill="rgba(0,0,0,0.5)"
+                        />
+                      )}
+                    </svg>
+                  </div>
+                )}
+              </>
             )}
 
             <ClipContent
@@ -2583,20 +2630,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
               linkedSyncOffsetFrames={linkedSyncOffsetFrames}
             />
 
-            {/* Status indicators */}
-            <ClipIndicators
-              hasKeyframes={hasKeyframes}
-              currentSpeed={currentSpeed}
-              isStretching={isStretching}
-              stretchFeedback={stretchFeedback}
-              isBroken={isBroken}
-              hasMediaId={!!item.mediaId}
-              isMask={item.type === 'shape' ? item.isMask ?? false : false}
-              isShape={item.type === 'shape'}
-            />
+            {!useCompactClipShell && (
+              /* Status indicators */
+              <ClipIndicators
+                hasKeyframes={hasKeyframes}
+                currentSpeed={currentSpeed}
+                isStretching={isStretching}
+                stretchFeedback={stretchFeedback}
+                isBroken={isBroken}
+                hasMediaId={!!item.mediaId}
+                isMask={item.type === 'shape' ? item.isMask ?? false : false}
+                isShape={item.type === 'shape'}
+              />
+            )}
           </div>
 
-          {isVisualFadeItem && (
+          {!useCompactClipShell && isVisualFadeItem && (
             <div
               className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
@@ -2618,7 +2667,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           )}
 
           {/* Trim handles */}
-          {item.type === 'audio' && (
+          {!useCompactClipShell && item.type === 'audio' && (
             <div
               className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
               style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
@@ -2634,8 +2683,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                 curveEditingHandle={audioFadeCurveEdit?.handle ?? null}
                 fadeInLabel={audioFadeInHoverLabel}
                 fadeOutLabel={audioFadeOutHoverLabel}
-                fadeInCurveDot={audioFadeInRatio > 0 ? { xPercent: (audioFadeInCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100, yPercent: audioFadeInCurvePoint.y } : null}
-                fadeOutCurveDot={audioFadeOutRatio > 0 ? { xPercent: (audioFadeOutCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100, yPercent: audioFadeOutCurvePoint.y } : null}
+                fadeInCurveDot={audioFadeInRatio > 0 && audioFadeInCurvePoint ? { xPercent: (audioFadeInCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100, yPercent: audioFadeInCurvePoint.y } : null}
+                fadeOutCurveDot={audioFadeOutRatio > 0 && audioFadeOutCurvePoint ? { xPercent: (audioFadeOutCurvePoint.x / FADE_VIEWBOX_WIDTH) * 100, yPercent: audioFadeOutCurvePoint.y } : null}
                 onFadeHandleMouseDown={handleAudioFadeHandleMouseDown}
                 onFadeHandleDoubleClick={handleAudioFadeHandleDoubleClick}
                 onFadeCurveDotMouseDown={handleAudioFadeCurveDotMouseDown}
@@ -2655,63 +2704,69 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           )}
 
           {/* Trim handles */}
-          <TrimHandles
-            trackLocked={trackLocked}
-            isAnyDragActive={isAnyDragActiveRef.current}
-            isTrimming={isTrimming}
-            trimHandle={trimHandle}
-            activeTool={activeTool}
-            hoveredEdge={hoveredEdge}
-            smartTrimIntent={smartTrimIntent}
-            rollHoverEdge={rollHoverEdge}
-            activeEdges={activeEdges}
-            startCursorClass={
-              smartTrimIntent === 'ripple-start'
-                ? 'cursor-ripple-left'
-                : smartTrimIntent === 'roll-start'
-                ? 'cursor-trim-center'
-                : 'cursor-trim-left'
-            }
-            endCursorClass={
-              smartTrimIntent === 'ripple-end'
-                ? 'cursor-ripple-right'
-                : smartTrimIntent === 'roll-end'
-                ? 'cursor-trim-center'
-                : 'cursor-trim-right'
-            }
-            startTone={smartTrimIntent === 'ripple-start' || (isTrimming && trimHandle === 'start' && isRippleEdit) ? 'ripple' : 'default'}
-            endTone={smartTrimIntent === 'ripple-end' || (isTrimming && trimHandle === 'end' && isRippleEdit) ? 'ripple' : 'default'}
-            hasJoinableLeft={hasJoinableLeft}
-            hasJoinableRight={hasJoinableRight}
-            onTrimStart={handleSmartTrimStart}
-            onJoinLeft={handleJoinLeft}
-            onJoinRight={handleJoinRight}
-          />
+          {!useCompactClipShell && (
+            <TrimHandles
+              trackLocked={trackLocked}
+              isAnyDragActive={isAnyDragActiveRef.current}
+              isTrimming={isTrimming}
+              trimHandle={trimHandle}
+              activeTool={activeTool}
+              hoveredEdge={hoveredEdge}
+              smartTrimIntent={smartTrimIntent}
+              rollHoverEdge={rollHoverEdge}
+              activeEdges={activeEdges}
+              startCursorClass={
+                smartTrimIntent === 'ripple-start'
+                  ? 'cursor-ripple-left'
+                  : smartTrimIntent === 'roll-start'
+                  ? 'cursor-trim-center'
+                  : 'cursor-trim-left'
+              }
+              endCursorClass={
+                smartTrimIntent === 'ripple-end'
+                  ? 'cursor-ripple-right'
+                  : smartTrimIntent === 'roll-end'
+                  ? 'cursor-trim-center'
+                  : 'cursor-trim-right'
+              }
+              startTone={smartTrimIntent === 'ripple-start' || (isTrimming && trimHandle === 'start' && isRippleEdit) ? 'ripple' : 'default'}
+              endTone={smartTrimIntent === 'ripple-end' || (isTrimming && trimHandle === 'end' && isRippleEdit) ? 'ripple' : 'default'}
+              hasJoinableLeft={hasJoinableLeft}
+              hasJoinableRight={hasJoinableRight}
+              onTrimStart={handleSmartTrimStart}
+              onJoinLeft={handleJoinLeft}
+              onJoinRight={handleJoinRight}
+            />
+          )}
 
           {/* Rate stretch handles */}
-          <StretchHandles
-            trackLocked={trackLocked}
-            isAnyDragActive={isAnyDragActiveRef.current}
-            isStretching={isStretching}
-            stretchHandle={stretchHandle}
-            stretchConstrained={stretchConstrained}
-            isRateStretchItem={isRateStretchItem}
-            onStretchStart={handleStretchStart}
-          />
+          {!useCompactClipShell && (
+            <StretchHandles
+              trackLocked={trackLocked}
+              isAnyDragActive={isAnyDragActiveRef.current}
+              isStretching={isStretching}
+              stretchHandle={stretchHandle}
+              stretchConstrained={stretchConstrained}
+              isRateStretchItem={isRateStretchItem}
+              onStretchStart={handleStretchStart}
+            />
+          )}
 
-          {/* Join indicators */}
-          <JoinIndicators
-            hasJoinableLeft={hasJoinableLeft}
-            hasJoinableRight={hasJoinableRight}
-            trackLocked={trackLocked}
-            dragAffectsJoin={dragAffectsJoin}
-            hoveredEdge={hoveredEdge}
-            isTrimming={isTrimming}
-            isStretching={isStretching}
-            isBeingDragged={isBeingDragged}
-          />
+          {/* Join indicators — hide globally below a zoom threshold so they're always consistent between neighbors */}
+          {showJoinIndicators && (
+            <JoinIndicators
+              hasJoinableLeft={hasJoinableLeft}
+              hasJoinableRight={hasJoinableRight}
+              trackLocked={trackLocked}
+              dragAffectsJoin={dragAffectsJoin}
+              hoveredEdge={hoveredEdge}
+              isTrimming={isTrimming}
+              isStretching={isStretching}
+              isBeingDragged={isBeingDragged}
+            />
+          )}
 
-          {draggedTransition && !trackLocked && (item.type === 'video' || item.type === 'image') && (
+          {!useCompactClipShell && draggedTransition && !trackLocked && (item.type === 'video' || item.type === 'image') && (
             <>
               <div
                 className="absolute inset-y-0 -left-2 z-40 w-4"
