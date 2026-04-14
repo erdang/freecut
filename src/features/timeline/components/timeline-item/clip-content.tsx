@@ -58,13 +58,15 @@ export const ClipContent = memo(function ClipContent({
   audioWaveformScale = 1,
   linkedSyncOffsetFrames = null,
 }: ClipContentProps) {
-  //   // Keep clip visuals in live zoom space while zooming so inner content stays locked to the shell
-  const isZoomInteracting = useZoomStore((s) => s.isZoomInteracting);
-  const livePixelsPerSecond = useZoomStore((s) => s.pixelsPerSecond);
-  const settledPixelsPerSecond = useZoomStore((s) => s.contentPixelsPerSecond);
-  const pixelsPerSecond = (preferImmediateRendering || isZoomInteracting)
-    ? livePixelsPerSecond
-    : settledPixelsPerSecond;
+  // Single zoom subscription: live value only for clips that need immediate rendering
+  // (e.g. during drag), settled value for everything else — avoids N re-renders per zoom tick.
+  const pixelsPerSecond = useZoomStore(
+    useCallback(
+      (s: { pixelsPerSecond: number; contentPixelsPerSecond: number }) =>
+        preferImmediateRendering ? s.pixelsPerSecond : s.contentPixelsPerSecond,
+      [preferImmediateRendering]
+    )
+  );
   const showWaveforms = useSettingsStore((s) => s.showWaveforms);
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const clipLeftPx = useMemo(
