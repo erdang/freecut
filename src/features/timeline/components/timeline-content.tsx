@@ -1619,6 +1619,15 @@ export const TimelineContent = memo(function TimelineContent({
     ? (videoSectionHasOverflow || audioSectionHasOverflow)
     : singleSectionHasOverflow;
 
+  // Stable children reference for TimelineTrackSectionsSurface memo boundary
+  const trackSurfaceOverlayChildren = useMemo(() => (
+    <>
+      {isDragging && <TimelineGuidelines />}
+      <TimelinePreviewScrubber maxFrame={maxTimelineFrame} />
+      <TimelinePlayhead maxFrame={maxTimelineFrame} />
+    </>
+  ), [isDragging, maxTimelineFrame]);
+
   return (
     <div className="flex flex-1 min-h-0 min-w-0 bg-background/30">
       <div
@@ -1672,12 +1681,7 @@ export const TimelineContent = memo(function TimelineContent({
           videoTracksScrollRef={videoTracksScrollRef}
           audioTracksScrollRef={audioTracksScrollRef}
         >
-          {isDragging && (
-            <TimelineGuidelines />
-          )}
-
-          <TimelinePreviewScrubber maxFrame={maxTimelineFrame} />
-          <TimelinePlayhead maxFrame={maxTimelineFrame} />
+          {trackSurfaceOverlayChildren}
         </TimelineTrackSectionsSurface>
       </div>
 

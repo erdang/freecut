@@ -1,4 +1,4 @@
-import { useCallback, useRef, memo, forwardRef } from 'react';
+import { useCallback, useMemo, useRef, useEffect, memo, forwardRef } from 'react';
 
 import { useTimelineStore } from '../stores/timeline-store';
 import { useTimelineZoomContext } from '../contexts/timeline-zoom-context';
@@ -28,6 +28,9 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
   setInPointRef.current = setInPoint;
   setOutPointRef.current = setOutPoint;
 
+  // Store active drag cleanup so we can tear down on unmount
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
   const startDrag = useCallback(
     (handle: 'in' | 'out') => (e: React.MouseEvent) => {
       e.preventDefault();
@@ -46,19 +49,24 @@ export const TimelineInOutMarkers = memo(function TimelineInOutMarkers() {
         const x = ev.clientX - rect.left;
         setter.current(Math.max(0, pixelsToFrameRef.current(x)));
       };
-      const onUp = () => {
+      const cleanup = () => {
         document.removeEventListener('mousemove', onMove);
-        document.removeEventListener('mouseup', onUp);
+        document.removeEventListener('mouseup', cleanup);
         document.body.style.cursor = prevCursor;
+        dragCleanupRef.current = null;
       };
       document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onUp);
+      document.addEventListener('mouseup', cleanup);
+      dragCleanupRef.current = cleanup;
     },
     [],
   );
 
-  const handleInDown = useRef(startDrag('in')).current;
-  const handleOutDown = useRef(startDrag('out')).current;
+  // Tear down listeners if component unmounts mid-drag
+  useEffect(() => () => { dragCleanupRef.current?.(); }, []);
+
+  const handleInDown = useMemo(() => startDrag('in'), [startDrag]);
+  const handleOutDown = useMemo(() => startDrag('out'), [startDrag]);
 
   return (
     <>

@@ -557,12 +557,13 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
 
   // Pick a cover frame from the middle of available frames — used as a repeating
   // CSS background behind tiles so gaps during zoom reconciliation show a frame
-  // instead of black.
-  const coverFrameUrl = useMemo(() => {
+  // instead of black. Track the full frame for stale-URL probing.
+  const coverFrame = useMemo(() => {
     if (!frames || frames.length === 0) return null;
     const mid = Math.floor(frames.length / 2);
-    return frames[mid]?.url ?? frames[0]?.url ?? null;
+    return frames[mid] ?? frames[0] ?? null;
   }, [frames]);
+  const coverFrameUrl = coverFrame?.url ?? null;
 
   if (error) {
     return null;
@@ -607,6 +608,17 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
             onSourceError={handleFrameSourceError}
           />
         ))}
+        {/* Hidden probe to detect stale cover background URL */}
+        {coverFrame && !coverFrame.bitmap && (
+          <img
+            src={coverFrame.url}
+            alt=""
+            aria-hidden
+            className="absolute h-px w-px opacity-0 pointer-events-none"
+            style={{ left: 0, top: 0 }}
+            onError={() => handleFrameSourceError(coverFrame.index)}
+          />
+        )}
       </div>
     </div>
   );

@@ -94,7 +94,8 @@ export const ClipContent = memo(function ClipContent({
   );
   const compositionSummary = useMemo(() => {
     if (!composition) {
-      return {   visualMediaId: null,
+      return {
+        visualMediaId: null,
         audioMediaId: null,
         hasOwnedAudio: false,
         hasMultipleOwnedAudioSources: false,

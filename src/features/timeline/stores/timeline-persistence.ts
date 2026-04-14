@@ -131,7 +131,7 @@ function sanitizeTimelineEphemeralFields(timeline: ProjectTimeline): {
 } {
   let cleaned = false;
 
-  const items = timeline.items.map((item) => {
+  const items = (timeline.items ?? []).map((item) => {
     if (item.thumbnailUrl === undefined) {
       return item;
     }
@@ -143,7 +143,7 @@ function sanitizeTimelineEphemeralFields(timeline: ProjectTimeline): {
   const compositions = timeline.compositions?.map((composition) => {
     let compositionCleaned = false;
 
-    const nextItems = composition.items.map((item) => {
+    const nextItems = (composition.items ?? []).map((item) => {
       if (item.thumbnailUrl === undefined) {
         return item;
       }

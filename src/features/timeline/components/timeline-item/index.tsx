@@ -1526,45 +1526,69 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const displayedAudioVolumeDb = item.type === 'audio'
     ? (item.volume ?? 0)
     : 0;
+  // Hoisted before fade memos so the compact guard can account for active interactions.
+  // A narrow clip that is selected/edited should still compute its fade ratios.
+  const hasActiveClipInteraction =
+    isSelected
+    || isBeingDragged
+    || isPartOfDrag
+    || isTrimming
+    || isStretching
+    || isSlipSlideActive
+    || isTrackPushActive
+    || isEffectDropTarget
+    || videoFadeEdit !== null
+    || audioFadeEdit !== null
+    || audioFadeCurveEdit !== null
+    || audioVolumeEdit !== null
+    || transitionDropGhost !== null
+    || draggedTransition !== null
+    || pointerHint !== null
+    || hoveredEdge !== null
+    || smartTrimIntent !== null
+    || smartBodyIntent !== null
+    || rollHoverEdge !== null
+    || activeEdges !== null;
+  const skipFadeComputation = isCompactWidth && !hasActiveClipInteraction;
   const clipFadeDurationFrames = Math.max(1, Math.round(visualWidthFrames));
   const videoFadeInRatio = useMemo(
-    () => isCompactWidth ? 0 : (isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeIn, fps, clipFadeDurationFrames) : 0),
-    [isCompactWidth, clipFadeDurationFrames, displayedVideoFadeIn, fps, isVisualFadeItem]
+    () => skipFadeComputation ? 0 : (isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeIn, fps, clipFadeDurationFrames) : 0),
+    [skipFadeComputation, clipFadeDurationFrames, displayedVideoFadeIn, fps, isVisualFadeItem]
   );
   const videoFadeOutRatio = useMemo(
-    () => isCompactWidth ? 0 : (isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeOut, fps, clipFadeDurationFrames) : 0),
-    [isCompactWidth, clipFadeDurationFrames, displayedVideoFadeOut, fps, isVisualFadeItem]
+    () => skipFadeComputation ? 0 : (isVisualFadeItem ? getAudioFadeRatio(displayedVideoFadeOut, fps, clipFadeDurationFrames) : 0),
+    [skipFadeComputation, clipFadeDurationFrames, displayedVideoFadeOut, fps, isVisualFadeItem]
   );
   const videoFadeLineYPercent = 50;
   const audioFadeInRatio = useMemo(
-    () => isCompactWidth ? 0 : (item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeIn, fps, clipFadeDurationFrames) : 0),
-    [isCompactWidth, clipFadeDurationFrames, displayedAudioFadeIn, fps, item.type]
+    () => skipFadeComputation ? 0 : (item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeIn, fps, clipFadeDurationFrames) : 0),
+    [skipFadeComputation, clipFadeDurationFrames, displayedAudioFadeIn, fps, item.type]
   );
   const audioFadeOutRatio = useMemo(
-    () => isCompactWidth ? 0 : (item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeOut, fps, clipFadeDurationFrames) : 0),
-    [isCompactWidth, clipFadeDurationFrames, displayedAudioFadeOut, fps, item.type]
+    () => skipFadeComputation ? 0 : (item.type === 'audio' ? getAudioFadeRatio(displayedAudioFadeOut, fps, clipFadeDurationFrames) : 0),
+    [skipFadeComputation, clipFadeDurationFrames, displayedAudioFadeOut, fps, item.type]
   );
   const audioFadeInHoverLabel = useMemo(
-    () => isCompactWidth ? '' : `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
-    [isCompactWidth, displayedAudioFadeIn]
+    () => skipFadeComputation ? '' : `Fade In ${displayedAudioFadeIn.toFixed(2)}s`,
+    [skipFadeComputation, displayedAudioFadeIn]
   );
   const audioFadeOutHoverLabel = useMemo(
-    () => isCompactWidth ? '' : `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
-    [isCompactWidth, displayedAudioFadeOut]
+    () => skipFadeComputation ? '' : `Fade Out ${displayedAudioFadeOut.toFixed(2)}s`,
+    [skipFadeComputation, displayedAudioFadeOut]
   );
   const videoFadeInHoverLabel = useMemo(
-    () => isCompactWidth ? '' : `Fade In ${displayedVideoFadeIn.toFixed(2)}s`,
-    [isCompactWidth, displayedVideoFadeIn]
+    () => skipFadeComputation ? '' : `Fade In ${displayedVideoFadeIn.toFixed(2)}s`,
+    [skipFadeComputation, displayedVideoFadeIn]
   );
   const videoFadeOutHoverLabel = useMemo(
-    () => isCompactWidth ? '' : `Fade Out ${displayedVideoFadeOut.toFixed(2)}s`,
-    [isCompactWidth, displayedVideoFadeOut]
+    () => skipFadeComputation ? '' : `Fade Out ${displayedVideoFadeOut.toFixed(2)}s`,
+    [skipFadeComputation, displayedVideoFadeOut]
   );
   const audioVolumeEditLabel = useMemo(() => {
-    if (isCompactWidth || !audioVolumeEdit) return null;
+    if (skipFadeComputation || !audioVolumeEdit) return null;
     const previewVolume = audioVolumePreviewRef.current;
     return `Volume ${previewVolume >= 0 ? '+' : ''}${previewVolume.toFixed(1)} dB`;
-  }, [isCompactWidth, audioVolumeEdit]);
+  }, [skipFadeComputation, audioVolumeEdit]);
   const audioVolumeLineY = useMemo(
     () => item.type === 'audio' ? getAudioVolumeLineY(displayedAudioVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) : AUDIO_ENVELOPE_VIEWBOX_HEIGHT / 2,
     [displayedAudioVolumeDb, item.type]
@@ -1586,64 +1610,64 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const videoFadeInViewboxWidth = videoFadeInRatio * FADE_VIEWBOX_WIDTH;
   const videoFadeOutViewboxWidth = videoFadeOutRatio * FADE_VIEWBOX_WIDTH;
   const audioFadeInCurvePoint = useMemo(
-    () => isCompactWidth ? null : getAudioFadeCurveControlPoint({
+    () => skipFadeComputation ? null : getAudioFadeCurveControlPoint({
       handle: 'in',
       fadePixels: audioFadeInViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeInCurve,
       curveX: displayedAudioFadeInCurveX,
     }),
-    [isCompactWidth, audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
+    [skipFadeComputation, audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
   );
   const audioFadeOutCurvePoint = useMemo(
-    () => isCompactWidth ? null : getAudioFadeCurveControlPoint({
+    () => skipFadeComputation ? null : getAudioFadeCurveControlPoint({
       handle: 'out',
       fadePixels: audioFadeOutViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeOutCurve,
       curveX: displayedAudioFadeOutCurveX,
     }),
-    [isCompactWidth, audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
+    [skipFadeComputation, audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
   );
   const audioFadeInCurvePath = useMemo(
-    () => isCompactWidth ? '' : getAudioFadeCurvePath({
+    () => skipFadeComputation ? '' : getAudioFadeCurvePath({
       handle: 'in',
       fadePixels: audioFadeInViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeInCurve,
       curveX: displayedAudioFadeInCurveX,
     }),
-    [isCompactWidth, audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
+    [skipFadeComputation, audioFadeInViewboxWidth, displayedAudioFadeInCurve, displayedAudioFadeInCurveX]
   );
   const audioFadeOutCurvePath = useMemo(
-    () => isCompactWidth ? '' : getAudioFadeCurvePath({
+    () => skipFadeComputation ? '' : getAudioFadeCurvePath({
       handle: 'out',
       fadePixels: audioFadeOutViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: displayedAudioFadeOutCurve,
       curveX: displayedAudioFadeOutCurveX,
     }),
-    [isCompactWidth, audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
+    [skipFadeComputation, audioFadeOutViewboxWidth, displayedAudioFadeOutCurve, displayedAudioFadeOutCurveX]
   );
   const videoFadeInPath = useMemo(
-    () => isCompactWidth ? '' : getAudioFadeCurvePath({
+    () => skipFadeComputation ? '' : getAudioFadeCurvePath({
       handle: 'in',
       fadePixels: videoFadeInViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: 0,
       curveX: 0.52,
     }),
-    [isCompactWidth, videoFadeInViewboxWidth]
+    [skipFadeComputation, videoFadeInViewboxWidth]
   );
   const videoFadeOutPath = useMemo(
-    () => isCompactWidth ? '' : getAudioFadeCurvePath({
+    () => skipFadeComputation ? '' : getAudioFadeCurvePath({
       handle: 'out',
       fadePixels: videoFadeOutViewboxWidth,
       clipWidthPixels: FADE_VIEWBOX_WIDTH,
       curve: 0,
       curveX: 0.52,
     }),
-    [isCompactWidth, videoFadeOutViewboxWidth]
+    [skipFadeComputation, videoFadeOutViewboxWidth]
   );
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
@@ -2294,27 +2318,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     || Math.abs(currentSpeed - 1) > SPEED_BADGE_EPSILON
     || linkedSyncOffsetFrames !== null
     || (item.type === 'shape' && (item.isMask ?? false));
-  const hasActiveClipInteraction =
-    isSelected
-    || isBeingDragged
-    || isPartOfDrag
-    || isTrimming
-    || isStretching
-    || isSlipSlideActive
-    || isTrackPushActive
-    || isEffectDropTarget
-    || videoFadeEdit !== null
-    || audioFadeEdit !== null
-    || audioFadeCurveEdit !== null
-    || audioVolumeEdit !== null
-    || transitionDropGhost !== null
-    || draggedTransition !== null
-    || pointerHint !== null
-    || hoveredEdge !== null
-    || smartTrimIntent !== null
-    || smartBodyIntent !== null
-    || rollHoverEdge !== null
-    || activeEdges !== null;
+  // hasActiveClipInteraction is hoisted before fade memos (see above)
   const useCompactClipShell =
     activeTool === 'select'
     && visualWidth > 0
