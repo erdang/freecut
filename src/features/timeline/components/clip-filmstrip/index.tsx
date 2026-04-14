@@ -531,7 +531,9 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
       const tileTime = effectiveStart + (tileCenterX / renderPixelsPerSecond) * speed;
       const nearestFrameIndex = Math.max(0, Math.round(tileTime));
       const frame = candidateFrameByIndex?.get(nearestFrameIndex)
-        ?? findClosestFrame(candidateFrames, tileTime);
+        ?? findClosestFrame(candidateFrames, tileTime)
+        // Fall back to full frame set — always cover gaps with the closest available frame
+        ?? findClosestFrame(frames, tileTime);
 
       if (frame) {
         result.push({ tileIndex: tile, frame, x: tileX, width: tileWidth });
@@ -552,6 +554,16 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     thumbnailWidth,
     renderWindow,
   ]);
+
+  // Pick a cover frame from the middle of available frames — used as a repeating
+  // CSS background behind tiles so gaps during zoom reconciliation show a frame
+  // instead of black. Track the full frame for stale-URL probing.
+  const coverFrame = useMemo(() => {
+    if (!frames || frames.length === 0) return null;
+    const mid = Math.floor(frames.length / 2);
+    return frames[mid] ?? frames[0] ?? null;
+  }, [frames]);
+  const coverFrameUrl = coverFrame?.url ?? null;
 
   if (error) {
     return null;
@@ -577,6 +589,11 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
       )}
       <div
         className="absolute inset-0 overflow-hidden pointer-events-none"
+        style={coverFrameUrl ? {
+          backgroundImage: `url(${coverFrameUrl})`,
+          backgroundRepeat: 'repeat-x',
+          backgroundSize: `${thumbnailWidth}px ${height}px`,
+        } : undefined}
       >
         {tiles.map(({ tileIndex, frame, x, width }) => (
           <FilmstripTile
@@ -591,6 +608,17 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
             onSourceError={handleFrameSourceError}
           />
         ))}
+        {/* Hidden probe to detect stale cover background URL */}
+        {coverFrame && !coverFrame.bitmap && (
+          <img
+            src={coverFrame.url}
+            alt=""
+            aria-hidden
+            className="absolute h-px w-px opacity-0 pointer-events-none"
+            style={{ left: 0, top: 0 }}
+            onError={() => handleFrameSourceError(coverFrame.index)}
+          />
+        )}
       </div>
     </div>
   );
