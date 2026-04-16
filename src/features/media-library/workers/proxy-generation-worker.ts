@@ -1,7 +1,7 @@
 /**
  * Proxy Generation Worker
  *
- * Transcodes video to 720p proxy using mediabunny's Conversion API
+ * Transcodes video to a 960x540-bounded proxy using mediabunny's Conversion API
  * and saves the result to OPFS. Used for preview playback optimization
  * — preview uses the proxy while export uses the original full-res source.
  *
@@ -14,8 +14,8 @@
 import type { Conversion as ConversionType } from 'mediabunny';
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 
-const PROXY_WIDTH = 1280;
-const PROXY_HEIGHT = 720;
+const PROXY_WIDTH = 960;
+const PROXY_HEIGHT = 540;
 const PROXY_STREAM_CHUNK_SIZE_BYTES = 4 * 1024 * 1024;
 
 // Message types
@@ -129,7 +129,7 @@ function calculateProxyDimensions(sourceWidth: number, sourceHeight: number): { 
 }
 
 /**
- * Generate a 720p proxy video via mediabunny Conversion
+ * Generate a 960x540-bounded proxy video via mediabunny Conversion
  */
 async function generateProxy(request: ProxyGenerateRequest): Promise<void> {
   const { mediaId, source, sourceWidth, sourceHeight } = request;

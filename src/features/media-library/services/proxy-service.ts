@@ -1,7 +1,7 @@
 ﻿/**
  * Proxy Video Service
  *
- * Manages 720p proxy video generation lifecycle:
+ * Manages 960x540-bounded proxy video generation lifecycle:
  * - Start/cancel proxy generation for a media item
  * - Track generation status per mediaId
  * - Load existing proxies from OPFS on startup
@@ -389,8 +389,8 @@ class ProxyService {
             continue;
           }
 
-          // Invalidate stale proxy formats to avoid aspect distortion from
-          // legacy fixed-1280x720 transcodes.
+          // Invalidate stale proxy formats to avoid carrying forward old proxy
+          // dimensions after proxy sizing changes.
           if (metadata.version !== PROXY_SCHEMA_VERSION) {
             const mappedMediaIds = collectMappedMediaIds(proxyKey);
             if (mappedMediaIds.length > 0) {

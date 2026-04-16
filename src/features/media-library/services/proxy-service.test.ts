@@ -160,9 +160,9 @@ describe('proxyService.loadExistingProxies', () => {
     const proxyDirectory = createDirectoryHandle({
       files: {
         'meta.json': createJsonFile({
-          version: 3,
-          width: 1280,
-          height: 720,
+          version: 4,
+          width: 960,
+          height: 540,
           sourceWidth: 3840,
           sourceHeight: 2160,
           status: 'generating',
@@ -201,9 +201,9 @@ describe('proxyService.loadExistingProxies', () => {
     const proxyDirectory = createDirectoryHandle({
       files: {
         'meta.json': createJsonFile({
-          version: 3,
-          width: 1280,
-          height: 720,
+          version: 4,
+          width: 960,
+          height: 540,
           sourceWidth: 3840,
           sourceHeight: 2160,
           status: 'error',
@@ -242,9 +242,9 @@ describe('proxyService.loadExistingProxies', () => {
     const proxyDirectory = createDirectoryHandle({
       files: {
         'meta.json': createJsonFile({
-          version: 3,
-          width: 1280,
-          height: 720,
+          version: 4,
+          width: 960,
+          height: 540,
           sourceWidth: 3840,
           sourceHeight: 2160,
           status: 'ready',
