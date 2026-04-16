@@ -149,6 +149,25 @@ export const SourceMonitor = memo(function SourceMonitor({
   interactive = true,
   seekFrame = null,
 }: SourceMonitorProps) {
+  return (
+    <SourceMonitorContent
+      key={mediaId}
+      mediaId={mediaId}
+      onClose={onClose}
+      variant={variant}
+      interactive={interactive}
+      seekFrame={seekFrame}
+    />
+  );
+});
+
+const SourceMonitorContent = memo(function SourceMonitorContent({
+  mediaId,
+  onClose,
+  variant = 'panel',
+  interactive = true,
+  seekFrame = null,
+}: SourceMonitorProps) {
   const [blobUrl, setBlobUrl] = useState<string>('');
   const media = useMediaLibraryStore((s) => s.mediaItems.find((m) => m.id === mediaId));
 

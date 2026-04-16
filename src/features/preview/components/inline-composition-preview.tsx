@@ -42,6 +42,24 @@ export const InlineCompositionPreview = memo(function InlineCompositionPreview({
   seekFrame,
   containerSize,
 }: InlineCompositionPreviewProps) {
+  const useProxy = usePlaybackStore((s) => s.useProxy);
+  const requestKey = `${compositionId}:${useProxy ? 'proxy' : 'source'}`;
+
+  return (
+    <InlineCompositionPreviewContent
+      key={requestKey}
+      compositionId={compositionId}
+      seekFrame={seekFrame}
+      containerSize={containerSize}
+    />
+  );
+});
+
+const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewContent({
+  compositionId,
+  seekFrame,
+  containerSize,
+}: InlineCompositionPreviewProps) {
   const composition = useCompositionsStore((s) => s.compositionById[compositionId]);
   const compositionById = useCompositionsStore((s) => s.compositionById);
   const zoom = usePlaybackStore((s) => s.zoom);

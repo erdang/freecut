@@ -35,6 +35,21 @@ export const InlineSourcePreview = memo(function InlineSourcePreview({
   seekFrame,
   containerSize,
 }: InlineSourcePreviewProps) {
+  return (
+    <InlineSourcePreviewContent
+      key={mediaId}
+      mediaId={mediaId}
+      seekFrame={seekFrame}
+      containerSize={containerSize}
+    />
+  );
+});
+
+const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
+  mediaId,
+  seekFrame,
+  containerSize,
+}: InlineSourcePreviewProps) {
   const [blobUrl, setBlobUrl] = useState('');
   const media = useMediaLibraryStore((s) => s.mediaById[mediaId]);
   const zoom = usePlaybackStore((s) => s.zoom);
