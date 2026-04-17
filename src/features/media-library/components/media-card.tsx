@@ -20,6 +20,7 @@ import { mediaTranscriptionService } from '../services/media-transcription-servi
 import { mediaCaptioningService } from '../services/media-captioning-service';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { useEditorStore } from '@/app/state/editor';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
 import { captionVideo, captionImage } from '../deps/analysis';
 import {
@@ -188,6 +189,7 @@ export const MediaCard = memo(function MediaCard({
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const setMediaSkimPreview = useEditorStore((s) => s.setMediaSkimPreview);
   const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview);
+  const pauseTimelinePlayback = usePlaybackStore((s) => s.pause);
 
   const isAudio = mediaType === 'audio' && !isBroken && !isImporting;
 
@@ -473,6 +475,8 @@ export const MediaCard = memo(function MediaCard({
 
   const canHoverPreview = (mediaType === 'video' || mediaType === 'image') && !isBroken && !isImporting;
   const canScrubPreview = mediaType === 'video' && media.duration > 0 && !isBroken && !isImporting;
+  const skimRafRef = useRef<number | null>(null);
+  const pendingSkimClientXRef = useRef<number | null>(null);
 
   const updateSkimPreview = useCallback((clientX: number) => {
     const thumbnailContainer = thumbnailContainerRef.current;
@@ -495,30 +499,58 @@ export const MediaCard = memo(function MediaCard({
     setMediaSkimPreview(media.id, frame);
   }, [canHoverPreview, canScrubPreview, media.duration, media.fps, media.id, setMediaSkimPreview]);
 
+  const flushScheduledSkimPreview = useCallback(() => {
+    skimRafRef.current = null;
+    const clientX = pendingSkimClientXRef.current;
+    pendingSkimClientXRef.current = null;
+    if (clientX === null) return;
+    updateSkimPreview(clientX);
+  }, [updateSkimPreview]);
+
+  const scheduleSkimPreview = useCallback((clientX: number) => {
+    pendingSkimClientXRef.current = clientX;
+    if (skimRafRef.current !== null) {
+      return;
+    }
+
+    skimRafRef.current = requestAnimationFrame(flushScheduledSkimPreview);
+  }, [flushScheduledSkimPreview]);
+
+  const cancelScheduledSkimPreview = useCallback(() => {
+    pendingSkimClientXRef.current = null;
+    if (skimRafRef.current !== null) {
+      cancelAnimationFrame(skimRafRef.current);
+      skimRafRef.current = null;
+    }
+  }, []);
+
   const handleThumbnailPointerEnter = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!canHoverPreview || event.pointerType === 'touch') return;
+    pauseTimelinePlayback();
     updateSkimPreview(event.clientX);
-  }, [canHoverPreview, updateSkimPreview]);
+  }, [canHoverPreview, pauseTimelinePlayback, updateSkimPreview]);
 
   const handleThumbnailPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!canScrubPreview || event.pointerType === 'touch') return;
-    updateSkimPreview(event.clientX);
-  }, [canScrubPreview, updateSkimPreview]);
+    scheduleSkimPreview(event.clientX);
+  }, [canScrubPreview, scheduleSkimPreview]);
 
   const handleThumbnailPointerLeave = useCallback(() => {
     if (!canHoverPreview) return;
+    cancelScheduledSkimPreview();
     setSkimProgress(null);
     clearMediaSkimPreview();
-  }, [canHoverPreview, clearMediaSkimPreview]);
+  }, [canHoverPreview, cancelScheduledSkimPreview, clearMediaSkimPreview]);
 
   useEffect(() => {
     if (!canHoverPreview) return;
     return () => {
+      cancelScheduledSkimPreview();
       if (useEditorStore.getState().mediaSkimPreviewMediaId === media.id) {
         clearMediaSkimPreview();
       }
     };
-  }, [canHoverPreview, clearMediaSkimPreview, media.id]);
+  }, [canHoverPreview, cancelScheduledSkimPreview, clearMediaSkimPreview, media.id]);
 
   // Cleanup audio on unmount
   useEffect(() => {

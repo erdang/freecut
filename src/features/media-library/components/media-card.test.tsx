@@ -47,6 +47,10 @@ const editorStoreState = vi.hoisted(() => ({
   mediaSkimPreviewMediaId: null as string | null,
 }));
 
+const playbackStoreState = vi.hoisted(() => ({
+  pause: vi.fn(),
+}));
+
 const sourcePlayerStoreState = vi.hoisted(() => ({
   setCurrentMediaId: vi.fn(),
   clearInOutPoints: vi.fn(),
@@ -124,6 +128,17 @@ vi.mock('@/app/state/editor', () => {
   return { useEditorStore };
 });
 
+vi.mock('@/shared/state/playback', () => {
+  const usePlaybackStore = Object.assign(
+    (selector: (state: typeof playbackStoreState) => unknown) => selector(playbackStoreState),
+    {
+      getState: () => playbackStoreState,
+    }
+  );
+
+  return { usePlaybackStore };
+});
+
 vi.mock('@/shared/state/source-player', () => ({
   useSourcePlayerStore: {
     getState: () => sourcePlayerStoreState,
@@ -177,6 +192,7 @@ describe('MediaCard', () => {
     mediaStoreState.transcriptProgress = new Map();
     mediaStoreState.taggingMediaIds = new Set();
     editorStoreState.mediaSkimPreviewMediaId = null;
+    playbackStoreState.pause.mockReset();
 
     mediaLibraryServiceMocks.getThumbnailBlobUrl.mockResolvedValue(null);
     mediaLibraryServiceMocks.getMediaFile.mockResolvedValue(new Blob(['video-data']));
@@ -235,5 +251,40 @@ describe('MediaCard', () => {
     expect(sourcePlayerStoreState.setOutPoint).toHaveBeenCalledWith(150);
     expect(sourcePlayerStoreState.setPendingSeekFrame).toHaveBeenCalledWith(75);
     expect(editorStoreState.setSourcePreviewMediaId).toHaveBeenCalledWith('media-1');
+  });
+
+  it('pauses timeline playback and updates skim preview while hovering a video thumbnail', () => {
+    const { container } = render(<MediaCard media={makeMedia()} viewMode="list" />);
+
+    const thumbnail = container.querySelector('.w-12.h-9') as HTMLDivElement;
+    expect(thumbnail).toBeTruthy();
+    vi.spyOn(thumbnail, 'getBoundingClientRect').mockReturnValue({
+      x: 0,
+      y: 0,
+      top: 0,
+      left: 0,
+      bottom: 36,
+      right: 100,
+      width: 100,
+      height: 36,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerEnter(thumbnail, {
+      clientX: 20,
+      pointerType: 'mouse',
+    });
+
+    expect(playbackStoreState.pause).toHaveBeenCalledTimes(1);
+    expect(editorStoreState.setMediaSkimPreview).toHaveBeenCalledWith('media-1', 30);
+
+    fireEvent.pointerMove(thumbnail, {
+      clientX: 50,
+      pointerType: 'mouse',
+    });
+
+    fireEvent.pointerLeave(thumbnail);
+
+    expect(editorStoreState.clearMediaSkimPreview).toHaveBeenCalledTimes(1);
   });
 });

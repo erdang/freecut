@@ -92,28 +92,34 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
   const mediaSkimPreviewFrame = useEditorStore((s) => s.mediaSkimPreviewFrame);
   const compoundClipSkimPreviewCompositionId = useEditorStore((s) => s.compoundClipSkimPreviewCompositionId);
   const compoundClipSkimPreviewFrame = useEditorStore((s) => s.compoundClipSkimPreviewFrame);
+  const skimPreviewOverlay = compoundClipSkimPreviewCompositionId ? (
+    <InlineCompositionPreview
+      compositionId={compoundClipSkimPreviewCompositionId}
+      seekFrame={compoundClipSkimPreviewFrame}
+      containerSize={containerSize}
+    />
+  ) : mediaSkimPreviewMediaId ? (
+    <InlineSourcePreview
+      mediaId={mediaSkimPreviewMediaId}
+      seekFrame={mediaSkimPreviewFrame}
+      containerSize={containerSize}
+    />
+  ) : null;
 
   return (
     <ErrorBoundary level="component">
-      {compoundClipSkimPreviewCompositionId ? (
-        <InlineCompositionPreview
-          compositionId={compoundClipSkimPreviewCompositionId}
-          seekFrame={compoundClipSkimPreviewFrame}
-          containerSize={containerSize}
-        />
-      ) : mediaSkimPreviewMediaId ? (
-        <InlineSourcePreview
-          mediaId={mediaSkimPreviewMediaId}
-          seekFrame={mediaSkimPreviewFrame}
-          containerSize={containerSize}
-        />
-      ) : (
+      <div className="relative w-full h-full">
         <VideoPreview
           project={project}
           containerSize={containerSize}
           suspendOverlay={suspendOverlay}
         />
-      )}
+        {skimPreviewOverlay && (
+          <div className="absolute inset-0 z-[100] bg-video-preview-background">
+            {skimPreviewOverlay}
+          </div>
+        )}
+      </div>
     </ErrorBoundary>
   );
 });

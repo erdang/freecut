@@ -32,6 +32,8 @@ interface SourceCompositionProps {
   src: string;
   mediaType: 'video' | 'audio' | 'image';
   fileName: string;
+  pausedFrameSource?: 'clock' | 'source-player';
+  forceFastScrub?: boolean;
 }
 
 let sourceMonitorVideoInstanceCounter = 0;
@@ -79,9 +81,23 @@ function useSourceMonitorVideoSrc(mediaId: string | undefined, src: string): str
   }, [mediaId, proxyStatus, src, useProxy]);
 }
 
-export function SourceComposition({ mediaId, src, mediaType, fileName }: SourceCompositionProps) {
+export function SourceComposition({
+  mediaId,
+  src,
+  mediaType,
+  fileName,
+  pausedFrameSource = 'source-player',
+  forceFastScrub = false,
+}: SourceCompositionProps) {
   if (mediaType === 'video') {
-    return <VideoSource mediaId={mediaId} src={src} />;
+    return (
+      <VideoSource
+        mediaId={mediaId}
+        src={src}
+        pausedFrameSource={pausedFrameSource}
+        forceFastScrub={forceFastScrub}
+      />
+    );
   }
   if (mediaType === 'image') {
     return <ImageSource src={src} />;
@@ -89,12 +105,26 @@ export function SourceComposition({ mediaId, src, mediaType, fileName }: SourceC
   return <AudioSource src={src} fileName={fileName} />;
 }
 
-function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
+function VideoSource({
+  mediaId,
+  src,
+  pausedFrameSource,
+  forceFastScrub,
+}: {
+  mediaId?: string;
+  src: string;
+  pausedFrameSource: 'clock' | 'source-player';
+  forceFastScrub: boolean;
+}) {
   const activeSrc = useSourceMonitorVideoSrc(mediaId, src);
   const clock = useClock();
   const playing = useClockIsPlaying();
   const playbackRate = useClockPlaybackRate();
-  const isPreviewScrubbing = useSourcePlayerStore((s) => s.previewSourceFrame !== null);
+  const followSourcePlayerFrames = pausedFrameSource === 'source-player';
+  const sourcePlayerPreviewScrubbing = useSourcePlayerStore((s) => (
+    followSourcePlayerFrames && s.previewSourceFrame !== null
+  ));
+  const isPreviewScrubbing = forceFastScrub || sourcePlayerPreviewScrubbing;
   const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -134,20 +164,30 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   }, [playing]);
 
   useEffect(() => {
+    if (!followSourcePlayerFrames) {
+      currentSourceFrameRef.current = clock.currentFrame;
+      previewSourceFrameRef.current = null;
+      return;
+    }
+
     return useSourcePlayerStore.subscribe((state) => {
       currentSourceFrameRef.current = state.currentSourceFrame;
       previewSourceFrameRef.current = state.previewSourceFrame;
     });
-  }, []);
+  }, [clock.currentFrame, followSourcePlayerFrames]);
 
   const getResolvedPausedSourceFrame = useCallback(() => {
+    if (!followSourcePlayerFrames) {
+      return clock.currentFrame;
+    }
+
     const previewFrame = previewSourceFrameRef.current;
     if (previewFrame !== null) {
       return previewFrame;
     }
 
     return currentSourceFrameRef.current;
-  }, []);
+  }, [clock.currentFrame, followSourcePlayerFrames]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -626,6 +666,10 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
   }, [clock, getResolvedPausedSourceFrame, playing, syncSourceFrame]);
 
   useEffect(() => {
+    if (!followSourcePlayerFrames) {
+      return;
+    }
+
     return useSourcePlayerStore.subscribe((state, prevState) => {
       if (
         playingRef.current
@@ -639,7 +683,7 @@ function VideoSource({ mediaId, src }: { mediaId?: string; src: string }) {
 
       syncSourceFrame(state.previewSourceFrame ?? state.currentSourceFrame);
     });
-  }, [clock, syncSourceFrame]);
+  }, [followSourcePlayerFrames, syncSourceFrame]);
 
   // Handle play/pause sync
   useEffect(() => {
