@@ -85,3 +85,23 @@ export {
   saveTranscript,
   deleteTranscript,
 } from '@/infrastructure/storage/workspace-fs/transcripts';
+
+// Orphan cache sweep
+export {
+  sweepWorkspaceOrphans,
+  type OrphanSweepReport,
+  type OrphanSweepOptions,
+} from '@/infrastructure/storage/workspace-fs/orphan-sweep';
+
+// Soft-delete / trash for projects
+export {
+  softDeleteProject,
+  restoreProject,
+  isProjectTrashed,
+  listTrashedProjects,
+  getTrashedProjectMediaIds,
+  sweepTrashOlderThan,
+  DEFAULT_TRASH_TTL_MS,
+  type TrashMarker,
+  type TrashedProjectEntry,
+} from '@/infrastructure/storage/workspace-fs/trash';

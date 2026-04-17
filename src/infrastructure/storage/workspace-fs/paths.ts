@@ -50,6 +50,18 @@ export const PROJECT_FILENAME = 'project.json';
 export const PROJECT_THUMBNAIL_FILENAME = 'thumbnail.jpg';
 export const PROJECT_MEDIA_LINKS_FILENAME = 'media-links.json';
 
+/**
+ * Marker file present inside a project directory that has been soft-deleted.
+ * Its presence hides the project from `getAllProjects()` / the index while
+ * preserving all content for possible restore. A periodic sweep (see
+ * `trash.ts`) permanently removes projects whose `deletedAt` is older than
+ * the configured TTL.
+ *
+ * Naming choice: `.freecut-trashed.json` makes the state self-explanatory
+ * when browsing the workspace folder externally with a file manager.
+ */
+export const PROJECT_TRASHED_MARKER_FILENAME = '.freecut-trashed.json';
+
 export const MEDIA_METADATA_FILENAME = 'metadata.json';
 export const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg';
 export const MEDIA_SOURCE_LINK_FILENAME = 'source.link.json';
@@ -82,6 +94,11 @@ export function projectThumbnailPath(id: string): string[] {
 /** Segments for `projects/{id}/media-links.json`. */
 export function projectMediaLinksPath(id: string): string[] {
   return [...projectDir(id), PROJECT_MEDIA_LINKS_FILENAME];
+}
+
+/** Segments for `projects/{id}/.freecut-trashed.json`. */
+export function projectTrashedMarkerPath(id: string): string[] {
+  return [...projectDir(id), PROJECT_TRASHED_MARKER_FILENAME];
 }
 
 /** Segments for `media/{id}/`. */

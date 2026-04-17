@@ -56,7 +56,7 @@ import {
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
 } from '@/infrastructure/storage';
-import { filmstripCache, gifFrameCache } from '@/features/media-library/deps/timeline-services';
+import { filmstripCache, gifFrameCache, waveformCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
 import { ensureFileHandlePermission, FileAccessError } from './file-access';
@@ -124,6 +124,32 @@ class MediaLibraryService {
       await gifFrameCache.clearMedia(mediaId);
     } catch (error) {
       logger.warn('Failed to delete GIF frame cache:', error);
+    }
+  }
+
+  /**
+   * Clear the filmstrip cache for a fully-dereferenced media item. Removes
+   * both the OPFS primary copy and the workspace-folder mirror so the
+   * workspace stays tidy after the last project using this media is gone.
+   */
+  private async clearFilmstripCacheSafely(mediaId: string): Promise<void> {
+    try {
+      await filmstripCache.clearMedia(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete filmstrip cache:', error);
+    }
+  }
+
+  /**
+   * Clear waveform caches for a fully-dereferenced media item. Removes
+   * the in-memory LRU entry, the IndexedDB binned persistence, and the
+   * OPFS + workspace-folder multi-resolution mirrors.
+   */
+  private async clearWaveformCacheSafely(mediaId: string): Promise<void> {
+    try {
+      await waveformCache.clearMedia(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete waveform cache:', error);
     }
   }
 
@@ -632,6 +658,8 @@ class MediaLibraryService {
       await this.deleteTranscriptSafely(mediaId);
       await this.deleteThumbnailsSafely(mediaId);
       await this.clearGifFrameCacheSafely(mediaId);
+      await this.clearFilmstripCacheSafely(mediaId);
+      await this.clearWaveformCacheSafely(mediaId);
       await deletePreviewAudioConform(media, { clearMetadata: false });
       await this.deleteProxySafely(media, { preserveSharedAliases: true });
       await this.deleteOpfsContentIfUnreferenced(media);
@@ -721,6 +749,9 @@ class MediaLibraryService {
     // Handle storage: nothing to delete, file stays on disk
 
     await this.deleteThumbnailsSafely(id);
+    await this.clearGifFrameCacheSafely(id);
+    await this.clearFilmstripCacheSafely(id);
+    await this.clearWaveformCacheSafely(id);
     await deletePreviewAudioConform(media, { clearMetadata: false });
     await this.deleteProxySafely(media);
 

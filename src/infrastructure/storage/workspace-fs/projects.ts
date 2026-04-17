@@ -20,6 +20,7 @@ import {
 
 import { requireWorkspaceRoot } from './root';
 import {
+  exists,
   listDirectory,
   readJson,
   removeEntry,
@@ -29,6 +30,7 @@ import {
   PROJECTS_DIR,
   projectDir,
   projectJsonPath,
+  projectTrashedMarkerPath,
 } from './paths';
 import {
   readWorkspaceIndex,
@@ -85,6 +87,13 @@ async function restoreRootFolderHandle(
   return serialized as Project;
 }
 
+async function isTrashed(
+  root: FileSystemDirectoryHandle,
+  id: string,
+): Promise<boolean> {
+  return exists(root, projectTrashedMarkerPath(id));
+}
+
 async function rebuildIndex(
   root: FileSystemDirectoryHandle,
 ): Promise<WorkspaceIndexEntry[]> {
@@ -92,6 +101,9 @@ async function rebuildIndex(
   const indexEntries: WorkspaceIndexEntry[] = [];
   for (const entry of entries) {
     if (entry.kind !== 'directory') continue;
+    // Trashed projects are invisible to `getAllProjects` and must not
+    // appear in the index either.
+    if (await isTrashed(root, entry.name)) continue;
     const project = await readJson<SerializedProject>(root, projectJsonPath(entry.name));
     if (!project) continue;
     indexEntries.push({
@@ -118,6 +130,10 @@ export async function getAllProjects(): Promise<Project[]> {
     const index = await readWorkspaceIndex(root);
     const projects: Project[] = [];
     for (const entry of index.projects) {
+      // Defensive: the index should never contain trashed projects, but
+      // if it drifted (e.g. marker written by another tab after index
+      // was last rebuilt), skip them so they don't surface in the UI.
+      if (await isTrashed(root, entry.id)) continue;
       const serialized = await readJson<SerializedProject>(root, projectJsonPath(entry.id));
       if (!serialized) continue;
       projects.push(await restoreRootFolderHandle(serialized));
@@ -132,6 +148,9 @@ export async function getAllProjects(): Promise<Project[]> {
 export async function getProject(id: string): Promise<Project | undefined> {
   const root = requireWorkspaceRoot();
   try {
+    // Trashed projects are invisible to normal consumers. The trash UI
+    // uses `listTrashedProjects` from `./trash.ts` to see them.
+    if (await isTrashed(root, id)) return undefined;
     const serialized = await readJson<SerializedProject>(root, projectJsonPath(id));
     if (!serialized) return undefined;
     return restoreRootFolderHandle(serialized);

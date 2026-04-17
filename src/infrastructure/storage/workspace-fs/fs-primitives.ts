@@ -16,6 +16,7 @@
 
 import { createLogger } from '@/shared/logging/logger';
 import { notifyPermissionLost } from './root';
+import { withKeyLock } from './with-key-lock';
 
 const logger = createLogger('WorkspaceFS');
 
@@ -122,43 +123,59 @@ export async function readArrayBuffer(
  * Atomic JSON write: writes to `{name}.tmp`, then replaces the target.
  * Protects against torn writes on crash. Uses FileSystemFileHandle.move
  * (Chromium) when available, falls back to write-then-remove-tmp.
+ *
+ * Serialized per-path by an in-memory lock. Without this, two concurrent
+ * callers racing on the same path can deadlock each other's move():
+ *   - A: open tmp writable, write, close → begin .move()
+ *   - B: open tmp writable (A has closed, so B succeeds) → write
+ *   - A: .move() throws NoModificationAllowedError — "cannot move while
+ *     the handle is locked" (B's writable is open on the same tmp)
+ * The lock scope is one tab; cross-tab races on the same path are still
+ * last-write-wins but can't produce the locked-handle error because each
+ * tab has its own tmp writable lifecycle.
  */
+function writeJsonAtomicLockKey(segments: string[]): string {
+  return `writeJsonAtomic:${segments.join('/')}`;
+}
+
 export async function writeJsonAtomic(
   root: FileSystemDirectoryHandle,
   segments: string[],
   data: unknown,
 ): Promise<number> {
-  return wrap('writeJsonAtomic', async () => {
-    const { parent, fileName } = await resolveFileParent(root, segments, true);
-    const tmpName = `${fileName}.tmp`;
-    const json = JSON.stringify(data, null, 2);
+  return wrap('writeJsonAtomic', () =>
+    withKeyLock(writeJsonAtomicLockKey(segments), async () => {
+      const { parent, fileName } = await resolveFileParent(root, segments, true);
+      const tmpName = `${fileName}.tmp`;
+      const json = JSON.stringify(data, null, 2);
 
-    const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
-    const writable = await tmpHandle.createWritable();
-    await writable.write(json);
-    await writable.close();
+      const tmpHandle = await parent.getFileHandle(tmpName, { create: true });
+      const writable = await tmpHandle.createWritable();
+      await writable.write(json);
+      await writable.close();
 
-    type MovableHandle = FileSystemFileHandle & {
-      move?: (parent: FileSystemDirectoryHandle, newName: string) => Promise<void>;
-    };
-    const movable = tmpHandle as MovableHandle;
-    if (typeof movable.move === 'function') {
-      await movable.move(parent, fileName);
-    } else {
-      // Fallback: copy tmp → target, then remove tmp.
-      const targetHandle = await parent.getFileHandle(fileName, { create: true });
-      const targetWritable = await targetHandle.createWritable();
-      await targetWritable.write(json);
-      await targetWritable.close();
-      try {
-        await parent.removeEntry(tmpName);
-      } catch (error) {
-        if (!isNotFound(error)) throw error;
+      type MovableHandle = FileSystemFileHandle & {
+        move?: (parent: FileSystemDirectoryHandle, newName: string) => Promise<void>;
+      };
+      const movable = tmpHandle as MovableHandle;
+      if (typeof movable.move === 'function') {
+        await movable.move(parent, fileName);
+      } else {
+        // Fallback: copy tmp → target, then remove tmp.
+        const targetHandle = await parent.getFileHandle(fileName, { create: true });
+        const targetWritable = await targetHandle.createWritable();
+        await targetWritable.write(json);
+        await targetWritable.close();
+        try {
+          await parent.removeEntry(tmpName);
+        } catch (error) {
+          if (!isNotFound(error)) throw error;
+        }
       }
-    }
 
-    return json.length;
-  });
+      return json.length;
+    }),
+  );
 }
 
 export async function writeBlob(
@@ -166,13 +183,21 @@ export async function writeBlob(
   segments: string[],
   data: Blob | ArrayBuffer | Uint8Array | string,
 ): Promise<void> {
-  return wrap('writeBlob', async () => {
-    const { parent, fileName } = await resolveFileParent(root, segments, true);
-    const fh = await parent.getFileHandle(fileName, { create: true });
-    const writable = await fh.createWritable();
-    await writable.write(data as FileSystemWriteChunkType);
-    await writable.close();
-  });
+  // Serialized per-path for the same reason as writeJsonAtomic: two
+  // concurrent writers on the same file race on the writable lock. In
+  // writeBlob's case the loser fails at createWritable with
+  // NoModificationAllowedError rather than at move(), but the fix is
+  // identical. Different paths use different lock keys, so this does
+  // not constrain parallelism of unrelated writes.
+  return wrap('writeBlob', () =>
+    withKeyLock(`writeBlob:${segments.join('/')}`, async () => {
+      const { parent, fileName } = await resolveFileParent(root, segments, true);
+      const fh = await parent.getFileHandle(fileName, { create: true });
+      const writable = await fh.createWritable();
+      await writable.write(data as FileSystemWriteChunkType);
+      await writable.close();
+    }),
+  );
 }
 
 /* ────────────────────────────── Delete helpers ───────────────────────── */

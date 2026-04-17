@@ -81,16 +81,49 @@ export const useDeleteProject = () => {
     async (id: string, clearLocalFiles?: boolean) => {
       try {
         const result = await deleteProject(id, clearLocalFiles);
-        return { success: true, error: null, localFilesDeleted: result.localFilesDeleted };
+        return {
+          success: true,
+          error: null,
+          localFilesDeleted: result.localFilesDeleted,
+          trashed: result.trashed,
+          deletedAt: result.deletedAt,
+          originalName: result.originalName,
+        };
       } catch (error) {
         return {
           success: false,
           error: error instanceof Error ? error.message : 'Failed to delete project',
           localFilesDeleted: false,
+          trashed: false as const,
+          deletedAt: 0,
+          originalName: '',
         };
       }
     },
     [deleteProject]
+  );
+};
+
+/**
+ * Hook for restoring a soft-deleted project. Pair with `useDeleteProject`
+ * to expose an Undo affordance (e.g. via a sonner toast action button).
+ */
+export const useRestoreProject = () => {
+  const restoreProject = useProjectStore((s) => s.restoreProject);
+
+  return useCallback(
+    async (id: string) => {
+      try {
+        await restoreProject(id);
+        return { success: true, error: null };
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to restore project',
+        };
+      }
+    },
+    [restoreProject]
   );
 };
 

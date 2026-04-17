@@ -158,6 +158,16 @@ export async function getProjectsUsingMedia(mediaId: string): Promise<string[]> 
     const result: string[] = [];
     for (const entry of projectDirs) {
       if (entry.kind !== 'directory') continue;
+      // Trashed projects DO count as references, on purpose: a project
+      // in the trash might be restored, and Restore must bring its
+      // media back with it. Without this, media exclusive to a trashed
+      // project would be fully cleaned up on unrelated delete-media
+      // operations, and the Restore would find broken links.
+      //
+      // Space reclamation happens when the trash is permanently emptied
+      // (`permanentlyDeleteProject` removes the project's media-links
+      // first, then `deleteMediaFromProject` runs cleanup per media —
+      // at that point the project no longer shows up in this scan).
       const links = await readLinks(root, entry.name);
       if (links.mediaIds.some((link) => link.id === mediaId)) {
         result.push(entry.name);

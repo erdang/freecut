@@ -22,7 +22,11 @@ import {
 import { Button } from '@/components/ui/button';
 import type { Project } from '@/types/project';
 import { formatRelativeTime } from '../utils/project-helpers';
-import { useDeleteProject, useDuplicateProject } from '../hooks/use-project-actions';
+import {
+  useDeleteProject,
+  useDuplicateProject,
+  useRestoreProject,
+} from '../hooks/use-project-actions';
 import { useProjectThumbnail } from '../hooks/use-project-thumbnail';
 
 interface ProjectCardProps {
@@ -36,6 +40,7 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [clearLocalFiles, setClearLocalFiles] = useState(false);
   const deleteProject = useDeleteProject();
+  const restoreProject = useRestoreProject();
   const duplicateProject = useDuplicateProject();
   const thumbnailUrl = useProjectThumbnail(project);
 
@@ -49,17 +54,44 @@ export function ProjectCard({ project, onEdit }: ProjectCardProps) {
     setIsDeleting(true);
     setShowDeleteDialog(false);
     const wantedLocalDelete = clearLocalFiles;
-    const result = await deleteProject(project.id, clearLocalFiles);
+    const projectId = project.id;
+    const result = await deleteProject(projectId, clearLocalFiles);
     setIsDeleting(false);
     setClearLocalFiles(false);
 
     if (!result.success) {
       toast.error('Failed to delete project', { description: result.error });
-    } else if (wantedLocalDelete && !result.localFilesDeleted) {
-      toast.warning('Project deleted but local files were not removed', {
-        description: 'Filesystem cleanup failed — you may need to delete the folder manually.',
-      });
+      return;
     }
+
+    // Successful soft-delete → offer Undo. Local-file cleanup (when the
+    // user opted in) has already run and is not reversible, so we warn
+    // about that separately and omit Undo from that toast to avoid
+    // suggesting the external folder could be restored.
+    if (wantedLocalDelete && !result.localFilesDeleted) {
+      toast.warning(`Moved "${result.originalName}" to trash`, {
+        description: 'Local files were not removed — you may need to delete the folder manually.',
+      });
+      return;
+    }
+
+    toast.success(`Moved "${result.originalName}" to trash`, {
+      description: wantedLocalDelete
+        ? 'Local files deleted — undo will not restore them.'
+        : 'You can undo this for the next few seconds.',
+      duration: 8000,
+      action: {
+        label: 'Undo',
+        onClick: async () => {
+          const undo = await restoreProject(projectId);
+          if (undo.success) {
+            toast.success(`Restored "${result.originalName}"`);
+          } else {
+            toast.error('Failed to restore project', { description: undo.error });
+          }
+        },
+      },
+    });
   };
 
   const handleDuplicate = async (e: React.MouseEvent) => {
