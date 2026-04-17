@@ -7,6 +7,7 @@ const mediaLibraryServiceMocks = vi.hoisted(() => ({
   getThumbnailBlobUrl: vi.fn(),
   getMediaFile: vi.fn(),
   getMediaBlobUrl: vi.fn(),
+  updateMediaCaptions: vi.fn(),
 }));
 
 const proxyServiceMocks = vi.hoisted(() => ({
@@ -37,7 +38,13 @@ const mediaStoreState = vi.hoisted(() => ({
   setTranscriptProgress: vi.fn(),
   clearTranscriptProgress: vi.fn(),
   setTaggingMedia: vi.fn(),
+  updateMediaCaptions: vi.fn(),
   showNotification: vi.fn(),
+}));
+
+const analysisMocks = vi.hoisted(() => ({
+  captionVideo: vi.fn(),
+  captionImage: vi.fn(),
 }));
 
 const editorStoreState = vi.hoisted(() => ({
@@ -157,6 +164,8 @@ vi.mock('../utils/drag-data-cache', () => ({
 vi.mock('@/shared/state/local-inference', () => ({
   isLocalInferenceCancellationError: vi.fn(() => false),
 }));
+
+vi.mock('../deps/analysis', () => analysisMocks);
 
 import { MediaCard } from './media-card';
 
@@ -286,5 +295,43 @@ describe('MediaCard', () => {
     fireEvent.pointerLeave(thumbnail);
 
     expect(editorStoreState.clearMediaSkimPreview).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores AI analysis on the media item without inserting timeline captions', async () => {
+    const media = makeMedia({
+      fileName: 'frame.png',
+      mimeType: 'image/png',
+      duration: 0,
+      fps: 0,
+      codec: '',
+    });
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      blob: async () => new Blob(['image-data']),
+    } as Response);
+    analysisMocks.captionImage.mockResolvedValue([
+      { timeSec: 1.25, text: 'First line' },
+      { timeSec: 2.5, text: 'Second line' },
+    ]);
+
+    render(<MediaCard media={media} viewMode="list" />);
+
+    fireEvent.click(screen.getByText('Analyze with AI'));
+
+    await waitFor(() => {
+      expect(mediaLibraryServiceMocks.updateMediaCaptions).toHaveBeenCalledWith('media-1', [
+        { timeSec: 1.25, text: 'First line' },
+        { timeSec: 2.5, text: 'Second line' },
+      ]);
+    });
+
+    expect(mediaStoreState.updateMediaCaptions).toHaveBeenCalledWith('media-1', [
+      { timeSec: 1.25, text: 'First line' },
+      { timeSec: 2.5, text: 'Second line' },
+    ]);
+    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+      type: 'success',
+      message: 'Generated 2 descriptions for "frame.png"',
+    });
+    fetchMock.mockRestore();
   });
 });

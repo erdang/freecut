@@ -24,6 +24,18 @@ vi.mock('../deps/timeline-contract', () => ({
     while (used.has(next)) next += 1;
     return `${prefix}${next}`;
   },
+  getTrackKind: (track: { name: string; kind?: string }) => {
+    if (track.kind === 'video' || track.kind === 'audio') {
+      return track.kind;
+    }
+    if (/^V(\d+)$/i.test(track.name)) {
+      return 'video';
+    }
+    if (/^A(\d+)$/i.test(track.name)) {
+      return 'audio';
+    }
+    return null;
+  },
 }));
 
 import {
@@ -39,8 +51,8 @@ import {
   getCaptionFrameRange,
   normalizeCaptionSegments,
 } from './caption-items';
+import { getTrackKind } from '../deps/timeline-contract';
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
-import { getTrackKind } from '@/features/timeline/utils/classic-tracks';
 
 describe('caption-items', () => {
   it('normalizes empty and invalid transcript segments', () => {

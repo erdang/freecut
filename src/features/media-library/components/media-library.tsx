@@ -28,6 +28,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
@@ -69,6 +75,21 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
     </button>
+  );
+}
+
+function HeaderActionTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -622,85 +643,92 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   return (
     <div ref={containerRef} className="h-full flex flex-col">
       {/* Header toolbar */}
-      <div className="px-3 py-2 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-2 text-xs">
-          {/* Import action */}
-          <button
-            onClick={handleImport}
-            disabled={!currentProjectId}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-              bg-primary text-primary-foreground
-              hover:bg-primary/90
-              disabled:opacity-40 disabled:cursor-not-allowed
-              transition-colors duration-150"
-            title="Import media files"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span>Import</span>
-          </button>
-
-          {/* Missing media indicator */}
-          {currentProjectBrokenMediaIds.length > 0 && (
-            <button
-              onClick={openMissingMediaDialog}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-                bg-destructive/10 border border-destructive/25 text-destructive
-                hover:bg-destructive/20 hover:border-destructive/40
-                transition-colors duration-150"
-              title="View missing media files"
-            >
-              <Link2Off className="w-3.5 h-3.5" />
-              <span>{currentProjectBrokenMediaIds.length} Missing</span>
-            </button>
-          )}
-
-
-          {/* Selection indicator & actions */}
-          {selectedAssetCount > 0 && (
-            <>
-              <div className="h-4 w-px bg-border" />
-
-              {/* Selection badge */}
-              <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border">
-                <span className="tabular-nums">{selectedAssetCount}</span>
-                <span className="text-muted-foreground">selected</span>
-                <button
-                  onClick={clearSelection}
-                  className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
-                  title="Clear selection"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Generate proxies for selection */}
-              {selectedProxyEligibleCount > 0 && (
-                <button
-                  onClick={handleGenerateSelectedProxies}
-                  className="flex items-center gap-1 h-7 px-2 rounded-md
-                    text-muted-foreground hover:text-primary hover:bg-primary/10
-                    transition-colors duration-150"
-                  title="Generate proxies for selected"
-                >
-                  <Zap className="w-3 h-3" />
-                  <span>Proxy ({selectedProxyEligibleCount})</span>
-                </button>
-              )}
-
-              {/* Delete action */}
+      <div className="@container px-3 py-2 border-b border-border flex-shrink-0">
+        <TooltipProvider>
+          <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
+            {/* Import action */}
+            <HeaderActionTooltip label="Import media files">
               <button
-                onClick={handleDeleteSelected}
-                className="flex items-center gap-1 h-7 px-2 rounded-md
-                  text-destructive/80 hover:text-destructive hover:bg-destructive/10
+                onClick={handleImport}
+                disabled={!currentProjectId}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                  bg-primary text-primary-foreground
+                  hover:bg-primary/90
+                  disabled:opacity-40 disabled:cursor-not-allowed
                   transition-colors duration-150"
-                title="Delete selected"
               >
-                <Trash2 className="w-3 h-3" />
-                <span>Delete</span>
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span className="hidden @[220px]:inline">Import</span>
               </button>
-            </>
-          )}
-        </div>
+            </HeaderActionTooltip>
+
+            {/* Missing media indicator */}
+            {currentProjectBrokenMediaIds.length > 0 && (
+              <HeaderActionTooltip label={`View ${currentProjectBrokenMediaIds.length} missing media file${currentProjectBrokenMediaIds.length === 1 ? '' : 's'}`}>
+                <button
+                  onClick={openMissingMediaDialog}
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                    bg-destructive/10 border border-destructive/25 text-destructive
+                    hover:bg-destructive/20 hover:border-destructive/40
+                    transition-colors duration-150"
+                >
+                  <Link2Off className="w-3.5 h-3.5" />
+                  <span className="hidden @[250px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
+                </button>
+              </HeaderActionTooltip>
+            )}
+
+
+            {/* Selection indicator & actions */}
+            {selectedAssetCount > 0 && (
+              <>
+                <div className="h-4 w-px bg-border hidden @[240px]:block" />
+
+                {/* Selection badge */}
+                <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
+                  <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
+                  <span className="text-muted-foreground hidden @[260px]:inline">selected</span>
+                  <HeaderActionTooltip label="Clear selection">
+                    <button
+                      onClick={clearSelection}
+                      className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </HeaderActionTooltip>
+                </div>
+
+                {/* Generate proxies for selection */}
+                {selectedProxyEligibleCount > 0 && (
+                  <HeaderActionTooltip label={`Generate proxies for ${selectedProxyEligibleCount} selected item${selectedProxyEligibleCount === 1 ? '' : 's'}`}>
+                    <button
+                      onClick={handleGenerateSelectedProxies}
+                      className="flex items-center gap-1 h-7 px-2 rounded-md shrink-0
+                        text-muted-foreground hover:text-primary hover:bg-primary/10
+                        transition-colors duration-150"
+                    >
+                      <Zap className="w-3 h-3" />
+                      <span className="hidden @[320px]:inline">Proxy ({selectedProxyEligibleCount})</span>
+                    </button>
+                  </HeaderActionTooltip>
+                )}
+
+                {/* Delete action */}
+                <HeaderActionTooltip label="Delete selected assets">
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="flex items-center gap-1 h-7 px-2 rounded-md shrink-0
+                      text-destructive/80 hover:text-destructive hover:bg-destructive/10
+                      transition-colors duration-150"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span className="hidden @[280px]:inline">Delete</span>
+                  </button>
+                </HeaderActionTooltip>
+              </>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
 
       {/* Error message */}

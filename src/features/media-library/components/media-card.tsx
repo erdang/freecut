@@ -17,7 +17,6 @@ import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
-import { mediaCaptioningService } from '../services/media-captioning-service';
 import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { useEditorStore } from '@/app/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -344,42 +343,15 @@ export const MediaCard = memo(function MediaCard({
         await mediaLibraryService.updateMediaCaptions(media.id, captions);
         store.updateMediaCaptions(media.id, captions);
 
-        let timelineInsertedCount = 0;
-        let noTargetClips = false;
-        try {
-          const result = await mediaCaptioningService.insertAiCaptionsOnTimeline(
-            media.id,
-            captions,
-            { replaceExisting: true },
-          );
-          timelineInsertedCount = result.insertedItemCount;
-          noTargetClips = result.noTargetClips;
-        } catch (error) {
-          store.showNotification({
-            type: 'error',
-            message: error instanceof Error
-              ? `Generated captions but failed to insert on timeline: ${error.message}`
-              : 'Generated captions but failed to insert on timeline',
-          });
-        }
-
-        const captionCountLabel = `${captions.length} caption${captions.length === 1 ? '' : 's'}`;
-        let timelineSuffix = '';
-        if (timelineInsertedCount > 0) {
-          timelineSuffix = ` — added ${timelineInsertedCount} to timeline`;
-        } else if (noTargetClips) {
-          timelineSuffix = ' — drop this clip on the timeline to insert them';
-        } else {
-          timelineSuffix = ' — captions saved but did not overlap any clip range';
-        }
+        const descriptionCountLabel = `${captions.length} description${captions.length === 1 ? '' : 's'}`;
         store.showNotification({
           type: 'success',
-          message: `Generated ${captionCountLabel} for "${media.fileName}"${timelineSuffix}`,
+          message: `Generated ${descriptionCountLabel} for "${media.fileName}"`,
         });
       } else {
         store.showNotification({
           type: 'info',
-          message: `No captions generated for "${media.fileName}"`,
+          message: `No descriptions generated for "${media.fileName}"`,
         });
       }
     } catch (error) {
