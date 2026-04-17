@@ -1,0 +1,43 @@
+name: Changelog append
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  append:
+    # Skip the commits we push ourselves from this workflow.
+    if: |
+      !contains(github.event.head_commit.message, '[skip changelog]') &&
+      !contains(github.event.head_commit.message, 'chore(changelog)')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run append script
+        run: node scripts/changelog-append.mjs HEAD~1..HEAD
+
+      - name: Commit updated changelog
+        run: |
+          if git diff --quiet src/data/changelog.json; then
+            echo "No changelog updates."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/data/changelog.json
+          git commit -m "chore(changelog): append bullets from $(git rev-parse --short HEAD^) [skip ci]"
+          git push
