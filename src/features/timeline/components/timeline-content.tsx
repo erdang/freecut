@@ -1125,6 +1125,10 @@ export const TimelineContent = memo(function TimelineContent({
   // Preview scrubber: show ghost playhead on hover
   const handleTimelineMouseDownCapture = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.timeline-ruler') || target.closest('[data-playhead-handle]')) {
+      return;
+    }
     if (usePlaybackStore.getState().previewFrame !== null) {
       setPreviewFrameRef.current(null);
     }

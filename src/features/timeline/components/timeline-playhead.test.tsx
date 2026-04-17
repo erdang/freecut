@@ -29,7 +29,7 @@ describe('TimelinePlayhead', () => {
     useZoomStore.getState().setZoomLevelSynchronized(1);
   });
 
-  it('uses preview-only updates while dragging and commits on release', async () => {
+  it('uses atomic scrub updates while dragging and clears preview on release', async () => {
     const { container } = render(
       <div className="timeline-ruler">
         <TimelinePlayhead inRuler maxFrame={300} />
@@ -59,9 +59,8 @@ describe('TimelinePlayhead', () => {
 
     await waitFor(() => {
       expect(usePlaybackStore.getState().previewFrame).toBe(36);
+      expect(usePlaybackStore.getState().currentFrame).toBe(36);
     });
-
-    expect(usePlaybackStore.getState().currentFrame).toBe(12);
 
     fireEvent.mouseUp(document, { clientX: 120, clientY: 8 });
 

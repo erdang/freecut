@@ -1,5 +1,5 @@
 import { createRef, type ReactNode } from 'react';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useEditorStore } from '@/app/state/editor';
@@ -374,5 +374,20 @@ describe('TimelineContent playback selection behavior', () => {
       expect(videoScrollContainer!.scrollTop).toBe(0);
     });
     expect(audioScrollContainer!.scrollTop).toBe(55);
+  });
+
+  it('does not clear previewFrame on ruler mousedown before the ruler handler runs', () => {
+    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24);
+    });
+
+    const ruler = container.querySelector('.timeline-ruler') as HTMLDivElement | null;
+    expect(ruler).toBeTruthy();
+
+    fireEvent.mouseDown(ruler!, { button: 0 });
+
+    expect(usePlaybackStore.getState().previewFrame).toBe(24);
   });
 });
