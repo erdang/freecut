@@ -35,3 +35,8 @@ export {
   buildSubCompositionInput,
   collectSubCompositionMediaIds,
 } from '../utils/sub-composition-preview';
+export {
+  createScrubThrottleState,
+  shouldCommitScrubFrame,
+  type ScrubThrottleState,
+} from '../utils/scrub-throttle';

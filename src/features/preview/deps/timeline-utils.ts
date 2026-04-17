@@ -16,4 +16,4 @@ export {
   createScrubThrottleState,
   shouldCommitScrubFrame,
   type ScrubThrottleState,
-} from '@/features/timeline/utils/scrub-throttle';
+} from './timeline-contract';
