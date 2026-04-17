@@ -115,7 +115,7 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
           suspendOverlay={suspendOverlay}
         />
         {skimPreviewOverlay && (
-          <div className="absolute inset-0 z-[100] bg-video-preview-background">
+          <div className="absolute inset-0 z-40 bg-video-preview-background">
             {skimPreviewOverlay}
           </div>
         )}
