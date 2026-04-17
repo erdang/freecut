@@ -695,7 +695,12 @@ export const MediaCard = memo(function MediaCard({
           )}
           {/* Proxy badge for list view */}
           {!isBroken && !isImporting && proxyStatus === 'generating' && (
-            <div className="absolute bottom-0.5 right-0.5 p-0.5 rounded bg-amber-500/90 text-black">
+            <div className="absolute bottom-0.5 right-0.5 p-0.5 rounded bg-green-500/90 text-black">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            </div>
+          )}
+          {!isBroken && !isImporting && isTagging && (
+            <div className="absolute bottom-0.5 left-0.5 p-0.5 rounded bg-purple-500/90 text-white" title="Analyzing with AI">
               <Loader2 className="w-2.5 h-2.5 animate-spin" />
             </div>
           )}
@@ -851,7 +856,12 @@ export const MediaCard = memo(function MediaCard({
               </div>
             )}
             {!isBroken && proxyStatus === 'generating' && (
-              <div className="p-0.5 rounded bg-amber-500/90 text-black pointer-events-none">
+              <div className="p-0.5 rounded bg-green-500/90 text-black pointer-events-none">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              </div>
+            )}
+            {!isBroken && isTagging && (
+              <div className="p-0.5 rounded bg-purple-500/90 text-white pointer-events-none" title="Analyzing with AI">
                 <Loader2 className="w-2.5 h-2.5 animate-spin" />
               </div>
             )}

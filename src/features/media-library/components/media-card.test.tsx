@@ -249,6 +249,22 @@ describe('MediaCard', () => {
     expect(proxyServiceMocks.cancelProxy).toHaveBeenCalledWith('media-1', 'proxy-media-1');
   });
 
+  it('shows an active AI analysis badge in list view while analysis is running', () => {
+    mediaStoreState.taggingMediaIds = new Set(['media-1']);
+
+    const { container } = render(<MediaCard media={makeMedia()} viewMode="list" />);
+
+    expect(container.querySelector('[title="Analyzing with AI"]')).toBeTruthy();
+  });
+
+  it('shows an active AI analysis badge in grid view while analysis is running', () => {
+    mediaStoreState.taggingMediaIds = new Set(['media-1']);
+
+    const { container } = render(<MediaCard media={makeMedia()} viewMode="grid" />);
+
+    expect(container.querySelector('[title="Analyzing with AI"]')).toBeTruthy();
+  });
+
   it('opens a caption in the source monitor with a default three-second I/O range', () => {
     render(<MediaCard media={makeMedia()} viewMode="list" />);
 

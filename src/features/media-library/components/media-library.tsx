@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles } from 'lucide-react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -196,6 +196,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
+  const taggingMediaIds = useMediaLibraryStore((s) => s.taggingMediaIds);
   const filteredMediaItems = useFilteredMediaItems();
   const mediaGroups = useMemo(() => {
     const groups: { key: string; label: string; icon: 'video' | 'audio' | 'image' | 'gif'; items: MediaMetadata[] }[] = [];
@@ -507,6 +508,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
     return count;
   }, [proxyStatus]);
+
+  const analyzingCount = taggingMediaIds.size;
 
   const currentProjectBrokenMediaIds = useMemo(
     () => getProjectBrokenMediaIds(brokenMediaIds, mediaById),
@@ -1043,11 +1046,34 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         )}
       </div>
 
+      {/* Background AI analysis status */}
+      {analyzingCount > 0 && (
+        <div className="px-3 py-2 border-t border-border flex-shrink-0 bg-panel-bg/50">
+          <div className="flex items-center gap-2 text-xs">
+            <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">
+                  Analyzing {analyzingCount} {analyzingCount === 1 ? 'item' : 'items'} with AI
+                </span>
+                <span className="text-muted-foreground">
+                  Working...
+                </span>
+              </div>
+              <div className="h-1 overflow-hidden rounded-full bg-secondary">
+                <div className="h-full w-1/3 rounded-full bg-purple-500 animate-pulse" />
+              </div>
+            </div>
+            <Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
+          </div>
+        </div>
+      )}
+
       {/* Proxy generation progress bar */}
       {generatingCount > 0 && (
         <div className="px-3 py-2 border-t border-border flex-shrink-0 bg-panel-bg/50">
           <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin flex-shrink-0" />
+            <Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-muted-foreground">
@@ -1068,7 +1094,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               </div>
               <div className="h-1 bg-secondary rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-amber-500 rounded-full transition-all duration-300"
+                  className="h-full bg-green-500 rounded-full transition-all duration-300"
                   style={{ width: `${Math.round(generatingAvgProgress * 100)}%` }}
                 />
               </div>
