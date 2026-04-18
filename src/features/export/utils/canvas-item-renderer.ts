@@ -26,9 +26,10 @@ import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 // Subsystem imports
 import { getAnimatedTransform } from './canvas-keyframes';
 import {
-  applyAllEffectsAsync,
+  renderEffectsFromMaskedSource,
   getAdjustmentLayerEffects,
   combineEffects,
+  type EffectSourceMask,
   type AdjustmentLayerWithTrackOrder,
 } from './canvas-effects';
 import {
@@ -1536,6 +1537,7 @@ export async function renderTransitionToCanvas(
   frame: number,
   rctx: ItemRenderContext,
   trackOrder: number,
+  trackMasks: EffectSourceMask[] = [],
 ): Promise<void> {
   const { canvasPool, canvasSettings } = rctx;
   const { leftClip, rightClip } = activeTransition;
@@ -1568,41 +1570,49 @@ export async function renderTransitionToCanvas(
   const hasLeftEffects = leftCombinedEffects.length > 0;
   const hasRightEffects = rightCombinedEffects.length > 0;
 
-  // Track pool effect canvases separately — in GPU batch mode the final
-  // source may be a GPU output canvas (not from the pool), but the pool
-  // canvases still need to be released.
-  let leftEffectPoolCanvas: OffscreenCanvas | null = null;
-  let rightEffectPoolCanvas: OffscreenCanvas | null = null;
+  const leftEffectPoolCanvases: OffscreenCanvas[] = [];
+  const rightEffectPoolCanvases: OffscreenCanvas[] = [];
 
   if (hasLeftEffects || hasRightEffects) {
-    // In GPU batch mode, applyAllEffectsAsync returns a deferred GPU canvas
-    // instead of drawing back to the effect canvas. We must capture and use
-    // the returned canvas, otherwise effects are silently dropped.
-    let leftGpuPromise: Promise<OffscreenCanvas | null> | undefined;
-    let rightGpuPromise: Promise<OffscreenCanvas | null> | undefined;
+    let leftEffectsPromise: Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }> | undefined;
+    let rightEffectsPromise: Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }> | undefined;
 
     if (hasLeftEffects) {
-      const { canvas: leftEffectCanvas, ctx: leftEffectCtx } = canvasPool.acquire();
-      leftEffectPoolCanvas = leftEffectCanvas;
-      leftFinalCanvas = leftEffectCanvas;
-      leftGpuPromise = applyAllEffectsAsync(leftEffectCtx, leftCanvas, leftCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
+      leftEffectsPromise = renderEffectsFromMaskedSource(
+        canvasPool,
+        leftCanvas,
+        leftCombinedEffects,
+        trackMasks,
+        frame,
+        canvasSettings,
+        rctx.gpuPipeline,
+      );
     }
     if (hasRightEffects) {
-      const { canvas: rightEffectCanvas, ctx: rightEffectCtx } = canvasPool.acquire();
-      rightEffectPoolCanvas = rightEffectCanvas;
-      rightFinalCanvas = rightEffectCanvas;
-      rightGpuPromise = applyAllEffectsAsync(rightEffectCtx, rightCanvas, rightCombinedEffects, frame, canvasSettings, rctx.gpuPipeline);
+      rightEffectsPromise = renderEffectsFromMaskedSource(
+        canvasPool,
+        rightCanvas,
+        rightCombinedEffects,
+        trackMasks,
+        frame,
+        canvasSettings,
+        rctx.gpuPipeline,
+      );
     }
 
-    const [leftGpu, rightGpu] = await Promise.all([
-      leftGpuPromise ?? Promise.resolve(null),
-      rightGpuPromise ?? Promise.resolve(null),
+    const [leftEffects, rightEffects] = await Promise.all([
+      leftEffectsPromise ?? Promise.resolve(null),
+      rightEffectsPromise ?? Promise.resolve(null),
     ]);
 
-    // Use deferred GPU canvas when returned (batch mode), otherwise the
-    // effect canvas already has the result drawn into it.
-    if (leftGpu) leftFinalCanvas = leftGpu;
-    if (rightGpu) rightFinalCanvas = rightGpu;
+    if (leftEffects) {
+      leftFinalCanvas = leftEffects.source;
+      leftEffectPoolCanvases.push(...leftEffects.poolCanvases);
+    }
+    if (rightEffects) {
+      rightFinalCanvas = rightEffects.source;
+      rightEffectPoolCanvases.push(...rightEffects.poolCanvases);
+    }
   }
 
   // Render transition with effect-applied canvases
@@ -1610,9 +1620,9 @@ export async function renderTransitionToCanvas(
   renderTransition(ctx, activeTransition, leftFinalCanvas, rightFinalCanvas, transitionSettings, rctx.gpuTransitionPipeline);
 
   // Release all pool canvases (GPU output canvases are managed by the pipeline)
-  if (leftEffectPoolCanvas) canvasPool.release(leftEffectPoolCanvas);
+  for (const effectCanvas of leftEffectPoolCanvases) canvasPool.release(effectCanvas);
   canvasPool.release(leftCanvas);
-  if (rightEffectPoolCanvas) canvasPool.release(rightEffectPoolCanvas);
+  for (const effectCanvas of rightEffectPoolCanvases) canvasPool.release(effectCanvas);
   canvasPool.release(rightCanvas);
 }
 

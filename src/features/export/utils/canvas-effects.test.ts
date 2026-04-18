@@ -1,7 +1,20 @@
-import { describe, expect, it } from 'vitest';
-import { getAdjustmentLayerEffects, type AdjustmentLayerWithTrackOrder } from './canvas-effects';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdjustmentItem } from '@/types/timeline';
 import type { ItemEffect } from '@/types/effects';
+
+const mockFns = vi.hoisted(() => ({
+  applyMasksMock: vi.fn(),
+}));
+
+vi.mock('./canvas-masks', () => ({
+  applyMasks: mockFns.applyMasksMock,
+}));
+
+import {
+  getAdjustmentLayerEffects,
+  renderEffectsFromMaskedSource,
+  type AdjustmentLayerWithTrackOrder,
+} from './canvas-effects';
 
 function createGpuEffect(id: string, amount: number): ItemEffect {
   return {
@@ -31,6 +44,14 @@ function createAdjustmentLayer(
   };
 
   return { layer, trackOrder };
+}
+
+function createMock2dContext(canvas: OffscreenCanvas): OffscreenCanvasRenderingContext2D {
+  return {
+    canvas,
+    drawImage: vi.fn(),
+    clearRect: vi.fn(),
+  } as unknown as OffscreenCanvasRenderingContext2D;
 }
 
 describe('getAdjustmentLayerEffects', () => {
@@ -87,5 +108,52 @@ describe('getAdjustmentLayerEffects', () => {
 
     expect(effects).toEqual([activeEffect]);
     expect(previewLookups).toEqual(['adj-active']);
+  });
+});
+
+describe('renderEffectsFromMaskedSource', () => {
+  beforeEach(() => {
+    mockFns.applyMasksMock.mockReset();
+  });
+
+  it('pre-masks the effect source before the effect chain draws from it', async () => {
+    const sourceCanvas = { width: 1920, height: 1080 } as OffscreenCanvas;
+    const maskedSourceCanvas = { width: 1920, height: 1080 } as OffscreenCanvas;
+    const effectCanvas = { width: 1920, height: 1080 } as OffscreenCanvas;
+    const maskedSourceCtx = createMock2dContext(maskedSourceCanvas);
+    const effectCtx = createMock2dContext(effectCanvas);
+    const canvasPool = {
+      acquire: vi.fn()
+        .mockReturnValueOnce({ canvas: maskedSourceCanvas, ctx: maskedSourceCtx })
+        .mockReturnValueOnce({ canvas: effectCanvas, ctx: effectCtx }),
+    };
+    const masks = [{
+      path: {} as Path2D,
+      inverted: false,
+      feather: 0,
+      maskType: 'clip' as const,
+    }];
+    const effect = createGpuEffect('fx-1', 0.5);
+
+    const result = await renderEffectsFromMaskedSource(
+      canvasPool,
+      sourceCanvas,
+      [effect],
+      masks,
+      12,
+      { width: 1920, height: 1080, fps: 30 },
+    );
+
+    expect(mockFns.applyMasksMock).toHaveBeenCalledWith(
+      maskedSourceCtx,
+      sourceCanvas,
+      masks,
+      { width: 1920, height: 1080, fps: 30 },
+    );
+    expect(effectCtx.drawImage).toHaveBeenCalledWith(maskedSourceCanvas, 0, 0);
+    expect(result).toEqual({
+      source: effectCanvas,
+      poolCanvases: [maskedSourceCanvas, effectCanvas],
+    });
   });
 });

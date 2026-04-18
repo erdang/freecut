@@ -34,7 +34,7 @@ import { VideoSourcePool } from '@/features/export/deps/player-contract';
 // Import subsystems
 import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
-  applyAllEffectsAsync,
+  renderEffectsFromMaskedSource,
   getAdjustmentLayerEffects,
   combineEffects,
   type AdjustmentLayerWithTrackOrder,
@@ -1204,6 +1204,7 @@ export async function createCompositionRenderer(
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
+        const applicableMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
 
         // NOTE: The importExternalTexture zero-copy path is disabled because
         // textureSampleBaseClampToEdge produces subtly different edge pixel values
@@ -1233,16 +1234,22 @@ export async function createCompositionRenderer(
               getLog().warn('GPU pipeline init failed — GPU effects will be skipped');
             }
           }
-          const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
-          const deferredGpuCanvas = await applyAllEffectsAsync(effectCtx, itemCanvas, combinedEffects, frame, canvasSettings, itemRenderContext.gpuPipeline);
+          const { source, poolCanvases } = await renderEffectsFromMaskedSource(
+            canvasPool,
+            itemCanvas,
+            combinedEffects,
+            applicableMasks,
+            frame,
+            maskSettings,
+            itemRenderContext.gpuPipeline,
+          );
           canvasPool.release(itemCanvas);
 
-          const source = deferredGpuCanvas ?? effectCanvas;
           if (deferred) {
-            return { source, poolCanvases: [effectCanvas] };
+            return { source, poolCanvases };
           }
           targetCtx.drawImage(source, 0, 0);
-          canvasPool.release(effectCanvas);
+          for (const effectCanvas of poolCanvases) canvasPool.release(effectCanvas);
           return null;
         }
 
@@ -1462,7 +1469,14 @@ export async function createCompositionRenderer(
             }
             // Transitions: render to a dedicated canvas
             const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire();
-            await renderTransitionToCanvas(trCtx, task.transition, frame, itemRenderContext, task.trackOrder);
+            await renderTransitionToCanvas(
+              trCtx,
+              task.transition,
+              frame,
+              itemRenderContext,
+              task.trackOrder,
+              activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, task.trackOrder)),
+            );
             return { source: trCanvas, poolCanvases: [trCanvas] } as { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] };
           }),
         );

@@ -185,8 +185,9 @@ export function toTrackTopologyFingerprint(tracks: CompositionInputProps['tracks
     );
     for (const item of track.items) {
       const src = 'src' in item ? (item.src ?? '') : '';
+      const isMask = item.type === 'shape' ? (item.isMask ? 1 : 0) : 0;
       parts.push(
-        `i:${item.id}:${item.type}:${item.mediaId ?? ''}:${src}:${item.trackId}`
+        `i:${item.id}:${item.type}:${item.mediaId ?? ''}:${src}:${item.trackId}:${isMask}`
       );
     }
   }

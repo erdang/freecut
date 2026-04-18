@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject } from 'react';
+import { useEffect, useRef, type MutableRefObject } from 'react';
 import type { CaptureOptions } from '@/shared/state/playback';
 
 interface UsePreviewCaptureBridgeParams {
@@ -26,6 +26,15 @@ export function usePreviewCaptureBridge({
   captureImageDataInFlightRef,
   captureScaleCanvasRef,
 }: UsePreviewCaptureBridgeParams) {
+  const unmountingRef = useRef(false);
+
+  useEffect(() => {
+    unmountingRef.current = false;
+    return () => {
+      unmountingRef.current = true;
+    };
+  }, []);
+
   useEffect(() => {
     setCaptureFrame(captureCurrentFrame);
     setCaptureFrameImageData(captureCurrentFrameImageData);
@@ -34,7 +43,9 @@ export function usePreviewCaptureBridge({
       setCaptureFrame(null);
       setCaptureFrameImageData(null);
       setCaptureCanvasSource(null);
-      setDisplayedFrame(null);
+      if (unmountingRef.current) {
+        setDisplayedFrame(null);
+      }
       captureInFlightRef.current = null;
       captureImageDataInFlightRef.current = null;
       captureScaleCanvasRef.current = null;

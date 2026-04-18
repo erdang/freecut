@@ -175,6 +175,33 @@ function createMockCanvasContext(): CanvasRenderingContext2D {
   } as unknown as CanvasRenderingContext2D;
 }
 
+function createRendererDouble(overrides: Partial<{
+  preload: ReturnType<typeof vi.fn>;
+  renderFrame: ReturnType<typeof vi.fn>;
+  prewarmFrame: ReturnType<typeof vi.fn>;
+  prewarmFrames: ReturnType<typeof vi.fn>;
+  invalidateFrameCache: ReturnType<typeof vi.fn>;
+  setDomVideoElementProvider: ReturnType<typeof vi.fn>;
+  getScrubbingCache: () => null;
+  dispose: ReturnType<typeof vi.fn>;
+}> = {}) {
+  const prewarmFrame = overrides.prewarmFrame ?? vi.fn(async () => {});
+  return {
+    preload: overrides.preload ?? vi.fn(async () => {}),
+    renderFrame: overrides.renderFrame ?? vi.fn(async () => {}),
+    prewarmFrame,
+    prewarmFrames: overrides.prewarmFrames ?? vi.fn(async (frames: number[]) => {
+      for (const frame of frames) {
+        await prewarmFrame(frame);
+      }
+    }),
+    invalidateFrameCache: overrides.invalidateFrameCache ?? vi.fn(),
+    setDomVideoElementProvider: overrides.setDomVideoElementProvider ?? vi.fn(),
+    getScrubbingCache: overrides.getScrubbingCache ?? (() => null),
+    dispose: overrides.dispose ?? vi.fn(),
+  };
+}
+
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -711,6 +738,143 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('rebuilds and immediately rerenders the fast-scrub overlay when a shape toggles into mask mode', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'shape-1',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 0,
+        durationInFrames: 120,
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+        isMask: false,
+      } as TimelineItem,
+      {
+        id: 'item-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-1',
+            enabled: true,
+            effect: { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.5 } },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const initialRendererCount = rendererMockState.instances.length;
+    const initialRenderer = rendererMockState.instances[initialRendererCount - 1]!;
+
+    await waitFor(() => {
+      expect(initialRenderer.renderFrame).toHaveBeenCalledWith(0);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(getDisplayedFrame()).toBe(0);
+    });
+
+    let resolveRebuiltRender: (() => void) | null = null;
+    createCompositionRendererMock.mockImplementationOnce(async () => {
+      const renderFrame = vi.fn(() => new Promise<void>((resolve) => {
+        resolveRebuiltRender = resolve;
+      }));
+      const renderer = createRendererDouble({ renderFrame });
+      rendererMockState.instances.push(renderer);
+      return renderer;
+    });
+
+    act(() => {
+      useItemsStore.getState().setItems([
+        {
+          id: 'shape-1',
+          type: 'shape',
+          trackId: 'track-mask',
+          from: 0,
+          durationInFrames: 120,
+          shapeType: 'rectangle',
+          fillColor: '#ffffff',
+          isMask: true,
+        } as TimelineItem,
+        {
+          id: 'item-1',
+          type: 'video',
+          trackId: 'track-video',
+          from: 0,
+          durationInFrames: 120,
+          src: 'blob:mock-video',
+          effects: [
+            {
+              id: 'effect-1',
+              enabled: true,
+              effect: { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.5 } },
+            },
+          ],
+        } as TimelineItem,
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(initialRendererCount);
+    });
+
+    const rebuiltRenderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(rebuiltRenderer.renderFrame).toHaveBeenCalledWith(0);
+    });
+
+    expect(scrubCanvas.style.visibility).toBe('visible');
+    expect(getDisplayedFrame()).toBe(0);
+
+    act(() => {
+      resolveRebuiltRender?.();
+    });
+
+    await waitFor(() => {
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(getDisplayedFrame()).toBe(0);
+    });
+  });
+
   it('reuses the active fast-scrub renderer for committed transform updates on gpu-effect clips', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -941,6 +1105,119 @@ describe('VideoPreview sync behavior', () => {
       expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
       expect(rendererMockState.instances.length).toBe(1);
       return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('re-renders the paused currentFrame after media resolution finishes on refresh', async () => {
+    const mediaId = 'media-effected';
+    setMockBlobUrl(mediaId, 'blob:effected-video');
+
+    const media = {
+      id: mediaId,
+      projectId: 'project-1',
+      fileName: 'effected.mp4',
+      fileSize: 1024,
+      mimeType: 'video/mp4',
+      width: 1920,
+      height: 1080,
+      duration: 4,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as (typeof useMediaLibraryStore.getState)['mediaItems'][number];
+
+    useMediaLibraryStore.setState({
+      mediaItems: [media],
+      mediaById: {
+        [mediaId]: media,
+      },
+      brokenMediaIds: [],
+    });
+
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'mask-shape',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Mask',
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+        isMask: true,
+        maskType: 'clip',
+      } as TimelineItem,
+      {
+        id: 'item-effected',
+        type: 'video',
+        trackId: 'track-video',
+        mediaId,
+        from: 0,
+        durationInFrames: 120,
+        src: '',
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.5 },
+            },
+          },
+        ],
+      } as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(24);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
     });
 
     await waitFor(() => {

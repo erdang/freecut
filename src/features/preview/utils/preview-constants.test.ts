@@ -67,4 +67,23 @@ describe('toTrackTopologyFingerprint', () => {
 
     expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before));
   });
+
+  it('changes when a shape toggles into or out of mask mode', () => {
+    const before = makeTracks({
+      id: 'shape-1',
+      type: 'shape',
+      mediaId: undefined,
+      src: undefined,
+      isMask: false,
+    });
+    const after = makeTracks({
+      id: 'shape-1',
+      type: 'shape',
+      mediaId: undefined,
+      src: undefined,
+      isMask: true,
+    });
+
+    expect(toTrackTopologyFingerprint(after)).not.toBe(toTrackTopologyFingerprint(before));
+  });
 });
