@@ -7,6 +7,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import type { CaptureOptions } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore, type PostEditWarmRequest } from '@/shared/state/preview-bridge';
 import { createLogger } from '@/shared/logging/logger';
 import type { PreviewPathVerticesOverride } from '../deps/composition-runtime';
 import { getPreviewRuntimeSnapshotFromPlaybackState } from '../utils/preview-state-coordinator';
@@ -160,6 +161,8 @@ export function usePreviewRendererController({
     tracks: fastScrubScaledTracks,
     keyframes: fastScrubScaledKeyframes,
   });
+  const pendingPostEditWarmRequestRef = useRef<PostEditWarmRequest | null>(null);
+  const postEditWarmInFlightRef = useRef(false);
 
   useLayoutEffect(() => {
     const canvas = scrubCanvasRef.current;
@@ -525,6 +528,70 @@ export function usePreviewRendererController({
     showPlaybackTransitionOverlayRef,
     transitionSessionBufferedFramesRef,
   ]);
+
+  useEffect(() => {
+    const flushPostEditWarmRequest = async () => {
+      if (postEditWarmInFlightRef.current) {
+        return;
+      }
+
+      postEditWarmInFlightRef.current = true;
+      try {
+        while (pendingPostEditWarmRequestRef.current) {
+          const request = pendingPostEditWarmRequestRef.current;
+          pendingPostEditWarmRequestRef.current = null;
+
+          const playbackState = usePlaybackStore.getState();
+          if (isResolving || playbackState.isPlaying || playbackState.previewFrame !== null) {
+            continue;
+          }
+
+          const renderer = await ensureFastScrubRenderer();
+          if (!renderer) {
+            continue;
+          }
+
+          try {
+            const framesToWarm = request.frames.length > 0 ? request.frames : [request.frame];
+            const warmRunwayFrames = Array.from(new Set([
+              ...framesToWarm,
+              request.frame - 2,
+              request.frame - 1,
+              request.frame + 1,
+              request.frame + 2,
+            ].filter((frame) => frame >= 0)));
+
+            if ('prewarmFrames' in renderer && warmRunwayFrames.length > 0) {
+              await renderer.prewarmFrames?.(warmRunwayFrames);
+            }
+            if ('prewarmItems' in renderer && request.itemIds.length > 0) {
+              await renderer.prewarmItems?.(request.itemIds, request.frame);
+            }
+            if (scrubOffscreenRenderedFrameRef.current !== request.frame) {
+              await renderer.renderFrame(request.frame);
+              scrubOffscreenRenderedFrameRef.current = request.frame;
+            }
+          } catch {
+            // Best effort only.
+          }
+        }
+      } finally {
+        postEditWarmInFlightRef.current = false;
+        if (pendingPostEditWarmRequestRef.current) {
+          void flushPostEditWarmRequest();
+        }
+      }
+    };
+
+    return usePreviewBridgeStore.subscribe((state, prev) => {
+      if (state.postEditWarmRequest === prev.postEditWarmRequest || !state.postEditWarmRequest) {
+        return;
+      }
+      const request = state.postEditWarmRequest;
+      pendingPostEditWarmRequestRef.current = request;
+      void flushPostEditWarmRequest();
+    });
+  }, [ensureFastScrubRenderer, isResolving, scrubOffscreenRenderedFrameRef]);
 
   const captureCurrentFrame = useCallback(async (options?: CaptureOptions): Promise<string | null> => {
     if (captureInFlightRef.current) {

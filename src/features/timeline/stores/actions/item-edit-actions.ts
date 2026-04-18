@@ -25,6 +25,8 @@ import {
   getSynchronizedLinkedItemsForEdit,
 } from './linked-edit';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
@@ -43,6 +45,67 @@ import { applySplitBookkeeping, type SplitResultEntry } from './split-bookkeepin
 
 function isLinkedSelectionEnabled(): boolean {
   return useEditorStore.getState().linkedSelectionEnabled;
+}
+
+const POST_EDIT_WARM_MAX_FRAMES = 32;
+
+function appendWarmFrame(target: number[], seen: Set<number>, frame: number): void {
+  if (!Number.isFinite(frame)) return;
+  const normalizedFrame = Math.max(0, Math.round(frame));
+  if (seen.has(normalizedFrame)) return;
+  seen.add(normalizedFrame);
+  target.push(normalizedFrame);
+}
+
+function appendItemWarmFrames(
+  target: number[],
+  seen: Set<number>,
+  item: TimelineItem | undefined,
+): void {
+  if (!item) return;
+  const startFrame = Math.max(0, Math.trunc(item.from));
+  const endFrame = Math.max(startFrame, Math.trunc(item.from + item.durationInFrames) - 1);
+  appendWarmFrame(target, seen, startFrame);
+  appendWarmFrame(target, seen, Math.min(endFrame, startFrame + 1));
+  appendWarmFrame(target, seen, Math.max(startFrame, endFrame - 1));
+  appendWarmFrame(target, seen, endFrame);
+}
+
+function collectPostEditWarmFrames(
+  itemIds: Iterable<string>,
+  preferredFrames: number[] = [],
+): number[] {
+  const frames: number[] = [];
+  const seen = new Set<number>();
+
+  for (const frame of preferredFrames) {
+    appendWarmFrame(frames, seen, frame);
+  }
+
+  const itemById = useItemsStore.getState().itemById;
+  for (const itemId of itemIds) {
+    appendItemWarmFrames(frames, seen, itemById[itemId]);
+    if (frames.length >= POST_EDIT_WARM_MAX_FRAMES) {
+      break;
+    }
+  }
+
+  return frames.slice(0, POST_EDIT_WARM_MAX_FRAMES);
+}
+
+function requestPostEditWarmForItems(
+  itemIds: Iterable<string>,
+  preferredFrames: number[] = [],
+): void {
+  const playbackState = usePlaybackStore.getState();
+  if (playbackState.isPlaying) return;
+
+  const uniqueItemIds = Array.from(new Set(itemIds));
+  if (uniqueItemIds.length === 0) return;
+
+  const primaryFrame = playbackState.currentFrame;
+  const warmFrames = collectPostEditWarmFrames(uniqueItemIds, [primaryFrame, ...preferredFrames]);
+  usePreviewBridgeStore.getState().requestPostEditWarm(primaryFrame, uniqueItemIds, warmFrames);
 }
 
 function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: number): void {
@@ -75,7 +138,9 @@ function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: 
     }
   }
 
-  applyTransitionRepairs(synchronizedItems.map((item) => item.id));
+  const affectedIds = synchronizedItems.map((item) => item.id);
+  applyTransitionRepairs(affectedIds);
+  requestPostEditWarmForItems(affectedIds);
   useTimelineSettingsStore.getState().markDirty();
 }
 
@@ -584,6 +649,7 @@ export function rateStretchItem(
     // Repair transitions for all affected clips
     const allAffectedIds = [...allSynchronizedIds, ...movedIds];
     applyTransitionRepairs(allAffectedIds);
+    requestPostEditWarmForItems(allAffectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, newFrom, newDuration, newSpeed });
@@ -728,6 +794,7 @@ export function resetSpeedWithRipple(itemIds: string[]): void {
     // Phase 3: Repair transitions for all affected clips
     const allAffectedIds = [...allChangedIds, ...movedIds];
     applyTransitionRepairs(allAffectedIds);
+    requestPostEditWarmForItems(allAffectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { itemIds });
@@ -1076,6 +1143,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
       useKeyframesStore.getState()._removeKeyframesForItems(lockedRemoved);
     }
     applyTransitionRepairs(affected, lockedRemoved.length > 0 ? new Set(lockedRemoved) : undefined);
+    requestPostEditWarmForItems(affected);
     useTimelineSettingsStore.getState().markDirty();
   }, { id, handle, trimDelta });
 }
@@ -1131,9 +1199,11 @@ export function rollingTrimItems(leftId: string, rightId: string, editPointDelta
       }
 
     // Repair transitions for both clips
-    applyTransitionRepairs(counterpartPair
+    const affectedIds = counterpartPair
       ? [leftId, rightId, counterpartPair.leftCounterpart.id, counterpartPair.rightCounterpart.id]
-      : [leftId, rightId]);
+      : [leftId, rightId];
+    applyTransitionRepairs(affectedIds);
+    requestPostEditWarmForItems(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { leftId, rightId, editPointDelta });
@@ -1181,7 +1251,9 @@ export function slipItem(id: string, slipDelta: number): void {
       });
     }
 
-    applyTransitionRepairs(synchronizedItems.map((synchronizedItem) => synchronizedItem.id));
+    const affectedIds = synchronizedItems.map((synchronizedItem) => synchronizedItem.id);
+    applyTransitionRepairs(affectedIds);
+    requestPostEditWarmForItems(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slipDelta });
@@ -1355,6 +1427,7 @@ export function slideItem(
       if (cpRightAdj) affectedIds.push(cpRightAdj.id);
     }
     applyTransitionRepairs(affectedIds);
+    requestPostEditWarmForItems(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slideDelta, leftNeighborId, rightNeighborId });

@@ -8,6 +8,7 @@ describe('preview-bridge-store', () => {
       captureFrame: null,
       captureFrameImageData: null,
       captureCanvasSource: null,
+      postEditWarmRequest: null,
     });
   });
 
@@ -17,6 +18,7 @@ describe('preview-bridge-store', () => {
       captureFrame: null,
       captureFrameImageData: null,
       captureCanvasSource: null,
+      postEditWarmRequest: null,
     });
   });
 
@@ -59,5 +61,25 @@ describe('preview-bridge-store', () => {
     expect(await state.captureFrame?.()).toBe('data:image/png;base64,abc');
     expect(await state.captureFrameImageData?.()).toBeNull();
     expect(await state.captureCanvasSource?.()).toBeNull();
+  });
+
+  it('stores post-edit warm requests with normalized frames and incrementing tokens', () => {
+    const store = usePreviewBridgeStore.getState();
+
+    store.requestPostEditWarm(48.6, ['clip-1'], [48.6, 47.8, 48.6, -2]);
+    expect(usePreviewBridgeStore.getState().postEditWarmRequest).toEqual({
+      frame: 49,
+      frames: [49, 48, 0],
+      itemIds: ['clip-1'],
+      token: 1,
+    });
+
+    store.requestPostEditWarm(-2, ['clip-2', 'clip-3']);
+    expect(usePreviewBridgeStore.getState().postEditWarmRequest).toEqual({
+      frame: 0,
+      frames: [0],
+      itemIds: ['clip-2', 'clip-3'],
+      token: 2,
+    });
   });
 });
