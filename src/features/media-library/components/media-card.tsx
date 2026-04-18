@@ -26,7 +26,12 @@ import {
   getTranscriptionStageLabel,
 } from '@/shared/utils/transcription-progress';
 import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
-import { isTranscriptionCancellationError } from '@/shared/utils/transcription-cancellation';
+import {
+  isTranscriptionCancellationError,
+  isTranscriptionOutOfMemoryError,
+  TRANSCRIPTION_OOM_HINT,
+} from '@/shared/utils/transcription-cancellation';
+import { TranscribeDialog, type TranscribeDialogValues } from './transcribe-dialog';
 
 interface MediaCardProps {
   media: MediaMetadata;
@@ -228,9 +233,12 @@ export const MediaCard = memo(function MediaCard({
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const setMediaSkimPreview = useEditorStore((s) => s.setMediaSkimPreview);
   const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview);
+  const isTranscriptionDialogOpen = useEditorStore((s) => s.transcriptionDialogDepth > 0);
   const pauseTimelinePlayback = usePlaybackStore((s) => s.pause);
 
   const isAudio = mediaType === 'audio' && !isBroken && !isImporting;
+  const [transcribeDialogOpen, setTranscribeDialogOpen] = useState(false);
+  const [transcribeErrorMessage, setTranscribeErrorMessage] = useState<string | null>(null);
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -301,13 +309,18 @@ export const MediaCard = memo(function MediaCard({
     proxyService.cancelProxy(media.id, getSharedProxyKey(media));
   };
 
-  const handleGenerateTranscript = (e: React.MouseEvent) => {
+  const handleOpenTranscribeDialog = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setTranscribeErrorMessage(null);
+    setTranscribeDialogOpen(true);
+  };
 
+  const handleStartTranscription = useCallback((values: TranscribeDialogValues) => {
     const store = useMediaLibraryStore.getState();
     const previousStatus = store.transcriptStatus.get(media.id) ?? 'idle';
 
+    setTranscribeErrorMessage(null);
     store.setTranscriptStatus(media.id, 'queued');
     store.setTranscriptProgress(media.id, { stage: 'queued', progress: 0 });
 
@@ -315,6 +328,9 @@ export const MediaCard = memo(function MediaCard({
       void (async () => {
         try {
           await mediaTranscriptionService.transcribeMedia(media.id, {
+            model: values.model,
+            quantization: values.quantization,
+            language: values.language || undefined,
             onQueueStatusChange: (state) => {
               if (state === 'queued') {
                 store.setTranscriptStatus(media.id, 'queued');
@@ -335,6 +351,7 @@ export const MediaCard = memo(function MediaCard({
             type: 'success',
             message: `Transcript ready for "${media.fileName}"`,
           });
+          setTranscribeDialogOpen(false);
         } catch (error) {
           if (isTranscriptionCancellationError(error)) {
             store.setTranscriptStatus(media.id, previousStatus);
@@ -344,18 +361,24 @@ export const MediaCard = memo(function MediaCard({
 
           store.setTranscriptStatus(media.id, previousStatus === 'ready' ? 'ready' : 'error');
           store.clearTranscriptProgress(media.id);
+
+          const baseMessage = error instanceof Error ? error.message : 'Failed to transcribe media';
+          const dialogMessage = isTranscriptionOutOfMemoryError(error)
+            ? TRANSCRIPTION_OOM_HINT
+            : baseMessage;
+          setTranscribeErrorMessage(dialogMessage);
           store.showNotification({
             type: 'error',
-            message: error instanceof Error ? error.message : 'Failed to transcribe media',
+            message: dialogMessage,
           });
         }
       })();
     });
-  };
+  }, [media.id, media.fileName]);
 
-  const handleCancelTranscript = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleCancelTranscript = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
     mediaTranscriptionService.cancelTranscription(media.id);
   };
 
@@ -527,8 +550,15 @@ export const MediaCard = memo(function MediaCard({
     onSelect?.(e);
   };
 
-  const canHoverPreview = (mediaType === 'video' || mediaType === 'image') && !isBroken && !isImporting;
-  const canScrubPreview = mediaType === 'video' && media.duration > 0 && !isBroken && !isImporting;
+  const canHoverPreview = (mediaType === 'video' || mediaType === 'image')
+    && !isBroken
+    && !isImporting
+    && !isTranscriptionDialogOpen;
+  const canScrubPreview = mediaType === 'video'
+    && media.duration > 0
+    && !isBroken
+    && !isImporting
+    && !isTranscriptionDialogOpen;
   const skimRafRef = useRef<number | null>(null);
   const pendingSkimClientXRef = useRef<number | null>(null);
 
@@ -694,6 +724,24 @@ export const MediaCard = memo(function MediaCard({
     ? `Refreshing Transcript (${transcriptProgressLabel})`
     : transcriptProgressLabel;
 
+  const transcribeDialog = (
+    <TranscribeDialog
+      open={transcribeDialogOpen}
+      onOpenChange={(next) => {
+        if (!next) setTranscribeErrorMessage(null);
+        setTranscribeDialogOpen(next);
+      }}
+      fileName={media.fileName}
+      hasTranscript={hasTranscript}
+      isRunning={isTranscribing}
+      progressPercent={transcriptProgressPercent}
+      progressLabel={transcriptProgressLabel}
+      errorMessage={transcribeErrorMessage}
+      onStart={handleStartTranscription}
+      onCancel={handleCancelTranscript}
+    />
+  );
+
   const actionMenuItems = (
     <MediaCardActionMenuItems
       isBroken={isBroken}
@@ -713,7 +761,7 @@ export const MediaCard = memo(function MediaCard({
       onGenerateProxy={handleGenerateProxy}
       onCancelProxy={handleCancelProxy}
       onDeleteProxy={handleDeleteProxy}
-      onGenerateTranscript={handleGenerateTranscript}
+      onGenerateTranscript={handleOpenTranscribeDialog}
       onCancelTranscript={handleCancelTranscript}
       onDeleteTranscript={handleDeleteTranscript}
       onAnalyzeWithAI={handleAnalyzeWithAI}
@@ -737,6 +785,8 @@ export const MediaCard = memo(function MediaCard({
   // List view
   if (viewMode === 'list') {
     return (
+      <>
+      {transcribeDialog}
       <div
         style={CARD_PERF_STYLE}
         className={`
@@ -892,11 +942,14 @@ export const MediaCard = memo(function MediaCard({
           </div>
         )}
       </div>
+      </>
     );
   }
 
   // Grid view
   return (
+    <>
+    {transcribeDialog}
     <div
       style={CARD_PERF_STYLE}
       className={`
@@ -1083,5 +1136,6 @@ export const MediaCard = memo(function MediaCard({
       <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
       <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
     </div>
+    </>
   );
 });

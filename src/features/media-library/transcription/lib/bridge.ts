@@ -113,6 +113,19 @@ export class Bridge {
     this.session.terminate();
   }
 
+  setPaused(paused: boolean): void {
+    if (this.session.isTerminated()) {
+      return;
+    }
+
+    const message = { type: paused ? 'pause' : 'resume' } as const;
+    this.session.getWorker('whisper').postMessage(message);
+    const hasWebCodecs = typeof window !== 'undefined' && 'AudioDecoder' in window;
+    if (hasWebCodecs) {
+      this.session.getWorker('decoder').postMessage(message);
+    }
+  }
+
   private async decodeWithAudioContext(file: File, port: MessagePort): Promise<void> {
     try {
       this.callbacks.onProgress({ stage: 'decoding', progress: 0 });

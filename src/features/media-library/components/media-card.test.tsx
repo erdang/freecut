@@ -95,6 +95,41 @@ vi.mock('@/components/ui/button', () => ({
   }) => <button disabled={disabled} onClick={onClick}>{children}</button>,
 }));
 
+vi.mock('./transcribe-dialog', () => ({
+  TranscribeDialog: ({
+    open,
+    onStart,
+    onCancel,
+  }: {
+    open: boolean;
+    onStart: (values: {
+      model: string;
+      quantization: string;
+      language: string;
+    }) => void;
+    onCancel: () => void;
+  }) =>
+    open ? (
+      <div data-testid="transcribe-dialog">
+        <button
+          type="button"
+          onClick={() =>
+            onStart({
+              model: 'whisper-base',
+              quantization: 'hybrid',
+              language: '',
+            })
+          }
+        >
+          Start Transcription
+        </button>
+        <button type="button" onClick={() => onCancel()}>
+          Stop Transcription
+        </button>
+      </div>
+    ) : null,
+}));
+
 vi.mock('./media-info-popover', () => ({
   MediaInfoPopover: ({ onSeekToCaption }: { onSeekToCaption?: (timeSec: number) => void }) => (
     <button data-testid="media-info-popover" onClick={() => onSeekToCaption?.(2.5)}>
@@ -232,7 +267,7 @@ describe('MediaCard', () => {
     expect(typeof generateProxyCall?.[1]).toBe('function');
   });
 
-  it('defers transcript work until after the click interaction completes', async () => {
+  it('opens the transcribe dialog and defers work until the user confirms', async () => {
     const media = makeMedia();
     mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined);
 
@@ -240,12 +275,21 @@ describe('MediaCard', () => {
 
     fireEvent.click(screen.getByText('Generate Transcript'));
 
+    // Clicking the menu item opens the dialog; transcription has NOT started.
+    expect(screen.getByTestId('transcribe-dialog')).toBeInTheDocument();
     expect(mediaTranscriptionServiceMocks.transcribeMedia).not.toHaveBeenCalled();
 
+    fireEvent.click(screen.getByText('Start Transcription'));
+
     await waitFor(() => {
-      expect(mediaTranscriptionServiceMocks.transcribeMedia).toHaveBeenCalledWith('media-1', expect.objectContaining({
-        onProgress: expect.any(Function),
-      }));
+      expect(mediaTranscriptionServiceMocks.transcribeMedia).toHaveBeenCalledWith(
+        'media-1',
+        expect.objectContaining({
+          model: 'whisper-base',
+          quantization: 'hybrid',
+          onProgress: expect.any(Function),
+        }),
+      );
     });
   });
 

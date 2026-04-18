@@ -11,6 +11,7 @@ import { localInferenceRuntimeRegistry } from '@/shared/state/local-inference';
 import { LOCAL_INFERENCE_UNLOADED_MESSAGE } from '@/shared/state/local-inference';
 import { formatWhisperRuntimeModelLabel, estimateWhisperRuntimeBytes } from './runtime-estimates';
 import { DEFAULT_WHISPER_MODEL } from '@/shared/utils/whisper-settings';
+import { usePlaybackStore } from '@/shared/state/playback';
 
 export class BrowserTranscriber {
   private readonly defaultOptions: TranscribeOptions;
@@ -38,6 +39,9 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
   private bridge: Bridge | null = null;
   private started = false;
   private runtimeRegistered = false;
+  private unsubscribePlayback: (() => void) | null = null;
+  private idleResumeTimer: ReturnType<typeof setTimeout> | null = null;
+  private workerPaused = false;
 
   constructor(file: File, options: TranscribeOptions = {}) {
     this.file = file;
@@ -78,7 +82,68 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
     this.queue.length = 0;
     this.error = new Error(message);
     this.unregisterRuntime();
+    this.stopPlaybackWatcher();
     this.wakeUp();
+  }
+
+  private startPlaybackWatcher(): void {
+    if (this.unsubscribePlayback) return;
+    if (!this.bridge) return;
+
+    const IDLE_RESUME_MS = 400;
+
+    const pauseWorker = () => {
+      if (this.idleResumeTimer !== null) {
+        clearTimeout(this.idleResumeTimer);
+        this.idleResumeTimer = null;
+      }
+      if (this.workerPaused) return;
+      this.workerPaused = true;
+      this.bridge?.setPaused(true);
+    };
+
+    const scheduleResume = () => {
+      if (this.idleResumeTimer !== null) {
+        clearTimeout(this.idleResumeTimer);
+      }
+      this.idleResumeTimer = setTimeout(() => {
+        this.idleResumeTimer = null;
+        const playback = usePlaybackStore.getState();
+        if (playback.isPlaying || playback.previewFrame !== null) return;
+        this.workerPaused = false;
+        this.bridge?.setPaused(false);
+      }, IDLE_RESUME_MS);
+    };
+
+    const initial = usePlaybackStore.getState();
+    if (initial.isPlaying || initial.previewFrame !== null) {
+      pauseWorker();
+    }
+
+    this.unsubscribePlayback = usePlaybackStore.subscribe((state, prev) => {
+      const isActive = state.isPlaying || state.previewFrame !== null;
+      const frameMoved = state.currentFrameEpoch !== prev.currentFrameEpoch;
+
+      if (isActive || frameMoved) {
+        pauseWorker();
+        if (!state.isPlaying) scheduleResume();
+        return;
+      }
+
+      if (prev.isPlaying && !state.isPlaying) {
+        scheduleResume();
+      }
+    });
+  }
+
+  private stopPlaybackWatcher(): void {
+    this.unsubscribePlayback?.();
+    this.unsubscribePlayback = null;
+    if (this.idleResumeTimer !== null) {
+      clearTimeout(this.idleResumeTimer);
+      this.idleResumeTimer = null;
+    }
+    this.workerPaused = false;
   }
 
   private async startBridge(): Promise<void> {
@@ -105,11 +170,13 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
       onDone: () => {
         this.doneFlag = true;
         this.unregisterRuntime();
+        this.stopPlaybackWatcher();
         this.wakeUp();
       },
       onError: (message: string) => {
         this.error = new Error(message);
         this.unregisterRuntime();
+        this.stopPlaybackWatcher();
         this.wakeUp();
       },
     });
@@ -121,9 +188,11 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
         this.options.language,
         this.options.quantization,
       );
+      this.startPlaybackWatcher();
     } catch (error) {
       this.error = error instanceof Error ? error : new Error(String(error));
       this.unregisterRuntime();
+      this.stopPlaybackWatcher();
       this.wakeUp();
     }
   }

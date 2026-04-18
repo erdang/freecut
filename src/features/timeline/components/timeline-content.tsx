@@ -726,6 +726,7 @@ export const TimelineContent = memo(function TimelineContent({
   const selectMarker = useSelectionStore((s) => s.selectMarker);
   const clearItemSelection = useSelectionStore((s) => s.clearItemSelection);
   const activeTrackId = useSelectionStore((s) => s.activeTrackId);
+  const isTranscriptionDialogOpen = useEditorStore((s) => s.transcriptionDialogDepth > 0);
   // Granular selectors for drag state - avoid subscribing to entire dragState object
   const isDragging = useSelectionStore((s) => !!s.dragState?.isDragging);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -763,6 +764,13 @@ export const TimelineContent = memo(function TimelineContent({
       usePlaybackStore.getState().setPreviewFrame(null);
     }
   }, [isDragging]);
+
+  useEffect(() => {
+    if (!isTranscriptionDialogOpen) return;
+    if (usePlaybackStore.getState().previewFrame !== null) {
+      usePlaybackStore.getState().setPreviewFrame(null);
+    }
+  }, [isTranscriptionDialogOpen]);
 
   // Cleanup preview RAF on unmount
   useEffect(() => {
@@ -1141,6 +1149,13 @@ export const TimelineContent = memo(function TimelineContent({
   }, []);
 
   const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
+    if (useEditorStore.getState().transcriptionDialogDepth > 0) {
+      if (usePlaybackStore.getState().previewFrame !== null) {
+        setPreviewFrameRef.current(null);
+      }
+      return;
+    }
+
     // Skip during playback
     if (usePlaybackStore.getState().isPlaying) {
       if (usePlaybackStore.getState().previewFrame !== null) {

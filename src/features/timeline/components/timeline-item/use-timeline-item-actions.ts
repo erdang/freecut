@@ -2,14 +2,21 @@ import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { AnimatableProperty } from '@/types/keyframe';
-import type { MediaTranscriptModel } from '@/types/storage';
+import type {
+  MediaTranscriptModel,
+  MediaTranscriptQuantization,
+} from '@/types/storage';
 import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog';
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog';
 import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
 import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
-import { isTranscriptionCancellationError } from '@/shared/utils/transcription-cancellation';
+import {
+  isTranscriptionCancellationError,
+  isTranscriptionOutOfMemoryError,
+  TRANSCRIPTION_OOM_HINT,
+} from '@/shared/utils/transcription-cancellation';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import {
   getMediaTranscriptionModelLabel,
@@ -46,7 +53,6 @@ import { saveScenes } from '@/infrastructure/storage/workspace-fs/scenes';
 
 const logger = createLogger('UseTimelineItemActions');
 
-const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
 const SCENE_DETECTION_OVERLAY_ID = 'scene-detection';
 
 interface UseTimelineItemActionsParams {
@@ -185,6 +191,9 @@ export function useTimelineItemActions({
     options?: {
       forceTranscription?: boolean;
       replaceExisting?: boolean;
+      quantization?: MediaTranscriptQuantization;
+      language?: string;
+      onError?: (error: unknown) => void;
     },
   ) => {
     if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId || isBroken) {
@@ -194,11 +203,9 @@ export function useTimelineItemActions({
     const mediaId = item.mediaId;
     const clipId = item.id;
     const store = useMediaLibraryStore.getState();
-    const overlayStore = useTimelineItemOverlayStore.getState();
     const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
     const forceTranscription = options?.forceTranscription ?? false;
     const replaceExisting = options?.replaceExisting ?? false;
-    const captionOverlayLabel = replaceExisting ? 'Updating captions' : 'Adding captions';
 
     const run = async () => {
       let updatedTranscriptStatus = previousStatus;
@@ -209,50 +216,26 @@ export function useTimelineItemActions({
           forceTranscription || !existingTranscript || existingTranscript.model !== model;
 
         if (needsTranscription) {
-          overlayStore.upsertOverlay(clipId, {
-            id: CAPTION_GENERATION_OVERLAY_ID,
-            label: 'Queued for transcription',
-            progress: 0,
-            tone: 'info',
-          });
           store.setTranscriptStatus(mediaId, 'queued');
           store.setTranscriptProgress(mediaId, { stage: 'queued', progress: 0 });
 
           await mediaTranscriptionService.transcribeMedia(mediaId, {
             model,
+            quantization: options?.quantization,
+            language: options?.language || undefined,
             onQueueStatusChange: (state) => {
               if (state === 'queued') {
                 store.setTranscriptStatus(mediaId, 'queued');
                 store.setTranscriptProgress(mediaId, { stage: 'queued', progress: 0 });
-                useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-                  id: CAPTION_GENERATION_OVERLAY_ID,
-                  label: 'Queued for transcription',
-                  progress: 0,
-                  tone: 'info',
-                });
                 return;
               }
 
               store.setTranscriptStatus(mediaId, 'transcribing');
               store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
-              useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-                id: CAPTION_GENERATION_OVERLAY_ID,
-                label: 'Transcribing audio',
-                progress: 0,
-                tone: 'info',
-              });
             },
             onProgress: (progress) => {
               const mediaLibraryStore = useMediaLibraryStore.getState();
               mediaLibraryStore.setTranscriptProgress(mediaId, progress);
-              const mergedProgress = mediaLibraryStore.transcriptProgress.get(mediaId) ?? progress;
-
-              useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-                id: CAPTION_GENERATION_OVERLAY_ID,
-                label: 'Transcribing audio',
-                progress: getTranscriptionOverallPercent(mergedProgress),
-                tone: 'info',
-              });
             },
           });
 
@@ -260,21 +243,10 @@ export function useTimelineItemActions({
           store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
           store.clearTranscriptProgress(mediaId);
         } else {
-          overlayStore.upsertOverlay(clipId, {
-            id: CAPTION_GENERATION_OVERLAY_ID,
-            label: captionOverlayLabel,
-            tone: 'info',
-          });
           updatedTranscriptStatus = 'ready';
           store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
           store.clearTranscriptProgress(mediaId);
         }
-
-        overlayStore.upsertOverlay(clipId, {
-          id: CAPTION_GENERATION_OVERLAY_ID,
-          label: captionOverlayLabel,
-          tone: 'info',
-        });
         const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
           clipIds: [clipId],
           replaceExisting,
@@ -301,12 +273,17 @@ export function useTimelineItemActions({
 
         store.setTranscriptStatus(mediaId, updatedTranscriptStatus === 'ready' ? 'ready' : 'error');
         store.clearTranscriptProgress(mediaId);
+        const fallbackMessage = error instanceof Error
+          ? error.message
+          : 'Failed to generate captions for segment';
+        const friendlyMessage = isTranscriptionOutOfMemoryError(error)
+          ? TRANSCRIPTION_OOM_HINT
+          : fallbackMessage;
+        options?.onError?.(error);
         store.showNotification({
           type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to generate captions for segment',
+          message: friendlyMessage,
         });
-      } finally {
-        useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
       }
     };
 
@@ -315,14 +292,19 @@ export function useTimelineItemActions({
     });
   }, [item.id, item.mediaId, item.type, isBroken]);
 
-  const handleGenerateCaptions = useCallback((model: MediaTranscriptModel) => {
-    handleCaptionGeneration(model);
-  }, [handleCaptionGeneration]);
-
-  const handleRegenerateCaptions = useCallback((model: MediaTranscriptModel) => {
-    handleCaptionGeneration(model, {
+  const handleCaptionsFromDialog = useCallback((values: {
+    model: MediaTranscriptModel;
+    quantization: MediaTranscriptQuantization;
+    language: string;
+  }, hasExistingCaptions: boolean, onError?: (error: unknown) => void) => {
+    handleCaptionGeneration(values.model, {
+      // The dialog path is always "generate fresh captions". Reusing the
+      // current transcript is handled explicitly by "Insert Existing Captions".
       forceTranscription: true,
-      replaceExisting: true,
+      replaceExisting: hasExistingCaptions,
+      quantization: values.quantization,
+      language: values.language,
+      onError,
     });
   }, [handleCaptionGeneration]);
 
@@ -334,7 +316,6 @@ export function useTimelineItemActions({
     const mediaId = item.mediaId;
     const clipId = item.id;
     const replaceExisting = useItemsStore.getState().replaceableCaptionClipIds.has(clipId);
-    const overlayLabel = replaceExisting ? 'Updating captions' : 'Adding captions';
     const store = useMediaLibraryStore.getState();
 
     const run = async () => {
@@ -343,12 +324,6 @@ export function useTimelineItemActions({
         if (!existingTranscript) {
           throw new Error('Generate a transcript first, then add captions from it.');
         }
-
-        useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-          id: CAPTION_GENERATION_OVERLAY_ID,
-          label: overlayLabel,
-          tone: 'info',
-        });
 
         const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
           clipIds: [clipId],
@@ -368,17 +343,11 @@ export function useTimelineItemActions({
           type: 'error',
           message: error instanceof Error ? error.message : 'Failed to update captions for segment',
         });
-      } finally {
-        useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
       }
     };
 
     void run();
   }, [isBroken, item.id, item.mediaId, item.type]);
-
-  const isCaptionGenerationActive = segmentOverlays.some(
-    (overlay) => overlay.id === CAPTION_GENERATION_OVERLAY_ID,
-  );
 
   const isSceneDetectionActive = segmentOverlays.some(
     (overlay) => overlay.id === SCENE_DETECTION_OVERLAY_ID,
@@ -569,7 +538,6 @@ export function useTimelineItemActions({
     getCanLinkSelected,
     getCanUnlinkSelected,
     hasSpeakableText,
-    isCaptionGenerationActive,
     isSceneDetectionActive,
     isCompositionItem,
     handleJoinSelected,
@@ -584,8 +552,7 @@ export function useTimelineItemActions({
     handleBentoLayout,
     handleFreezeFrame,
     handleGenerateAudioFromText,
-    handleGenerateCaptions,
-    handleRegenerateCaptions,
+    handleCaptionsFromDialog,
     handleApplyCaptionsFromTranscript,
     handleCreatePreComp,
     handleEnterComposition,

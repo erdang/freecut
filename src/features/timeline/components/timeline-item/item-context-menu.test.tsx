@@ -39,14 +39,6 @@ vi.mock('@/features/timeline/deps/analysis', () => ({
   getSceneVerificationModelOptions: mockGetSceneVerificationModelOptions,
 }));
 
-vi.mock('@/features/timeline/deps/media-transcription-service', () => ({
-  getMediaTranscriptionModelLabel: (model: string) => model,
-  getMediaTranscriptionModelOptions: () => [
-    { value: 'whisper-base', label: 'Base' },
-    { value: 'whisper-small', label: 'Small' },
-  ],
-}));
-
 vi.mock('@/features/timeline/deps/settings', () => ({
   useResolvedHotkeys: () => ({}),
 }));
@@ -119,38 +111,52 @@ describe('ItemContextMenu scene detection', () => {
 });
 
 describe('ItemContextMenu captions', () => {
-  it('uses caption-specific wording when a transcript already exists', () => {
-    const onApplyCaptionsFromTranscript = vi.fn();
-    const onRegenerateCaptions = vi.fn();
+  it('shows a single "Generate Captions" item when no transcript exists', () => {
+    const onOpenCaptionDialog = vi.fn();
 
     renderContextMenu({
       canManageCaptions: true,
-      hasTranscript: true,
       hasCaptions: false,
-      defaultCaptionModel: 'whisper-small',
+      hasTranscript: false,
+      onOpenCaptionDialog,
+    });
+
+    const item = screen.getByRole('button', { name: 'Generate Captions' });
+    expect(item).toBeInTheDocument();
+    expect(screen.queryByText('Captions')).not.toBeInTheDocument();
+    fireEvent.click(item);
+    expect(onOpenCaptionDialog).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a Captions submenu with Insert + Generate when a transcript already exists', () => {
+    const onOpenCaptionDialog = vi.fn();
+    const onApplyCaptionsFromTranscript = vi.fn();
+
+    renderContextMenu({
+      canManageCaptions: true,
+      hasCaptions: false,
+      hasTranscript: true,
+      onOpenCaptionDialog,
       onApplyCaptionsFromTranscript,
-      onRegenerateCaptions,
     });
 
     expect(screen.getByText('Captions')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add from Current Transcript' })).toBeInTheDocument();
-    expect(screen.getByText('Re-Transcribe & Add')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Insert Existing Captions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Generate Captions' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Insert Existing Captions' }));
+    expect(onApplyCaptionsFromTranscript).toHaveBeenCalledTimes(1);
   });
 
-  it('uses update wording when captions already exist', () => {
-    const onApplyCaptionsFromTranscript = vi.fn();
-    const onRegenerateCaptions = vi.fn();
-
+  it('labels the generate item "Regenerate Captions" when the clip already has captions', () => {
     renderContextMenu({
       canManageCaptions: true,
-      hasTranscript: true,
       hasCaptions: true,
-      defaultCaptionModel: 'whisper-small',
-      onApplyCaptionsFromTranscript,
-      onRegenerateCaptions,
+      hasTranscript: true,
+      onOpenCaptionDialog: vi.fn(),
+      onApplyCaptionsFromTranscript: vi.fn(),
     });
 
-    expect(screen.getByRole('button', { name: 'Update from Current Transcript' })).toBeInTheDocument();
-    expect(screen.getByText('Re-Transcribe & Update')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Regenerate Captions' })).toBeInTheDocument();
   });
 });

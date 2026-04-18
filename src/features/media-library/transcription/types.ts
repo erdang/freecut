@@ -49,7 +49,9 @@ export type WhisperWorkerMessage =
       modelId: string;
       language?: string;
       quantization?: QuantizationType;
-    };
+    }
+  | { type: 'pause' }
+  | { type: 'resume' };
 
 export const MODEL_IDS: Record<WhisperModel, string> = {
   'whisper-tiny': 'onnx-community/whisper-tiny',
