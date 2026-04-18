@@ -8,7 +8,12 @@
  */
 
 import type { PaletteEntry } from '../deps/analysis';
-import { colorBoostFor, parseColorQuery, type ColorBoostResult } from './color-boost';
+import {
+  colorBoostFor,
+  paletteSimilarityBoost,
+  parseColorQuery,
+  type ColorBoostResult,
+} from './color-boost';
 import type { RankableScene, ScoredScene } from './rank';
 
 /** "Fair" tier floor for text cosines — a weakly confirming signal. */
@@ -53,6 +58,12 @@ export interface SemanticRankOptions {
   query?: string;
   /** sceneId → dominant-color palette (CIELAB + weights). */
   palettes?: Map<string, PaletteEntry[]>;
+  /**
+   * Reference palette for "find similar colors" mode. When set, the
+   * ranker switches to palette-similarity scoring and ignores text/CLIP
+   * signals — object semantics aren't part of "scenes with this palette".
+   */
+  referencePalette?: PaletteEntry[] | null;
 }
 
 export function cosineSimilarity(a: Float32Array, b: Float32Array): number {
@@ -87,17 +98,34 @@ export function semanticRank(
   const queryImage = options.queryImageEmbedding ?? null;
   const imageMap = options.imageEmbeddings;
   const paletteMap = options.palettes;
+  const referencePalette = options.referencePalette ?? null;
 
   // Parse color intent once so the per-scene loop stays tight. Explicit
   // palette queries bypass text/CLIP scoring; mixed queries still get a
-  // palette boost on top of semantic meaning.
+  // palette boost on top of semantic meaning. A reference palette forces
+  // palette-only scoring regardless of the query shape.
   const colorQuery = options.query ? parseColorQuery(options.query) : { colors: [], paletteOnly: false };
   const queryColors = colorQuery.colors;
   const hasColorQuery = queryColors.length > 0;
-  const paletteOnly = colorQuery.paletteOnly;
+  const paletteOnly = !!referencePalette || colorQuery.paletteOnly;
 
   const scored: ScoredScene[] = [];
   for (const scene of scenes) {
+    if (referencePalette) {
+      const scenePalette = paletteMap?.get(scene.id) ?? scene.palette;
+      const similarity = paletteSimilarityBoost(referencePalette, scenePalette);
+      if (!similarity) continue;
+      scored.push({
+        ...scene,
+        score: similarity.boost,
+        matchSpans: [],
+        signals: {
+          ranker: 'semantic',
+          paletteDistance: similarity.distance,
+        },
+      });
+      continue;
+    }
     const textVector = embeddings.get(scene.id);
     const imageVector = queryImage && imageMap ? imageMap.get(scene.id) : undefined;
 

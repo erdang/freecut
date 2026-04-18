@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { colorBoostFor, extractQueryColors, parseColorQuery } from './color-boost';
+import {
+  colorBoostFor,
+  extractQueryColors,
+  nearestColorFamily,
+  palettePairDistance,
+  paletteSimilarityBoost,
+  parseColorQuery,
+} from './color-boost';
 import type { PaletteEntry } from '../deps/analysis';
 
 describe('extractQueryColors', () => {
@@ -157,5 +164,76 @@ describe('colorBoostFor', () => {
     ]);
     expect(result).not.toBeNull();
     expect(result?.family).toBe('gray');
+  });
+});
+
+describe('nearestColorFamily', () => {
+  it('maps a clearly chromatic swatch to the obvious family', () => {
+    expect(nearestColorFamily({ l: 53, a: 70, b: 50 })).toBe('red');
+    expect(nearestColorFamily({ l: 40, a: 15, b: -60 })).toBe('blue');
+    expect(nearestColorFamily({ l: 90, a: -5, b: 80 })).toBe('yellow');
+  });
+
+  it('maps near-neutral swatches to gray/black/white', () => {
+    expect(nearestColorFamily({ l: 55, a: 0, b: 0 })).toBe('gray');
+    expect(nearestColorFamily({ l: 95, a: 0, b: 0 })).toBe('white');
+    expect(nearestColorFamily({ l: 10, a: 0, b: 0 })).toBe('black');
+  });
+});
+
+describe('palettePairDistance', () => {
+  it('returns 0 for identical palettes', () => {
+    const a: PaletteEntry[] = [
+      { l: 50, a: 60, b: 40, weight: 0.6 },
+      { l: 40, a: 20, b: -50, weight: 0.4 },
+    ];
+    expect(palettePairDistance(a, a)).toBeCloseTo(0, 5);
+  });
+
+  it('is symmetric', () => {
+    const a: PaletteEntry[] = [{ l: 60, a: 40, b: 30, weight: 0.8 }];
+    const b: PaletteEntry[] = [{ l: 65, a: 45, b: 20, weight: 1.0 }];
+    expect(palettePairDistance(a, b)).toBeCloseTo(palettePairDistance(b, a), 5);
+  });
+
+  it('returns a larger distance for perceptually different palettes', () => {
+    const warmReds: PaletteEntry[] = [{ l: 53, a: 70, b: 50, weight: 1 }];
+    const coolBlues: PaletteEntry[] = [{ l: 40, a: 15, b: -60, weight: 1 }];
+    expect(palettePairDistance(warmReds, coolBlues)).toBeGreaterThan(40);
+  });
+
+  it('returns infinity for empty palettes', () => {
+    const a: PaletteEntry[] = [{ l: 50, a: 0, b: 0, weight: 1 }];
+    expect(palettePairDistance(a, [])).toBe(Number.POSITIVE_INFINITY);
+    expect(palettePairDistance([], a)).toBe(Number.POSITIVE_INFINITY);
+  });
+});
+
+describe('paletteSimilarityBoost', () => {
+  it('produces a non-zero boost for similar palettes', () => {
+    const ref: PaletteEntry[] = [
+      { l: 50, a: 60, b: 40, weight: 0.7 },
+      { l: 40, a: 20, b: -50, weight: 0.3 },
+    ];
+    const candidate: PaletteEntry[] = [
+      { l: 52, a: 62, b: 38, weight: 0.6 },
+      { l: 42, a: 18, b: -52, weight: 0.4 },
+    ];
+    const result = paletteSimilarityBoost(ref, candidate);
+    expect(result).not.toBeNull();
+    expect(result?.boost).toBeGreaterThan(0.1);
+    expect(result?.distance).toBeLessThan(10);
+  });
+
+  it('returns null for clearly dissimilar palettes', () => {
+    const warmReds: PaletteEntry[] = [{ l: 53, a: 70, b: 50, weight: 1 }];
+    const coolGreens: PaletteEntry[] = [{ l: 60, a: -55, b: 50, weight: 1 }];
+    expect(paletteSimilarityBoost(warmReds, coolGreens)).toBeNull();
+  });
+
+  it('returns null for missing inputs', () => {
+    const a: PaletteEntry[] = [{ l: 50, a: 0, b: 0, weight: 1 }];
+    expect(paletteSimilarityBoost(undefined, a)).toBeNull();
+    expect(paletteSimilarityBoost(a, undefined)).toBeNull();
   });
 });

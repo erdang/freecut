@@ -51,6 +51,12 @@ export interface SceneMatchSignals {
    * Color chip; absent means no color match (or no color query).
    */
   colorMatch?: string;
+  /**
+   * Weighted-mean ∆E between the scene's palette and the user-selected
+   * reference palette, when "find similar palette" is active. Lower is
+   * closer; surfaced as a palette-distance chip on the row.
+   */
+  paletteDistance?: number;
 }
 
 export interface ScoredScene extends RankableScene {

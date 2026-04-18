@@ -21,6 +21,12 @@ interface ScenePaletteSwatchesProps {
   /** When present, draws a ring around the matched swatch. */
   highlight?: string | null;
   className?: string;
+  /**
+   * Fires when a swatch is clicked. The caller is responsible for
+   * resolving the swatch to a search action (e.g. nearest color family
+   * → setQuery). When omitted, swatches render non-interactively.
+   */
+  onSwatchClick?: (swatch: Swatch) => void;
 }
 
 function labToRgb(l: number, a: number, b: number): [number, number, number] {
@@ -74,8 +80,10 @@ export const ScenePaletteSwatches = memo(function ScenePaletteSwatches({
   palette,
   highlight,
   className,
+  onSwatchClick,
 }: ScenePaletteSwatchesProps) {
   if (!palette || palette.length === 0) return null;
+  const interactive = !!onSwatchClick;
   return (
     <div
       className={cn('flex items-center gap-0.5', className)}
@@ -89,16 +97,27 @@ export const ScenePaletteSwatches = memo(function ScenePaletteSwatches({
         const isHighlighted = highlight
           && Boolean(palette[i])
           && paletteMatchesFamily(palette[i]!, highlight);
+        const commonClass = cn(
+          'block h-3 rounded-sm border border-white/10',
+          isHighlighted && 'ring-2 ring-primary',
+          interactive && 'cursor-pointer hover:ring-1 hover:ring-white/30',
+        );
+        const style = { width: `${width}px`, backgroundColor: swatchColor(swatch) };
+        if (!interactive) {
+          return <span key={i} className={commonClass} style={style} />;
+        }
         return (
           <span
             key={i}
-            className={cn(
-              'block h-3 rounded-sm border border-white/10',
-              isHighlighted && 'ring-2 ring-primary',
-            )}
-            style={{
-              width: `${width}px`,
-              backgroundColor: swatchColor(swatch),
+            role="button"
+            tabIndex={-1}
+            aria-label="Search by this color"
+            title="Search by this color"
+            className={commonClass}
+            style={style}
+            onClick={(e) => {
+              e.stopPropagation();
+              onSwatchClick(swatch);
             }}
           />
         );

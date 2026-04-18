@@ -1,6 +1,16 @@
 import { create } from 'zustand';
+import type { PaletteEntry } from '../deps/analysis';
 
 export type SceneBrowserSortMode = 'relevance' | 'time' | 'name';
+
+export interface SceneBrowserReference {
+  /** Scene id whose palette is the reference — for dedupe and the clear chip. */
+  sceneId: string;
+  /** Short human label (e.g. `"foo.mp4 · 0:12"`) shown in the chip. */
+  label: string;
+  /** The reference palette (CIELAB + weight). */
+  palette: PaletteEntry[];
+}
 
 /**
  * `scope === null` is the default cross-library view. A non-null scope is
@@ -14,6 +24,12 @@ interface SceneBrowserState {
   sortMode: SceneBrowserSortMode;
   /** Incrementing token the search input watches to force a focus. */
   focusNonce: number;
+  /**
+   * Active "find similar palette" reference. When set, the ranker scores
+   * scenes by palette distance against this reference instead of by
+   * query semantics. Cleared explicitly (chip × or escape).
+   */
+  reference: SceneBrowserReference | null;
 }
 
 interface SceneBrowserActions {
@@ -24,6 +40,7 @@ interface SceneBrowserActions {
   setScope: (scope: string | null) => void;
   setSortMode: (mode: SceneBrowserSortMode) => void;
   requestFocus: () => void;
+  setReference: (reference: SceneBrowserReference | null) => void;
   reset: () => void;
 }
 
@@ -33,6 +50,7 @@ const INITIAL_STATE: SceneBrowserState = {
   scope: null,
   sortMode: 'relevance',
   focusNonce: 0,
+  reference: null,
 };
 
 export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActions>((set) => ({
@@ -58,6 +76,8 @@ export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActio
   setSortMode: (sortMode) => set({ sortMode }),
 
   requestFocus: () => set((state) => ({ focusNonce: state.focusNonce + 1 })),
+
+  setReference: (reference) => set({ reference }),
 
   reset: () => set(INITIAL_STATE),
 }));

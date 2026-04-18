@@ -1,8 +1,10 @@
 import { memo, useCallback, useMemo } from 'react';
-import { Play, Clock, Film } from 'lucide-react';
+import { Play, Clock, Film, Palette } from 'lucide-react';
 import { cn } from '@/shared/ui/cn';
 import { formatDuration } from '../deps/media-library';
 import { useCaptionThumbnail } from '../hooks/use-caption-thumbnail';
+import { useSceneBrowserStore } from '../stores/scene-browser-store';
+import { nearestColorFamily } from '../utils/color-boost';
 import { seekToScene } from '../utils/seek';
 import { HighlightedText } from './highlighted-text';
 import { SceneMatchBadges, SceneMatchStrength } from './scene-match-badges';
@@ -47,6 +49,27 @@ export const SceneRow = memo(function SceneRow({
   const handleOpen = useCallback(() => {
     seekToScene(scene.mediaId, scene.timeSec);
   }, [scene.mediaId, scene.timeSec]);
+
+  const setQuery = useSceneBrowserStore((s) => s.setQuery);
+  const setReference = useSceneBrowserStore((s) => s.setReference);
+
+  const handleSwatchClick = useCallback((swatch: { l: number; a: number; b: number }) => {
+    const family = nearestColorFamily(swatch);
+    if (!family) return;
+    setReference(null);
+    setQuery(family);
+  }, [setQuery, setReference]);
+
+  const handleFindSimilarPalette = useCallback((event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!scene.palette || scene.palette.length === 0) return;
+    setQuery('');
+    setReference({
+      sceneId: scene.id,
+      label: `${scene.mediaFileName} · ${formatSceneTimestamp(scene.timeSec)}`,
+      palette: scene.palette.map((p) => ({ l: p.l, a: p.a, b: p.b, weight: p.weight })),
+    });
+  }, [scene.id, scene.mediaFileName, scene.palette, scene.timeSec, setQuery, setReference]);
 
   const handleDragStart = useCallback((event: React.DragEvent) => {
     event.dataTransfer.effectAllowed = 'copy';
@@ -125,7 +148,20 @@ export const SceneRow = memo(function SceneRow({
               <ScenePaletteSwatches
                 palette={scene.palette}
                 highlight={scene.signals.colorMatch ?? null}
+                onSwatchClick={handleSwatchClick}
               />
+              {scene.palette && scene.palette.length > 0 && (
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label="Find scenes with a similar palette"
+                  title="Find scenes with a similar palette"
+                  className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/10 hover:text-foreground group-hover:opacity-100"
+                  onClick={handleFindSimilarPalette}
+                >
+                  <Palette className="h-3 w-3" />
+                </span>
+              )}
             </div>
           </div>
         )}

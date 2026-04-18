@@ -147,8 +147,19 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         />,
       );
     }
+    if (typeof signals.paletteDistance === 'number') {
+      chips.push(
+        <Chip
+          key="palette-similar"
+          tone="palette"
+          icon={<Palette className="h-2.5 w-2.5" />}
+          label={`Palette · ∆E ${signals.paletteDistance.toFixed(1)}`}
+          hint="Weighted-mean ∆E 2000 to the reference palette"
+        />,
+      );
+    }
 
-    if (!textTier && !imageTier && !signals.colorMatch) {
+    if (!textTier && !imageTier && !signals.colorMatch && signals.paletteDistance === undefined) {
       // Shouldn't normally reach here — the ranker drops rows that clear
       // no threshold — but surface something so the row isn't silent.
       chips.push(

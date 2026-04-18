@@ -69,6 +69,7 @@ export function useRankedScenes(): RankedScenesResult {
   const query = useSceneBrowserStore((s) => s.query);
   const scope = useSceneBrowserStore((s) => s.scope);
   const sortMode = useSceneBrowserStore((s) => s.sortMode);
+  const reference = useSceneBrowserStore((s) => s.reference);
   const captionSearchMode = useSettingsStore((s) => s.captionSearchMode);
   const colorQuery = useMemo(() => parseColorQuery(query), [query]);
 
@@ -193,14 +194,25 @@ export function useRankedScenes(): RankedScenesResult {
     const imageEmbeddings = getImageEmbeddingsSnapshot();
     const paletteSnapshot = getPalettesSnapshot();
 
-    const ranked = isSemanticActive
-      ? semanticRank(queryEmbedding!, allScenes, textEmbeddings, {
+    // A reference palette forces semantic-lane ranking (palette-only
+    // scoring inside semanticRank). The query stays visible in the input
+    // but is ignored until the reference is cleared.
+    let ranked;
+    if (reference) {
+      ranked = semanticRank(new Float32Array(0), allScenes, textEmbeddings, {
+        palettes: paletteSnapshot,
+        referencePalette: reference.palette,
+      });
+    } else if (isSemanticActive) {
+      ranked = semanticRank(queryEmbedding!, allScenes, textEmbeddings, {
         queryImageEmbedding,
         imageEmbeddings,
         query,
         palettes: paletteSnapshot,
-      })
-      : rankScenes(query, allScenes);
+      });
+    } else {
+      ranked = rankScenes(query, allScenes);
+    }
 
     // Coverage stats over the scenes the user can currently see, not
     // over the whole library — keeps the "indexed" counter honest when
@@ -212,7 +224,8 @@ export function useRankedScenes(): RankedScenesResult {
       if (imageEmbeddings.has(scene.id)) sceneImageIndexed += 1;
     }
 
-    if (query.trim().length === 0 || sortMode === 'time' || sortMode === 'name') {
+    const hasRankingSignal = query.trim().length > 0 || !!reference;
+    if (!hasRankingSignal || sortMode === 'time' || sortMode === 'name') {
       ranked.sort((a, b) => {
         if (a.mediaFileName !== b.mediaFileName) {
           return a.mediaFileName.localeCompare(b.mediaFileName);
@@ -228,8 +241,8 @@ export function useRankedScenes(): RankedScenesResult {
       totalClips: mediaItems.length,
       clipsWithCaptions,
       reanalyzingMedia,
-      activeMode: isSemanticActive ? 'semantic' : 'keyword',
-      isQuerying: query.trim().length > 0,
+      activeMode: isSemanticActive || reference ? 'semantic' : 'keyword',
+      isQuerying: hasRankingSignal,
       sceneTextIndexed,
       sceneImageIndexed,
       queryTextEmbedding: queryTextState,
@@ -247,5 +260,6 @@ export function useRankedScenes(): RankedScenesResult {
     queryTextState,
     queryImageState,
     colorQuery.paletteOnly,
+    reference,
   ]);
 }

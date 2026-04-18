@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { Search, Sparkles, X } from 'lucide-react';
+import { Palette, Search, Sparkles, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/shared/ui/cn';
 import { useSettingsStore, type CaptionSearchMode } from '../deps/settings';
@@ -9,6 +9,8 @@ export function SceneSearchInput() {
   const query = useSceneBrowserStore((s) => s.query);
   const setQuery = useSceneBrowserStore((s) => s.setQuery);
   const focusNonce = useSceneBrowserStore((s) => s.focusNonce);
+  const reference = useSceneBrowserStore((s) => s.reference);
+  const setReference = useSceneBrowserStore((s) => s.setReference);
   const captionSearchMode = useSettingsStore((s) => s.captionSearchMode);
   const setSetting = useSettingsStore((s) => s.setSetting);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -36,15 +38,18 @@ export function SceneSearchInput() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
-            semanticActive
-              ? 'Search by meaning — "sunset over water", "people laughing"…'
-              : 'Search scenes by what you see…'
+            reference
+              ? 'Finding scenes with a similar palette…'
+              : semanticActive
+                ? 'Search by meaning — "sunset over water", "people laughing"…'
+                : 'Search scenes by what you see…'
           }
-          className="h-8 pl-8 pr-7 text-[12px]"
+          disabled={!!reference}
+          className="h-8 pl-8 pr-7 text-[12px] disabled:opacity-60"
           spellCheck={false}
           autoComplete="off"
         />
-        {query.length > 0 && (
+        {query.length > 0 && !reference && (
           <button
             type="button"
             onClick={() => setQuery('')}
@@ -55,6 +60,18 @@ export function SceneSearchInput() {
           </button>
         )}
       </div>
+      {reference && (
+        <button
+          type="button"
+          onClick={() => setReference(null)}
+          className="flex h-8 max-w-[220px] items-center gap-1 rounded-md border border-primary/60 bg-primary/10 px-2 text-[11px] text-primary transition-colors hover:bg-primary/20"
+          title={`Similar palette to ${reference.label} — click to clear`}
+        >
+          <Palette className="h-3 w-3 shrink-0" />
+          <span className="truncate">{reference.label}</span>
+          <X className="h-3 w-3 shrink-0" />
+        </button>
+      )}
       <button
         type="button"
         onClick={toggleMode}

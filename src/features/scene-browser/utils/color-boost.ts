@@ -273,3 +273,93 @@ export function colorBoostFor(
   }
   return best;
 }
+
+/**
+ * Map a single Lab swatch to its closest color-family name. Used by the
+ * "click a palette swatch to search its color" interaction — we want the
+ * family word (e.g. `"red"`) that parseColorQuery will canonicalize back
+ * to the same palette-only search.
+ *
+ * Returns null for swatches too far from every family reference (rare —
+ * the families span the Lab gamut densely enough that the nearest is
+ * usually within ∆E 30).
+ */
+export function nearestColorFamily(entry: LabColor): string | null {
+  let bestFamily: string | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+  for (const def of COLOR_FAMILIES) {
+    const distance = deltaE2000(def.lab, entry);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestFamily = def.family;
+    }
+  }
+  return bestDistance < ZERO_BOOST_DELTA_E ? bestFamily : null;
+}
+
+/**
+ * Symmetric weighted distance between two palettes via greedy nearest
+ * matching in both directions. Full Hungarian assignment would be cleaner
+ * but palettes are ≤6 entries in practice, and greedy matches stay within
+ * a few percent of optimal for that size. Averaging both directions keeps
+ * the metric symmetric — a tiny palette shouldn't "win" just because one
+ * of its entries happens to be close to a big entry in the reference.
+ *
+ * Output is a weighted-mean ∆E 2000 across matched entries. Palettes with
+ * no overlap return POSITIVE_INFINITY so the ranker can drop them.
+ */
+export function palettePairDistance(
+  a: PaletteEntry[],
+  b: PaletteEntry[],
+): number {
+  if (a.length === 0 || b.length === 0) return Number.POSITIVE_INFINITY;
+  const forward = greedyDirectionalDistance(a, b);
+  const reverse = greedyDirectionalDistance(b, a);
+  if (!Number.isFinite(forward) || !Number.isFinite(reverse)) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return (forward + reverse) / 2;
+}
+
+function greedyDirectionalDistance(
+  source: PaletteEntry[],
+  target: PaletteEntry[],
+): number {
+  let totalWeight = 0;
+  let totalWeighted = 0;
+  for (const s of source) {
+    let best = Number.POSITIVE_INFINITY;
+    for (const t of target) {
+      const d = deltaE2000({ l: s.l, a: s.a, b: s.b }, { l: t.l, a: t.a, b: t.b });
+      if (d < best) best = d;
+    }
+    if (!Number.isFinite(best)) continue;
+    totalWeighted += best * s.weight;
+    totalWeight += s.weight;
+  }
+  if (totalWeight <= 0) return Number.POSITIVE_INFINITY;
+  return totalWeighted / totalWeight;
+}
+
+export interface PaletteSimilarityResult {
+  /** Cosine-compatible boost (higher = more similar). */
+  boost: number;
+  /** Weighted-mean ∆E 2000 between the two palettes. */
+  distance: number;
+}
+
+/**
+ * Turn a palette-pair distance into a score in cosine-compatible units,
+ * reusing the same linear falloff as the single-color boost so both
+ * signals compose cleanly when mixed.
+ */
+export function paletteSimilarityBoost(
+  reference: PaletteEntry[] | undefined,
+  candidate: PaletteEntry[] | undefined,
+): PaletteSimilarityResult | null {
+  if (!reference || !candidate) return null;
+  const distance = palettePairDistance(reference, candidate);
+  if (!Number.isFinite(distance) || distance >= ZERO_BOOST_DELTA_E) return null;
+  const linear = (ZERO_BOOST_DELTA_E - distance) / ZERO_BOOST_DELTA_E;
+  return { boost: MAX_BOOST * linear, distance };
+}

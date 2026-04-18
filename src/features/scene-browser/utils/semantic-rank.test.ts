@@ -316,4 +316,47 @@ describe('semanticRank with CLIP image signal', () => {
     expect(result[0]?.signals.textScore).toBeDefined();
     expect(result[0]?.signals.imageScore).toBeDefined();
   });
+
+  it('ranks by palette similarity and ignores text scores when referencePalette is set', () => {
+    // With a reference palette, the ranker should find scenes whose
+    // palettes are perceptually close to the reference, regardless of
+    // how well the text side matches the query vector.
+    const query = unit([1, 0]);
+    const scenes = [
+      scene('warm:0', 'an unrelated caption'),
+      scene('cool:0', 'a perfect text match'),
+    ];
+    const textEmbeds = new Map<string, Float32Array>([
+      ['warm:0', unit([0, 1])],
+      ['cool:0', unit([1, 0])],
+    ]);
+    const palettes = new Map([
+      ['warm:0', [{ l: 53, a: 70, b: 50, weight: 0.9 }]],
+      ['cool:0', [{ l: 40, a: 15, b: -60, weight: 0.9 }]],
+    ]);
+    const referencePalette = [{ l: 53, a: 70, b: 50, weight: 1 }];
+
+    const result = semanticRank(query, scenes, textEmbeds, {
+      palettes,
+      referencePalette,
+    });
+
+    expect(result.map((s) => s.id)).toEqual(['warm:0']);
+    expect(result[0]?.signals.paletteDistance).toBeDefined();
+    expect(result[0]?.signals.textScore).toBeUndefined();
+  });
+
+  it('falls back to the scene-level palette when paletteMap lacks the id', () => {
+    const query = unit([1, 0]);
+    const warmPalette = [{ l: 53, a: 70, b: 50, weight: 1 }];
+    const scenes: RankableScene[] = [
+      { ...scene('warm:0', 'x'), palette: warmPalette },
+    ];
+    const textEmbeds = new Map<string, Float32Array>();
+    const result = semanticRank(query, scenes, textEmbeds, {
+      referencePalette: warmPalette,
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.score).toBeGreaterThan(0);
+  });
 });
