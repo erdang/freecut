@@ -1,4 +1,9 @@
-import { DEFAULT_TRACK_HEIGHT, getNextClassicTrackName } from '../deps/timeline-contract';
+import {
+  DEFAULT_TRACK_HEIGHT,
+  getEffectiveTrackKindForItem,
+  getNextClassicTrackName,
+  type TrackKind,
+} from '../deps/timeline-contract';
 import type { MediaTranscriptSegment } from '@/types/storage';
 import type { MediaCaption } from '@/infrastructure/analysis';
 import type {
@@ -213,28 +218,12 @@ export function findCompatibleCaptionTrack(
   startFrame: number,
   endFrame: number,
 ): TimelineTrack | null {
-  const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
-
-  for (const track of sortedTracks) {
-    if (track.visible === false || track.locked || track.isGroup) {
-      continue;
-    }
-
-    const hasOverlap = items.some((item) => {
-      if (item.trackId !== track.id) {
-        return false;
-      }
-
-      const itemEnd = item.from + item.durationInFrames;
-      return item.from < endFrame && itemEnd > startFrame;
-    });
-
-    if (!hasOverlap) {
-      return track;
-    }
-  }
-
-  return null;
+  return findCompatibleGeneratedTrackForRanges(
+    tracks,
+    items,
+    [{ startFrame, endFrame }],
+    'video',
+  );
 }
 
 export function findCompatibleCaptionTrackForRanges(
@@ -242,10 +231,19 @@ export function findCompatibleCaptionTrackForRanges(
   items: readonly TimelineItem[],
   ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
 ): TimelineTrack | null {
+  return findCompatibleGeneratedTrackForRanges(tracks, items, ranges, 'video');
+}
+
+export function findCompatibleGeneratedTrackForRanges(
+  tracks: readonly TimelineTrack[],
+  items: readonly TimelineItem[],
+  ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
+  requiredKind: TrackKind,
+): TimelineTrack | null {
   const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
 
   for (const track of sortedTracks) {
-    if (track.visible === false || track.locked || track.isGroup) {
+    if (!isGeneratedContentTrackCandidate(track, items, requiredKind)) {
       continue;
     }
 
@@ -266,6 +264,30 @@ export function findCompatibleCaptionTrackForRanges(
   }
 
   return null;
+}
+
+export function isGeneratedContentTrackCandidate(
+  track: TimelineTrack,
+  items: readonly TimelineItem[],
+  requiredKind: TrackKind,
+): boolean {
+  if (track.visible === false || track.locked || track.isGroup) {
+    return false;
+  }
+
+  const effectiveKind = getEffectiveTrackKindForItem(track, items);
+  if (requiredKind === 'audio') {
+    return effectiveKind === 'audio';
+  }
+
+  return effectiveKind === 'video' || effectiveKind === null;
+}
+
+export function isCaptionTrackCandidate(
+  track: TimelineTrack,
+  items: readonly TimelineItem[],
+): boolean {
+  return isGeneratedContentTrackCandidate(track, items, 'video');
 }
 
 export function buildCaptionTrack(tracks: readonly TimelineTrack[]): TimelineTrack {

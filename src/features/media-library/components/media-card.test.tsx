@@ -21,6 +21,8 @@ const proxyServiceMocks = vi.hoisted(() => ({
 
 const mediaTranscriptionServiceMocks = vi.hoisted(() => ({
   transcribeMedia: vi.fn(),
+  deleteTranscript: vi.fn(),
+  cancelTranscription: vi.fn(),
 }));
 
 const mediaStoreState = vi.hoisted(() => ({
@@ -29,7 +31,7 @@ const mediaStoreState = vi.hoisted(() => ({
   importingIds: [] as string[],
   proxyStatus: new Map<string, 'generating' | 'ready' | 'error'>(),
   proxyProgress: new Map<string, number>(),
-  transcriptStatus: new Map<string, 'idle' | 'transcribing' | 'ready' | 'error'>(),
+  transcriptStatus: new Map<string, 'idle' | 'queued' | 'transcribing' | 'ready' | 'error'>(),
   transcriptProgress: new Map(),
   taggingMediaIds: new Set<string>(),
   setProxyStatus: vi.fn(),
@@ -192,6 +194,7 @@ function makeMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
 describe('MediaCard', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.useRealTimers();
     mediaStoreState.selectedMediaIds = [];
     mediaStoreState.mediaItems = [makeMedia()];
     mediaStoreState.importingIds = [];
@@ -227,6 +230,81 @@ describe('MediaCard', () => {
     expect(generateProxyCall?.[3]).toBe(2160);
     expect(generateProxyCall?.[4]).toBe('proxy-media-1');
     expect(typeof generateProxyCall?.[1]).toBe('function');
+  });
+
+  it('defers transcript work until after the click interaction completes', async () => {
+    const media = makeMedia();
+    mediaTranscriptionServiceMocks.transcribeMedia.mockResolvedValue(undefined);
+
+    render(<MediaCard media={media} viewMode="list" />);
+
+    fireEvent.click(screen.getByText('Generate Transcript'));
+
+    expect(mediaTranscriptionServiceMocks.transcribeMedia).not.toHaveBeenCalled();
+
+    await waitFor(() => {
+      expect(mediaTranscriptionServiceMocks.transcribeMedia).toHaveBeenCalledWith('media-1', expect.objectContaining({
+        onProgress: expect.any(Function),
+      }));
+    });
+  });
+
+  it('uses transcript wording in the media action menu', () => {
+    const { rerender } = render(<MediaCard media={makeMedia()} viewMode="list" />);
+    expect(screen.getByText('Generate Transcript')).toBeInTheDocument();
+
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'ready']]);
+    rerender(<MediaCard media={makeMedia()} viewMode="list" />);
+    expect(screen.getByText('Refresh Transcript')).toBeInTheDocument();
+    expect(screen.getByText('Delete Transcript')).toBeInTheDocument();
+  });
+
+  it('shows transcript progress bars while transcribing', () => {
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'queued']]);
+    mediaStoreState.transcriptProgress = new Map([
+      ['media-1', { stage: 'queued', progress: 0 }],
+    ]);
+
+    render(<MediaCard media={makeMedia()} viewMode="list" />);
+
+    expect(screen.getByText('Queued (0%)')).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: 'Transcript menu progress' }))
+      .toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByRole('progressbar', { name: 'Transcript progress' }))
+      .toHaveAttribute('aria-valuenow', '0');
+    expect(screen.getByText('Cancel Transcript')).toBeInTheDocument();
+  });
+
+  it('cancels transcript generation from the action menu', () => {
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'queued']]);
+    mediaStoreState.transcriptProgress = new Map([
+      ['media-1', { stage: 'queued', progress: 0 }],
+    ]);
+
+    render(<MediaCard media={makeMedia()} viewMode="list" />);
+
+    fireEvent.click(screen.getByText('Cancel Transcript'));
+
+    expect(mediaTranscriptionServiceMocks.cancelTranscription).toHaveBeenCalledWith('media-1');
+  });
+
+  it('deletes a transcript from the media action menu', async () => {
+    mediaStoreState.transcriptStatus = new Map([['media-1', 'ready']]);
+    mediaTranscriptionServiceMocks.deleteTranscript.mockResolvedValue(undefined);
+
+    render(<MediaCard media={makeMedia()} viewMode="list" />);
+
+    fireEvent.click(screen.getByText('Delete Transcript'));
+
+    await waitFor(() => {
+      expect(mediaTranscriptionServiceMocks.deleteTranscript).toHaveBeenCalledWith('media-1');
+    });
+    expect(mediaStoreState.setTranscriptStatus).toHaveBeenCalledWith('media-1', 'idle');
+    expect(mediaStoreState.clearTranscriptProgress).toHaveBeenCalledWith('media-1');
+    expect(mediaStoreState.showNotification).toHaveBeenCalledWith({
+      type: 'success',
+      message: 'Transcript deleted for "clip.mp4"',
+    });
   });
 
   it('uses the shared action menu to relink broken media in grid view', () => {

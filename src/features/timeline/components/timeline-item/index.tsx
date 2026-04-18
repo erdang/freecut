@@ -221,6 +221,9 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const isLinked = useItemsStore(
     useCallback((s) => !!s.linkedItemsByItemId[item.id], [item.id])
   );
+  const linkedItemsForCaptionOwnership = useItemsStore(
+    useCallback((s) => s.linkedItemsByItemId[item.id] ?? EMPTY_LINKED_ITEMS, [item.id])
+  );
   const linkedSelectionEnabled = useEditorStore((s) => s.linkedSelectionEnabled);
   const segmentOverlays = useTimelineItemOverlayStore(
     useCallback((s) => s.overlaysByItemId[item.id] ?? EMPTY_SEGMENT_OVERLAYS, [item.id])
@@ -241,6 +244,21 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     [itemKeyframes]
   );
   const hasKeyframes = keyframedProperties.length > 0;
+  const linkedVideoCaptionOwner = useMemo(() => {
+    if (item.type !== 'audio' || !item.mediaId) {
+      return null;
+    }
+
+    return linkedItemsForCaptionOwnership.find((linkedItem) => (
+      linkedItem.id !== item.id
+      && linkedItem.type === 'video'
+      && linkedItem.mediaId === item.mediaId
+    )) ?? null;
+  }, [item.id, item.mediaId, item.type, linkedItemsForCaptionOwnership]);
+  const canManageCaptions = !!item.mediaId
+    && !isBroken
+    && (item.type === 'video' || (item.type === 'audio' && linkedVideoCaptionOwner === null));
+  const hasTranscript = transcriptStatus === 'ready';
 
   // Use refs for actions to avoid selector re-renders - read from store in callbacks
   const activeTool = useSelectionStore((s) => s.activeTool);
@@ -1420,6 +1438,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     handleGenerateAudioFromText,
     handleGenerateCaptions,
     handleRegenerateCaptions,
+    handleApplyCaptionsFromTranscript,
     handleCreatePreComp,
     handleEnterComposition,
     handleDissolveComposition,
@@ -2480,10 +2499,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         onFreezeFrame={handleFreezeFrame}
         isTextItem={item.type === 'text' && hasSpeakableText}
         onGenerateAudioFromText={handleGenerateAudioFromText}
-        canGenerateCaptions={(item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken}
-        canRegenerateCaptions={hasGeneratedCaptions}
-        isGeneratingCaptions={isCaptionGenerationActive || transcriptStatus === 'transcribing'}
+        canManageCaptions={canManageCaptions}
+        hasTranscript={hasTranscript}
+        hasCaptions={hasGeneratedCaptions}
+        isGeneratingCaptions={
+          isCaptionGenerationActive
+          || transcriptStatus === 'queued'
+          || transcriptStatus === 'transcribing'
+        }
         defaultCaptionModel={defaultWhisperModel}
+        onApplyCaptionsFromTranscript={handleApplyCaptionsFromTranscript}
         onGenerateCaptions={handleGenerateCaptions}
         onRegenerateCaptions={handleRegenerateCaptions}
         isCompositionItem={isCompositionItem}

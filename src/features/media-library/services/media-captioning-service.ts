@@ -24,6 +24,7 @@ import {
   buildCaptionTrackAbove,
   findReplaceableCaptionItemsForClip,
   findCompatibleCaptionTrackForRanges,
+  isCaptionTrackCandidate,
   getCaptionTextItemTemplate,
   getCaptionRangeForClip,
 } from '../utils/caption-items';
@@ -255,7 +256,7 @@ class MediaCaptioningService {
     if (trackIds.length !== 1) return null;
 
     const preferredTrack = tracks.find((track) => track.id === trackIds[0]);
-    if (!preferredTrack || preferredTrack.visible === false || preferredTrack.locked || preferredTrack.isGroup) {
+    if (!preferredTrack || !isCaptionTrackCandidate(preferredTrack, items)) {
       return null;
     }
 

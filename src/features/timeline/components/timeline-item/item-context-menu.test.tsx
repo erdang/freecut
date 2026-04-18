@@ -41,7 +41,10 @@ vi.mock('@/features/timeline/deps/analysis', () => ({
 
 vi.mock('@/features/timeline/deps/media-transcription-service', () => ({
   getMediaTranscriptionModelLabel: (model: string) => model,
-  getMediaTranscriptionModelOptions: () => [],
+  getMediaTranscriptionModelOptions: () => [
+    { value: 'whisper-tiny', label: 'Tiny' },
+    { value: 'whisper-base', label: 'Base' },
+  ],
 }));
 
 vi.mock('@/features/timeline/deps/settings', () => ({
@@ -112,5 +115,42 @@ describe('ItemContextMenu scene detection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'AI (Liquid Vision)' }));
 
     expect(onDetectScenes).toHaveBeenCalledWith('optical-flow', 'lfm');
+  });
+});
+
+describe('ItemContextMenu captions', () => {
+  it('uses caption-specific wording when a transcript already exists', () => {
+    const onApplyCaptionsFromTranscript = vi.fn();
+    const onRegenerateCaptions = vi.fn();
+
+    renderContextMenu({
+      canManageCaptions: true,
+      hasTranscript: true,
+      hasCaptions: false,
+      defaultCaptionModel: 'whisper-tiny',
+      onApplyCaptionsFromTranscript,
+      onRegenerateCaptions,
+    });
+
+    expect(screen.getByText('Captions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add from Current Transcript' })).toBeInTheDocument();
+    expect(screen.getByText('Re-Transcribe & Add')).toBeInTheDocument();
+  });
+
+  it('uses update wording when captions already exist', () => {
+    const onApplyCaptionsFromTranscript = vi.fn();
+    const onRegenerateCaptions = vi.fn();
+
+    renderContextMenu({
+      canManageCaptions: true,
+      hasTranscript: true,
+      hasCaptions: true,
+      defaultCaptionModel: 'whisper-tiny',
+      onApplyCaptionsFromTranscript,
+      onRegenerateCaptions,
+    });
+
+    expect(screen.getByRole('button', { name: 'Update from Current Transcript' })).toBeInTheDocument();
+    expect(screen.getByText('Re-Transcribe & Update')).toBeInTheDocument();
   });
 });

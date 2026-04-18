@@ -11,7 +11,7 @@ export interface MediaLibrarySelection {
   compositionIds: string[];
 }
 
-export type MediaTranscriptStatus = 'idle' | 'transcribing' | 'ready' | 'error';
+export type MediaTranscriptStatus = 'idle' | 'queued' | 'transcribing' | 'ready' | 'error';
 
 export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
 

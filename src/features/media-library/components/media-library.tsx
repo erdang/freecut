@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText } from 'lucide-react';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -38,6 +38,7 @@ import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
 import { CompositionsSection } from './compositions-section';
+import { BackgroundTaskProgress } from './background-task-progress';
 import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
@@ -53,10 +54,15 @@ import {
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
+import { mediaTranscriptionService } from '../services/media-transcription-service';
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { getMediaType } from '../utils/validation';
 import { getProjectBrokenMediaIds } from '@/features/media-library/utils/broken-media';
+import {
+  getTranscriptionOverallProgress,
+  getTranscriptionStageLabel,
+} from '@/shared/utils/transcription-progress';
 import type { MediaMetadata } from '@/types/storage';
 import { isMarqueeJustFinished, useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 
@@ -196,6 +202,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
+  const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus);
+  const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress);
   const taggingMediaIds = useMediaLibraryStore((s) => s.taggingMediaIds);
   const filteredMediaItems = useFilteredMediaItems();
   const mediaGroups = useMemo(() => {
@@ -511,6 +519,14 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
   const analyzingCount = taggingMediaIds.size;
 
+  const transcribingCount = useMemo(() => {
+    let count = 0;
+    for (const status of transcriptStatus.values()) {
+      if (status === 'queued' || status === 'transcribing') count++;
+    }
+    return count;
+  }, [transcriptStatus]);
+
   const currentProjectBrokenMediaIds = useMemo(
     () => getProjectBrokenMediaIds(brokenMediaIds, mediaById),
     [brokenMediaIds, mediaById]
@@ -529,6 +545,31 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
     return count > 0 ? total / count : 0;
   }, [proxyStatus, proxyProgress, generatingCount]);
+
+  const transcribingAvgProgress = useMemo(() => {
+    if (transcribingCount === 0) return 0;
+    let total = 0;
+    let count = 0;
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id);
+        total += progress ? getTranscriptionOverallProgress(progress) : 0;
+        count++;
+      }
+    }
+    return count > 0 ? total / count : 0;
+  }, [transcriptStatus, transcriptProgress, transcribingCount]);
+
+  const singleTranscriptionStageLabel = useMemo(() => {
+    if (transcribingCount !== 1) return null;
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id);
+        return progress ? getTranscriptionStageLabel(progress.stage) : null;
+      }
+    }
+    return null;
+  }, [transcriptStatus, transcriptProgress, transcribingCount]);
 
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
@@ -563,6 +604,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       const media = mediaById[mediaId];
       proxyService.cancelProxy(mediaId, media ? getSharedProxyKey(media) : undefined);
+    }
+  };
+
+  const handleCancelAllTranscriptions = () => {
+    for (const [mediaId, status] of transcriptStatus.entries()) {
+      if (status !== 'queued' && status !== 'transcribing') {
+        continue;
+      }
+
+      mediaTranscriptionService.cancelTranscription(mediaId);
     }
   };
 
@@ -1048,59 +1099,70 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       {/* Background AI analysis status */}
       {analyzingCount > 0 && (
-        <div className="px-3 py-2 border-t border-border flex-shrink-0 bg-panel-bg/50">
-          <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <span className="text-muted-foreground">
-                  Analyzing {analyzingCount} {analyzingCount === 1 ? 'item' : 'items'} with AI
+        <BackgroundTaskProgress
+          icon={<Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />}
+          label={`Analyzing ${analyzingCount} ${analyzingCount === 1 ? 'item' : 'items'} with AI`}
+          progressAriaLabel="AI analysis progress"
+          indeterminate
+          meta={<span>Working...</span>}
+          trailing={<Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
+          fillClassName="bg-purple-500"
+        />
+      )}
+
+      {/* Transcript generation progress bar */}
+      {transcribingCount > 0 && (
+        <BackgroundTaskProgress
+          icon={<FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />}
+          label={`Generating ${transcribingCount} ${transcribingCount === 1 ? 'transcript' : 'transcripts'} in background`}
+          progressAriaLabel="Transcript generation progress"
+          progressPercent={transcribingAvgProgress * 100}
+          meta={(
+            <>
+              {singleTranscriptionStageLabel && (
+                <span className="hidden sm:inline truncate">
+                  {singleTranscriptionStageLabel}
                 </span>
-                <span className="text-muted-foreground">
-                  Working...
-                </span>
-              </div>
-              <div className="h-1 overflow-hidden rounded-full bg-secondary">
-                <div className="h-full w-1/3 rounded-full bg-purple-500 animate-pulse" />
-              </div>
-            </div>
-            <Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />
-          </div>
-        </div>
+              )}
+              <span className="tabular-nums">
+                {Math.round(transcribingAvgProgress * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelAllTranscriptions}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel all
+              </button>
+            </>
+          )}
+          fillClassName="bg-blue-500"
+        />
       )}
 
       {/* Proxy generation progress bar */}
       {generatingCount > 0 && (
-        <div className="px-3 py-2 border-t border-border flex-shrink-0 bg-panel-bg/50">
-          <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-muted-foreground">
-                  Generating {generatingCount} {generatingCount === 1 ? 'proxy' : 'proxies'} in background
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground tabular-nums">
-                    {Math.round(generatingAvgProgress * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCancelAllProxies}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancel all
-                  </button>
-                </div>
-              </div>
-              <div className="h-1 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-green-500 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(generatingAvgProgress * 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <BackgroundTaskProgress
+          icon={<Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />}
+          label={`Generating ${generatingCount} ${generatingCount === 1 ? 'proxy' : 'proxies'} in background`}
+          progressAriaLabel="Proxy generation progress"
+          progressPercent={generatingAvgProgress * 100}
+          meta={(
+            <>
+              <span className="tabular-nums">
+                {Math.round(generatingAvgProgress * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelAllProxies}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel all
+              </button>
+            </>
+          )}
+          fillClassName="bg-green-500"
+        />
       )}
 
       {/* Delete confirmation dialog */}

@@ -36,6 +36,32 @@ vi.mock('../deps/timeline-contract', () => ({
     }
     return null;
   },
+  getEffectiveTrackKindForItem: (
+    track: { id: string; name: string; kind?: string },
+    items: Array<{ trackId: string; type: string }>,
+  ) => {
+    if (track.kind === 'video' || track.kind === 'audio') {
+      return track.kind;
+    }
+    if (/^V(\d+)$/i.test(track.name)) {
+      return 'video';
+    }
+    if (/^A(\d+)$/i.test(track.name)) {
+      return 'audio';
+    }
+
+    let hasAudioItems = false;
+    for (const item of items) {
+      if (item.trackId !== track.id) continue;
+      if (item.type === 'audio') {
+        hasAudioItems = true;
+        continue;
+      }
+      return 'video';
+    }
+
+    return hasAudioItems ? 'audio' : null;
+  },
 }));
 
 import {
@@ -47,8 +73,12 @@ import {
   findReplaceableCaptionItemsForClip,
   getCaptionTextItemTemplate,
   findCompatibleCaptionTrack,
+  findCompatibleCaptionTrackForRanges,
+  findCompatibleGeneratedTrackForRanges,
   getCaptionRangeForClip,
   getCaptionFrameRange,
+  isGeneratedContentTrackCandidate,
+  isCaptionTrackCandidate,
   normalizeCaptionSegments,
 } from './caption-items';
 import { getTrackKind } from '../deps/timeline-contract';
@@ -188,6 +218,105 @@ describe('caption-items', () => {
 
     const track = findCompatibleCaptionTrack(tracks, items, 30, 90);
     expect(track?.id).toBe('track-2');
+  });
+
+  it('never reuses audio tracks for caption text', () => {
+    const tracks: TimelineTrack[] = [
+      {
+        id: 'track-audio',
+        name: 'A1',
+        kind: 'audio',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'V1',
+        kind: 'video',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ];
+
+    expect(isCaptionTrackCandidate(tracks[0]!, [])).toBe(false);
+    expect(isCaptionTrackCandidate(tracks[1]!, [])).toBe(true);
+    expect(findCompatibleCaptionTrack(tracks, [], 30, 90)?.id).toBe('track-video');
+    expect(
+      findCompatibleCaptionTrackForRanges(tracks, [], [{ startFrame: 30, endFrame: 90 }])?.id,
+    ).toBe('track-video');
+  });
+
+  it('can target audio tracks for generated audio content', () => {
+    const tracks: TimelineTrack[] = [
+      {
+        id: 'track-generic-audio',
+        name: 'Track 1',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'V1',
+        kind: 'video',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+      {
+        id: 'track-audio',
+        name: 'A1',
+        kind: 'audio',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 2,
+        items: [],
+      },
+    ];
+    const items: TimelineItem[] = [
+      {
+        id: 'existing-audio',
+        type: 'audio',
+        trackId: 'track-generic-audio',
+        from: 0,
+        durationInFrames: 30,
+        label: 'Existing audio',
+        src: 'blob:test',
+      },
+    ];
+
+    expect(isGeneratedContentTrackCandidate(tracks[0]!, items, 'audio')).toBe(true);
+    expect(isGeneratedContentTrackCandidate(tracks[1]!, items, 'audio')).toBe(false);
+    expect(isGeneratedContentTrackCandidate(tracks[2]!, items, 'audio')).toBe(true);
+    expect(
+      findCompatibleGeneratedTrackForRanges(
+        tracks,
+        items,
+        [{ startFrame: 30, endFrame: 90 }],
+        'audio',
+      )?.id,
+    ).toBe('track-generic-audio');
   });
 
   it('returns the overall transcript frame range', () => {

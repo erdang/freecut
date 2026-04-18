@@ -58,10 +58,12 @@ interface ItemContextMenuProps {
   /** Whether the playhead is within this item's bounds */
   playheadInBounds?: boolean;
   onFreezeFrame?: () => void;
-  canGenerateCaptions?: boolean;
-  canRegenerateCaptions?: boolean;
+  canManageCaptions?: boolean;
+  hasTranscript?: boolean;
+  hasCaptions?: boolean;
   isGeneratingCaptions?: boolean;
   defaultCaptionModel?: MediaTranscriptModel;
+  onApplyCaptionsFromTranscript?: () => void;
   onGenerateCaptions?: (model: MediaTranscriptModel) => void;
   onRegenerateCaptions?: (model: MediaTranscriptModel) => void;
   /** Whether this item is a composition item (enables enter/dissolve options) */
@@ -113,10 +115,12 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
-  canGenerateCaptions,
-  canRegenerateCaptions,
+  canManageCaptions,
+  hasTranscript,
+  hasCaptions,
   isGeneratingCaptions,
   defaultCaptionModel,
+  onApplyCaptionsFromTranscript,
   onGenerateCaptions,
   onRegenerateCaptions,
   isCompositionItem,
@@ -175,10 +179,12 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       isVideoItem={isVideoItem}
       playheadInBounds={playheadInBounds}
       onFreezeFrame={onFreezeFrame}
-      canGenerateCaptions={canGenerateCaptions}
-      canRegenerateCaptions={canRegenerateCaptions}
+      canManageCaptions={canManageCaptions}
+      hasTranscript={hasTranscript}
+      hasCaptions={hasCaptions}
       isGeneratingCaptions={isGeneratingCaptions}
       defaultCaptionModel={defaultCaptionModel}
+      onApplyCaptionsFromTranscript={onApplyCaptionsFromTranscript}
       onGenerateCaptions={onGenerateCaptions}
       onRegenerateCaptions={onRegenerateCaptions}
       isCompositionItem={isCompositionItem}
@@ -255,10 +261,12 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
-  canGenerateCaptions,
-  canRegenerateCaptions,
+  canManageCaptions,
+  hasTranscript,
+  hasCaptions,
   isGeneratingCaptions,
   defaultCaptionModel,
+  onApplyCaptionsFromTranscript,
   onGenerateCaptions,
   onRegenerateCaptions,
   isCompositionItem,
@@ -298,6 +306,10 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
     () => getSceneVerificationModelOptions(),
     [],
   );
+  const transcriptionActionLabel = hasCaptions ? 'Re-Transcribe & Update' : 'Transcribe & Add';
+  const applyTranscriptLabel = hasCaptions
+    ? 'Update from Current Transcript'
+    : 'Add from Current Transcript';
 
   const hasKeyframes = propertiesWithKeyframes.length > 0;
 
@@ -454,60 +466,77 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           </>
         )}
 
-        {canGenerateCaptions && onGenerateCaptions && (
+        {canManageCaptions && (onApplyCaptionsFromTranscript || onGenerateCaptions || onRegenerateCaptions) && (
           <>
             {isGeneratingCaptions ? (
               <ContextMenuItem disabled>
-                Updating Captions...
+                Updating captions...
               </ContextMenuItem>
             ) : (
-              <>
-                <ContextMenuSub>
-                  <ContextMenuSubTrigger>Generate Captions for Segment</ContextMenuSubTrigger>
-                  <ContextMenuSubContent className="w-48">
-                    {defaultCaptionModel && (
-                      <>
-                        <ContextMenuItem onClick={() => onGenerateCaptions(defaultCaptionModel)}>
-                          {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
-                        </ContextMenuItem>
-                        <ContextMenuSeparator />
-                      </>
-                    )}
-                    {explicitCaptionModelOptions.map((option) => (
-                      <ContextMenuItem
-                        key={option.value}
-                        onClick={() => onGenerateCaptions(option.value)}
-                      >
-                        {option.label}
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Captions</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-56">
+                  {hasTranscript && onApplyCaptionsFromTranscript && (
+                    <>
+                      <ContextMenuItem onClick={onApplyCaptionsFromTranscript}>
+                        {applyTranscriptLabel}
                       </ContextMenuItem>
-                    ))}
-                  </ContextMenuSubContent>
-                </ContextMenuSub>
-
-                {canRegenerateCaptions && onRegenerateCaptions && (
-                  <ContextMenuSub>
-                    <ContextMenuSubTrigger>Regenerate Captions for Segment</ContextMenuSubTrigger>
-                    <ContextMenuSubContent className="w-48">
-                      {defaultCaptionModel && (
-                        <>
-                          <ContextMenuItem onClick={() => onRegenerateCaptions(defaultCaptionModel)}>
-                            {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
+                      {(onGenerateCaptions || onRegenerateCaptions) && <ContextMenuSeparator />}
+                    </>
+                  )}
+                  {((hasCaptions && onRegenerateCaptions) || (!hasTranscript && onGenerateCaptions)) && (
+                    <ContextMenuSub>
+                      <ContextMenuSubTrigger>{transcriptionActionLabel}</ContextMenuSubTrigger>
+                      <ContextMenuSubContent className="w-48">
+                        {defaultCaptionModel && (
+                          <>
+                            <ContextMenuItem
+                              onClick={() => (hasCaptions ? onRegenerateCaptions : onGenerateCaptions)?.(defaultCaptionModel)}
+                            >
+                              {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
+                            </ContextMenuItem>
+                            <ContextMenuSeparator />
+                          </>
+                        )}
+                        {explicitCaptionModelOptions.map((option) => (
+                          <ContextMenuItem
+                            key={option.value}
+                            onClick={() => (hasCaptions ? onRegenerateCaptions : onGenerateCaptions)?.(option.value)}
+                          >
+                            {option.label}
                           </ContextMenuItem>
-                          <ContextMenuSeparator />
-                        </>
-                      )}
-                      {explicitCaptionModelOptions.map((option) => (
-                        <ContextMenuItem
-                          key={option.value}
-                          onClick={() => onRegenerateCaptions(option.value)}
-                        >
-                          {option.label}
-                        </ContextMenuItem>
-                      ))}
-                    </ContextMenuSubContent>
-                  </ContextMenuSub>
-                )}
-              </>
+                        ))}
+                      </ContextMenuSubContent>
+                    </ContextMenuSub>
+                  )}
+                  {hasTranscript && !hasCaptions && onRegenerateCaptions && (
+                    <>
+                      <ContextMenuSeparator />
+                      <ContextMenuSub>
+                        <ContextMenuSubTrigger>Re-Transcribe & Add</ContextMenuSubTrigger>
+                        <ContextMenuSubContent className="w-48">
+                          {defaultCaptionModel && (
+                            <>
+                              <ContextMenuItem onClick={() => onRegenerateCaptions(defaultCaptionModel)}>
+                                {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                            </>
+                          )}
+                          {explicitCaptionModelOptions.map((option) => (
+                            <ContextMenuItem
+                              key={option.value}
+                              onClick={() => onRegenerateCaptions(option.value)}
+                            >
+                              {option.label}
+                            </ContextMenuItem>
+                          ))}
+                        </ContextMenuSubContent>
+                      </ContextMenuSub>
+                    </>
+                  )}
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             )}
             <ContextMenuSeparator />
           </>

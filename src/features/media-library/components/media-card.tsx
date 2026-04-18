@@ -17,7 +17,6 @@ import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
-import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { useEditorStore } from '@/app/state/editor';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
@@ -26,6 +25,8 @@ import {
   getTranscriptionOverallPercent,
   getTranscriptionStageLabel,
 } from '@/shared/utils/transcription-progress';
+import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
+import { isTranscriptionCancellationError } from '@/shared/utils/transcription-cancellation';
 
 interface MediaCardProps {
   media: MediaMetadata;
@@ -48,14 +49,17 @@ interface MediaCardActionMenuProps {
   isTranscribable: boolean;
   isTranscribing: boolean;
   hasTranscript: boolean;
-  transcriptProgressLabel: string;
+  transcriptProgressPercent: number | null;
+  transcriptBusyLabel: string;
   isTaggable: boolean;
   isTagging: boolean;
   hasTags: boolean;
   onGenerateProxy: (event: React.MouseEvent) => void | Promise<void>;
   onCancelProxy: (event: React.MouseEvent) => void | Promise<void>;
   onDeleteProxy: (event: React.MouseEvent) => Promise<void>;
-  onGenerateTranscript: (event: React.MouseEvent) => Promise<void>;
+  onGenerateTranscript: (event: React.MouseEvent) => void | Promise<void>;
+  onCancelTranscript: (event: React.MouseEvent) => void;
+  onDeleteTranscript: (event: React.MouseEvent) => Promise<void>;
   onAnalyzeWithAI: (event: React.MouseEvent) => void;
   onDelete: (event: React.MouseEvent) => void;
 }
@@ -72,7 +76,8 @@ function MediaCardActionMenuItems({
   isTranscribable,
   isTranscribing,
   hasTranscript,
-  transcriptProgressLabel,
+  transcriptProgressPercent,
+  transcriptBusyLabel,
   isTaggable,
   isTagging,
   hasTags,
@@ -80,6 +85,8 @@ function MediaCardActionMenuItems({
   onCancelProxy,
   onDeleteProxy,
   onGenerateTranscript,
+  onCancelTranscript,
+  onDeleteTranscript,
   onAnalyzeWithAI,
   onDelete,
 }: MediaCardActionMenuProps) {
@@ -100,13 +107,46 @@ function MediaCardActionMenuItems({
       {isTranscribable && !isBroken && !isTranscribing && (
         <DropdownMenuItem onClick={onGenerateTranscript}>
           <FileText className="w-3 h-3 mr-2" />
-          {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
+          {hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'}
+        </DropdownMenuItem>
+      )}
+      {isTranscribable && !isBroken && hasTranscript && !isTranscribing && (
+        <DropdownMenuItem onClick={onDeleteTranscript} className="text-destructive focus:text-destructive">
+          <Trash2 className="w-3 h-3 mr-2" />
+          Delete Transcript
         </DropdownMenuItem>
       )}
       {isTranscribable && !isBroken && isTranscribing && (
         <DropdownMenuItem disabled>
-          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-          {transcriptProgressLabel}
+          <div className="flex w-full min-w-48 flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+              <span className="min-w-0 truncate">
+                {transcriptBusyLabel}
+              </span>
+            </div>
+            {transcriptProgressPercent !== null && (
+              <div
+                role="progressbar"
+                aria-label="Transcript menu progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={transcriptProgressPercent}
+                className="h-1 overflow-hidden rounded-full bg-secondary"
+              >
+                <div
+                  className="h-full rounded-full bg-blue-500 transition-all duration-300"
+                  style={{ width: `${transcriptProgressPercent}%` }}
+                />
+              </div>
+            )}
+          </div>
+        </DropdownMenuItem>
+      )}
+      {isTranscribable && !isBroken && isTranscribing && (
+        <DropdownMenuItem onClick={onCancelTranscript}>
+          <Square className="w-3 h-3 mr-2" />
+          Cancel Transcript
         </DropdownMenuItem>
       )}
       {proxyStatus === 'generating' && (
@@ -177,7 +217,7 @@ export const MediaCard = memo(function MediaCard({
     && proxyService.canGenerateProxy(media.mimeType);
   const hasProxy = proxyStatus === 'ready';
   const hasTranscript = transcriptStatus === 'ready';
-  const isTranscribing = transcriptStatus === 'transcribing';
+  const isTranscribing = transcriptStatus === 'transcribing' || transcriptStatus === 'queued';
   const isTagging = useMediaLibraryStore((s) => s.taggingMediaIds.has(media.id));
   const isTaggable = mediaType === 'video' || mediaType === 'image';
   const hasCaptions = (media.aiCaptions?.length ?? 0) > 0;
@@ -261,40 +301,82 @@ export const MediaCard = memo(function MediaCard({
     proxyService.cancelProxy(media.id, getSharedProxyKey(media));
   };
 
-  const handleGenerateTranscript = async (e: React.MouseEvent) => {
+  const handleGenerateTranscript = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     const store = useMediaLibraryStore.getState();
     const previousStatus = store.transcriptStatus.get(media.id) ?? 'idle';
 
-    store.setTranscriptStatus(media.id, 'transcribing');
-    store.setTranscriptProgress(media.id, { stage: 'loading', progress: 0 });
+    store.setTranscriptStatus(media.id, 'queued');
+    store.setTranscriptProgress(media.id, { stage: 'queued', progress: 0 });
+
+    scheduleAfterPaint(() => {
+      void (async () => {
+        try {
+          await mediaTranscriptionService.transcribeMedia(media.id, {
+            onQueueStatusChange: (state) => {
+              if (state === 'queued') {
+                store.setTranscriptStatus(media.id, 'queued');
+                store.setTranscriptProgress(media.id, { stage: 'queued', progress: 0 });
+                return;
+              }
+
+              store.setTranscriptStatus(media.id, 'transcribing');
+              store.setTranscriptProgress(media.id, { stage: 'loading', progress: 0 });
+            },
+            onProgress: (progress) => {
+              store.setTranscriptProgress(media.id, progress);
+            },
+          });
+          store.setTranscriptStatus(media.id, 'ready');
+          store.clearTranscriptProgress(media.id);
+          store.showNotification({
+            type: 'success',
+            message: `Transcript ready for "${media.fileName}"`,
+          });
+        } catch (error) {
+          if (isTranscriptionCancellationError(error)) {
+            store.setTranscriptStatus(media.id, previousStatus);
+            store.clearTranscriptProgress(media.id);
+            return;
+          }
+
+          store.setTranscriptStatus(media.id, previousStatus === 'ready' ? 'ready' : 'error');
+          store.clearTranscriptProgress(media.id);
+          store.showNotification({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'Failed to transcribe media',
+          });
+        }
+      })();
+    });
+  };
+
+  const handleCancelTranscript = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    mediaTranscriptionService.cancelTranscription(media.id);
+  };
+
+  const handleDeleteTranscript = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const store = useMediaLibraryStore.getState();
 
     try {
-      await mediaTranscriptionService.transcribeMedia(media.id, {
-        onProgress: (progress) => {
-          store.setTranscriptProgress(media.id, progress);
-        },
-      });
-      store.setTranscriptStatus(media.id, 'ready');
+      await mediaTranscriptionService.deleteTranscript(media.id);
+      store.setTranscriptStatus(media.id, 'idle');
       store.clearTranscriptProgress(media.id);
       store.showNotification({
         type: 'success',
-        message: `Transcript ready for "${media.fileName}"`,
+        message: `Transcript deleted for "${media.fileName}"`,
       });
     } catch (error) {
-      if (isLocalInferenceCancellationError(error)) {
-        store.setTranscriptStatus(media.id, previousStatus);
-        store.clearTranscriptProgress(media.id);
-        return;
-      }
-
-      store.setTranscriptStatus(media.id, previousStatus === 'ready' ? 'ready' : 'error');
-      store.clearTranscriptProgress(media.id);
       store.showNotification({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to transcribe media',
+        message: error instanceof Error ? error.message : 'Failed to delete transcript',
       });
     }
   };
@@ -602,9 +684,15 @@ export const MediaCard = memo(function MediaCard({
     useEditorStore.getState().setSourcePreviewMediaId(media.id);
   }, [media.duration, media.fps, media.id]);
 
+  const transcriptProgressPercent = transcriptProgress
+    ? Math.round(getTranscriptionOverallPercent(transcriptProgress))
+    : null;
   const transcriptProgressLabel = transcriptProgress
-    ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(getTranscriptionOverallPercent(transcriptProgress))}%)`
+    ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${transcriptProgressPercent}%)`
     : 'Transcribing...';
+  const transcriptBusyLabel = hasTranscript
+    ? `Refreshing Transcript (${transcriptProgressLabel})`
+    : transcriptProgressLabel;
 
   const actionMenuItems = (
     <MediaCardActionMenuItems
@@ -617,7 +705,8 @@ export const MediaCard = memo(function MediaCard({
       isTranscribable={isTranscribable}
       isTranscribing={isTranscribing}
       hasTranscript={hasTranscript}
-      transcriptProgressLabel={transcriptProgressLabel}
+      transcriptProgressPercent={transcriptProgressPercent}
+      transcriptBusyLabel={transcriptBusyLabel}
       isTaggable={isTaggable}
       isTagging={isTagging}
       hasTags={hasCaptions}
@@ -625,6 +714,8 @@ export const MediaCard = memo(function MediaCard({
       onCancelProxy={handleCancelProxy}
       onDeleteProxy={handleDeleteProxy}
       onGenerateTranscript={handleGenerateTranscript}
+      onCancelTranscript={handleCancelTranscript}
+      onDeleteTranscript={handleDeleteTranscript}
       onAnalyzeWithAI={handleAnalyzeWithAI}
       onDelete={handleDelete}
     />
@@ -714,6 +805,21 @@ export const MediaCard = memo(function MediaCard({
                 className="absolute inset-y-0 w-px bg-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.25)] pointer-events-none"
                 style={{ left: `${skimProgress * 100}%` }}
               />
+          )}
+          {!isBroken && !isImporting && isTranscribing && transcriptProgressPercent !== null && (
+            <div
+              role="progressbar"
+              aria-label="Transcript progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={transcriptProgressPercent}
+              className="absolute inset-x-0 bottom-0 z-10 h-1 overflow-hidden bg-black/25 pointer-events-none"
+            >
+              <div
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${transcriptProgressPercent}%` }}
+              />
+            </div>
           )}
           {/* Audio play button for list view */}
           {isAudio && (
@@ -926,6 +1032,21 @@ export const MediaCard = memo(function MediaCard({
               className="absolute inset-y-0 w-px bg-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.3)] pointer-events-none"
               style={{ left: `${skimProgress * 100}%` }}
             />
+        )}
+        {!isBroken && !isImporting && isTranscribing && transcriptProgressPercent !== null && (
+          <div
+            role="progressbar"
+            aria-label="Transcript progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={transcriptProgressPercent}
+            className="absolute inset-x-0 bottom-0 z-10 h-1 overflow-hidden bg-black/25 pointer-events-none"
+          >
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${transcriptProgressPercent}%` }}
+            />
+          </div>
         )}
       </div>
 
