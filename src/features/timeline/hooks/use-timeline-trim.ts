@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback';
 import { useEditorStore } from '@/app/state/editor';
 import { toast } from 'sonner';
 import type { SnapTarget } from '../types/drag';
@@ -719,7 +719,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
       // including guardrail early returns.
       e.stopPropagation();
       e.preventDefault();
-      usePlaybackStore.getState().setPreviewFrame(null);
+      commitPreviewFrameToCurrentFrame();
 
       const forcedMode = options?.forcedMode ?? null;
       const destroyTransitionAtHandle = options?.destroyTransitionAtHandle ?? false;

@@ -15,6 +15,7 @@ import {
   FAST_SCRUB_RENDERER_ENABLED,
   blobToDataUrl,
 } from '../utils/preview-constants';
+import { setActivePreviewScrubbingCache } from '../utils/preview-scrubbing-cache-bridge';
 import { collectVisualInvalidationRanges } from '../utils/preview-frame-invalidation';
 import { isFrameInRanges } from '@/shared/utils/frame-invalidation';
 import { usePreviewCaptureBridge } from './use-preview-capture-bridge';
@@ -200,6 +201,7 @@ export function usePreviewRendererController({
         logger.warn('Failed to dispose renderer:', error);
       }
       scrubRendererRef.current = null;
+      setActivePreviewScrubbingCache(null);
     }
     scrubRendererStructureKeyRef.current = null;
 
@@ -365,6 +367,9 @@ export function usePreviewRendererController({
         scrubOffscreenRenderedFrameRef.current = null;
         scrubRendererRef.current = renderer;
         scrubRendererStructureKeyRef.current = fastScrubRendererStructureKey;
+        setActivePreviewScrubbingCache(
+          'getScrubbingCache' in renderer ? renderer.getScrubbingCache() : null,
+        );
         if ('warmGpuPipeline' in renderer) {
           void renderer.warmGpuPipeline();
         }
@@ -372,6 +377,7 @@ export function usePreviewRendererController({
       } catch (error) {
         logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
         scrubRendererRef.current = null;
+        setActivePreviewScrubbingCache(null);
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;
         scrubOffscreenRenderedFrameRef.current = null;

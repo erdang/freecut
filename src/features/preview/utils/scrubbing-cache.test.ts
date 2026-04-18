@@ -44,8 +44,26 @@ describe('ScrubbingCache tier 2 video frames', () => {
     cache.putVideoFrame('item-1', firstFrame, 1.0);
     cache.putVideoFrame('item-1', secondFrame, 1.1);
 
-    expect(firstFrame.close).toHaveBeenCalledTimes(1);
+    expect(firstFrame.close).not.toHaveBeenCalled();
     expect(secondFrame.close).not.toHaveBeenCalled();
+  });
+
+  it('keeps a small recent-frame runway per item and returns the closest match', () => {
+    const cache = new ScrubbingCache();
+    const frameA = createMockFrame();
+    const frameB = createMockFrame();
+    const frameC = createMockFrame();
+
+    cache.putVideoFrame('item-1', frameA, 1.0);
+    cache.putVideoFrame('item-1', frameB, 1.1);
+    cache.putVideoFrame('item-1', frameC, 1.2);
+
+    const entry = cache.getVideoFrameEntry('item-1', 1.11, 0.05);
+
+    expect(entry?.frame).toBe(frameB);
+    expect(frameA.close).not.toHaveBeenCalled();
+    expect(frameB.close).not.toHaveBeenCalled();
+    expect(frameC.close).not.toHaveBeenCalled();
   });
 
   it('closes cached frames when invalidating tier 2 entries', () => {

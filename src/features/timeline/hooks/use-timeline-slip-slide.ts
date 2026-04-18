@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback';
 import { useEditorStore } from '@/app/state/editor';
 import { DRAG_THRESHOLD_PIXELS } from '../constants';
 import { useTimelineStore } from '../stores/timeline-store';
@@ -105,7 +105,7 @@ export function useTimelineSlipSlide(
   }, [getItemFromStore]);
 
   const beginSlipSlideGesture = useCallback((startX: number, mode: 'slip' | 'slide') => {
-    usePlaybackStore.getState().setPreviewFrame(null);
+    commitPreviewFrameToCurrentFrame();
 
     const { leftNeighbor, rightNeighbor } = findNeighbors();
     const currentItem = getItemFromStore();

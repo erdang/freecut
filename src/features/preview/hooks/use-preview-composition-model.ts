@@ -13,7 +13,7 @@ import { useMaskEditorStore } from '../stores/mask-editor-store';
 import { resolveProxyUrl } from '../utils/media-resolver';
 import {
   getMediaResolveCost,
-  toTrackFingerprint,
+  toTrackTopologyFingerprint,
   type FastScrubBoundarySource,
   type VideoSourceSpan,
 } from '../utils/preview-constants';
@@ -106,7 +106,7 @@ export function usePreviewCompositionModel({
     scrubVideoSourceSpans,
     fastScrubBoundaryFrames,
     fastScrubBoundarySources,
-    fastScrubTracksFingerprint,
+    fastScrubTracksTopologyFingerprint,
     totalFrames,
     inputProps,
     playerRenderSize,
@@ -201,7 +201,7 @@ export function usePreviewCompositionModel({
     fastScrubScaledKeyframes,
     fastScrubInputProps,
     fastScrubPreviewItems,
-    fastScrubTracksFingerprint,
+    fastScrubTracksTopologyFingerprint,
     getPreviewTransformOverride,
     getPreviewEffectsOverride,
     getPreviewCornerPinOverride,
@@ -310,7 +310,7 @@ export function buildPreviewCompositionData({
 
   const resolvedTracks = resolvedTrackList;
   const fastScrubTracks = fastScrubTrackList;
-  const fastScrubTracksFingerprint = toTrackFingerprint(fastScrubTrackList);
+  const fastScrubTracksTopologyFingerprint = toTrackTopologyFingerprint(fastScrubTrackList);
   const furthestItemEndFrame = items.reduce((max, item) => Math.max(max, item.from + item.durationInFrames), 0);
   const totalFrames = furthestItemEndFrame === 0 ? 900 : furthestItemEndFrame + (fps * 5);
   const inputProps: CompositionInputProps = {
@@ -352,7 +352,7 @@ export function buildPreviewCompositionData({
     scrubVideoSourceSpans: scrubSpans,
     fastScrubBoundaryFrames: sortedBoundaryFrames,
     fastScrubBoundarySources: sortedBoundarySources,
-    fastScrubTracksFingerprint,
+    fastScrubTracksTopologyFingerprint,
     totalFrames,
     inputProps,
     playerRenderSize,

@@ -17,8 +17,11 @@ import {
   putCachedEditOverlayFrame,
 } from '@/features/preview/utils/edit-overlay-frame-cache';
 import { collectEditOverlayDirectionalPrewarmTimes } from '@/features/preview/utils/edit-overlay-prewarm-plan';
+import {
+  getActivePreviewScrubbingCache,
+  getActivePreviewVideoFrameEntry,
+} from '@/features/preview/utils/preview-scrubbing-cache-bridge';
 import type { TimelineItem } from '@/types/timeline';
-import { usePlaybackStore } from '@/shared/state/playback';
 import { resolveMediaUrl, resolveProxyUrl } from '../utils/media-resolver';
 import {
   computeFittedMediaSize,
@@ -46,6 +49,8 @@ const STRICT_DECODE_FALLBACK_FAILURES = 2;
 const CACHE_TIME_QUANTUM = 1 / 60;
 const STRICT_DECODE_SHARED_CACHE_WAIT_MS = 6;
 const EDIT_OVERLAY_PREWARM_MAX_TIMESTAMPS = 6;
+const SCRUBBING_CACHE_TOLERANCE_FACTOR = 0.9;
+const EDIT_OVERLAY_LEGACY_SEEK_SPEED_EPSILON = 0.01;
 let previewVideoInstanceCounter = 0;
 let strictDecodeInstanceCounter = 0;
 let globalEditOverlayDecoderPool: SharedVideoExtractorPool | null = null;
@@ -57,14 +62,18 @@ function getEditOverlayDecoderPool(): SharedVideoExtractorPool {
   return globalEditOverlayDecoderPool;
 }
 
-function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean): string | null {
+function quantizeOverlayCacheTime(sourceTime: number): number {
+  return Math.round(sourceTime / CACHE_TIME_QUANTUM) * CACHE_TIME_QUANTUM;
+}
+
+function useResolvedVideoBlobUrl(mediaId: string | undefined): string | null {
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const blobUrlVersion = useBlobUrlVersion();
   const requestKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const requestKey = `${mediaId ?? 'none'}:${useProxy ? 'proxy' : 'source'}`;
+    const requestKey = `${mediaId ?? 'none'}:proxy-first`;
     if (requestKeyRef.current !== requestKey) {
       requestKeyRef.current = requestKey;
       setBlobUrl(null);
@@ -76,14 +85,12 @@ function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean)
       };
     }
 
-    if (useProxy) {
-      const proxyUrl = resolveProxyUrl(mediaId);
-      if (proxyUrl) {
-        setBlobUrl(proxyUrl);
-        return () => {
-          cancelled = true;
-        };
-      }
+    const proxyUrl = resolveProxyUrl(mediaId);
+    if (proxyUrl) {
+      setBlobUrl(proxyUrl);
+      return () => {
+        cancelled = true;
+      };
     }
 
     resolveMediaUrl(mediaId)
@@ -99,7 +106,7 @@ function useResolvedVideoBlobUrl(mediaId: string | undefined, useProxy: boolean)
     return () => {
       cancelled = true;
     };
-  }, [mediaId, useProxy, blobUrlVersion]);
+  }, [mediaId, blobUrlVersion]);
 
   return blobUrl;
 }
@@ -231,13 +238,29 @@ interface VideoFrameProps {
 
 function VideoFrameImpl({ item, sourceTime }: VideoFrameProps) {
   const [useLegacyFallback, setUseLegacyFallback] = useState(false);
+  const [legacyFailed, setLegacyFailed] = useState(false);
+  const prefersLegacySeek = Math.abs((item.speed ?? 1) - 1) < EDIT_OVERLAY_LEGACY_SEEK_SPEED_EPSILON;
+  const canUseLegacySeek = !legacyFailed;
+
+  useEffect(() => {
+    setUseLegacyFallback(false);
+    setLegacyFailed(false);
+  }, [item.id, item.mediaId, prefersLegacySeek]);
 
   const handleStrictDecodeFailure = useCallback(() => {
+    if (!canUseLegacySeek) return;
     setUseLegacyFallback((prev) => (prev ? prev : true));
+  }, [canUseLegacySeek]);
+
+  const shouldUseLegacySeek = canUseLegacySeek && (prefersLegacySeek || useLegacyFallback);
+
+  const handleLegacyFailure = useCallback(() => {
+    setLegacyFailed(true);
+    setUseLegacyFallback(false);
   }, []);
 
-  if (useLegacyFallback) {
-    return <LegacySeekVideoFrame item={item} sourceTime={sourceTime} />;
+  if (shouldUseLegacySeek) {
+    return <LegacySeekVideoFrame item={item} sourceTime={sourceTime} onFailure={handleLegacyFailure} />;
   }
 
   return (
@@ -269,8 +292,7 @@ function StrictDecodedVideoFrame({
   const pendingTimeRef = useRef<number | null>(null);
   const consecutiveDecodeFailuresRef = useRef(0);
   const latestTargetTimeRef = useRef(Math.max(0, sourceTime));
-  const useProxy = usePlaybackStore((s) => s.useProxy);
-  const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
+  const blobUrl = useResolvedVideoBlobUrl(item.mediaId);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const decoderItemId = `${item.id}:${decodeLaneRef.current}`;
   const prewarmInFlightRef = useRef(false);
@@ -385,23 +407,53 @@ function StrictDecodedVideoFrame({
     const cacheKey = blobUrl
       ? getEditOverlayFrameCacheKey(blobUrl, targetTime, CACHE_TIME_QUANTUM)
       : null;
+    const quantizedTargetTime = quantizeOverlayCacheTime(targetTime);
     const drawBitmap = (bitmap: CanvasImageSource) => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    };
+    const populateSharedScrubCache = (source: ImageBitmap, resolvedSourceTime: number) => {
+      const scrubbingCache = getActivePreviewScrubbingCache();
+      if (!scrubbingCache) {
+        return;
+      }
+      void createImageBitmap(source)
+        .then((bitmap) => {
+          scrubbingCache.putVideoFrame(item.id, bitmap, quantizeOverlayCacheTime(resolvedSourceTime));
+        })
+        .catch(() => {
+          // Shared scrub cache population is best-effort only.
+        });
     };
 
     if (cacheKey) {
       const sharedCachedFrame = getCachedEditOverlayFrame(cacheKey);
       if (sharedCachedFrame) {
         drawBitmap(sharedCachedFrame);
+        populateSharedScrubCache(sharedCachedFrame, targetTime);
         return true;
       }
+    }
+
+    const scrubbingCacheTolerance = Math.max(
+      CACHE_TIME_QUANTUM / 2,
+      (SCRUBBING_CACHE_TOLERANCE_FACTOR / prewarmFps) / 2,
+    );
+    const scrubCachedFrame = getActivePreviewVideoFrameEntry(
+      item.id,
+      quantizedTargetTime,
+      scrubbingCacheTolerance,
+    );
+    if (scrubCachedFrame) {
+      drawBitmap(scrubCachedFrame.frame);
+      return true;
     }
 
     if (blobUrl) {
       const predecodedBitmap = getCachedPredecodedBitmap(blobUrl, targetTime, CACHE_TIME_QUANTUM);
       if (predecodedBitmap) {
         drawBitmap(predecodedBitmap);
+        populateSharedScrubCache(predecodedBitmap, targetTime);
         return true;
       }
 
@@ -413,11 +465,12 @@ function StrictDecodedVideoFrame({
       ).catch(() => null);
       if (inflightBitmap) {
         drawBitmap(inflightBitmap);
+        populateSharedScrubCache(inflightBitmap, targetTime);
         return true;
       }
     }
 
-    const didDraw = await extractor.drawFrame(
+    const drawResult = await extractor.drawFrameWithCapture(
       ctx,
       Math.max(0, targetTime),
       0,
@@ -425,7 +478,16 @@ function StrictDecodedVideoFrame({
       canvas.width,
       canvas.height,
     );
-    if (!didDraw) return false;
+    if (!drawResult.success) return false;
+
+    const scrubbingCache = getActivePreviewScrubbingCache();
+    if (scrubbingCache && drawResult.capturedFrame) {
+      scrubbingCache.putVideoFrame(
+        item.id,
+        drawResult.capturedFrame,
+        quantizedTargetTime,
+      );
+    }
 
     if (cacheKey) {
       try {
@@ -545,13 +607,16 @@ function StrictDecodedVideoFrame({
   );
 }
 
-function LegacySeekVideoFrame({ item, sourceTime }: VideoFrameProps) {
+interface LegacySeekVideoFrameProps extends VideoFrameProps {
+  onFailure: () => void;
+}
+
+function LegacySeekVideoFrame({ item, sourceTime, onFailure }: LegacySeekVideoFrameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poolRef = useRef(getGlobalVideoSourcePool());
   const poolClipIdRef = useRef<string>(`edit-preview-${++previewVideoInstanceCounter}`);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const useProxy = usePlaybackStore((s) => s.useProxy);
-  const blobUrl = useResolvedVideoBlobUrl(item.mediaId, useProxy);
+  const blobUrl = useResolvedVideoBlobUrl(item.mediaId);
   const contextRef = useRef<CanvasRenderingContext2D | null>(null);
   const seekingRef = useRef(false);
   const pendingTimeRef = useRef<number | null>(null);
@@ -614,6 +679,10 @@ function LegacySeekVideoFrame({ item, sourceTime }: VideoFrameProps) {
     video.playsInline = true;
     videoRef.current = video;
 
+    const handleError = () => {
+      onFailure();
+    };
+
     const handleSeeked = () => {
       seekingRef.current = false;
       drawFrame();
@@ -633,10 +702,12 @@ function LegacySeekVideoFrame({ item, sourceTime }: VideoFrameProps) {
       }
     };
 
+    video.addEventListener('error', handleError);
     video.addEventListener('seeked', handleSeeked);
     video.addEventListener('loadeddata', handleLoadedData);
 
     return () => {
+      video.removeEventListener('error', handleError);
       video.removeEventListener('seeked', handleSeeked);
       video.removeEventListener('loadeddata', handleLoadedData);
       video.pause();
@@ -645,7 +716,7 @@ function LegacySeekVideoFrame({ item, sourceTime }: VideoFrameProps) {
       pendingTimeRef.current = null;
       pool.releaseClip(clipId);
     };
-  }, [blobUrl, drawFrame, requestSeek]);
+  }, [blobUrl, drawFrame, onFailure, requestSeek]);
 
   useEffect(() => {
     const video = videoRef.current;

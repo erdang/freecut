@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { TimelineItem } from '@/types/timeline';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback';
 import { useSelectionStore } from '@/shared/state/selection';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useItemsStore } from '../stores/items-store';
@@ -135,7 +135,7 @@ export function useTrackPush(item: TimelineItem, timelineDuration: number, track
     if (e.button !== 0 || trackLocked) return;
     e.stopPropagation();
     e.preventDefault();
-    usePlaybackStore.getState().setPreviewFrame(null);
+    commitPreviewFrameToCurrentFrame();
 
     const { items: allItems, itemsByTrackId } = useItemsStore.getState();
     const cutFrame = item.from;

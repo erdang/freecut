@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect, useEffectEvent } from 'react';
 import type { TimelineItem } from '@/types/timeline';
 import { useEditorStore } from '@/app/state/editor';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback';
 import type { SnapTarget } from '../types/drag';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useSelectionStore } from '@/shared/state/selection';
@@ -570,7 +570,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
 
       e.stopPropagation();
       e.preventDefault();
-      usePlaybackStore.getState().setPreviewFrame(null);
+      commitPreviewFrameToCurrentFrame();
 
       setDragState({
         isDragging: true,
