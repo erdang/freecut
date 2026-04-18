@@ -93,12 +93,13 @@ const IMPORT_BACKGROUND_WARM_DELAY_MS = 600;
 const IMPORT_BACKGROUND_HEAVY_DELAY_MS = 2200;
 
 /**
- * Media Library Service - Coordinates OPFS + IndexedDB + metadata extraction
+ * Media Library Service - Coordinates handle/OPFS media access with
+ * workspace-backed metadata, thumbnails, and derived caches.
  *
  * Includes in-memory thumbnail URL cache to prevent flicker on re-renders.
  *
- * Provides atomic operations for media management, ensuring OPFS and IndexedDB
- * stay in sync.
+ * Provides atomic operations for media management while keeping origin-scoped
+ * sources and the workspace folder in sync.
  */
 class MediaLibraryService {
   /** In-memory cache for thumbnail blob URLs to prevent flicker on re-renders */
@@ -160,7 +161,7 @@ class MediaLibraryService {
 
   /**
    * Clear waveform caches for a fully-dereferenced media item. Removes
-   * the in-memory LRU entry, the IndexedDB binned persistence, and the
+   * the in-memory LRU entry, the persisted binned waveform cache, and the
    * OPFS + workspace-folder multi-resolution mirrors.
    */
   private async clearWaveformCacheSafely(mediaId: string): Promise<void> {
@@ -235,7 +236,7 @@ class MediaLibraryService {
   }
 
   /**
-   * Get all media items from IndexedDB
+   * Get all media items from workspace storage
    */
   async getAllMedia(): Promise<MediaMetadata[]> {
     return getAllMediaDB();
@@ -338,7 +339,7 @@ class MediaLibraryService {
     // Check for unsupported audio codec (included in metadata from worker)
     const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
 
-    // Stage 6: Save metadata to IndexedDB with file handle
+    // Stage 6: Save metadata with the file handle-backed source reference
     const mediaMetadata: MediaMetadata = {
       id,
       storageType: 'handle',
@@ -1111,7 +1112,7 @@ class MediaLibraryService {
   }
 
   /**
-   * Validate sync between OPFS and IndexedDB
+   * Validate sync between OPFS and workspace-backed metadata
    * Returns list of issues found
    *
    * Note: Only validates OPFS-based media. Handle-based media is validated

@@ -5,6 +5,7 @@ import {
   DEFAULT_WHISPER_LANGUAGE,
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
+  normalizeSelectableWhisperModel,
 } from '@/shared/utils/whisper-settings';
 import type { EditorDensityPresetName } from '@/app/editor-layout';
 import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/app/editor-layout';
@@ -101,7 +102,11 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       ...DEFAULT_SETTINGS,
 
-      setSetting: (key, value) => set({ [key]: value }),
+      setSetting: (key, value) => set({
+        [key]: key === 'defaultWhisperModel'
+          ? normalizeSelectableWhisperModel(value as MediaTranscriptModel)
+          : value,
+      }),
 
       setHotkeyBinding: (key, binding) => set((state) => {
         const normalizedBinding = normalizeHotkeyBinding(binding);
@@ -165,6 +170,7 @@ export const useSettingsStore = create<SettingsStore>()(
         return {
           ...currentState,
           ...typedState,
+          defaultWhisperModel: normalizeSelectableWhisperModel(typedState.defaultWhisperModel),
           hotkeyOverrides: sanitizeHotkeyOverrides(typedState.hotkeyOverrides),
         };
       },

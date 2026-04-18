@@ -3,6 +3,7 @@ import {
   BROWSER_WHISPER_MODEL_LABELS,
   BROWSER_WHISPER_MODEL_OPTIONS,
   DEFAULT_BROWSER_WHISPER_MODEL,
+  normalizeSelectableBrowserWhisperModel,
 } from './browser-whisper-models';
 
 export const DEFAULT_WHISPER_MODEL: MediaTranscriptModel = DEFAULT_BROWSER_WHISPER_MODEL;
@@ -16,6 +17,12 @@ export const WHISPER_MODEL_OPTIONS: ReadonlyArray<{
   value: MediaTranscriptModel;
   label: string;
 }> = BROWSER_WHISPER_MODEL_OPTIONS;
+
+export function normalizeSelectableWhisperModel(
+  model: MediaTranscriptModel | undefined,
+): MediaTranscriptModel {
+  return normalizeSelectableBrowserWhisperModel(model);
+}
 
 export const WHISPER_QUANTIZATION_OPTIONS: ReadonlyArray<{
   value: MediaTranscriptQuantization;
@@ -51,9 +58,10 @@ export const WHISPER_QUANTIZATION_OPTIONS: ReadonlyArray<{
 
 export function getWhisperQuantizationOption(
   value: MediaTranscriptQuantization | undefined,
-) {
+): (typeof WHISPER_QUANTIZATION_OPTIONS)[number] {
+  const fallback = WHISPER_QUANTIZATION_OPTIONS[0]!;
   return WHISPER_QUANTIZATION_OPTIONS.find((option) => option.value === value)
-    ?? WHISPER_QUANTIZATION_OPTIONS[0];
+    ?? fallback;
 }
 
 const WHISPER_LANGUAGE_NAMES = {

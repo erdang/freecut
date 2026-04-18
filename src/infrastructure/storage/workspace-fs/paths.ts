@@ -71,7 +71,6 @@ export const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg';
 export const MEDIA_SOURCE_LINK_FILENAME = 'source.link.json';
 export const MEDIA_CACHE_DIR = 'cache';
 
-export const CACHE_FILMSTRIP_DIR = 'filmstrip';
 export const CACHE_WAVEFORM_DIR = 'waveform';
 export const CACHE_GIF_FRAMES_DIR = 'gif-frames';
 export const CACHE_DECODED_AUDIO_DIR = 'decoded-audio';
@@ -190,14 +189,6 @@ export function mediaCacheDir(id: string): string[] {
   return [...mediaDir(id), MEDIA_CACHE_DIR];
 }
 
-export function filmstripDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_FILMSTRIP_DIR];
-}
-
-export function filmstripFramePath(mediaId: string, frameIndex: number): string[] {
-  return [...filmstripDir(mediaId), `frame-${frameIndex}.jpg`];
-}
-
 export function waveformDir(mediaId: string): string[] {
   return [...mediaCacheDir(mediaId), CACHE_WAVEFORM_DIR];
 }
@@ -269,10 +260,11 @@ export function contentDataPath(hash: string, extension: string): string[] {
   return [...contentDir(hash), `data.${ext}`];
 }
 
-/* ───────────────── Mirrored OPFS caches (shared across origins) ─────────────── */
+/* ---------------- Shared persisted caches ---------------- */
 //
-// These caches are primary in OPFS for speed but are also mirrored into the
-// workspace folder so other origins can read them without regenerating.
+// These caches live outside the media metadata tree so other origins can reuse
+// them without regenerating. Some still hydrate from legacy OPFS on demand.
+// Filmstrips intentionally use top-level `filmstrips/{mediaId}/...`.
 
 export const WORKSPACE_PROXIES_DIR = 'proxies';
 export const WORKSPACE_FILMSTRIPS_DIR = 'filmstrips';
@@ -296,13 +288,16 @@ export function filmstripMetaPath(mediaId: string): string[] {
 }
 
 export function previewAudioPath(relativePath: string): string[] {
-  // relativePath like 'm-123/track-left.wav' — keep original OPFS layout.
-  return [WORKSPACE_PREVIEW_AUDIO_DIR, ...relativePath.split('/')];
+  // Legacy metadata may already include the top-level 'preview-audio/' prefix.
+  // Normalize that away so workspace paths stay rooted at one shared folder.
+  const normalized = relativePath.replace(/^preview-audio\//, '');
+  return [WORKSPACE_PREVIEW_AUDIO_DIR, ...normalized.split('/').filter(Boolean)];
 }
 
 /**
- * Fast multi-resolution waveform binary — the OPFS-primary cache used by the
- * timeline renderer, mirrored here for cross-origin reuse. Different from
+ * Fast multi-resolution waveform binary. The timeline renderer still keeps an
+ * OPFS-local copy for range reads, while the workspace mirror enables
+ * cross-origin reuse. Different from
  * `waveformBinPath` above, which addresses bins inside the per-media cache.
  */
 export function waveformBinaryPath(mediaId: string): string[] {

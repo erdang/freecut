@@ -4,11 +4,11 @@
  * Caches decoded AudioBuffers for custom-decoded audio tracks so that
  * split clips from the same source share a single decode.
  *
- * Storage: Decoded audio is persisted to IndexedDB in 10-second bins
+ * Storage: Decoded audio is persisted to workspace-backed files in 10-second bins
  * (Int16 @ 22050 Hz stereo ~ 0.84 MB/bin). This avoids large single
  * records and allows progressive persistence during decode.
  *
- * On refresh, bins are loaded from IndexedDB in parallel and
+ * On refresh, bins are loaded from the workspace cache in parallel and
  * reassembled into an AudioBuffer with no re-decode needed.
  *
  * Surround (5.1/7.1) sources are downmixed to stereo during decode
@@ -72,10 +72,10 @@ const PLAYABLE_PARTIAL_PREROLL_SECONDS = 0.25;
 const STARTUP_PLAYABLE_PARTIAL_READY_SECONDS = 1;
 const PENDING_PLAYBACK_SLICE_REUSE_HEADROOM_SECONDS = 1;
 
-/** Sample rate for IndexedDB storage; 22050 Hz is sufficient for preview. */
+/** Sample rate for persisted preview-audio bins; 22050 Hz is sufficient for preview. */
 const STORAGE_SAMPLE_RATE = 22050;
 
-/** Bin duration in seconds for chunked IndexedDB storage. */
+/** Bin duration in seconds for chunked persisted storage. */
 const BIN_DURATION_SEC = 10;
 
 export interface PlaybackAudioSlice {
@@ -224,7 +224,7 @@ function createInputSource(
 
 /**
  * Get a cached AudioBuffer or decode one via mediabunny.
- * Checks: memory cache -> IndexedDB bins -> decode (persists bins progressively).
+ * Checks: memory cache -> persisted bins -> decode (persists bins progressively).
  * Concurrent calls for the same mediaId share a single promise.
  */
 function ensureDecodeStarted(mediaId: string, src: PreviewAudioSource): Promise<AudioBuffer> {
@@ -619,11 +619,11 @@ export function clearPreviewAudioCache(): void {
 }
 
 // ---------------------------------------------------------------------------
-// Load from IndexedDB bins
+// Load from persisted bins
 // ---------------------------------------------------------------------------
 
 async function loadOrDecodeAudio(mediaId: string, src: PreviewAudioSource): Promise<AudioBuffer> {
-  // Try IndexedDB
+  // Try persisted workspace cache
   try {
     const cached = await getDecodedPreviewAudio(mediaId);
     if (cached && 'kind' in cached && cached.kind === 'meta') {
@@ -638,7 +638,7 @@ async function loadOrDecodeAudio(mediaId: string, src: PreviewAudioSource): Prom
       await deleteDecodedPreviewAudio(mediaId).catch(() => undefined);
     }
   } catch (err) {
-    log.warn('Failed to load from IndexedDB, will decode', { mediaId, err });
+    log.warn('Failed to load persisted decoded audio, will decode', { mediaId, err });
   }
 
   // Full decode with progressive bin persistence
@@ -694,7 +694,7 @@ async function loadFromBins(meta: DecodedPreviewAudioMeta): Promise<AudioBuffer>
     throw new Error(`Decoded audio bins incomplete: ${offset}/${totalFrames} frames`);
   }
 
-  log.info('Loaded decoded audio from IndexedDB', {
+  log.info('Loaded decoded audio from workspace cache', {
     mediaId,
     binCount,
     sampleRate,
@@ -804,7 +804,7 @@ async function buildPreviewStereoBuffer(
 }
 
 /**
- * Downsample, convert to Int16, and persist one bin to IndexedDB.
+ * Downsample, convert to Int16, and persist one bin to workspace-backed storage.
  * Returns persisted Int16 data so playback can be assembled without
  * retaining a massive full-resolution decode in memory.
  */
@@ -1015,9 +1015,9 @@ async function decodeFullAudio(
         binDurationSec: BIN_DURATION_SEC,
         createdAt: Date.now(),
       }).then(() => {
-        log.info('All bins persisted to IndexedDB', { mediaId, binCount: totalBins });
+        log.info('All bins persisted to workspace cache', { mediaId, binCount: totalBins });
       }).catch((err) => {
-        log.warn('Failed to persist bins to IndexedDB', { mediaId, err });
+        log.warn('Failed to persist bins to workspace cache', { mediaId, err });
       });
 
       return combined;

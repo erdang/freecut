@@ -11,6 +11,7 @@ import { MODEL_IDS } from '../types';
 import { createManagedWorkerSession } from '@/shared/utils/managed-worker-session';
 import { Chunker } from './chunker';
 import { downmixToMono, resampleTo16kHz } from './resampler';
+import { DEFAULT_WHISPER_MODEL } from '@/shared/utils/whisper-settings';
 
 export interface BridgeCallbacks {
   onSegment: (segment: TranscriptSegment) => void;
@@ -73,7 +74,7 @@ export class Bridge {
 
   async start(
     file: File,
-    model: WhisperModel = 'whisper-tiny',
+    model: WhisperModel = DEFAULT_WHISPER_MODEL,
     language?: string,
     quantization?: QuantizationType,
   ): Promise<void> {

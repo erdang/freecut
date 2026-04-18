@@ -36,7 +36,7 @@ export const Route = createFileRoute('/projects/')({
   // Clean up any media blob URLs when returning to projects page
   beforeLoad: async () => {
     cleanupBlobUrls();
-    // Always reload projects from IndexedDB to get fresh data (thumbnails may have changed)
+    // Always reload projects from storage to get fresh data (thumbnails may have changed)
     const { loadProjects } = useProjectStore.getState();
     await loadProjects();
   },
@@ -473,4 +473,3 @@ function ProjectsIndex() {
     </>
   );
 }
-

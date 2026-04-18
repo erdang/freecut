@@ -8,7 +8,7 @@ const DEFAULT_SETTINGS = {
   editorDensity: 'compact' as const,
   maxUndoHistory: 50,
   autoSaveInterval: 0,
-  defaultWhisperModel: 'whisper-tiny' as const,
+  defaultWhisperModel: 'whisper-small' as const,
   defaultWhisperQuantization: 'hybrid' as const,
   defaultWhisperLanguage: '',
 };
@@ -26,7 +26,7 @@ describe('settings-store', () => {
     expect(state.editorDensity).toBe('compact');
     expect(state.maxUndoHistory).toBe(50);
     expect(state.autoSaveInterval).toBe(0);
-    expect(state.defaultWhisperModel).toBe('whisper-tiny');
+    expect(state.defaultWhisperModel).toBe('whisper-small');
     expect(state.defaultWhisperQuantization).toBe('hybrid');
     expect(state.defaultWhisperLanguage).toBe('');
   });
@@ -51,6 +51,12 @@ describe('settings-store', () => {
 
       expect(useSettingsStore.getState().defaultWhisperModel).toBe('whisper-small');
       expect(useSettingsStore.getState().defaultWhisperQuantization).toBe('q8');
+    });
+
+    it('normalizes legacy tiny model selections back to small', () => {
+      useSettingsStore.getState().setSetting('defaultWhisperModel', 'whisper-tiny');
+
+      expect(useSettingsStore.getState().defaultWhisperModel).toBe('whisper-small');
     });
 
     it('updates auto-save interval', () => {

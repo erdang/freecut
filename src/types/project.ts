@@ -15,7 +15,7 @@ export interface Project {
    * Increment CURRENT_SCHEMA_VERSION in lib/migrations when adding migrations.
    */
   schemaVersion?: number;
-  thumbnailId?: string; // Reference to ThumbnailData in IndexedDB
+  thumbnailId?: string; // Reference to workspace-backed ThumbnailData
   thumbnail?: string; // @deprecated Base64 data URL (for backward compatibility)
   metadata: ProjectResolution;
   timeline?: ProjectTimeline;

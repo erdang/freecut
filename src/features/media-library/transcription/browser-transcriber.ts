@@ -10,6 +10,7 @@ import type { MediaTranscriptQuantization } from '@/types/storage';
 import { localInferenceRuntimeRegistry } from '@/shared/state/local-inference';
 import { LOCAL_INFERENCE_UNLOADED_MESSAGE } from '@/shared/state/local-inference';
 import { formatWhisperRuntimeModelLabel, estimateWhisperRuntimeBytes } from './runtime-estimates';
+import { DEFAULT_WHISPER_MODEL } from '@/shared/utils/whisper-settings';
 
 export class BrowserTranscriber {
   private readonly defaultOptions: TranscribeOptions;
@@ -116,7 +117,7 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
     try {
       await this.bridge.start(
         this.file,
-        (this.options.model as WhisperModel | undefined) ?? 'whisper-tiny',
+        (this.options.model as WhisperModel | undefined) ?? DEFAULT_WHISPER_MODEL,
         this.options.language,
         this.options.quantization,
       );
@@ -133,7 +134,7 @@ export class TranscribeStream implements AsyncIterable<TranscriptSegment> {
     }
 
     this.runtimeRegistered = true;
-    const model = (this.options.model as WhisperModel | undefined) ?? 'whisper-tiny';
+    const model = (this.options.model as WhisperModel | undefined) ?? DEFAULT_WHISPER_MODEL;
     const quantization = (this.options.quantization as MediaTranscriptQuantization | undefined) ?? 'hybrid';
     const now = Date.now();
 

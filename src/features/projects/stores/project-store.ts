@@ -101,7 +101,7 @@ export const useProjectStore = create<ProjectState & ProjectActions>()(
         filterResolution: undefined,
         filterFps: undefined,
 
-        // Load all projects from IndexedDB
+        // Load all projects from workspace storage
         loadProjects: async () => {
           set({ isLoading: true, error: null });
 
@@ -557,4 +557,3 @@ useSettingsStore.subscribe((state, prevState) => {
     }
   }
 });
-

@@ -42,8 +42,8 @@ vi.mock('@/features/timeline/deps/analysis', () => ({
 vi.mock('@/features/timeline/deps/media-transcription-service', () => ({
   getMediaTranscriptionModelLabel: (model: string) => model,
   getMediaTranscriptionModelOptions: () => [
-    { value: 'whisper-tiny', label: 'Tiny' },
     { value: 'whisper-base', label: 'Base' },
+    { value: 'whisper-small', label: 'Small' },
   ],
 }));
 
@@ -127,7 +127,7 @@ describe('ItemContextMenu captions', () => {
       canManageCaptions: true,
       hasTranscript: true,
       hasCaptions: false,
-      defaultCaptionModel: 'whisper-tiny',
+      defaultCaptionModel: 'whisper-small',
       onApplyCaptionsFromTranscript,
       onRegenerateCaptions,
     });
@@ -145,7 +145,7 @@ describe('ItemContextMenu captions', () => {
       canManageCaptions: true,
       hasTranscript: true,
       hasCaptions: true,
-      defaultCaptionModel: 'whisper-tiny',
+      defaultCaptionModel: 'whisper-small',
       onApplyCaptionsFromTranscript,
       onRegenerateCaptions,
     });

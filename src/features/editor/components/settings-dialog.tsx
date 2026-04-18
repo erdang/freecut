@@ -60,6 +60,7 @@ import {
   getWhisperQuantizationOption,
   getWhisperLanguageSelectValue,
   getWhisperLanguageSettingValue,
+  normalizeSelectableWhisperModel,
   WHISPER_LANGUAGE_OPTIONS,
   WHISPER_QUANTIZATION_OPTIONS,
 } from '@/shared/utils/whisper-settings';
@@ -145,7 +146,7 @@ async function clearProjectProxies(
 
 /**
  * Regenerate thumbnails for all media in the current project.
- * Fetches each media file, generates a new thumbnail, and saves it to IndexedDB.
+ * Fetches each media file, generates a new thumbnail, and saves it to workspace storage.
  */
 async function regenerateProjectThumbnails(
   mediaItems: Array<{ id: string; fileName: string; mimeType: string }>,
@@ -320,6 +321,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const defaultWhisperLanguageValue = getWhisperLanguageSelectValue(defaultWhisperLanguage);
   const defaultWhisperQuantizationOption = getWhisperQuantizationOption(defaultWhisperQuantization);
+  const defaultWhisperModelValue = normalizeSelectableWhisperModel(defaultWhisperModel);
   const missingProjectProxyCount = mediaItems.filter((media) => (
     media.mimeType.startsWith('video/')
     && proxyStatus.get(media.id) !== 'ready'
@@ -449,7 +451,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   <div className="space-y-1.5">
                     <Label className="text-sm">Default Model</Label>
                     <Select
-                      value={defaultWhisperModel}
+                      value={defaultWhisperModelValue}
                       onValueChange={(value) =>
                         setSetting('defaultWhisperModel', value as MediaTranscriptModel)
                       }

@@ -15,6 +15,7 @@ import {
   mediaLibraryService,
   opfsService,
 } from '@/features/timeline/deps/media-library-service';
+import { writeMediaSource } from '@/infrastructure/storage/workspace-fs/media-source';
 import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, getLogger } from './shared';
 import {
@@ -865,10 +866,14 @@ export async function insertFreezeFrame(
       updatedAt: Date.now(),
     };
 
-    // Store the frame blob in OPFS
+    // Store the frame blob in OPFS, then mirror it into the workspace folder
+    // so other origins and external tooling can see it on disk.
     const opfsPath = `content/${frameMediaId.slice(0, 2)}/${frameMediaId.slice(2, 4)}/${frameMediaId}/data`;
     await opfsService.saveFile(opfsPath, await frameBlob.arrayBuffer());
     mediaMetadata.opfsPath = opfsPath;
+    void writeMediaSource(frameMediaId, frameBlob, fileName).catch((error) => {
+      getLogger().warn('[insertFreezeFrame] Failed to mirror frame to workspace', error);
+    });
 
     await createMedia(mediaMetadata);
     await associateMediaWithProject(currentProjectId, frameMediaId);

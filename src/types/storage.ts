@@ -54,7 +54,8 @@ export interface MediaMetadata {
   audioCodecSupported?: boolean;
   /**
    * Conformed preview-audio asset path for custom-decoded codecs.
-   * Points to a browser-native playable WAV stored in OPFS.
+   * Kept under the legacy name for compatibility, but now points to the
+   * workspace-backed persisted WAV path.
    */
   previewAudioOpfsPath?: string;
   previewAudioMimeType?: string;
@@ -157,7 +158,7 @@ export interface WaveformData {
   createdAt: number;
 }
 
-// Streaming waveform cache records (meta + bins in IndexedDB).
+// Streaming waveform cache records (meta + bins in persisted storage).
 export interface WaveformMeta {
   id: string; // Same as mediaId
   mediaId: string;
