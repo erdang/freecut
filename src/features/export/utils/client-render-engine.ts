@@ -58,7 +58,7 @@ import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 import { CanvasPool, TextMeasurementCache } from './canvas-pool';
 import { SharedVideoExtractorPool, type VideoFrameSource } from './shared-video-extractor';
 import { getCompositeOperation } from '@/types/blend-mode-css';
-import { useCompositionsStore } from '@/features/export/deps/timeline';
+import { useCompositionsStore, type SubComposition } from '@/features/export/deps/timeline';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
 import { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
@@ -480,8 +480,44 @@ export async function createCompositionRenderer(
   const inFlightInitByItem = new Map<string, Promise<boolean>>();
   let isDisposed = false;
 
-  // Pre-computed sub-composition render data (populated during preload)
+  // Pre-computed sub-composition render data. Populated synchronously at
+  // renderer creation (so the first renderFrame sees compound-clip structure
+  // even before preload finishes) and refreshed during preload.
   const subCompRenderData = new Map<string, SubCompRenderData>();
+
+  const buildSubCompRenderDataEntry = (subComp: SubComposition): SubCompRenderData => {
+    const sorted = [...subComp.tracks].sort(
+      (a, b) => (b.order ?? 0) - (a.order ?? 0)
+    );
+    const sortedWithItems = sorted.map((t) => ({
+      order: t.order ?? 0,
+      visible: t.visible !== false,
+      items: subComp.items.filter(
+        (i) => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
+      ),
+    }));
+    const subKfMap = new Map<string, ItemKeyframes>();
+    for (const kf of subComp.keyframes ?? []) {
+      subKfMap.set(kf.itemId, kf);
+    }
+    const subAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = [];
+    for (const t of subComp.tracks) {
+      if (t.visible === false) continue;
+      const trackOrder = t.order ?? 0;
+      for (const i of subComp.items) {
+        if (i.trackId === t.id && i.type === 'adjustment') {
+          subAdjustmentLayers.push({ layer: i, trackOrder });
+        }
+      }
+    }
+    return {
+      fps: subComp.fps,
+      durationInFrames: subComp.durationInFrames,
+      sortedTracks: sortedWithItems,
+      keyframesMap: subKfMap,
+      adjustmentLayers: subAdjustmentLayers,
+    };
+  };
   const PREWARM_DECODE_MAX_ITEMS = 6;
   let prewarmCanvas: OffscreenCanvas | HTMLCanvasElement | null = null;
   let prewarmCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null = null;
@@ -516,6 +552,24 @@ export async function createCompositionRenderer(
     gpuTransitionPipeline: null,
     domVideoElementProvider,
   };
+
+  // Synchronously populate sub-comp render data from the current compositions
+  // store. Without this, the first renderFrame after creation would fall into
+  // the `if (!subData) return;` path in renderCompositionItem and skip all
+  // compound clips — producing a black frame until preload() finishes.
+  {
+    const initialCompositionById = useCompositionsStore.getState().compositionById;
+    const initialReachableIds = collectReachableCompositionIdsFromTracks(
+      tracks,
+      initialCompositionById,
+    );
+    for (const compositionId of initialReachableIds) {
+      const subComp = initialCompositionById[compositionId];
+      if (!subComp) continue;
+      if (subCompRenderData.has(compositionId)) continue;
+      subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
+    }
+  }
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
     if (prewarmAttempted) return prewarmCtx;
@@ -851,41 +905,7 @@ export async function createCompositionRenderer(
         }
 
         if (!subCompRenderData.has(compositionId)) {
-          const sorted = [...subComp.tracks].sort(
-            (a, b) => (b.order ?? 0) - (a.order ?? 0)
-          );
-          const sortedWithItems = sorted.map((t) => ({
-            order: t.order ?? 0,
-            visible: t.visible !== false,
-            items: subComp.items.filter(
-              (i) => i.trackId === t.id && i.type !== 'audio' && i.type !== 'adjustment'
-            ),
-          }));
-          const subKfMap = new Map<string, ItemKeyframes>();
-          for (const kf of subComp.keyframes ?? []) {
-            subKfMap.set(kf.itemId, kf);
-          }
-
-          // Collect adjustment layers from VISIBLE tracks so their effects apply
-          // to items below them inside the sub-composition (parity with main timeline).
-          const subAdjustmentLayers: AdjustmentLayerWithTrackOrder[] = [];
-          for (const t of subComp.tracks) {
-            if (t.visible === false) continue;
-            const trackOrder = t.order ?? 0;
-            for (const i of subComp.items) {
-              if (i.trackId === t.id && i.type === 'adjustment') {
-                subAdjustmentLayers.push({ layer: i, trackOrder });
-              }
-            }
-          }
-
-          subCompRenderData.set(compositionId, {
-            fps: subComp.fps,
-            durationInFrames: subComp.durationInFrames,
-            sortedTracks: sortedWithItems,
-            keyframesMap: subKfMap,
-            adjustmentLayers: subAdjustmentLayers,
-          });
+          subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
         }
 
         for (const subItem of subComp.items) {
