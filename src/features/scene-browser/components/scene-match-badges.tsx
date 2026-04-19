@@ -252,8 +252,15 @@ export const SceneMatchStrength = memo(function SceneMatchStrength({
     );
   }
 
-  const textPct = typeof signals.textScore === 'number' ? textFraction(signals.textScore) : 0;
-  const imagePct = typeof signals.imageScore === 'number' ? imageFraction(signals.imageScore) : 0;
+  const hasTextScore = typeof signals.textScore === 'number';
+  const hasImageScore = typeof signals.imageScore === 'number';
+
+  // Palette-only ranking has neither text nor image cosines — showing
+  // two empty bars reads as broken UI, so skip the strength row entirely.
+  if (!hasTextScore && !hasImageScore) return null;
+
+  const textPct = hasTextScore ? textFraction(signals.textScore!) : 0;
+  const imagePct = hasImageScore ? imageFraction(signals.imageScore!) : 0;
 
   return (
     <div className="flex h-0.5 w-full gap-0.5">

@@ -52,13 +52,22 @@ export const SceneRow = memo(function SceneRow({
 
   const setQuery = useSceneBrowserStore((s) => s.setQuery);
   const setReference = useSceneBrowserStore((s) => s.setReference);
+  const colorMode = useSceneBrowserStore((s) => s.colorMode);
 
   const handleSwatchClick = useCallback((swatch: { l: number; a: number; b: number }) => {
+    if (colorMode) {
+      setReference({
+        sceneId: `swatch-${Math.round(swatch.l)}-${Math.round(swatch.a)}-${Math.round(swatch.b)}`,
+        label: 'Picked swatch',
+        palette: [{ l: swatch.l, a: swatch.a, b: swatch.b, weight: 1 }],
+      });
+      return;
+    }
     const family = nearestColorFamily(swatch);
     if (!family) return;
     setReference(null);
     setQuery(family);
-  }, [setQuery, setReference]);
+  }, [colorMode, setQuery, setReference]);
 
   const handleFindSimilarPalette = useCallback((event: React.MouseEvent) => {
     event.stopPropagation();
@@ -163,6 +172,33 @@ export const SceneRow = memo(function SceneRow({
                 </span>
               )}
             </div>
+          </div>
+        )}
+        {!showSignals && colorMode && (
+          <div className="flex flex-wrap items-center gap-2 pt-0.5">
+            {scene.palette && scene.palette.length > 0 ? (
+              <>
+                <ScenePaletteSwatches
+                  palette={scene.palette}
+                  highlight={null}
+                  onSwatchClick={handleSwatchClick}
+                />
+                <span
+                  role="button"
+                  tabIndex={-1}
+                  aria-label="Find scenes with a similar palette"
+                  title="Find scenes with a similar palette"
+                  className="flex h-5 w-5 items-center justify-center rounded-md text-muted-foreground transition-opacity hover:bg-foreground/10 hover:text-foreground"
+                  onClick={handleFindSimilarPalette}
+                >
+                  <Palette className="h-3 w-3" />
+                </span>
+              </>
+            ) : (
+              <span className="text-[10px] italic text-muted-foreground/60">
+                No palette indexed
+              </span>
+            )}
           </div>
         )}
       </div>

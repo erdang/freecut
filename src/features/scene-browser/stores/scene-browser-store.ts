@@ -30,6 +30,13 @@ interface SceneBrowserState {
    * query semantics. Cleared explicitly (chip × or escape).
    */
   reference: SceneBrowserReference | null;
+  /**
+   * Panel-local Color Mode — swaps the search input for a grid of the
+   * library's dominant colors. Orthogonal to captionSearchMode; a user
+   * can come back to their preferred keyword/semantic lane by toggling
+   * it off. Not persisted so the default is always "text search".
+   */
+  colorMode: boolean;
 }
 
 interface SceneBrowserActions {
@@ -41,6 +48,7 @@ interface SceneBrowserActions {
   setSortMode: (mode: SceneBrowserSortMode) => void;
   requestFocus: () => void;
   setReference: (reference: SceneBrowserReference | null) => void;
+  setColorMode: (colorMode: boolean) => void;
   reset: () => void;
 }
 
@@ -51,6 +59,7 @@ const INITIAL_STATE: SceneBrowserState = {
   sortMode: 'relevance',
   focusNonce: 0,
   reference: null,
+  colorMode: false,
 };
 
 export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActions>((set) => ({
@@ -78,6 +87,14 @@ export const useSceneBrowserStore = create<SceneBrowserState & SceneBrowserActio
   requestFocus: () => set((state) => ({ focusNonce: state.focusNonce + 1 })),
 
   setReference: (reference) => set({ reference }),
+
+  setColorMode: (colorMode) => set((state) => ({
+    colorMode,
+    // Leaving color mode clears any active reference — the mode is the
+    // only way to land on one, so the chip shouldn't outlive the mode.
+    reference: colorMode ? state.reference : null,
+    query: colorMode ? '' : state.query,
+  })),
 
   reset: () => set(INITIAL_STATE),
 }));

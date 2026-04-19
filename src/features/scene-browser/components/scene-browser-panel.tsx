@@ -1,6 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { ArrowLeft, BrainCircuit, Eye, Loader2, MessageSquareText, Sparkles } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { BrainCircuit, Eye, Loader2, MessageSquareText, Sparkles } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -29,7 +28,6 @@ const SORT_OPTIONS: Array<{ value: SceneBrowserSortMode; label: string }> = [
 ];
 
 export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
-  const closeBrowser = useSceneBrowserStore((s) => s.closeBrowser);
   const query = useSceneBrowserStore((s) => s.query);
   const scope = useSceneBrowserStore((s) => s.scope);
   const setScope = useSceneBrowserStore((s) => s.setScope);
@@ -78,16 +76,6 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
       <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0"
-          onClick={closeBrowser}
-          aria-label="Back to media library"
-          title="Back to media library"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-        </Button>
         <SceneSearchInput />
         <Select value={scope ?? 'all'} onValueChange={handleScopeChange}>
           <SelectTrigger className="h-8 w-36 text-[11px]">
@@ -141,8 +129,14 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
         />
       )}
 
-      <ScrollArea className="flex-1 min-h-0">
-        <div className="space-y-0.5 px-2 py-2">
+      {/* The `[&>...]` override forces Radix's inner viewport wrapper to
+          block layout. Radix defaults it to `display: table; min-width: 100%`
+          which lets the wrapper grow past the viewport width if any row has
+          a long intrinsic min-width — that overflow slides row content
+          underneath the vertical scrollbar. Block layout keeps the wrapper
+          clamped to viewport width so the scrollbar sits in its own column. */}
+      <ScrollArea className="flex-1 min-h-0 mr-2 [&>[data-radix-scroll-area-viewport]>div]:!block">
+        <div className="space-y-0.5 pl-2 pr-3 py-2">
           {reanalyzingMedia.length > 0 && (
             <ReanalyzingBanner items={reanalyzingMedia} />
           )}

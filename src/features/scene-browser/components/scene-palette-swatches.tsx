@@ -29,7 +29,7 @@ interface ScenePaletteSwatchesProps {
   onSwatchClick?: (swatch: Swatch) => void;
 }
 
-function labToRgb(l: number, a: number, b: number): [number, number, number] {
+export function labToRgb(l: number, a: number, b: number): [number, number, number] {
   // Inverse of sRGB → Lab conversion: Lab → XYZ → linear sRGB → gamma.
   const fy = (l + 16) / 116;
   const fx = a / 500 + fy;

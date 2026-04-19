@@ -719,6 +719,26 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               </button>
             </HeaderActionTooltip>
 
+            {/* Scene browser view toggle — lives here with Import (not in
+                the filter row) because it switches the whole panel between
+                media-library and scene-captioner views; the search/filter
+                bar below only scopes whichever view is mounted. */}
+            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
+              <button
+                onClick={toggleSceneBrowser}
+                className={cn(
+                  'flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border transition-colors duration-150',
+                  sceneBrowserOpen
+                    ? 'bg-primary/10 border-primary/40 text-primary'
+                    : 'bg-secondary border-border text-muted-foreground hover:text-foreground hover:bg-foreground/5',
+                )}
+                aria-pressed={sceneBrowserOpen}
+              >
+                <ScanSearch className="w-3.5 h-3.5" />
+                <span className="hidden @[260px]:inline">Scenes</span>
+              </button>
+            </HeaderActionTooltip>
+
             {/* Missing media indicator */}
             {currentProjectBrokenMediaIds.length > 0 && (
               <HeaderActionTooltip label={`View ${currentProjectBrokenMediaIds.length} missing media file${currentProjectBrokenMediaIds.length === 1 ? '' : 's'}`}>
@@ -857,7 +877,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       )}
 
-      {/* Search and filters */}
+      {/* Search and filters — hidden in Scene mode since they only scope
+          the media library grid; the scene browser has its own search. */}
+      {!sceneBrowserOpen && (
       <div className="px-4 pt-3 pb-2 space-y-2 flex-shrink-0">
         {/* Search */}
         <div className="relative group">
@@ -979,23 +1001,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 aria-label="Grid item size"
               />
             )}
-            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleSceneBrowser}
-                className={cn(
-                  'h-6 px-2 gap-1 flex-shrink-0 text-[11px]',
-                  sceneBrowserOpen
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-                aria-pressed={sceneBrowserOpen}
-              >
-                <ScanSearch className="w-3 h-3" />
-                Scenes
-              </Button>
-            </HeaderActionTooltip>
             <div className="flex items-center border border-border rounded bg-secondary flex-shrink-0">
               <Button
                 variant="ghost"
@@ -1025,6 +1030,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           </div>
         </div>
       </div>
+      )}
 
       {/* Composition navigation banner — shown when inside a sub-composition */}
       {activeCompositionId !== null && activeCompLabel && (
