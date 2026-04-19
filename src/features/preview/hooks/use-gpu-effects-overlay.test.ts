@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { shouldForceContinuousPreviewOverlay } from './use-gpu-effects-overlay';
 import type { TimelineItem } from '@/types/timeline';
-import type { SubComposition } from '@/features/timeline/stores/compositions-store';
+import type { SubComposition } from '@/features/preview/deps/timeline-store';
 
 function createVideoItem(overrides: Partial<TimelineItem> = {}): TimelineItem {
   return {

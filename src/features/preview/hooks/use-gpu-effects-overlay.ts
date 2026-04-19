@@ -3,12 +3,12 @@ import {
   useCompositionsStore,
   useItemsStore,
   useTransitionsStore,
+  type SubComposition,
 } from '@/features/preview/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useGizmoStore } from '@/features/preview/stores/gizmo-store';
 import type { ItemEffect } from '@/types/effects';
 import type { TimelineItem } from '@/types/timeline';
-import type { SubComposition } from '@/features/timeline/stores/compositions-store';
 
 function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
   return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false;
