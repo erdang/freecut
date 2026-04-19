@@ -7,6 +7,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import type { CaptureOptions } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { useCompositionsStore } from '@/features/preview/deps/timeline-store';
 import { usePreviewBridgeStore, type PostEditWarmRequest } from '@/shared/state/preview-bridge';
 import { createLogger } from '@/shared/logging/logger';
 import type { PreviewPathVerticesOverride } from '../deps/composition-runtime';
@@ -632,6 +633,61 @@ export function usePreviewRendererController({
     fastScrubRendererStructureKey,
     forceFastScrubOverlay,
     items,
+    resumeScrubLoopRef,
+    scrubOffscreenRenderedFrameRef,
+    scrubRendererRef,
+    scrubRendererStructureKeyRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const invalidateCurrentFrame = () => {
+      const scrubRenderer = scrubRendererRef.current;
+      const bgRenderer = bgTransitionRendererRef.current;
+      const scrubRendererMatchesStructure = (
+        scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
+      );
+      const bgRendererMatchesStructure = (
+        bgTransitionRendererStructureKeyRef.current === fastScrubRendererStructureKey
+      );
+      if (!scrubRenderer && !bgRenderer) return;
+
+      const playbackState = usePlaybackStore.getState();
+      const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+
+      if (scrubRenderer && scrubRendererMatchesStructure) {
+        scrubRenderer.invalidateFrameCache({ frames: [targetFrame] });
+      }
+      if (bgRenderer && bgRendererMatchesStructure) {
+        bgRenderer.invalidateFrameCache({ frames: [targetFrame] });
+      }
+      if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+        scrubOffscreenRenderedFrameRef.current = null;
+      }
+
+      const needsRenderedFrame = (
+        forceFastScrubOverlay
+        || playbackState.previewFrame !== null
+        || showFastScrubOverlayRef.current
+        || showPlaybackTransitionOverlayRef.current
+      );
+      if (!needsRenderedFrame) return;
+
+      scrubRequestedFrameRef.current = targetFrame;
+      void resumeScrubLoopRef.current();
+    };
+
+    return useCompositionsStore.subscribe((state, prev) => {
+      if (state.compositionById === prev.compositionById) return;
+      invalidateCurrentFrame();
+    });
+  }, [
+    bgTransitionRendererRef,
+    bgTransitionRendererStructureKeyRef,
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
     resumeScrubLoopRef,
     scrubOffscreenRenderedFrameRef,
     scrubRendererRef,
