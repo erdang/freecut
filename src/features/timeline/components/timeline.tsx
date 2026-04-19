@@ -287,6 +287,12 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     visibleTracks,
   ]);
 
+  const handleTimelineAreaMouseDown = useCallback((event: React.MouseEvent) => {
+    if (event.button !== 1) return;
+    if (!hasTrackSections) return;
+    handleSectionDividerMouseDown(event);
+  }, [handleSectionDividerMouseDown, hasTrackSections]);
+
   // Set first track as active on mount
   // Use primitive dependencies to avoid re-running on unrelated track changes
   const tracksLength = tracks.length;
@@ -746,7 +752,7 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
         <CompositionBreadcrumbs />
 
       {/* Timeline Content */}
-      <div className="flex-1 flex overflow-hidden min-h-0">
+      <div className="flex-1 flex overflow-hidden min-h-0" onMouseDown={handleTimelineAreaMouseDown}>
         {/* Track Headers Sidebar */}
         <div
           className="border-r border-border panel-bg flex-shrink-0 flex flex-col overflow-x-hidden"
