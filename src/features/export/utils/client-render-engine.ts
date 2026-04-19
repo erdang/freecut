@@ -710,7 +710,11 @@ export async function createCompositionRenderer(
   };
 
   return {
-    async preload(options: { priorityFrame?: number; priorityWindowFrames?: number } = {}) {
+    async preload(options: {
+      priorityFrame?: number;
+      priorityWindowFrames?: number;
+      onPriorityMediaReady?: () => void;
+    } = {}) {
       // Composition items require the compositions store which only exists on main thread.
       // Workers get a fresh, empty Zustand store, so sub-comp data can never be resolved.
       // Bail early to trigger the main-thread fallback path.
@@ -958,6 +962,18 @@ export async function createCompositionRenderer(
         if (prioritizedSubVideoItemIds.length > 0) {
           await initializeMediabunnyForItems(prioritizedSubVideoItemIds);
         }
+
+        // Signal that priority media for the current frame is ready. The
+        // preview controller uses this to trigger a re-render before the
+        // rest of preload (remaining videos, sub images, GIF/WebP frames)
+        // finishes — so the user sees the correct frame faster after
+        // exiting a sub-composition.
+        try {
+          options.onPriorityMediaReady?.();
+        } catch (err) {
+          getLog().warn('onPriorityMediaReady callback threw', { error: err });
+        }
+
         const remainingSubVideoItemIds = subVideoItemIds.filter(
           (itemId) => !prioritySubCompVideoItemIds.has(itemId)
         );

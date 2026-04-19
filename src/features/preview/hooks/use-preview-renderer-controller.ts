@@ -371,9 +371,30 @@ export function usePreviewRendererController({
           isGizmoInteractingRef.current,
         );
         const preloadPriorityFrame = runtimeSnapshot.anchorFrame;
+        // Invalidate the current frame and re-request a render. Used both
+        // after priority media is ready (earlier, partial preload) and after
+        // full preload completes, so the real video + GPU effects appear
+        // without needing a manual scrub. Idempotent.
+        const kickRerender = () => {
+          if (scrubRendererRef.current !== renderer) return;
+          const playbackState = usePlaybackStore.getState();
+          const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+          try {
+            renderer.invalidateFrameCache({ frames: [targetFrame] });
+          } catch {
+            return;
+          }
+          if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+            scrubOffscreenRenderedFrameRef.current = null;
+          }
+          scrubRequestedFrameRef.current = targetFrame;
+          void resumeScrubLoopRef.current();
+        };
+
         const preloadPromise = renderer.preload({
           priorityFrame: preloadPriorityFrame,
           priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
+          onPriorityMediaReady: kickRerender,
         })
           .catch((error) => {
             logger.warn('Renderer preload failed:', error);
@@ -382,25 +403,7 @@ export function usePreviewRendererController({
             if (scrubPreloadPromiseRef.current === preloadPromise) {
               scrubPreloadPromiseRef.current = null;
             }
-            // First render after a fresh renderer (e.g. exit from sub-comp)
-            // often runs before sub-comp video extractors are initialized,
-            // so compound-clip videos render as empty. Invalidate the current
-            // frame and re-request a render once preload finishes so the
-            // real video and its GPU effects appear without needing a scrub.
-            if (scrubRendererRef.current !== renderer) return;
-            const playbackState = usePlaybackStore.getState();
-            const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
-            try {
-              renderer.invalidateFrameCache({ frames: [targetFrame] });
-            } catch {
-              // Renderer may have been disposed between the check and here.
-              return;
-            }
-            if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
-              scrubOffscreenRenderedFrameRef.current = null;
-            }
-            scrubRequestedFrameRef.current = targetFrame;
-            void resumeScrubLoopRef.current();
+            kickRerender();
           });
         scrubPreloadPromiseRef.current = preloadPromise;
         void Promise.race([
