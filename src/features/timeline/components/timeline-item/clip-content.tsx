@@ -170,7 +170,7 @@ export const ClipContent = memo(function ClipContent({
   const compositionSourceDurationFrames = Math.max(
     1,
     item.type === 'composition' || isCompositionAudioWrapper
-      ? (item.sourceDuration ?? composition?.durationInFrames ?? item.durationInFrames)
+      ? (composition?.durationInFrames ?? item.sourceDuration ?? item.durationInFrames)
       : sourceDurationFrames
   );
   const compositionSourceStartFrames = Math.max(
