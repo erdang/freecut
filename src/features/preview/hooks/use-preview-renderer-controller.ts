@@ -7,6 +7,7 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import type { CaptureOptions } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore, type PostEditWarmRequest } from '@/shared/state/preview-bridge';
 import { createLogger } from '@/shared/logging/logger';
 import type { PreviewPathVerticesOverride } from '../deps/composition-runtime';
 import { getPreviewRuntimeSnapshotFromPlaybackState } from '../utils/preview-state-coordinator';
@@ -15,6 +16,7 @@ import {
   FAST_SCRUB_RENDERER_ENABLED,
   blobToDataUrl,
 } from '../utils/preview-constants';
+import { setActivePreviewScrubbingCache } from '../utils/preview-scrubbing-cache-bridge';
 import { collectVisualInvalidationRanges } from '../utils/preview-frame-invalidation';
 import { isFrameInRanges } from '@/shared/utils/frame-invalidation';
 import { usePreviewCaptureBridge } from './use-preview-capture-bridge';
@@ -27,6 +29,7 @@ interface UsePreviewRendererControllerParams {
   fps: number;
   isResolving: boolean;
   forceFastScrubOverlay: boolean;
+  items: TimelineItem[];
   playerRenderSize: { width: number; height: number };
   renderSize: { width: number; height: number };
   fastScrubInputProps: CompositionInputProps;
@@ -93,6 +96,7 @@ export function usePreviewRendererController({
   fps,
   isResolving,
   forceFastScrubOverlay,
+  items,
   playerRenderSize,
   renderSize,
   fastScrubInputProps,
@@ -159,6 +163,10 @@ export function usePreviewRendererController({
     tracks: fastScrubScaledTracks,
     keyframes: fastScrubScaledKeyframes,
   });
+  const previousItemsRef = useRef(items);
+  const previousIsResolvingRef = useRef(isResolving);
+  const pendingPostEditWarmRequestRef = useRef<PostEditWarmRequest | null>(null);
+  const postEditWarmInFlightRef = useRef(false);
 
   useLayoutEffect(() => {
     const canvas = scrubCanvasRef.current;
@@ -200,6 +208,7 @@ export function usePreviewRendererController({
         logger.warn('Failed to dispose renderer:', error);
       }
       scrubRendererRef.current = null;
+      setActivePreviewScrubbingCache(null);
     }
     scrubRendererStructureKeyRef.current = null;
 
@@ -333,6 +342,18 @@ export function usePreviewRendererController({
           getLiveItemSnapshot,
           getLiveKeyframes,
         });
+        scrubOffscreenCanvasRef.current = offscreen;
+        scrubOffscreenCtxRef.current = offscreenCtx;
+        scrubOffscreenRenderedFrameRef.current = null;
+        scrubRendererRef.current = renderer;
+        scrubRendererStructureKeyRef.current = fastScrubRendererStructureKey;
+        setActivePreviewScrubbingCache(
+          'getScrubbingCache' in renderer ? renderer.getScrubbingCache() : null,
+        );
+        if ('warmGpuPipeline' in renderer) {
+          void renderer.warmGpuPipeline();
+        }
+
         const playbackState = usePlaybackStore.getState();
         const runtimeSnapshot = getPreviewRuntimeSnapshotFromPlaybackState(
           playbackState,
@@ -352,26 +373,17 @@ export function usePreviewRendererController({
             }
           });
         scrubPreloadPromiseRef.current = preloadPromise;
-
-        await Promise.race([
+        void Promise.race([
           preloadPromise,
           new Promise<void>((resolve) => {
             setTimeout(resolve, FAST_SCRUB_PRELOAD_BUDGET_MS);
           }),
         ]);
-
-        scrubOffscreenCanvasRef.current = offscreen;
-        scrubOffscreenCtxRef.current = offscreenCtx;
-        scrubOffscreenRenderedFrameRef.current = null;
-        scrubRendererRef.current = renderer;
-        scrubRendererStructureKeyRef.current = fastScrubRendererStructureKey;
-        if ('warmGpuPipeline' in renderer) {
-          void renderer.warmGpuPipeline();
-        }
         return renderer;
       } catch (error) {
         logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
         scrubRendererRef.current = null;
+        setActivePreviewScrubbingCache(null);
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;
         scrubOffscreenRenderedFrameRef.current = null;
@@ -426,8 +438,37 @@ export function usePreviewRendererController({
   }, [ensureFastScrubRenderer, scrubOffscreenCanvasRef, scrubOffscreenRenderedFrameRef]);
 
   useEffect(() => {
+    const hadRenderer = scrubRendererRef.current !== null || bgTransitionRendererRef.current !== null;
     disposeFastScrubRenderer();
-  }, [disposeFastScrubRenderer, fastScrubRendererStructureKey, renderSize.height, renderSize.width]);
+
+    if (!hadRenderer) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    if (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    ) {
+      scrubRequestedFrameRef.current = targetFrame;
+      void resumeScrubLoopRef.current();
+    }
+  }, [
+    bgTransitionRendererRef,
+    disposeFastScrubRenderer,
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+    renderSize.height,
+    renderSize.width,
+    resumeScrubLoopRef,
+    scrubRendererRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
 
   useEffect(() => {
     const previousVisualState = previousVisualStateRef.current;
@@ -519,6 +560,150 @@ export function usePreviewRendererController({
     showPlaybackTransitionOverlayRef,
     transitionSessionBufferedFramesRef,
   ]);
+
+  useEffect(() => {
+    const wasResolving = previousIsResolvingRef.current;
+    previousIsResolvingRef.current = isResolving;
+
+    if (isResolving || !wasResolving) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const needsRenderedFrame = (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    );
+
+    if (!needsRenderedFrame) {
+      return;
+    }
+
+    scrubRequestedFrameRef.current = targetFrame;
+    void resumeScrubLoopRef.current();
+  }, [
+    forceFastScrubOverlay,
+    isResolving,
+    resumeScrubLoopRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const previousItems = previousItemsRef.current;
+    previousItemsRef.current = items;
+
+    if (previousItems === items) {
+      return;
+    }
+
+    const scrubRenderer = scrubRendererRef.current;
+    const scrubRendererMatchesStructure = (
+      scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
+    );
+    if (!scrubRenderer || !scrubRendererMatchesStructure) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const needsRenderedFrame = (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    );
+
+    if (!needsRenderedFrame) {
+      return;
+    }
+
+    scrubRenderer.invalidateFrameCache({ frames: [targetFrame] });
+    if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+      scrubOffscreenRenderedFrameRef.current = null;
+    }
+    scrubRequestedFrameRef.current = targetFrame;
+    void resumeScrubLoopRef.current();
+  }, [
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+    items,
+    resumeScrubLoopRef,
+    scrubOffscreenRenderedFrameRef,
+    scrubRendererRef,
+    scrubRendererStructureKeyRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const flushPostEditWarmRequest = async () => {
+      if (postEditWarmInFlightRef.current) {
+        return;
+      }
+
+      postEditWarmInFlightRef.current = true;
+      try {
+        while (pendingPostEditWarmRequestRef.current) {
+          const request = pendingPostEditWarmRequestRef.current;
+          pendingPostEditWarmRequestRef.current = null;
+
+          const playbackState = usePlaybackStore.getState();
+          if (isResolving || playbackState.isPlaying || playbackState.previewFrame !== null) {
+            continue;
+          }
+
+          const renderer = await ensureFastScrubRenderer();
+          if (!renderer) {
+            continue;
+          }
+
+          try {
+            const framesToWarm = request.frames.length > 0 ? request.frames : [request.frame];
+            const warmRunwayFrames = Array.from(new Set([
+              ...framesToWarm,
+              request.frame - 2,
+              request.frame - 1,
+              request.frame + 1,
+              request.frame + 2,
+            ].filter((frame) => frame >= 0)));
+
+            if ('prewarmFrames' in renderer && warmRunwayFrames.length > 0) {
+              await renderer.prewarmFrames?.(warmRunwayFrames);
+            }
+            if ('prewarmItems' in renderer && request.itemIds.length > 0) {
+              await renderer.prewarmItems?.(request.itemIds, request.frame);
+            }
+            if (scrubOffscreenRenderedFrameRef.current !== request.frame) {
+              await renderer.renderFrame(request.frame);
+              scrubOffscreenRenderedFrameRef.current = request.frame;
+            }
+          } catch {
+            // Best effort only.
+          }
+        }
+      } finally {
+        postEditWarmInFlightRef.current = false;
+        if (pendingPostEditWarmRequestRef.current) {
+          void flushPostEditWarmRequest();
+        }
+      }
+    };
+
+    return usePreviewBridgeStore.subscribe((state, prev) => {
+      if (state.postEditWarmRequest === prev.postEditWarmRequest || !state.postEditWarmRequest) {
+        return;
+      }
+      const request = state.postEditWarmRequest;
+      pendingPostEditWarmRequestRef.current = request;
+      void flushPostEditWarmRequest();
+    });
+  }, [ensureFastScrubRenderer, isResolving, scrubOffscreenRenderedFrameRef]);
 
   const captureCurrentFrame = useCallback(async (options?: CaptureOptions): Promise<string | null> => {
     if (captureInFlightRef.current) {

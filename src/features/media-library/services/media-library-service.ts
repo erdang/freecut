@@ -56,6 +56,8 @@ import {
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
 } from '@/infrastructure/storage';
+import { saveCaptions, deleteCaptions } from '@/infrastructure/storage/workspace-fs/captions';
+import { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes';
 import { filmstripCache, gifFrameCache, waveformCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
@@ -91,12 +93,13 @@ const IMPORT_BACKGROUND_WARM_DELAY_MS = 600;
 const IMPORT_BACKGROUND_HEAVY_DELAY_MS = 2200;
 
 /**
- * Media Library Service - Coordinates OPFS + IndexedDB + metadata extraction
+ * Media Library Service - Coordinates handle/OPFS media access with
+ * workspace-backed metadata, thumbnails, and derived caches.
  *
  * Includes in-memory thumbnail URL cache to prevent flicker on re-renders.
  *
- * Provides atomic operations for media management, ensuring OPFS and IndexedDB
- * stay in sync.
+ * Provides atomic operations for media management while keeping origin-scoped
+ * sources and the workspace folder in sync.
  */
 class MediaLibraryService {
   /** In-memory cache for thumbnail blob URLs to prevent flicker on re-renders */
@@ -107,6 +110,22 @@ class MediaLibraryService {
       await deleteTranscript(mediaId);
     } catch (error) {
       logger.warn('Failed to delete transcript:', error);
+    }
+  }
+
+  private async deleteCaptionsSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteCaptions(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete captions:', error);
+    }
+  }
+
+  private async deleteScenesSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteScenes(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete scenes:', error);
     }
   }
 
@@ -142,7 +161,7 @@ class MediaLibraryService {
 
   /**
    * Clear waveform caches for a fully-dereferenced media item. Removes
-   * the in-memory LRU entry, the IndexedDB binned persistence, and the
+   * the in-memory LRU entry, the persisted binned waveform cache, and the
    * OPFS + workspace-folder multi-resolution mirrors.
    */
   private async clearWaveformCacheSafely(mediaId: string): Promise<void> {
@@ -217,7 +236,7 @@ class MediaLibraryService {
   }
 
   /**
-   * Get all media items from IndexedDB
+   * Get all media items from workspace storage
    */
   async getAllMedia(): Promise<MediaMetadata[]> {
     return getAllMediaDB();
@@ -320,7 +339,7 @@ class MediaLibraryService {
     // Check for unsupported audio codec (included in metadata from worker)
     const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
 
-    // Stage 6: Save metadata to IndexedDB with file handle
+    // Stage 6: Save metadata with the file handle-backed source reference
     const mediaMetadata: MediaMetadata = {
       id,
       storageType: 'handle',
@@ -656,6 +675,8 @@ class MediaLibraryService {
       await deleteMediaDB(mediaId);
 
       await this.deleteTranscriptSafely(mediaId);
+      await this.deleteCaptionsSafely(mediaId);
+      await this.deleteScenesSafely(mediaId);
       await this.deleteThumbnailsSafely(mediaId);
       await this.clearGifFrameCacheSafely(mediaId);
       await this.clearFilmstripCacheSafely(mediaId);
@@ -758,6 +779,8 @@ class MediaLibraryService {
     await deleteMediaDB(id);
 
     await this.deleteTranscriptSafely(id);
+    await this.deleteCaptionsSafely(id);
+    await this.deleteScenesSafely(id);
   }
 
   /**
@@ -1009,11 +1032,41 @@ class MediaLibraryService {
 
   /**
    * Update AI-generated captions for a media item.
+   *
+   * Captions live in `cache/ai/captions.json` as the authoritative source.
+   * We also mirror them onto `MediaMetadata.aiCaptions` so in-memory zustand
+   * consumers and search (`media-library-store.ts`) don't need a separate
+   * hydration pass — the mirror stays consistent because this is the only
+   * writer.
    */
   async updateMediaCaptions(
     mediaId: string,
-    captions: Array<{ timeSec: number; text: string }>,
+    captions: NonNullable<MediaMetadata['aiCaptions']>,
+    options?: {
+      service?: string;
+      model?: string;
+      sampleIntervalSec?: number;
+      embeddingModel?: string;
+      embeddingDim?: number;
+      imageEmbeddingModel?: string;
+      imageEmbeddingDim?: number;
+    },
   ): Promise<MediaMetadata> {
+    try {
+      await saveCaptions({
+        mediaId,
+        captions,
+        service: options?.service ?? 'lfm-captioning',
+        model: options?.model ?? 'lfm-2.5-vl',
+        sampleIntervalSec: options?.sampleIntervalSec,
+        embeddingModel: options?.embeddingModel,
+        embeddingDim: options?.embeddingDim,
+        imageEmbeddingModel: options?.imageEmbeddingModel,
+        imageEmbeddingDim: options?.imageEmbeddingDim,
+      });
+    } catch (error) {
+      logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);
+    }
     return updateMediaDB(mediaId, { aiCaptions: captions });
   }
 
@@ -1071,7 +1124,7 @@ class MediaLibraryService {
   }
 
   /**
-   * Validate sync between OPFS and IndexedDB
+   * Validate sync between OPFS and workspace-backed metadata
    * Returns list of issues found
    *
    * Note: Only validates OPFS-based media. Handle-based media is validated

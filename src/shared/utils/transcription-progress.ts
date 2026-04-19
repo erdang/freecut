@@ -1,4 +1,4 @@
-export type TranscriptionProgressStage = 'loading' | 'decoding' | 'transcribing';
+export type TranscriptionProgressStage = 'queued' | 'loading' | 'decoding' | 'transcribing';
 
 export interface TranscriptionProgressSnapshot {
   stage: TranscriptionProgressStage;
@@ -15,6 +15,8 @@ export function getTranscriptionOverallProgress(
   const normalizedProgress = clampProgress(snapshot.progress);
 
   switch (snapshot.stage) {
+    case 'queued':
+      return 0;
     case 'loading':
       return normalizedProgress * 0.35;
     case 'decoding':
@@ -50,10 +52,12 @@ export function mergeTranscriptionProgress(
 
 export function getTranscriptionStageLabel(stage: TranscriptionProgressStage): string {
   switch (stage) {
+    case 'queued':
+      return 'Queued';
     case 'loading':
       return 'Loading model';
     case 'decoding':
-      return 'Decoding audio';
+      return 'Preparing audio';
     case 'transcribing':
       return 'Transcribing';
   }

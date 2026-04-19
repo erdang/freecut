@@ -54,7 +54,8 @@ export interface MediaMetadata {
   audioCodecSupported?: boolean;
   /**
    * Conformed preview-audio asset path for custom-decoded codecs.
-   * Points to a browser-native playable WAV stored in OPFS.
+   * Kept under the legacy name for compatibility, but now points to the
+   * workspace-backed persisted WAV path.
    */
   previewAudioOpfsPath?: string;
   previewAudioMimeType?: string;
@@ -74,8 +75,30 @@ export interface MediaMetadata {
   gopInterval?: number;
   thumbnailId?: string;
   tags: string[];
-  /** AI-generated timestamped captions from LFM vision-language model. */
-  aiCaptions?: Array<{ timeSec: number; text: string }>;
+  /**
+   * AI-generated timestamped captions from LFM vision-language model.
+   * Mirrors the canonical `cache/ai/captions.json` payload for in-memory
+   * consumers (search, Scene Browser). See `MediaCaption` in
+   * `lib/analysis/captioning/types.ts` for the full shape including optional
+   * thumbnail paths, semantic embeddings, and color palettes.
+   */
+  aiCaptions?: Array<{
+    timeSec: number;
+    text: string;
+    sceneData?: {
+      caption?: string;
+      shotType?: string;
+      subjects?: string[];
+      action?: string;
+      setting?: string;
+      lighting?: string;
+      timeOfDay?: string;
+      weather?: string;
+    };
+    thumbRelPath?: string;
+    embedding?: number[];
+    palette?: Array<{ l: number; a: number; b: number; weight: number }>;
+  }>;
   createdAt: number;
   updatedAt: number;
 }
@@ -157,7 +180,7 @@ export interface WaveformData {
   createdAt: number;
 }
 
-// Streaming waveform cache records (meta + bins in IndexedDB).
+// Streaming waveform cache records (meta + bins in persisted storage).
 export interface WaveformMeta {
   id: string; // Same as mediaId
   mediaId: string;

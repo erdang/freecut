@@ -15,6 +15,7 @@ import {
   mediaLibraryService,
   opfsService,
 } from '@/features/timeline/deps/media-library-service';
+import { writeMediaSource } from '@/infrastructure/storage/workspace-fs/media-source';
 import { toast } from 'sonner';
 import { execute, applyTransitionRepairs, getLogger } from './shared';
 import {
@@ -24,12 +25,18 @@ import {
   getSynchronizedLinkedItemsForEdit,
 } from './linked-edit';
 import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '../../utils/source-calculations';
 import { computeClampedSlipDelta } from '../../utils/slip-utils';
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils';
 import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-utils';
 import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
-import { getLinkedItemIds, getUniqueLinkedItemAnchorIds } from '../../utils/linked-items';
+import {
+  expandItemIdsWithAttachedCaptions,
+  getLinkedItemIds,
+  getUniqueLinkedItemAnchorIds,
+} from '../../utils/linked-items';
 import {
   propagateInsertedGapToSyncLockedTracks,
   propagateRemovedIntervalsToSyncLockedTracks,
@@ -38,6 +45,67 @@ import { applySplitBookkeeping, type SplitResultEntry } from './split-bookkeepin
 
 function isLinkedSelectionEnabled(): boolean {
   return useEditorStore.getState().linkedSelectionEnabled;
+}
+
+const POST_EDIT_WARM_MAX_FRAMES = 32;
+
+function appendWarmFrame(target: number[], seen: Set<number>, frame: number): void {
+  if (!Number.isFinite(frame)) return;
+  const normalizedFrame = Math.max(0, Math.round(frame));
+  if (seen.has(normalizedFrame)) return;
+  seen.add(normalizedFrame);
+  target.push(normalizedFrame);
+}
+
+function appendItemWarmFrames(
+  target: number[],
+  seen: Set<number>,
+  item: TimelineItem | undefined,
+): void {
+  if (!item) return;
+  const startFrame = Math.max(0, Math.trunc(item.from));
+  const endFrame = Math.max(startFrame, Math.trunc(item.from + item.durationInFrames) - 1);
+  appendWarmFrame(target, seen, startFrame);
+  appendWarmFrame(target, seen, Math.min(endFrame, startFrame + 1));
+  appendWarmFrame(target, seen, Math.max(startFrame, endFrame - 1));
+  appendWarmFrame(target, seen, endFrame);
+}
+
+function collectPostEditWarmFrames(
+  itemIds: Iterable<string>,
+  preferredFrames: number[] = [],
+): number[] {
+  const frames: number[] = [];
+  const seen = new Set<number>();
+
+  for (const frame of preferredFrames) {
+    appendWarmFrame(frames, seen, frame);
+  }
+
+  const itemById = useItemsStore.getState().itemById;
+  for (const itemId of itemIds) {
+    appendItemWarmFrames(frames, seen, itemById[itemId]);
+    if (frames.length >= POST_EDIT_WARM_MAX_FRAMES) {
+      break;
+    }
+  }
+
+  return frames.slice(0, POST_EDIT_WARM_MAX_FRAMES);
+}
+
+function requestPostEditWarmForItems(
+  itemIds: Iterable<string>,
+  preferredFrames: number[] = [],
+): void {
+  const playbackState = usePlaybackStore.getState();
+  if (playbackState.isPlaying) return;
+
+  const uniqueItemIds = Array.from(new Set(itemIds));
+  if (uniqueItemIds.length === 0) return;
+
+  const primaryFrame = playbackState.currentFrame;
+  const warmFrames = collectPostEditWarmFrames(uniqueItemIds, [primaryFrame, ...preferredFrames]);
+  usePreviewBridgeStore.getState().requestPostEditWarm(primaryFrame, uniqueItemIds, warmFrames);
 }
 
 function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: number): void {
@@ -70,7 +138,9 @@ function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: 
     }
   }
 
-  applyTransitionRepairs(synchronizedItems.map((item) => item.id));
+  const affectedIds = synchronizedItems.map((item) => item.id);
+  applyTransitionRepairs(affectedIds);
+  requestPostEditWarmForItems(affectedIds);
   useTimelineSettingsStore.getState().markDirty();
 }
 
@@ -485,7 +555,7 @@ export function rateStretchItem(
           moveUpdates.push({ id: downstream.id, from: downstream.from + endDelta });
 
           // Also move linked companions on other tracks
-          const linkedIds = getLinkedItemIds(freshItems, downstream.id);
+          const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, downstream.id));
           for (const linkedId of linkedIds) {
             if (linkedId === downstream.id || movedIds.has(linkedId)) continue;
             const linked = freshItems.find((i) => i.id === linkedId);
@@ -506,7 +576,7 @@ export function rateStretchItem(
             if (neighbor) {
               movedIds.add(neighbor.id);
               moveUpdates.push({ id: neighbor.id, from: neighbor.from + endDelta });
-              const linkedIds = getLinkedItemIds(freshItems, neighbor.id);
+              const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, neighbor.id));
               for (const linkedId of linkedIds) {
                 if (linkedId === neighbor.id || movedIds.has(linkedId)) continue;
                 const linked = freshItems.find((i) => i.id === linkedId);
@@ -537,7 +607,7 @@ export function rateStretchItem(
           movedIds.add(upstream.id);
           moveUpdates.push({ id: upstream.id, from: Math.max(0, upstream.from + fromDelta) });
 
-          const linkedIds = getLinkedItemIds(freshItems, upstream.id);
+          const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, upstream.id));
           for (const linkedId of linkedIds) {
             if (linkedId === upstream.id || movedIds.has(linkedId)) continue;
             const linked = freshItems.find((i) => i.id === linkedId);
@@ -557,7 +627,7 @@ export function rateStretchItem(
             if (neighbor) {
               movedIds.add(neighbor.id);
               moveUpdates.push({ id: neighbor.id, from: Math.max(0, neighbor.from + fromDelta) });
-              const linkedIds = getLinkedItemIds(freshItems, neighbor.id);
+              const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, neighbor.id));
               for (const linkedId of linkedIds) {
                 if (linkedId === neighbor.id || movedIds.has(linkedId)) continue;
                 const linked = freshItems.find((i) => i.id === linkedId);
@@ -579,6 +649,7 @@ export function rateStretchItem(
     // Repair transitions for all affected clips
     const allAffectedIds = [...allSynchronizedIds, ...movedIds];
     applyTransitionRepairs(allAffectedIds);
+    requestPostEditWarmForItems(allAffectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, newFrom, newDuration, newSpeed });
@@ -703,7 +774,7 @@ export function resetSpeedWithRipple(itemIds: string[]): void {
           moveUpdates.push({ id: downstream.id, from: downstream.from + growth });
 
           // Also move linked companions on other tracks
-          const linkedIds = getLinkedItemIds(freshItems, downstream.id);
+          const linkedIds = expandItemIdsWithAttachedCaptions(freshItems, getLinkedItemIds(freshItems, downstream.id));
           for (const linkedId of linkedIds) {
             if (linkedId === downstream.id || movedIds.has(linkedId)) continue;
             const linked = freshItems.find((i) => i.id === linkedId);
@@ -723,6 +794,7 @@ export function resetSpeedWithRipple(itemIds: string[]): void {
     // Phase 3: Repair transitions for all affected clips
     const allAffectedIds = [...allChangedIds, ...movedIds];
     applyTransitionRepairs(allAffectedIds);
+    requestPostEditWarmForItems(allAffectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { itemIds });
@@ -861,10 +933,14 @@ export async function insertFreezeFrame(
       updatedAt: Date.now(),
     };
 
-    // Store the frame blob in OPFS
+    // Store the frame blob in OPFS, then mirror it into the workspace folder
+    // so other origins and external tooling can see it on disk.
     const opfsPath = `content/${frameMediaId.slice(0, 2)}/${frameMediaId.slice(2, 4)}/${frameMediaId}/data`;
     await opfsService.saveFile(opfsPath, await frameBlob.arrayBuffer());
     mediaMetadata.opfsPath = opfsPath;
+    void writeMediaSource(frameMediaId, frameBlob, fileName).catch((error) => {
+      getLogger().warn('[insertFreezeFrame] Failed to mirror frame to workspace', error);
+    });
 
     await createMedia(mediaMetadata);
     await associateMediaWithProject(currentProjectId, frameMediaId);
@@ -1067,6 +1143,7 @@ export function rippleTrimItem(id: string, handle: 'start' | 'end', trimDelta: n
       useKeyframesStore.getState()._removeKeyframesForItems(lockedRemoved);
     }
     applyTransitionRepairs(affected, lockedRemoved.length > 0 ? new Set(lockedRemoved) : undefined);
+    requestPostEditWarmForItems(affected);
     useTimelineSettingsStore.getState().markDirty();
   }, { id, handle, trimDelta });
 }
@@ -1122,9 +1199,11 @@ export function rollingTrimItems(leftId: string, rightId: string, editPointDelta
       }
 
     // Repair transitions for both clips
-    applyTransitionRepairs(counterpartPair
+    const affectedIds = counterpartPair
       ? [leftId, rightId, counterpartPair.leftCounterpart.id, counterpartPair.rightCounterpart.id]
-      : [leftId, rightId]);
+      : [leftId, rightId];
+    applyTransitionRepairs(affectedIds);
+    requestPostEditWarmForItems(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { leftId, rightId, editPointDelta });
@@ -1172,7 +1251,9 @@ export function slipItem(id: string, slipDelta: number): void {
       });
     }
 
-    applyTransitionRepairs(synchronizedItems.map((synchronizedItem) => synchronizedItem.id));
+    const affectedIds = synchronizedItems.map((synchronizedItem) => synchronizedItem.id);
+    applyTransitionRepairs(affectedIds);
+    requestPostEditWarmForItems(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slipDelta });
@@ -1346,6 +1427,7 @@ export function slideItem(
       if (cpRightAdj) affectedIds.push(cpRightAdj.id);
     }
     applyTransitionRepairs(affectedIds);
+    requestPostEditWarmForItems(affectedIds);
 
     useTimelineSettingsStore.getState().markDirty();
   }, { id, slideDelta, leftNeighborId, rightNeighborId });

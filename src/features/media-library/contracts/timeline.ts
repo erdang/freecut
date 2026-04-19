@@ -10,6 +10,10 @@ export {
   getMediaTranscriptionModelLabel,
   getMediaTranscriptionModelOptions,
 } from '../transcription/registry';
+export {
+  TranscribeDialog,
+  type TranscribeDialogValues,
+} from '../components/transcribe-dialog';
 export { opfsService } from '../services/opfs-service';
 export {
   resolveMediaUrl,

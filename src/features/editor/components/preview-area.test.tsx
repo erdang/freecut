@@ -159,7 +159,7 @@ describe('PreviewArea mask editor toolbar', () => {
     );
 
     expect(screen.getByTestId('inline-source-preview')).toBeInTheDocument();
-    expect(screen.queryByTestId('video-preview')).not.toBeInTheDocument();
+    expect(screen.getByTestId('video-preview')).toBeInTheDocument();
     expect(screen.getByTestId('playback-controls')).toBeInTheDocument();
   });
 
@@ -176,7 +176,7 @@ describe('PreviewArea mask editor toolbar', () => {
     );
 
     expect(screen.getByTestId('inline-composition-preview')).toBeInTheDocument();
-    expect(screen.queryByTestId('video-preview')).not.toBeInTheDocument();
+    expect(screen.getByTestId('video-preview')).toBeInTheDocument();
     expect(screen.getByTestId('playback-controls')).toBeInTheDocument();
   });
 

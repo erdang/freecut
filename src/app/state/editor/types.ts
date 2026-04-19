@@ -16,6 +16,7 @@ export interface EditorState {
   mediaSkimPreviewFrame: number | null;
   compoundClipSkimPreviewCompositionId: string | null;
   compoundClipSkimPreviewFrame: number | null;
+  transcriptionDialogDepth: number;
   sourcePatchVideoEnabled: boolean;
   sourcePatchAudioEnabled: boolean;
   sourcePatchVideoTrackId: string | null;
@@ -54,6 +55,8 @@ export interface EditorActions {
   clearMediaSkimPreview: () => void;
   setCompoundClipSkimPreview: (compositionId: string | null, frame?: number | null) => void;
   clearCompoundClipSkimPreview: () => void;
+  beginTranscriptionDialog: () => void;
+  endTranscriptionDialog: () => void;
   setSourcePatchVideoEnabled: (enabled: boolean) => void;
   setSourcePatchAudioEnabled: (enabled: boolean) => void;
   setSourcePatchVideoTrackId: (trackId: string | null) => void;

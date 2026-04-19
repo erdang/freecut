@@ -48,9 +48,28 @@ let currentModelId: string | null = null;
 let port: MessagePort | null = null;
 let language: string | undefined;
 let pipelineReady = false;
+let paused = false;
 const queue: PCMChunk[] = [];
 let processing = false;
 let reportedEstimatedBytes = 0;
+
+self.addEventListener('unhandledrejection', (event: PromiseRejectionEvent) => {
+  const reason = event.reason;
+  const message = reason instanceof Error
+    ? `${reason.name}: ${reason.message}`
+    : typeof reason === 'string'
+      ? reason
+      : 'Unknown worker error';
+  postMain({ type: 'error', message });
+  event.preventDefault();
+});
+
+self.addEventListener('error', (event: ErrorEvent) => {
+  postMain({
+    type: 'error',
+    message: event.message || (event.error instanceof Error ? event.error.message : 'Worker error'),
+  });
+});
 
 self.onmessage = async (event: MessageEvent) => {
   const message = event.data as WhisperWorkerMessage;
@@ -66,18 +85,35 @@ self.onmessage = async (event: MessageEvent) => {
   if (message.type === 'init') {
     language = message.language;
     await initPipeline(message.modelId, message.quantization ?? 'hybrid');
+    return;
+  }
+
+  if (message.type === 'pause') {
+    paused = true;
+    return;
+  }
+
+  if (message.type === 'resume') {
+    if (!paused) return;
+    paused = false;
+    if (pipelineReady && !processing && queue.length > 0) {
+      void processNext();
+    }
   }
 };
 
 function enqueue(chunk: PCMChunk): void {
   queue.push(chunk);
   port?.postMessage(queue.length);
-  if (pipelineReady && !processing) {
+  if (pipelineReady && !processing && !paused) {
     void processNext();
   }
 }
 
-async function initPipeline(modelId: string, quantization: QuantizationType): Promise<void> {
+async function initPipeline(
+  modelId: string,
+  quantization: QuantizationType,
+): Promise<void> {
   postMain({ type: 'progress', event: { stage: 'loading', progress: 0 } });
   reportedEstimatedBytes = 0;
 
@@ -189,7 +225,7 @@ async function initPipeline(modelId: string, quantization: QuantizationType): Pr
 }
 
 async function processNext(): Promise<void> {
-  if (!pipelineReady || !asrPipeline) {
+  if (!pipelineReady || !asrPipeline || paused) {
     processing = false;
     return;
   }
@@ -215,7 +251,7 @@ async function processNext(): Promise<void> {
   }
 
   processing = false;
-  if (queue.length > 0) {
+  if (queue.length > 0 && !paused) {
     void processNext();
   }
 }

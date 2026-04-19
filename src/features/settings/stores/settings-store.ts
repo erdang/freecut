@@ -5,6 +5,7 @@ import {
   DEFAULT_WHISPER_LANGUAGE,
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
+  normalizeSelectableWhisperModel,
 } from '@/shared/utils/whisper-settings';
 import type { EditorDensityPresetName } from '@/app/editor-layout';
 import { DEFAULT_EDITOR_DENSITY_PRESET } from '@/app/editor-layout';
@@ -37,8 +38,62 @@ interface AppSettings {
   defaultWhisperQuantization: MediaTranscriptQuantization;
   defaultWhisperLanguage: string;
 
+  // AI captioning — interval between sampled frames when running LFM captions.
+  // Frames mode is converted to seconds at capture time using media.fps.
+  captioningIntervalUnit: CaptioningIntervalUnit;
+  captioningIntervalValue: number;
+
+  // Scene Browser — how caption search matches queries. `semantic` uses a
+  // sentence-transformer model to rank by meaning; `keyword` uses
+  // substring + fuzzy-prefix matching on caption text.
+  captionSearchMode: CaptionSearchMode;
+
   // Keyboard shortcuts
   hotkeyOverrides: HotkeyOverrideMap;
+}
+
+export type CaptionSearchMode = 'keyword' | 'semantic';
+
+function normalizeCaptionSearchMode(value: unknown): CaptionSearchMode {
+  return value === 'semantic' ? 'semantic' : 'keyword';
+}
+
+export type CaptioningIntervalUnit = 'seconds' | 'frames';
+
+export const CAPTIONING_INTERVAL_BOUNDS = {
+  seconds: { min: 0.5, max: 60 },
+  frames: { min: 1, max: 1800 },
+} as const;
+
+export const DEFAULT_CAPTIONING_INTERVAL_SECONDS = 3;
+
+function normalizeCaptioningIntervalUnit(value: unknown): CaptioningIntervalUnit {
+  return value === 'frames' ? 'frames' : 'seconds';
+}
+
+function clampCaptioningIntervalValue(
+  value: unknown,
+  unit: CaptioningIntervalUnit,
+): number {
+  const bounds = CAPTIONING_INTERVAL_BOUNDS[unit];
+  const fallback = unit === 'seconds' ? DEFAULT_CAPTIONING_INTERVAL_SECONDS : 90;
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  return Math.min(bounds.max, Math.max(bounds.min, numeric));
+}
+
+/**
+ * Derive the effective `sampleIntervalSec` to pass to the captioning provider.
+ * Frames mode divides by the source media FPS (falling back to 30 when the
+ * media reports no usable frame rate).
+ */
+export function resolveCaptioningIntervalSec(
+  unit: CaptioningIntervalUnit,
+  value: number,
+  fps: number,
+): number {
+  if (unit === 'seconds') return value;
+  const effectiveFps = fps > 0 ? fps : 30;
+  return value / effectiveFps;
 }
 
 interface SettingsActions {
@@ -84,6 +139,13 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultWhisperQuantization: DEFAULT_WHISPER_QUANTIZATION,
   defaultWhisperLanguage: DEFAULT_WHISPER_LANGUAGE,
 
+  // AI captioning defaults
+  captioningIntervalUnit: 'seconds',
+  captioningIntervalValue: DEFAULT_CAPTIONING_INTERVAL_SECONDS,
+
+  // Scene Browser defaults
+  captionSearchMode: 'keyword',
+
   // Keyboard shortcuts
   hotkeyOverrides: {},
 };
@@ -101,7 +163,24 @@ export const useSettingsStore = create<SettingsStore>()(
     (set) => ({
       ...DEFAULT_SETTINGS,
 
-      setSetting: (key, value) => set({ [key]: value }),
+      setSetting: (key, value) => set((state) => {
+        if (key === 'defaultWhisperModel') {
+          return { [key]: normalizeSelectableWhisperModel(value as MediaTranscriptModel) };
+        }
+        if (key === 'captioningIntervalUnit') {
+          const unit = normalizeCaptioningIntervalUnit(value);
+          return {
+            captioningIntervalUnit: unit,
+            captioningIntervalValue: clampCaptioningIntervalValue(state.captioningIntervalValue, unit),
+          };
+        }
+        if (key === 'captioningIntervalValue') {
+          return {
+            captioningIntervalValue: clampCaptioningIntervalValue(value, state.captioningIntervalUnit),
+          };
+        }
+        return { [key]: value };
+      }),
 
       setHotkeyBinding: (key, binding) => set((state) => {
         const normalizedBinding = normalizeHotkeyBinding(binding);
@@ -161,11 +240,19 @@ export const useSettingsStore = create<SettingsStore>()(
       name: 'freecut-settings',
       merge: (persistedState, currentState) => {
         const typedState = (persistedState as Partial<AppSettings> | undefined) ?? {};
+        const captioningIntervalUnit = normalizeCaptioningIntervalUnit(typedState.captioningIntervalUnit);
 
         return {
           ...currentState,
           ...typedState,
+          defaultWhisperModel: normalizeSelectableWhisperModel(typedState.defaultWhisperModel),
           hotkeyOverrides: sanitizeHotkeyOverrides(typedState.hotkeyOverrides),
+          captioningIntervalUnit,
+          captioningIntervalValue: clampCaptioningIntervalValue(
+            typedState.captioningIntervalValue,
+            captioningIntervalUnit,
+          ),
+          captionSearchMode: normalizeCaptionSearchMode(typedState.captionSearchMode),
         };
       },
     }

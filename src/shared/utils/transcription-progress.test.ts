@@ -7,6 +7,7 @@ import {
 
 describe('transcription-progress', () => {
   it('maps stages into a stable overall percentage range', () => {
+    expect(getTranscriptionOverallPercent({ stage: 'queued', progress: 1 })).toBe(0);
     expect(getTranscriptionOverallPercent({ stage: 'loading', progress: 1 })).toBe(35);
     expect(getTranscriptionOverallPercent({ stage: 'decoding', progress: 0.5 })).toBeCloseTo(52.5);
     expect(getTranscriptionOverallPercent({ stage: 'transcribing', progress: 0.5 })).toBe(85);
@@ -40,8 +41,9 @@ describe('transcription-progress', () => {
   });
 
   it('formats readable stage labels', () => {
+    expect(getTranscriptionStageLabel('queued')).toBe('Queued');
     expect(getTranscriptionStageLabel('loading')).toBe('Loading model');
-    expect(getTranscriptionStageLabel('decoding')).toBe('Decoding audio');
+    expect(getTranscriptionStageLabel('decoding')).toBe('Preparing audio');
     expect(getTranscriptionStageLabel('transcribing')).toBe('Transcribing');
   });
 });

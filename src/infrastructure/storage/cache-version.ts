@@ -25,7 +25,7 @@ const VERSION_PREFIX = 'cache-version-';
 const CACHE_VERSIONS = {
   filmstrip: 9,    // OPFS filmstrip frames (v9: invalidate incorrect partial-complete prewarms)
   waveform: 3,     // OPFS waveform data (v3: stereo interleaved L/R peaks)
-  thumbnail: 1,    // IndexedDB thumbnails
+  thumbnail: 1,    // Workspace-backed thumbnails
   media: 1,        // OPFS media files
 } as const;
 

@@ -6,8 +6,8 @@ import { createLogger } from '@/shared/logging/logger';
 const logger = createLogger('ProjectThumbnail');
 
 /**
- * Hook to load project thumbnail from IndexedDB Blob storage.
- * Falls back to deprecated base64 thumbnail for backward compatibility.
+ * Hook to load a project thumbnail from workspace-backed blob storage.
+ * Falls back to the deprecated base64 thumbnail for backward compatibility.
  *
  * @param project - The project to get thumbnail for
  * @returns Object URL for the thumbnail, or undefined if not available
@@ -20,7 +20,7 @@ export function useProjectThumbnail(project: Project): string | undefined {
     let cancelled = false;
 
     async function loadThumbnail() {
-      // Try to load from thumbnailId first (new Blob-based storage)
+      // Try to load from thumbnailId first (workspace-backed blob storage)
       if (project.thumbnailId) {
         try {
           const thumbnailData = await getThumbnail(project.thumbnailId);
@@ -30,7 +30,7 @@ export function useProjectThumbnail(project: Project): string | undefined {
             return;
           }
         } catch (error) {
-          logger.warn('Failed to load thumbnail from IndexedDB:', error);
+          logger.warn('Failed to load thumbnail from workspace storage:', error);
         }
       }
 
@@ -53,4 +53,3 @@ export function useProjectThumbnail(project: Project): string | undefined {
 
   return thumbnailUrl;
 }
-

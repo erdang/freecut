@@ -768,7 +768,7 @@ export async function saveTimeline(projectId: string): Promise<void> {
           });
         }
 
-        // Save thumbnail to IndexedDB
+        // Save thumbnail to workspace storage
         thumbnailId = `project:${projectId}:cover`;
         await saveThumbnail({
           id: thumbnailId,

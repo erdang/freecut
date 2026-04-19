@@ -162,6 +162,8 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
                       src={blobUrl}
                       mediaType={mediaType}
                       fileName={media.fileName}
+                      pausedFrameSource="clock"
+                      forceFastScrub={seekFrame !== null}
                     />
                   </VideoConfigProvider>
                 </ClockBridgeProvider>

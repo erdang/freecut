@@ -3,7 +3,7 @@
  *
  * Simple service that:
  * 1. Manages extraction worker
- * 2. Provides object URLs from OPFS storage
+ * 2. Provides object URLs from persisted filmstrip storage
  * 3. Notifies subscribers when new frames are available
  *
  * No ImageBitmaps in memory - just URLs for <img> tags.
@@ -25,7 +25,7 @@ import {
   FILMSTRIP_EXTRACT_HEIGHT,
   THUMBNAIL_WIDTH,
 } from '@/features/timeline/constants';
-import { filmstripOPFSStorage, type FilmstripFrame } from './filmstrip-opfs-storage';
+import { filmstripStorage, type FilmstripFrame } from './filmstrip-storage';
 import { FilmstripMemoryState } from './filmstrip-memory-state';
 import type { ExtractRequest, WorkerResponse } from '../workers/filmstrip-extraction-worker';
 
@@ -319,7 +319,7 @@ class FilmstripCacheService {
 
     this.cache.delete(mediaId);
     this.clearCacheMeta(mediaId);
-    filmstripOPFSStorage.revokeUrls(mediaId);
+    filmstripStorage.revokeUrls(mediaId);
     this.clearIdleEvictionTimer(mediaId);
     logger.debug(`Evicted in-memory filmstrip ${mediaId} (${reason})`);
     return true;
@@ -798,7 +798,7 @@ class FilmstripCacheService {
         frames: cached.frames,
         existingIndices: cached.frames.map((frame) => frame.index),
       }
-      : await filmstripOPFSStorage.load(mediaId);
+      : await filmstripStorage.load(mediaId);
 
     const existingFrames = stored?.frames ?? [];
     const existingIndices = stored?.existingIndices ?? [];
@@ -1082,7 +1082,7 @@ class FilmstripCacheService {
     options?: FilmstripLoadOptions,
   ): Promise<Filmstrip> {
     // Try loading from storage
-    const stored = await filmstripOPFSStorage.load(mediaId);
+    const stored = await filmstripStorage.load(mediaId);
 
     if (stored?.metadata.isComplete) {
       // Complete - return immediately
@@ -1231,7 +1231,7 @@ class FilmstripCacheService {
       const targetFrames = [...existingFrames].sort((a, b) => a.index - b.index);
       const settled = this.buildSettledFilmstrip(pending, targetFrames);
       if (settled.isComplete && this.shouldPersistCompletionMetadata(pending)) {
-        void filmstripOPFSStorage.saveMetadata(mediaId, {
+        void filmstripStorage.saveMetadata(mediaId, {
           width: FILMSTRIP_EXTRACT_WIDTH,
           height: FILMSTRIP_EXTRACT_HEIGHT,
           isComplete: true,
@@ -1251,7 +1251,7 @@ class FilmstripCacheService {
 
     // Persist extraction session metadata once. Workers should focus on frame
     // writes; centralizing meta writes avoids cross-worker file contention.
-    void filmstripOPFSStorage.saveMetadata(mediaId, {
+    void filmstripStorage.saveMetadata(mediaId, {
       width: FILMSTRIP_EXTRACT_WIDTH,
       height: FILMSTRIP_EXTRACT_HEIGHT,
       isComplete: false,
@@ -1504,9 +1504,9 @@ class FilmstripCacheService {
           }
 
           // When blobs arrive (after JPEG encode), upgrade frames with proper URLs
-          // and persist to OPFS. This replaces bitmap-only frames.
+          // and persist them to the workspace. This replaces bitmap-only frames.
           if (Array.isArray(response.savedFrames) && response.savedFrames.length > 0) {
-            this.ingestSavedFrames(
+            await this.ingestSavedFrames(
               mediaId,
               response.savedFrames.filter((frame) =>
                 frame.index >= workerState.startIndex
@@ -1525,14 +1525,14 @@ class FilmstripCacheService {
               try {
                 await this.loadNewFrames(mediaId, newIndices);
               } catch (error) {
-                logger.error('Failed to load saved filmstrip frames from OPFS', {
+                logger.error('Failed to load saved filmstrip frames from persisted storage', {
                   mediaId,
                   requestId: workerState.requestId,
                   range: [workerState.startIndex, workerState.endIndex],
                   newIndicesCount: newIndices.length,
                   error,
                 });
-                this.handleWorkerError(mediaId, 'Failed to load saved frames from OPFS');
+                this.handleWorkerError(mediaId, 'Failed to load saved frames from storage');
                 return;
               }
             }
@@ -1544,14 +1544,14 @@ class FilmstripCacheService {
               try {
                 await this.flushWorkerRangeLoads(mediaId, workerState);
               } catch (error) {
-                logger.error('Failed to flush worker frame range loads from OPFS', {
+                logger.error('Failed to flush worker frame range loads from persisted storage', {
                   mediaId,
                   requestId: workerState.requestId,
                   range: [workerState.startIndex, workerState.endIndex],
                   newFrameCount,
                   error,
                 });
-                this.handleWorkerError(mediaId, 'Failed to refresh worker frame range from OPFS');
+                this.handleWorkerError(mediaId, 'Failed to refresh worker frame range from storage');
                 return;
               }
             }
@@ -1580,12 +1580,12 @@ class FilmstripCacheService {
           // Check if all workers are done
           if (pending.completedWorkers === pending.workers.length) {
             // All workers done - finalize directly from in-memory extracted frames
-            // to avoid an extra full OPFS directory scan and URL recreation pass.
+            // to avoid an extra full storage scan and URL recreation pass.
             const finalFrames = Array.from(pending.extractedFrames.values())
               .sort((a, b) => a.index - b.index);
             const settled = this.buildSettledFilmstrip(pending, finalFrames);
             try {
-              await filmstripOPFSStorage.saveMetadata(mediaId, {
+              await filmstripStorage.saveMetadata(mediaId, {
                 width: FILMSTRIP_EXTRACT_WIDTH,
                 height: FILMSTRIP_EXTRACT_HEIGHT,
                 isComplete: settled.isComplete && this.shouldPersistCompletionMetadata(pending),
@@ -1678,7 +1678,7 @@ class FilmstripCacheService {
     if (!pending) return 0;
 
     // Discover what is actually saved on disk for this worker's range.
-    const inRangeExistingIndices = await filmstripOPFSStorage.getExistingIndices(
+    const inRangeExistingIndices = await filmstripStorage.getExistingIndices(
       mediaId,
       startIndex,
       endIndex
@@ -1703,7 +1703,7 @@ class FilmstripCacheService {
     if (indices.length === 0) return;
 
     const loadPromises = indices.map(async (index) => {
-      const frame = await filmstripOPFSStorage.loadSingleFrame(mediaId, index);
+      const frame = await filmstripStorage.loadSingleFrame(mediaId, index);
       if (frame) {
         pending.extractedFrames.set(index, frame);
         this.noteFirstFrame(pending.metrics);
@@ -1725,7 +1725,7 @@ class FilmstripCacheService {
         bf.bitmap.close();
         continue;
       }
-      const frame = filmstripOPFSStorage.createFrameFromBitmap(mediaId, bf.index, bf.bitmap);
+      const frame = filmstripStorage.createFrameFromBitmap(mediaId, bf.index, bf.bitmap);
       if (frame) {
         pending.extractedFrames.set(bf.index, frame);
         this.noteFirstFrame(pending.metrics);
@@ -1733,16 +1733,18 @@ class FilmstripCacheService {
     }
   }
 
-  private ingestSavedFrames(
+  private async ingestSavedFrames(
     mediaId: string,
     savedFrames: Array<{ index: number; blob: Blob }>
-  ): void {
+  ): Promise<void> {
     const pending = this.pendingExtractions.get(mediaId);
     if (!pending || savedFrames.length === 0) return;
 
+    const persistWrites: Promise<void>[] = [];
+
     for (const saved of savedFrames) {
       const existing = pending.extractedFrames.get(saved.index);
-      const frame = filmstripOPFSStorage.createFrameFromBlob(mediaId, saved.index, saved.blob);
+      const frame = filmstripStorage.createFrameFromBlob(mediaId, saved.index, saved.blob);
       if (frame) {
         // Close bitmap if this frame was previously bitmap-only
         if (existing?.bitmap) {
@@ -1753,6 +1755,13 @@ class FilmstripCacheService {
           this.noteFirstFrame(pending.metrics);
         }
       }
+      persistWrites.push(
+        filmstripStorage.saveFrameBlob(mediaId, saved.index, saved.blob),
+      );
+    }
+
+    if (persistWrites.length > 0) {
+      await Promise.all(persistWrites);
     }
   }
 
@@ -1919,7 +1928,7 @@ class FilmstripCacheService {
       const totalTargetFrames = Math.max(1, targetIndices.length);
       let extractedTargetCount = skipSet.size;
 
-      await filmstripOPFSStorage.saveMetadata(mediaId, {
+      await filmstripStorage.saveMetadata(mediaId, {
         width: FILMSTRIP_EXTRACT_WIDTH,
         height: FILMSTRIP_EXTRACT_HEIGHT,
         isComplete: false,
@@ -1951,9 +1960,9 @@ class FilmstripCacheService {
         this.drawCoverFrame(video, ctx, canvas.width, canvas.height);
 
         const blob = await this.canvasToBlob(canvas);
-        await filmstripOPFSStorage.saveFrameBlob(mediaId, i, blob);
+        await filmstripStorage.saveFrameBlob(mediaId, i, blob);
 
-        const frame = await filmstripOPFSStorage.loadSingleFrame(mediaId, i);
+        const frame = await filmstripStorage.loadSingleFrame(mediaId, i);
         if (frame) {
           currentPending.extractedFrames.set(i, frame);
           this.noteFirstFrame(currentPending.metrics);
@@ -1987,7 +1996,7 @@ class FilmstripCacheService {
       const finalFrames = Array.from(finishedPending.extractedFrames.values())
         .sort((a, b) => a.index - b.index);
       const settled = this.buildSettledFilmstrip(finishedPending, finalFrames);
-      await filmstripOPFSStorage.saveMetadata(mediaId, {
+      await filmstripStorage.saveMetadata(mediaId, {
         width: FILMSTRIP_EXTRACT_WIDTH,
         height: FILMSTRIP_EXTRACT_HEIGHT,
         isComplete: settled.isComplete && this.shouldPersistCompletionMetadata(finishedPending),
@@ -2285,7 +2294,7 @@ class FilmstripCacheService {
   }
 
   /**
-   * Refresh cached frame URLs from OPFS when a visible tile reports a stale source.
+   * Refresh cached frame URLs from persisted storage when a visible tile reports a stale source.
    */
   async refreshFrames(mediaId: string, frameIndices: number[]): Promise<void> {
     const normalizedIndices = Array.from(new Set(
@@ -2296,7 +2305,7 @@ class FilmstripCacheService {
     }
 
     const refreshedEntries = await Promise.all(normalizedIndices.map(async (index) => {
-      const frame = await filmstripOPFSStorage.loadSingleFrame(mediaId, index);
+      const frame = await filmstripStorage.loadSingleFrame(mediaId, index);
       return frame ? [index, frame] as const : null;
     }));
     const refreshedByIndex = new Map(
@@ -2369,8 +2378,8 @@ class FilmstripCacheService {
     this.clearIdleEvictionTimer(mediaId);
     this.cache.delete(mediaId);
     this.clearCacheMeta(mediaId);
-    filmstripOPFSStorage.revokeUrls(mediaId);
-    await filmstripOPFSStorage.delete(mediaId);
+    filmstripStorage.revokeUrls(mediaId);
+    await filmstripStorage.delete(mediaId);
   }
 
   /**
@@ -2382,7 +2391,7 @@ class FilmstripCacheService {
     }
     this.cache.clear();
     this.memoryState.clear();
-    await filmstripOPFSStorage.clearAll();
+    await filmstripStorage.clearAll();
   }
 
   /**
@@ -2390,7 +2399,7 @@ class FilmstripCacheService {
    *
    * IMPORTANT:
    * - This is runtime cleanup only (workers, timers, in-memory URLs/cache).
-   * - Do NOT clear OPFS filmstrip files here.
+   * - Do NOT clear persisted filmstrip files here.
    *   Persistent filmstrip data must survive page refresh so F5 can reuse cache.
    * - Use clearAll()/clearMedia() only for explicit user/debug cache reset flows.
    */
@@ -2399,9 +2408,9 @@ class FilmstripCacheService {
       this.abort(mediaId);
     }
     this.workerPoolManager.terminateAll();
-    // Revoke in-memory object URLs only; keep persisted OPFS filmstrip files.
+    // Revoke in-memory object URLs only; keep persisted filmstrip files.
     for (const mediaId of this.cache.keys()) {
-      filmstripOPFSStorage.revokeUrls(mediaId);
+      filmstripStorage.revokeUrls(mediaId);
     }
     this.cache.clear();
     this.memoryState.clear();

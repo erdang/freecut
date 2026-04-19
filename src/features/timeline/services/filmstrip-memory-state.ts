@@ -2,7 +2,7 @@ import {
   FILMSTRIP_EXTRACT_HEIGHT,
   FILMSTRIP_EXTRACT_WIDTH,
 } from '@/features/timeline/constants';
-import type { FilmstripFrame } from './filmstrip-opfs-storage';
+import type { FilmstripFrame } from './filmstrip-storage';
 
 const FRAME_MEMORY_FALLBACK_BYTES = FILMSTRIP_EXTRACT_WIDTH * FILMSTRIP_EXTRACT_HEIGHT * 4;
 

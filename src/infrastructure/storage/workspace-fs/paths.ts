@@ -28,7 +28,11 @@
  * │           ├── waveform/{meta.json,bin-N.bin}
  * │           ├── gif-frames/{meta.json,frame-N.png}
  * │           ├── decoded-audio/{meta.json,left-N.bin,right-N.bin}
- * │           └── transcript.json
+ * │           └── ai/
+ * │               ├── transcript.json
+ * │               ├── captions.json
+ * │               ├── scenes.json
+ * │               └── {kind}.json          # new AI outputs go here, one file per kind
  * └── content/
  *     └── {hash[0:2]}/{hash}/
  *         ├── refs.json
@@ -67,11 +71,18 @@ export const MEDIA_THUMBNAIL_FILENAME = 'thumbnail.jpg';
 export const MEDIA_SOURCE_LINK_FILENAME = 'source.link.json';
 export const MEDIA_CACHE_DIR = 'cache';
 
-export const CACHE_FILMSTRIP_DIR = 'filmstrip';
 export const CACHE_WAVEFORM_DIR = 'waveform';
 export const CACHE_GIF_FRAMES_DIR = 'gif-frames';
 export const CACHE_DECODED_AUDIO_DIR = 'decoded-audio';
-export const CACHE_TRANSCRIPT_FILENAME = 'transcript.json';
+export const CACHE_AI_DIR = 'ai';
+/** Per-caption thumbnail JPEGs captured alongside LFM caption generation. */
+export const CACHE_CAPTION_THUMBS_DIR = 'captions-thumbs';
+/**
+ * Legacy path for transcripts — was `cache/transcript.json` before AI outputs
+ * were consolidated under `cache/ai/`. Readers fall back to this on miss; a
+ * subsequent save rewrites to the new path.
+ */
+export const CACHE_TRANSCRIPT_FILENAME_LEGACY = 'transcript.json';
 export const CACHE_META_FILENAME = 'meta.json';
 
 export const CONTENT_REFS_FILENAME = 'refs.json';
@@ -180,14 +191,6 @@ export function mediaCacheDir(id: string): string[] {
   return [...mediaDir(id), MEDIA_CACHE_DIR];
 }
 
-export function filmstripDir(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_FILMSTRIP_DIR];
-}
-
-export function filmstripFramePath(mediaId: string, frameIndex: number): string[] {
-  return [...filmstripDir(mediaId), `frame-${frameIndex}.jpg`];
-}
-
 export function waveformDir(mediaId: string): string[] {
   return [...mediaCacheDir(mediaId), CACHE_WAVEFORM_DIR];
 }
@@ -216,8 +219,65 @@ export function decodedAudioBinPath(
   return [...decodedAudioDir(mediaId), `${channel}-${binIndex}.bin`];
 }
 
-export function transcriptPath(mediaId: string): string[] {
-  return [...mediaCacheDir(mediaId), CACHE_TRANSCRIPT_FILENAME];
+/**
+ * Segments for `media/{id}/cache/ai/` — home for AI-derived analysis outputs
+ * (transcripts, captions, scene cuts, etc.). One file per `AiOutputKind`.
+ */
+export function aiOutputsDir(mediaId: string): string[] {
+  return [...mediaCacheDir(mediaId), CACHE_AI_DIR];
+}
+
+/**
+ * Segments for `media/{id}/cache/ai/{kind}.json`. The caller owns the `kind`
+ * enum (see `ai-outputs/types.ts`) — this helper only does path assembly.
+ */
+export function aiOutputPath(mediaId: string, kind: string): string[] {
+  return [...aiOutputsDir(mediaId), `${kind}.json`];
+}
+
+/** Segments for `media/{id}/cache/ai/captions-thumbs/`. */
+export function captionThumbsDir(mediaId: string): string[] {
+  return [...aiOutputsDir(mediaId), CACHE_CAPTION_THUMBS_DIR];
+}
+
+/** Segments for `media/{id}/cache/ai/captions-thumbs/{index}.jpg`. */
+export function captionThumbPath(mediaId: string, index: number): string[] {
+  return [...captionThumbsDir(mediaId), `${index}.jpg`];
+}
+
+/**
+ * Segments for `media/{id}/cache/ai/captions-embeddings.bin`. Stored as a
+ * contiguous `Float32Array` so 384-dim * N-caption embeddings stay compact
+ * (e.g. 500 captions = 750 KB vs ~4 MB if round-tripped through JSON).
+ */
+export function captionEmbeddingsPath(mediaId: string): string[] {
+  return [...aiOutputsDir(mediaId), 'captions-embeddings.bin'];
+}
+
+/**
+ * Segments for `media/{id}/cache/ai/captions-image-embeddings.bin`. Same
+ * packing as the text embeddings bin but in the CLIP joint embedding
+ * space (typically 512-dim), so semantic queries can fall back to
+ * matching on what the clip *looks like* when caption text is thin.
+ */
+export function captionImageEmbeddingsPath(mediaId: string): string[] {
+  return [...aiOutputsDir(mediaId), 'captions-image-embeddings.bin'];
+}
+
+/**
+ * Workspace-root-relative path (forward-slash separated) for a caption thumb,
+ * safe to persist in JSON / `MediaCaption.thumbRelPath`.
+ */
+export function captionThumbRelPath(mediaId: string, index: number): string {
+  return captionThumbPath(mediaId, index).join('/');
+}
+
+/**
+ * Legacy path kept only for read-fallback. New writes go through
+ * `aiOutputPath(mediaId, 'transcript')`.
+ */
+export function legacyTranscriptPath(mediaId: string): string[] {
+  return [...mediaCacheDir(mediaId), CACHE_TRANSCRIPT_FILENAME_LEGACY];
 }
 
 export function cacheMetaPath(dir: string[]): string[] {
@@ -239,10 +299,11 @@ export function contentDataPath(hash: string, extension: string): string[] {
   return [...contentDir(hash), `data.${ext}`];
 }
 
-/* ───────────────── Mirrored OPFS caches (shared across origins) ─────────────── */
+/* ---------------- Shared persisted caches ---------------- */
 //
-// These caches are primary in OPFS for speed but are also mirrored into the
-// workspace folder so other origins can read them without regenerating.
+// These caches live outside the media metadata tree so other origins can reuse
+// them without regenerating. Some still hydrate from legacy OPFS on demand.
+// Filmstrips intentionally use top-level `filmstrips/{mediaId}/...`.
 
 export const WORKSPACE_PROXIES_DIR = 'proxies';
 export const WORKSPACE_FILMSTRIPS_DIR = 'filmstrips';
@@ -266,13 +327,16 @@ export function filmstripMetaPath(mediaId: string): string[] {
 }
 
 export function previewAudioPath(relativePath: string): string[] {
-  // relativePath like 'm-123/track-left.wav' — keep original OPFS layout.
-  return [WORKSPACE_PREVIEW_AUDIO_DIR, ...relativePath.split('/')];
+  // Legacy metadata may already include the top-level 'preview-audio/' prefix.
+  // Normalize that away so workspace paths stay rooted at one shared folder.
+  const normalized = relativePath.replace(/^preview-audio\//, '');
+  return [WORKSPACE_PREVIEW_AUDIO_DIR, ...normalized.split('/').filter(Boolean)];
 }
 
 /**
- * Fast multi-resolution waveform binary — the OPFS-primary cache used by the
- * timeline renderer, mirrored here for cross-origin reuse. Different from
+ * Fast multi-resolution waveform binary. The timeline renderer still keeps an
+ * OPFS-local copy for range reads, while the workspace mirror enables
+ * cross-origin reuse. Different from
  * `waveformBinPath` above, which addresses bins inside the per-media cache.
  */
 export function waveformBinaryPath(mediaId: string): string[] {
