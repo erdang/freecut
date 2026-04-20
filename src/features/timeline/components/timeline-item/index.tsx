@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
+import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useShallow } from 'zustand/react/shallow';
 import { setMixerLiveGains, getMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
@@ -1755,6 +1755,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
+  const volumeLineRef = useRef<HTMLDivElement>(null);
+  const snapVolumeLineTop = useCallback((ratio: number) => {
+    const line = volumeLineRef.current;
+    const container = audioControlsRef.current;
+    if (!line || !container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    const docY = rect.top + rect.height * ratio;
+    line.style.top = `${Math.round(docY) - rect.top}px`;
+  }, []);
   const applyAudioVolumeVisualPreview = useCallback((previewVolumeDb: number) => {
     audioVolumePreviewRef.current = previewVolumeDb;
 
@@ -1769,6 +1779,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       );
     }
 
+    snapVolumeLineTop(getAudioVolumeLineY(previewVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) / AUDIO_ENVELOPE_VIEWBOX_HEIGHT);
+
     if (audioVolumeEditLabelRef.current) {
       audioVolumeEditLabelRef.current.textContent = `Volume ${previewVolumeDb >= 0 ? '+' : ''}${previewVolumeDb.toFixed(1)} dB`;
     }
@@ -1782,6 +1794,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     applyAudioVolumeVisualPreview(itemVolume ?? 0);
   }, [applyAudioVolumeVisualPreview, audioVolumeEdit, itemType, itemVolume]);
+  useLayoutEffect(() => {
+    if (itemType !== 'audio') return;
+    const container = audioControlsRef.current;
+    if (!container) return;
+    const ratio = audioVolumeLineY / AUDIO_ENVELOPE_VIEWBOX_HEIGHT;
+    snapVolumeLineTop(ratio);
+    const ro = new ResizeObserver(() => snapVolumeLineTop(ratio));
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [itemType, audioVolumeLineY, snapVolumeLineTop]);
   const finalizeAudioVolumeChange = useCallback((nextVolume: number, options?: {
     preserveLiveGainOnCommit?: boolean;
     commitFromActiveEdit?: boolean;
@@ -2685,9 +2707,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                     style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
                   >
                     <div
-                      className="absolute left-0 right-0 h-px -translate-y-1/2 pointer-events-none"
+                      ref={volumeLineRef}
+                      className="absolute left-0 right-0 pointer-events-none"
                       style={{
-                        top: `var(--timeline-audio-volume-line-y, ${audioVolumeLineYPercent}%)`,
+                        height: '1px',
                         backgroundColor: audioVolumeLineStroke,
                       }}
                     />
