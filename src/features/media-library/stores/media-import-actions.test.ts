@@ -5,6 +5,7 @@ import { createImportActions } from './media-import-actions';
 
 const mediaLibraryServiceMocks = vi.hoisted(() => ({
   importMediaWithHandle: vi.fn(),
+  importMediaFromUrl: vi.fn(),
   getMediaFile: vi.fn(),
 }));
 
@@ -170,6 +171,55 @@ describe('createImportActions', () => {
     expect(currentState.mediaItems).toEqual([imported]);
     expect(currentState.importingIds).toEqual([]);
     expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('imported-1', 'proxy-imported-1');
+  });
+
+  it('imports media from a direct URL and prepends it to the library', async () => {
+    const imported = makeMedia({ id: 'remote-1', storageType: 'opfs', fileName: 'clip.mp4' });
+    mediaLibraryServiceMocks.importMediaFromUrl.mockResolvedValue(imported);
+
+    let currentState = createMockState({
+      mediaItems: [makeMedia({ id: 'older-1', fileName: 'older.mp4' })],
+    });
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState & MediaLibraryActions;
+    });
+    const get = vi.fn(() => currentState);
+
+    const actions = createImportActions(set, get);
+    const result = await actions.importMediaFromUrl('https://cdn.example.com/clip.mp4');
+
+    expect(result).toEqual([imported]);
+    expect(mediaLibraryServiceMocks.importMediaFromUrl).toHaveBeenCalledWith(
+      'https://cdn.example.com/clip.mp4',
+      'project-1',
+    );
+    expect(currentState.mediaItems.map((item) => item.id)).toEqual(['remote-1', 'older-1']);
+    expect(proxyServiceMocks.setProxyKey).toHaveBeenCalledWith('remote-1', 'proxy-remote-1');
+  });
+
+  it('shows an info notification when a URL import resolves to an existing media item', async () => {
+    const duplicate = makeMedia({ id: 'existing-1', storageType: 'opfs', fileName: 'clip.mp4' });
+    mediaLibraryServiceMocks.importMediaFromUrl.mockResolvedValue({
+      ...duplicate,
+      isDuplicate: true,
+    });
+
+    let currentState = createMockState();
+    const set = vi.fn((updater: ImportUpdater) => {
+      currentState = applyStateUpdate(currentState, updater) as MediaLibraryState & MediaLibraryActions;
+    });
+    const get = vi.fn(() => currentState);
+
+    const actions = createImportActions(set, get);
+    const result = await actions.importMediaFromUrl('https://cdn.example.com/clip.mp4');
+
+    expect(result).toEqual([]);
+    expect(currentState.mediaItems).toEqual([]);
+    expect(currentState.showNotification).toHaveBeenCalledWith({
+      type: 'info',
+      message: '"clip.mp4" already exists in library',
+    });
+    expect(proxyServiceMocks.setProxyKey).not.toHaveBeenCalled();
   });
 
   it('removes duplicate placeholders and shows an info notification', async () => {

@@ -21,7 +21,7 @@ export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
 export interface UnsupportedCodecFile {
   fileName: string;
   audioCodec: string;
-  handle: FileSystemFileHandle;
+  handle?: FileSystemFileHandle;
 }
 
 /**
@@ -120,6 +120,11 @@ export interface MediaLibraryActions {
    * Uses FileSystemFileHandle to reference files directly on user's disk
    */
   importMedia: () => Promise<MediaMetadata[]>;
+  /**
+   * Import media from a direct URL into OPFS-backed storage.
+   * Best for CORS-enabled direct media files (mp4, mp3, png, etc.).
+   */
+  importMediaFromUrl: (url: string) => Promise<MediaMetadata[]>;
   /**
    * Import media from file handles (for drag-drop)
    * Uses FileSystemFileHandle directly without file picker

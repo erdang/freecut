@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText, ScanSearch } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText, ScanSearch } from 'lucide-react';
 import { SceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser';
 import { createLogger } from '@/shared/logging/logger';
 
@@ -24,6 +24,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Collapsible,
   CollapsibleContent,
@@ -170,12 +178,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({ mediaIds: [], compositionIds: [] });
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['video', 'audio', 'image', 'gif']));
   const [isDragging, setIsDragging] = useState(false);
+  const [showImportUrlDialog, setShowImportUrlDialog] = useState(false);
+  const [importUrlValue, setImportUrlValue] = useState('');
+  const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false);
 
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId);
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject);
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
+  const importMediaFromUrl = useMediaLibraryStore((s) => s.importMediaFromUrl);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
   const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const showNotification = useMediaLibraryStore((s) => s.showNotification);
@@ -430,6 +442,26 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       logger.error('Import failed:', error);
     }
   };
+
+  const handleImportUrl = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isImportUrlSubmitting) {
+      return;
+    }
+
+    setIsImportUrlSubmitting(true);
+    try {
+      await importMediaFromUrl(importUrlValue);
+      if (!useMediaLibraryStore.getState().error) {
+        setShowImportUrlDialog(false);
+        setImportUrlValue('');
+      }
+    } catch (error) {
+      logger.error('Import from URL failed:', error);
+    } finally {
+      setIsImportUrlSubmitting(false);
+    }
+  }, [importMediaFromUrl, importUrlValue, isImportUrlSubmitting]);
 
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(async (handles: FileSystemFileHandle[]) => {
@@ -713,6 +745,21 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               </button>
             </HeaderActionTooltip>
 
+            <HeaderActionTooltip label="Import media from URL">
+              <button
+                onClick={() => setShowImportUrlDialog(true)}
+                disabled={!currentProjectId}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                  bg-secondary border-border text-muted-foreground
+                  hover:text-primary hover:bg-primary/10 hover:border-primary/40
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  transition-colors duration-150"
+              >
+                <Link className="w-3.5 h-3.5" />
+                <span className="hidden @[360px]:inline">URL</span>
+              </button>
+            </HeaderActionTooltip>
+
             {/* Missing media indicator */}
             {currentProjectBrokenMediaIds.length > 0 && (
               <HeaderActionTooltip label={`View ${currentProjectBrokenMediaIds.length} missing media file${currentProjectBrokenMediaIds.length === 1 ? '' : 's'}`}>
@@ -783,6 +830,65 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           </div>
         </TooltipProvider>
       </div>
+
+      <Dialog
+        open={showImportUrlDialog}
+        onOpenChange={(open) => {
+          setShowImportUrlDialog(open);
+          if (!open && !isImportUrlSubmitting) {
+            setImportUrlValue('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Import From URL</DialogTitle>
+            <DialogDescription>
+              Paste a direct link to a media file. MP4, WebM, MOV, MP3, WAV, JPG, PNG, GIF, WebP, and SVG links work when the site allows browser downloads. YouTube and similar page URLs usually will not.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleImportUrl} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                autoFocus
+                type="url"
+                inputMode="url"
+                placeholder="https://example.com/video.mp4"
+                value={importUrlValue}
+                onChange={(event) => setImportUrlValue(event.target.value)}
+                disabled={isImportUrlSubmitting}
+              />
+              <p className="text-xs text-muted-foreground">
+                The file is downloaded into the current project and stored locally for editing.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!isImportUrlSubmitting) {
+                    setShowImportUrlDialog(false);
+                    setImportUrlValue('');
+                  }
+                }}
+                disabled={isImportUrlSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!currentProjectId || importUrlValue.trim().length === 0 || isImportUrlSubmitting}
+              >
+                {isImportUrlSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Import
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Error message */}
       {error && (
