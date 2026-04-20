@@ -158,7 +158,7 @@ describe('overlay containers must not block trim handle events', () => {
     const root = container.firstElementChild!;
     expect(root.className).toContain('pointer-events-none');
     // The drag target opts back in
-    const button = screen.getByRole('button', { name: 'Adjust clip volume' });
+    const button = screen.getByRole('button', { name: '调整片段音量' });
     expect(button.className).toContain('pointer-events-auto');
   });
 

@@ -20,8 +20,8 @@ describe('VideoFadeHandles', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Adjust video fade in' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Adjust video fade out' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '调整视频淡入' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '调整视频淡出' })).toBeInTheDocument();
   });
 
   it('shows the hover label and prevents double-click from bubbling', () => {
@@ -47,7 +47,7 @@ describe('VideoFadeHandles', () => {
       </div>
     );
 
-    const fadeInHandle = screen.getByRole('button', { name: 'Adjust video fade in' });
+    const fadeInHandle = screen.getByRole('button', { name: '调整视频淡入' });
 
     fireEvent.mouseEnter(fadeInHandle);
     expect(screen.getByText('Fade In 1.00s')).toBeInTheDocument();

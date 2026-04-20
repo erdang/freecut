@@ -80,7 +80,7 @@ export const TrackHeader = memo(function TrackHeader({
 
   // Use track drag hook (visuals handled centrally by timeline.tsx via DOM)
   const { handleDragStart } = useTrackDrag(track);
-  const itemCountLabel = `${itemCount} ${itemCount === 1 ? 'Clip' : 'Clips'}`;
+  const itemCountLabel = `${itemCount} 个片段`;
 
   return (
     <ContextMenu>
@@ -120,8 +120,8 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleDisabled();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              aria-label={trackDisabled ? 'Enable track' : 'Disable track'}
-              data-tooltip={trackDisabled ? 'Enable track' : 'Disable track'}
+              aria-label={trackDisabled ? '启用轨道' : '禁用轨道'}
+              data-tooltip={trackDisabled ? '启用轨道' : '禁用轨道'}
             >
               {trackDisabled ? (
                 <PowerOff className="w-3 h-3 text-primary" />
@@ -141,8 +141,8 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleSolo();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              aria-label={track.solo ? 'Unsolo track' : 'Solo track'}
-              data-tooltip={track.solo ? 'Unsolo track' : 'Solo track'}
+              aria-label={track.solo ? '取消独奏轨道' : '独奏轨道'}
+              data-tooltip={track.solo ? '取消独奏轨道' : '独奏轨道'}
             >
               <Radio
                 className={`w-3 h-3 ${track.solo ? 'text-primary' : ''}`}
@@ -160,8 +160,8 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleLock();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              aria-label={track.locked ? 'Unlock track' : 'Lock track'}
-              data-tooltip={track.locked ? 'Unlock track' : 'Lock track'}
+              aria-label={track.locked ? '解锁轨道' : '锁定轨道'}
+              data-tooltip={track.locked ? '解锁轨道' : '锁定轨道'}
             >
               <Lock
                 className={`w-3 h-3 ${track.locked ? 'text-primary' : 'opacity-70'}`}
@@ -178,8 +178,8 @@ export const TrackHeader = memo(function TrackHeader({
                 onToggleSyncLock();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              aria-label={syncLockEnabled ? 'Disable sync lock' : 'Enable sync lock'}
-              data-tooltip={syncLockEnabled ? 'Disable sync lock' : 'Enable sync lock'}
+              aria-label={syncLockEnabled ? '关闭同步锁' : '开启同步锁'}
+              data-tooltip={syncLockEnabled ? '关闭同步锁' : '开启同步锁'}
             >
               <Link2
                 className={`w-3 h-3 ${syncLockEnabled ? 'text-primary' : 'opacity-70'}`}
@@ -196,8 +196,8 @@ export const TrackHeader = memo(function TrackHeader({
                 onCloseGaps?.();
               }}
               onMouseDown={(e) => e.stopPropagation()}
-              aria-label="Close all gaps"
-              data-tooltip="Close all gaps"
+              aria-label="闭合所有间隙"
+              data-tooltip="闭合所有间隙"
             >
               <FoldHorizontal className="w-3 h-3" />
             </Button>
@@ -216,22 +216,22 @@ export const TrackHeader = memo(function TrackHeader({
 
       <ContextMenuContent className="w-52">
         <ContextMenuItem onClick={onCloseGaps}>
-          Close All Gaps
+          闭合所有间隙
         </ContextMenuItem>
 
         <ContextMenuSeparator />
         <ContextMenuItem onClick={onAddVideoTrack}>
-          Add Video Track
+          添加视频轨道
         </ContextMenuItem>
         <ContextMenuItem onClick={onAddAudioTrack}>
-          Add Audio Track
+          添加音频轨道
         </ContextMenuItem>
         <ContextMenuSeparator />
         <ContextMenuItem disabled={!canDeleteTrack} onClick={onDeleteTrack}>
-          Delete Track
+          删除轨道
         </ContextMenuItem>
         <ContextMenuItem disabled={!canDeleteEmptyTracks} onClick={onDeleteEmptyTracks}>
-          Delete Empty Tracks
+          删除空轨道
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

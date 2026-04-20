@@ -116,7 +116,7 @@ export function WorkspaceGate({ children }: { children: React.ReactNode }) {
     const unsubscribe = onPermissionLost(() => {
       void (async () => {
         const record = await getWorkspaceHandleRecord();
-        setStatus({ kind: 'reconnect', handleName: record?.name ?? 'workspace' });
+        setStatus({ kind: 'reconnect', handleName: record?.name ?? '工作区' });
       })();
     });
     return () => {

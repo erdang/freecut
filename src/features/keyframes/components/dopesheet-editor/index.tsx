@@ -2891,8 +2891,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
               onClick={() => handleRowNavigate(row.property, row.controls.prevKeyframe)}
               disabled={disabled || row.controls.prevKeyframe === null || !onNavigateToKeyframe}
-              title={`Previous ${PROPERTY_LABELS[row.property]} keyframe`}
-              aria-label={`Previous ${PROPERTY_LABELS[row.property]} keyframe`}
+              title={`上一个${PROPERTY_LABELS[row.property]}关键帧`}
+              aria-label={`上一个${PROPERTY_LABELS[row.property]}关键帧`}
             >
               <ChevronLeft className="h-[9px] w-[9px]" />
             </Button>
@@ -2918,13 +2918,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               }
               title={
                 row.controls.hasKeyframeAtCurrentFrame
-                  ? `Remove ${PROPERTY_LABELS[row.property]} keyframe at playhead`
-                  : `Toggle ${PROPERTY_LABELS[row.property]} keyframe at playhead`
+                  ? `删除播放头处的${PROPERTY_LABELS[row.property]}关键帧`
+                  : `在播放头处切换${PROPERTY_LABELS[row.property]}关键帧`
               }
               aria-label={
                 row.controls.hasKeyframeAtCurrentFrame
-                  ? `Remove ${PROPERTY_LABELS[row.property]} keyframe at playhead`
-                  : `Toggle ${PROPERTY_LABELS[row.property]} keyframe at playhead`
+                  ? `删除播放头处的${PROPERTY_LABELS[row.property]}关键帧`
+                  : `在播放头处切换${PROPERTY_LABELS[row.property]}关键帧`
               }
             >
               <span
@@ -2943,8 +2943,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground"
               onClick={() => handleRowNavigate(row.property, row.controls.nextKeyframe)}
               disabled={disabled || row.controls.nextKeyframe === null || !onNavigateToKeyframe}
-              title={`Next ${PROPERTY_LABELS[row.property]} keyframe`}
-              aria-label={`Next ${PROPERTY_LABELS[row.property]} keyframe`}
+              title={`下一个${PROPERTY_LABELS[row.property]}关键帧`}
+              aria-label={`下一个${PROPERTY_LABELS[row.property]}关键帧`}
             >
               <ChevronRight className="h-[9px] w-[9px]" />
             </Button>
@@ -3107,8 +3107,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 handleRowNavigate(group.prevKeyframe?.property ?? group.rows[0]?.property ?? 'x', group.prevKeyframe?.keyframe ?? null);
               }}
               disabled={disabled || group.prevKeyframe === null || !onNavigateToKeyframe}
-              title={`Previous ${group.label} keyframe`}
-              aria-label={`Previous ${group.label} keyframe`}
+              title={`上一个${group.label}关键帧`}
+              aria-label={`上一个${group.label}关键帧`}
             >
               <ChevronLeft className={MINI_ICON_CLASS} />
             </Button>
@@ -3131,13 +3131,13 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               disabled={!canToggleCurrentFrame}
               title={
                 hasUnlockedCurrentKeyframes
-                  ? `Remove ${group.label} keyframes at playhead`
-                  : `Toggle ${group.label} keyframes at playhead`
+                  ? `删除播放头处的${group.label}关键帧`
+                  : `在播放头处切换${group.label}关键帧`
               }
               aria-label={
                 hasUnlockedCurrentKeyframes
-                  ? `Remove ${group.label} keyframes at playhead`
-                  : `Toggle ${group.label} keyframes at playhead`
+                  ? `删除播放头处的${group.label}关键帧`
+                  : `在播放头处切换${group.label}关键帧`
               }
             >
               <span
@@ -3159,8 +3159,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 handleRowNavigate(group.nextKeyframe?.property ?? group.rows[0]?.property ?? 'x', group.nextKeyframe?.keyframe ?? null);
               }}
               disabled={disabled || group.nextKeyframe === null || !onNavigateToKeyframe}
-              title={`Next ${group.label} keyframe`}
-              aria-label={`Next ${group.label} keyframe`}
+              title={`下一个${group.label}关键帧`}
+              aria-label={`下一个${group.label}关键帧`}
             >
               <ChevronRight className={MINI_ICON_CLASS} />
             </Button>
@@ -3433,15 +3433,15 @@ export const DopesheetEditor = memo(function DopesheetEditor({
     [expandedGroups, groupedPropertyRows, renderGroupHeaderContent, renderPropertyRowContent]
   );
   const emptyStateMessage = hasPropertyFilters
-    ? 'No parameters match the current view'
-    : 'No keyframes to display';
+    ? '当前视图下无匹配参数'
+    : '没有可显示的关键帧';
 
   return (
     <div className={cn('flex h-full flex-col gap-0.5 overflow-hidden', className)} style={{ height, width }}>
       <div className="flex items-center justify-between px-2 flex-shrink-0 min-h-7">
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1">
-            <span className="text-xs text-muted-foreground">Parameters</span>
+            <span className="text-xs text-muted-foreground">参数</span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -3449,7 +3449,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   size="sm"
                   className="h-7 w-7 p-0"
                   disabled={disabled || availableProperties.length === 0}
-                  aria-label="Parameter display options"
+                  aria-label="参数显示选项"
                 >
                   <MoreHorizontal className="h-3.5 w-3.5" />
                 </Button>
@@ -3462,7 +3462,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   }}
                 >
                   <Check className={cn('h-3.5 w-3.5', !showKeyframedOnly && 'opacity-0')} />
-                  Display Parameters with Keyframes
+                  仅显示含关键帧的参数
                 </DropdownMenuItem>
                 {allPropertyGroups.length > 0 && <DropdownMenuSeparator />}
                 {allPropertyGroups.map((group) => {
@@ -3476,20 +3476,20 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                       }}
                     >
                       <Check className={cn('h-3.5 w-3.5', !isVisible && 'opacity-0')} />
-                      {`Display ${group.label} Parameters`}
+                      {`显示${group.label}参数`}
                     </DropdownMenuItem>
                   );
                 })}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setAllGroupsExpanded(true)}>
-                  Expand All Parameters
+                  展开全部参数
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setAllGroupsExpanded(false)}>
-                  Collapse All Parameters
+                  折叠全部参数
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={resetParameterView}>
-                  Reset Parameter View
+                  重置参数视图
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -3497,23 +3497,23 @@ export const DopesheetEditor = memo(function DopesheetEditor({
 
           {hasPropertyFilters && (
             <span className="text-[10px] uppercase tracking-[0.08em] text-muted-foreground">
-              Filtered
+              已筛选
             </span>
           )}
 
           {visualizationMode === 'graph' && graphDisplayProperty && (
             <span className="text-xs text-muted-foreground">
-              Graph: {PROPERTY_LABELS[graphDisplayProperty]}
+              曲线：{PROPERTY_LABELS[graphDisplayProperty]}
             </span>
           )}
 
           <span className="text-xs text-muted-foreground">
-            {visibleKeyframes.length} keyframe{visibleKeyframes.length !== 1 ? 's' : ''}
+            {visibleKeyframes.length} 个关键帧
           </span>
 
           <div className="flex items-center gap-1">
             <div className="flex items-center gap-0.5">
-              <span className="text-[10px] text-muted-foreground">Local</span>
+              <span className="text-[10px] text-muted-foreground">本地</span>
               <Input
                 type="number"
                 value={localFrameInputValue}
@@ -3529,7 +3529,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 onKeyDown={(event) =>
                   handleHeaderFrameInputKeyDown(event, 'local', commitLocalFrameInput)
                 }
-                aria-label="Local frame"
+                aria-label="本地帧"
                 className="h-5 w-12 px-1 text-center text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 min={0}
                 max={Math.max(totalFrames - 1, 0)}
@@ -3543,7 +3543,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             </div>
             {globalFrame !== null && (
               <div className="flex items-center gap-0.5">
-                <span className="text-[10px] text-muted-foreground">Global</span>
+                <span className="text-[10px] text-muted-foreground">全局</span>
                 <Input
                   type="number"
                   value={globalFrameInputValue}
@@ -3559,7 +3559,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                   onKeyDown={(event) =>
                     handleHeaderFrameInputKeyDown(event, 'global', commitGlobalFrameInput)
                   }
-                  aria-label="Global frame"
+                  aria-label="全局帧"
                   className="h-5 w-14 px-1 text-center text-[10px] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   disabled={
                     disabled ||
@@ -3577,7 +3577,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
           {visualizationMode === 'graph' && interpolationOptions.length > 0 && (
             <div
               className="flex items-center gap-0.5 rounded-md border border-border/80 bg-muted/20 px-0.5 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]"
-              aria-label="Interpolation controls"
+              aria-label="插值控制"
             >
               {interpolationOptions.map((option) => {
                 const isActive = selectedInterpolation === option.value;
@@ -3593,7 +3593,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                     onClick={() => onInterpolationChange?.(option.value)}
                     disabled={disabled || interpolationDisabled || !onInterpolationChange}
                     title={option.label}
-                    aria-label={`Set interpolation to ${option.label}`}
+                    aria-label={`将插值设为${option.label}`}
                     aria-pressed={isActive}
                   >
                     <InterpolationTypeIcon type={option.value} />
@@ -3610,8 +3610,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 className="h-6 w-6 p-0"
                 onClick={onCopyKeyframes}
                 disabled={disabled || selectedRefs.length === 0 || !onCopyKeyframes}
-                title="Copy selected keyframes"
-                aria-label="Copy selected keyframes"
+                title="复制所选关键帧"
+                aria-label="复制所选关键帧"
               >
                 <Copy className="h-3 w-3" />
               </Button>
@@ -3621,8 +3621,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 className="h-6 w-6 p-0"
                 onClick={onCutKeyframes}
                 disabled={disabled || selectedRefs.length === 0 || !onCutKeyframes}
-                title="Cut selected keyframes"
-                aria-label="Cut selected keyframes"
+                title="剪切所选关键帧"
+                aria-label="剪切所选关键帧"
               >
                 <Scissors className="h-3 w-3" />
               </Button>
@@ -3632,14 +3632,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 className="h-6 w-6 p-0"
                 onClick={onPasteKeyframes}
                 disabled={disabled || !hasKeyframeClipboard || !onPasteKeyframes}
-                title={isKeyframeClipboardCut ? 'Move keyframes from clipboard' : 'Paste keyframes'}
-                aria-label={isKeyframeClipboardCut ? 'Move keyframes from clipboard' : 'Paste keyframes'}
+                title={isKeyframeClipboardCut ? '从剪贴板移动关键帧' : '粘贴关键帧'}
+                aria-label={isKeyframeClipboardCut ? '从剪贴板移动关键帧' : '粘贴关键帧'}
               >
                 <ClipboardPaste className="h-3 w-3" />
               </Button>
               {isKeyframeClipboardCut && hasKeyframeClipboard && (
                 <span className="pl-0.5 text-[10px] font-medium text-amber-500">
-                  Cut
+                  剪切
                 </span>
               )}
             </div>
@@ -3651,14 +3651,14 @@ export const DopesheetEditor = memo(function DopesheetEditor({
               className="h-6 w-6 p-0 text-destructive hover:text-destructive"
               onClick={handleRemoveKeyframes}
               disabled={disabled || selectedRefs.length === 0 || !onRemoveKeyframes}
-              title="Remove selected keyframes"
+              title="删除所选关键帧"
             >
               <Trash2 className="h-3 w-3" />
             </Button>
             <div className="mx-0.5 h-3.5 w-px bg-border/80" />
             <MiniZoomControl
               icon={<MoveHorizontal className="h-3 w-3" />}
-              label="Horizontal zoom"
+              label="水平缩放"
               value={horizontalZoomValue}
               disabled={disabled || horizontalZoomRatioBase <= 1}
               onValueChange={setHorizontalZoomValue}
@@ -3669,7 +3669,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 <div className="mx-0.5 h-3.5 w-px bg-border/80" />
                 <MiniZoomControl
                   icon={<MoveVertical className="h-3 w-3" />}
-                  label="Vertical zoom"
+                  label="垂直缩放"
                   value={graphVerticalZoomValue}
                   disabled={disabled || visibleGraphProperties.length === 0 || verticalZoomRatioBase <= 1}
                   onValueChange={setGraphVerticalZoomValue}
@@ -3685,8 +3685,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 size="sm"
                 className="h-6 w-6 p-0"
                 disabled={disabled}
-                aria-label={visualizationMode === 'graph' ? 'Graph view options' : 'Sheet view options'}
-                title={visualizationMode === 'graph' ? 'Graph view options' : 'Sheet view options'}
+                aria-label={visualizationMode === 'graph' ? '曲线视图选项' : '表格视图选项'}
+                title={visualizationMode === 'graph' ? '曲线视图选项' : '表格视图选项'}
               >
                 <MoreHorizontal className="h-3 w-3" />
               </Button>
@@ -3699,7 +3699,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 }}
               >
                 <Check className={cn('h-3.5 w-3.5', graphRulerUnit !== 'seconds' && 'opacity-0')} />
-                Display Time Ruler in Seconds
+                时间标尺显示为秒
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={(event) => {
@@ -3708,7 +3708,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 }}
               >
                 <Check className={cn('h-3.5 w-3.5', graphRulerUnit !== 'frames' && 'opacity-0')} />
-                Display Time Ruler in Frames
+                时间标尺显示为帧
               </DropdownMenuItem>
               {visualizationMode === 'graph' && (
                 <>
@@ -3720,7 +3720,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                     }}
                   >
                     <Check className={cn('h-3.5 w-3.5', !showAllGraphHandles && 'opacity-0')} />
-                    Show All Handles
+                    显示全部控制柄
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={(event) => {
@@ -3729,7 +3729,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                     }}
                   >
                     <Check className={cn('h-3.5 w-3.5', !autoZoomGraphHeight && 'opacity-0')} />
-                    Auto Zoom Graph Height
+                    自动缩放曲线高度
                   </DropdownMenuItem>
                 </>
               )}

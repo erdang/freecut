@@ -32,9 +32,9 @@ const horizontalAlignments: Array<{
   icon: typeof AlignStartVertical;
   label: string;
 }> = [
-  { type: 'left', icon: AlignStartVertical, label: 'Align Left' },
-  { type: 'center-h', icon: AlignCenterVertical, label: 'Center Horizontally' },
-  { type: 'right', icon: AlignEndVertical, label: 'Align Right' },
+  { type: 'left', icon: AlignStartVertical, label: '左对齐' },
+  { type: 'center-h', icon: AlignCenterVertical, label: '水平居中' },
+  { type: 'right', icon: AlignEndVertical, label: '右对齐' },
 ];
 
 const verticalAlignments: Array<{
@@ -42,9 +42,9 @@ const verticalAlignments: Array<{
   icon: typeof AlignStartHorizontal;
   label: string;
 }> = [
-  { type: 'top', icon: AlignStartHorizontal, label: 'Align Top' },
-  { type: 'center-v', icon: AlignCenterHorizontal, label: 'Center Vertically' },
-  { type: 'bottom', icon: AlignEndHorizontal, label: 'Align Bottom' },
+  { type: 'top', icon: AlignStartHorizontal, label: '顶部对齐' },
+  { type: 'center-v', icon: AlignCenterHorizontal, label: '垂直居中' },
+  { type: 'bottom', icon: AlignEndHorizontal, label: '底部对齐' },
 ];
 
 const distributionAlignments: Array<{
@@ -55,12 +55,12 @@ const distributionAlignments: Array<{
   {
     type: 'distribute-h',
     icon: AlignHorizontalDistributeCenter,
-    label: 'Distribute Horizontally',
+    label: '水平分布',
   },
   {
     type: 'distribute-v',
     icon: AlignVerticalDistributeCenter,
-    label: 'Distribute Vertically',
+    label: '垂直分布',
   },
 ];
 

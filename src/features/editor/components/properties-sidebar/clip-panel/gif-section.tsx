@@ -87,9 +87,9 @@ export function GifSection({ items }: GifSectionProps) {
   if (gifItems.length === 0) return null;
 
   return (
-    <PropertySection title="Animation" icon={Image} defaultOpen={true}>
+    <PropertySection title="动画" icon={Image} defaultOpen={true}>
       {/* Playback Speed - affects animation rate (not duration) */}
-      <PropertyRow label="Speed">
+      <PropertyRow label="速度">
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={speed}
@@ -105,7 +105,7 @@ export function GifSection({ items }: GifSectionProps) {
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetSpeed}
-            title="Reset to 1x"
+            title="重置为 1 倍"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
@@ -114,4 +114,3 @@ export function GifSection({ items }: GifSectionProps) {
     </PropertySection>
   );
 }
-

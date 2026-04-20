@@ -20,7 +20,7 @@ describe('AudioVolumeControl', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Adjust clip volume' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '调整片段音量' })).toBeInTheDocument();
   });
 
   it('only enables dragging after the hover delay', () => {
@@ -39,7 +39,7 @@ describe('AudioVolumeControl', () => {
       />
     );
 
-    const button = screen.getByRole('button', { name: 'Adjust clip volume' });
+    const button = screen.getByRole('button', { name: '调整片段音量' });
 
     fireEvent.mouseEnter(button);
     fireEvent.mouseDown(button);
@@ -72,7 +72,7 @@ describe('AudioVolumeControl', () => {
       </div>
     );
 
-    const button = screen.getByRole('button', { name: 'Adjust clip volume' });
+    const button = screen.getByRole('button', { name: '调整片段音量' });
 
     fireEvent.click(button);
     fireEvent.doubleClick(button);

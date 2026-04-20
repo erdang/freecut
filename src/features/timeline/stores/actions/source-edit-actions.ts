@@ -47,7 +47,7 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
     sourcePatchAudioTrackId,
   } = useEditorStore.getState();
   if (!sourceMediaId) {
-    toast.warning('Open a source in the source monitor first');
+    toast.warning('请先在源监视器中打开素材');
     return null;
   }
 
@@ -112,13 +112,13 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
   });
   if (!resolvedTargets) {
     if (!sourcePatchVideoEnabled && !sourcePatchAudioEnabled) {
-      toast.warning('Enable V and/or A source patch targets first');
+      toast.warning('请先启用 V 和/或 A 源补丁目标');
     } else if (mediaType === 'audio' && !sourcePatchAudioEnabled) {
-      toast.warning('Enable the A source patch target to edit audio');
+      toast.warning('编辑音频请启用 A 源补丁目标');
     } else if ((mediaType === 'video' || mediaType === 'image') && !sourcePatchVideoEnabled && !hasAudio) {
-      toast.warning('Enable the V source patch target to edit this source');
+      toast.warning('编辑此素材请启用 V 源补丁目标');
     } else {
-      toast.warning('Unable to resolve source patch targets');
+      toast.warning('无法解析源补丁目标轨道');
     }
     return null;
   }
@@ -130,14 +130,14 @@ async function resolveSourceEditContext(): Promise<SourceEditContext | null> {
     targetTrackIds.includes(timelineTrack.id) && timelineTrack.locked
   );
   if (lockedTarget) {
-    toast.warning(`Target track ${lockedTarget.name} is locked`);
+    toast.warning(`目标轨道 ${lockedTarget.name} 已锁定`);
     return null;
   }
 
   // Resolve blob URLs before execute (async not allowed inside execute)
   const blobUrl = await mediaLibraryService.getMediaBlobUrl(sourceMediaId);
   if (!blobUrl) {
-    toast.error('Failed to load source media');
+    toast.error('加载源素材失败');
     return null;
   }
   const thumbnailUrl = (await mediaLibraryService.getThumbnailBlobUrl(sourceMediaId)) || undefined;
@@ -261,7 +261,7 @@ export async function performInsertEdit(): Promise<void> {
   const newItems = createTimelineItems(ctx);
   const targetTrackIds = Array.from(new Set(newItems.map((item) => item.trackId)));
   if (newItems.length === 0 || targetTrackIds.length === 0) {
-    toast.warning('Unable to resolve source patch targets');
+    toast.warning('无法解析源补丁目标轨道');
     return;
   }
 
@@ -307,7 +307,7 @@ export async function performInsertEdit(): Promise<void> {
 
   // Advance playhead to end of inserted clip
   usePlaybackStore.getState().setCurrentFrame(insertFrame + clipDurationFrames);
-  toast.success('Insert edit applied');
+  toast.success('已执行插入编辑');
 }
 
 export async function performOverwriteEdit(): Promise<void> {
@@ -320,7 +320,7 @@ export async function performOverwriteEdit(): Promise<void> {
   const newItems = createTimelineItems(ctx);
   const targetTrackIds = Array.from(new Set(newItems.map((item) => item.trackId)));
   if (newItems.length === 0 || targetTrackIds.length === 0) {
-    toast.warning('Unable to resolve source patch targets');
+    toast.warning('无法解析源补丁目标轨道');
     return;
   }
 
@@ -381,5 +381,5 @@ export async function performOverwriteEdit(): Promise<void> {
 
   // Advance playhead to end of overwritten clip
   usePlaybackStore.getState().setCurrentFrame(overwriteEnd);
-  toast.success('Overwrite edit applied');
+  toast.success('已执行覆盖编辑');
 }

@@ -89,7 +89,7 @@ function SourcePatchDestinationPicker({
   options: TimelineTrack[];
   onSelectTrack: (trackId: string | null) => void;
 }) {
-  const kindLabel = kind === 'video' ? 'Video' : 'Audio';
+  const kindLabel = kind === 'video' ? '视频' : '音频';
 
   return (
     <DropdownMenu>
@@ -101,7 +101,7 @@ function SourcePatchDestinationPicker({
             'h-6 min-w-[3.75rem] justify-between gap-1 px-1.5 font-mono text-[10px]',
             !selectedTrackId && 'text-muted-foreground',
           )}
-          aria-label={`Choose ${kindLabel.toLowerCase()} source patch destination`}
+          aria-label={`选择${kindLabel}源补丁目标轨道`}
         >
           <span className="truncate">{label}</span>
           <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
@@ -109,7 +109,7 @@ function SourcePatchDestinationPicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-40">
         <DropdownMenuLabel className="font-mono text-[10px] uppercase tracking-normal">
-          {kindLabel} destination
+          {kindLabel}目标轨道
         </DropdownMenuLabel>
         <DropdownMenuItem
           className={cn(
@@ -118,7 +118,7 @@ function SourcePatchDestinationPicker({
           )}
           onSelect={() => onSelectTrack(null)}
         >
-          Auto
+          自动
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {options.length > 0 ? options.map((track) => (
@@ -134,7 +134,7 @@ function SourcePatchDestinationPicker({
           </DropdownMenuItem>
         )) : (
           <DropdownMenuItem disabled className="font-mono text-xs">
-            Create on edit
+            编辑时创建
           </DropdownMenuItem>
         )}
       </DropdownMenuContent>
@@ -449,12 +449,12 @@ function SourceMonitorInner({
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
         >
           <span className="text-xs text-muted-foreground truncate">
-            Source: {fileName}
+            源：{fileName}
           </span>
           <button
             onClick={onClose}
             className="p-1 rounded hover:bg-muted transition-colors shrink-0"
-            aria-label="Close source monitor"
+            aria-label="关闭源监视器"
           >
             <X className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
@@ -490,7 +490,7 @@ function SourceMonitorInner({
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
-            Loading media...
+            正在加载媒体...
           </div>
         )}
       </div>
@@ -917,19 +917,19 @@ function SourcePlaybackControls({
     tracks,
   ]);
 
-  const videoDestinationLabel = selectedVideoTrack?.name ?? patchTargetPreview.videoTargetName ?? 'Auto';
-  const audioDestinationLabel = selectedAudioTrack?.name ?? patchTargetPreview.audioTargetName ?? 'Auto';
+  const videoDestinationLabel = selectedVideoTrack?.name ?? patchTargetPreview.videoTargetName ?? '自动';
+  const audioDestinationLabel = selectedAudioTrack?.name ?? patchTargetPreview.audioTargetName ?? '自动';
 
   const videoPatchTooltip = patchTargetPreview.videoTargetName
-    ? `Video Source Patch On -> ${patchTargetPreview.videoTargetName}`
+    ? `视频源补丁：开 -> ${patchTargetPreview.videoTargetName}`
     : sourcePatchVideoEnabled
-      ? 'Video Source Patch On'
-      : 'Video Source Patch Off';
+      ? '视频源补丁：开'
+      : '视频源补丁：关';
   const audioPatchTooltip = patchTargetPreview.audioTargetName
-    ? `Audio Source Patch On -> ${patchTargetPreview.audioTargetName}`
+    ? `音频源补丁：开 -> ${patchTargetPreview.audioTargetName}`
     : sourcePatchAudioEnabled
-      ? 'Audio Source Patch On'
-      : 'Audio Source Patch Off';
+      ? '音频源补丁：开'
+      : '音频源补丁：关';
 
   return (
     <div className="@container flex flex-col shrink-0">
@@ -1045,7 +1045,7 @@ function SourcePlaybackControls({
                   <Repeat className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Play In to Out</TooltipContent>
+              <TooltipContent side="top">播放入点到出点</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1053,7 +1053,7 @@ function SourcePlaybackControls({
                   <ArrowLeftToLine className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Mark In (I)</TooltipContent>
+              <TooltipContent side="top">标记入点（I）</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1061,7 +1061,7 @@ function SourcePlaybackControls({
                   <ArrowRightToLine className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Mark Out (O)</TooltipContent>
+              <TooltipContent side="top">标记出点（O）</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1069,7 +1069,7 @@ function SourcePlaybackControls({
                   <XCircle className="w-3 h-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Clear In/Out (Alt+X)</TooltipContent>
+              <TooltipContent side="top">清除入/出点（Alt+X）</TooltipContent>
             </Tooltip>
           </div>
         )}
@@ -1102,7 +1102,7 @@ function SourcePlaybackControls({
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Go to start (Home)</TooltipContent>
+            <TooltipContent side="top">跳到开头（Home）</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1110,7 +1110,7 @@ function SourcePlaybackControls({
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Previous frame (Left Arrow)</TooltipContent>
+            <TooltipContent side="top">上一帧（左箭头）</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1118,7 +1118,7 @@ function SourcePlaybackControls({
                 {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">{playing ? 'Pause' : 'Play'} (Space)</TooltipContent>
+            <TooltipContent side="top">{playing ? '暂停' : '播放'}（空格）</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1126,7 +1126,7 @@ function SourcePlaybackControls({
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Next frame (Right Arrow)</TooltipContent>
+            <TooltipContent side="top">下一帧（右箭头）</TooltipContent>
           </Tooltip>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -1134,7 +1134,7 @@ function SourcePlaybackControls({
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top">Go to end (End)</TooltipContent>
+            <TooltipContent side="top">跳到末尾（End）</TooltipContent>
           </Tooltip>
         </div>
 
@@ -1151,7 +1151,7 @@ function SourcePlaybackControls({
                         sourcePatchVideoEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
                       }`}
                       onClick={toggleSourcePatchVideoEnabled}
-                      aria-label={sourcePatchVideoEnabled ? 'Disable video source patch target' : 'Enable video source patch target'}
+                      aria-label={sourcePatchVideoEnabled ? '关闭视频源补丁目标' : '开启视频源补丁目标'}
                       aria-pressed={sourcePatchVideoEnabled}
                     >
                       V
@@ -1175,7 +1175,7 @@ function SourcePlaybackControls({
                         sourcePatchAudioEnabled ? 'bg-primary text-primary-foreground hover:bg-primary/90' : ''
                       }`}
                       onClick={toggleSourcePatchAudioEnabled}
-                      aria-label={sourcePatchAudioEnabled ? 'Disable audio source patch target' : 'Enable audio source patch target'}
+                      aria-label={sourcePatchAudioEnabled ? '关闭音频源补丁目标' : '开启音频源补丁目标'}
                       aria-pressed={sourcePatchAudioEnabled}
                     >
                       A
@@ -1214,7 +1214,7 @@ function SourcePlaybackControls({
                   <ArrowDownToLine className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Insert (,)</TooltipContent>
+              <TooltipContent side="top">插入（,）</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1222,7 +1222,7 @@ function SourcePlaybackControls({
                   <Replace className="w-3.5 h-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="top">Overwrite (.)</TooltipContent>
+              <TooltipContent side="top">覆盖（.）</TooltipContent>
             </Tooltip>
           </div>
         ) : (

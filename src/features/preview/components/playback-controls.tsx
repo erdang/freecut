@@ -39,7 +39,7 @@ async function canvasToBlob(
         resolve(blob);
         return;
       }
-      reject(new Error('Failed to convert frame to blob'));
+      reject(new Error('帧转换为 Blob 失败'));
     }, type);
   });
 }
@@ -166,7 +166,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
       }
 
       if (!frameBlob) {
-        toast.error('Failed to capture the current frame.');
+        toast.error('截取当前帧失败。');
         return;
       }
 
@@ -174,7 +174,7 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
 
       const currentProjectId = useMediaLibraryStore.getState().currentProjectId;
       if (!currentProjectId) {
-        toast.error('Downloaded the frame, but no project is selected for media library import.');
+        toast.error('已下载当前帧，但未选择项目，无法导入媒体库。');
         return;
       }
 
@@ -194,10 +194,10 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
         mediaItems: [savedMedia, ...state.mediaItems],
       }));
 
-      toast.success(`Saved "${savedMedia.fileName}" to the media library and started the download.`);
+      toast.success(`已将“${savedMedia.fileName}”保存到媒体库，并开始下载。`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to save frame.';
-      toast.error(`Downloaded frame, but could not save it to the media library. ${message}`);
+      const message = error instanceof Error ? error.message : '保存帧失败。';
+      toast.error(`已下载当前帧，但保存到媒体库失败。${message}`);
     } finally {
       setIsSavingFrame(false);
     }
@@ -213,8 +213,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handleGoToStart}
-          data-tooltip="Go to Start (Home)"
-          aria-label="Go to start"
+          data-tooltip="跳到开头（Home）"
+          aria-label="跳到开头"
         >
           <SkipBack className="w-3.5 h-3.5" />
         </Button>
@@ -225,8 +225,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handlePreviousFrame}
-          data-tooltip="Previous Frame (Left Arrow)"
-          aria-label="Previous frame"
+          data-tooltip="上一帧（左箭头）"
+          aria-label="上一帧"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </Button>
@@ -236,8 +236,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={togglePlayPause}
-          data-tooltip={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
+          data-tooltip={isPlaying ? '暂停（空格）' : '播放（空格）'}
+          aria-label={isPlaying ? '暂停' : '播放'}
         >
           {isPlaying ? (
             <Pause className="w-3.5 h-3.5" />
@@ -252,8 +252,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handleNextFrame}
-          data-tooltip="Next Frame (Right Arrow)"
-          aria-label="Next frame"
+          data-tooltip="下一帧（右箭头）"
+          aria-label="下一帧"
         >
           <ChevronRight className="w-3.5 h-3.5" />
         </Button>
@@ -264,8 +264,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
           className="flex-shrink-0"
           style={btnSize}
           onClick={handleGoToEnd}
-          data-tooltip="Go to End (End)"
-          aria-label="Go to end"
+          data-tooltip="跳到末尾（End）"
+          aria-label="跳到末尾"
         >
           <SkipForward className="w-3.5 h-3.5" />
         </Button>
@@ -286,8 +286,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
             void handleSaveFrame();
           }}
           disabled={isSavingFrame}
-          data-tooltip={isSavingFrame ? 'Saving Frame...' : 'Save Frame'}
-          aria-label={isSavingFrame ? 'Saving frame' : 'Save frame'}
+          data-tooltip={isSavingFrame ? '正在保存帧...' : '保存帧'}
+          aria-label={isSavingFrame ? '正在保存帧' : '保存帧'}
         >
           {isSavingFrame ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -311,8 +311,8 @@ export function PlaybackControls({ totalFrames, fps }: PlaybackControlsProps) {
               : 'text-muted-foreground hover:text-foreground'
           }`}
           onClick={toggleUseProxy}
-          data-tooltip={useProxy ? 'Proxy Playback: On' : 'Proxy Playback: Off'}
-          aria-label={useProxy ? 'Disable proxy playback' : 'Enable proxy playback'}
+          data-tooltip={useProxy ? '代理播放：开' : '代理播放：关'}
+          aria-label={useProxy ? '关闭代理播放' : '开启代理播放'}
         >
           <Zap className="w-3.5 h-3.5" />
         </Button>

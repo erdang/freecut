@@ -98,7 +98,7 @@ export function GizmoHandles({
           zIndex: 101,
         }}
         role="button"
-        aria-label="Move selected element"
+        aria-label="移动已选元素"
         tabIndex={0}
         data-gizmo="border"
         onMouseDown={onTranslateStart}
@@ -108,15 +108,15 @@ export function GizmoHandles({
       {/* Scale handles */}
       {SCALE_HANDLES.map((handle) => {
         const handleLabels: Record<GizmoHandle, string> = {
-          nw: 'Resize from top-left corner',
-          n: 'Resize from top edge',
-          ne: 'Resize from top-right corner',
-          e: 'Resize from right edge',
-          se: 'Resize from bottom-right corner',
-          s: 'Resize from bottom edge',
-          sw: 'Resize from bottom-left corner',
-          w: 'Resize from left edge',
-          rotate: 'Rotate element',
+          nw: '从左上角缩放',
+          n: '从上边缘缩放',
+          ne: '从右上角缩放',
+          e: '从右边缘缩放',
+          se: '从右下角缩放',
+          s: '从下边缘缩放',
+          sw: '从左下角缩放',
+          w: '从左边缘缩放',
+          rotate: '旋转元素',
         };
         return (
           <div
@@ -144,7 +144,7 @@ export function GizmoHandles({
           zIndex: 102,
         }}
         role="button"
-        aria-label="Rotate selected element"
+        aria-label="旋转已选元素"
         tabIndex={0}
         data-gizmo="rotate"
         onMouseDown={onRotateStart}

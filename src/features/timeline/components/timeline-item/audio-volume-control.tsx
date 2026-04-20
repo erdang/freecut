@@ -85,7 +85,7 @@ export const AudioVolumeControl = memo(function AudioVolumeControl({
           }
         }}
         tabIndex={-1}
-        aria-label="Adjust clip volume"
+        aria-label="调整片段音量"
       />
 
       {isEditing && editLabel && (

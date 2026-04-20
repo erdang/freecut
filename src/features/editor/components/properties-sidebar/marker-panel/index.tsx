@@ -99,16 +99,16 @@ export function MarkerPanel() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <MapPin className="w-8 h-8 text-muted-foreground/50 mb-2" />
-        <p className="text-xs text-muted-foreground">Marker not found</p>
+        <p className="text-xs text-muted-foreground">未找到标记</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <PropertySection title="Marker" icon={MapPin} defaultOpen={true}>
+      <PropertySection title="标记" icon={MapPin} defaultOpen={true}>
         {/* Frame position */}
-        <PropertyRow label="Frame">
+        <PropertyRow label="帧">
           <NumberInput
             value={selectedMarker.frame}
             onChange={handleFrameChange}
@@ -120,18 +120,18 @@ export function MarkerPanel() {
         </PropertyRow>
 
         {/* Timecode (read-only) */}
-        <PropertyRow label="Time">
+        <PropertyRow label="时间">
           <span className="text-xs font-mono tabular-nums text-muted-foreground">
             {formatTimecode(selectedMarker.frame)}
           </span>
         </PropertyRow>
 
         {/* Label */}
-        <PropertyRow label="Label">
+        <PropertyRow label="标签">
           <Input
             value={selectedMarker.label || ''}
             onChange={handleLabelChange}
-            placeholder="Enter label..."
+            placeholder="输入标签..."
             className="h-7 text-xs flex-1 min-w-0"
           />
         </PropertyRow>
@@ -155,7 +155,7 @@ export function MarkerPanel() {
             onClick={handleDelete}
           >
             <Trash2 className="w-3 h-3 mr-1.5" />
-            Delete Marker
+            删除标记
           </Button>
         </div>
       </PropertySection>

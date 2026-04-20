@@ -163,7 +163,7 @@ export const TrimHandles = memo(function TrimHandles({
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={onJoinLeft}>
-            Join
+            拼接
             <ContextMenuShortcut>J</ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>
@@ -208,7 +208,7 @@ export const TrimHandles = memo(function TrimHandles({
         </ContextMenuTrigger>
         <ContextMenuContent>
           <ContextMenuItem onClick={onJoinRight}>
-            Join
+            拼接
             <ContextMenuShortcut>J</ContextMenuShortcut>
           </ContextMenuItem>
         </ContextMenuContent>

@@ -741,7 +741,7 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         );
         neighborId = neighbor?.id ?? null;
         if (!neighborId) {
-          toast.warning('Rolling edit needs a neighbor on this edge');
+          toast.warning('滚动编辑要求该侧存在相邻片段');
           return;
         }
       }

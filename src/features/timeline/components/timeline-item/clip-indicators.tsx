@@ -50,14 +50,14 @@ export const ClipIndicators = memo(function ClipIndicators({
           style={{ top: 0, height: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
         >
           {hasKeyframes && (
-            <span title="Has keyframe animations">
+            <span title="包含关键帧动画">
               <Diamond className="w-3 h-3 text-amber-500 fill-amber-500/50" />
             </span>
           )}
           {isShape && isMask && (
             <span
               className="px-1 py-0.5 text-[10px] font-bold bg-cyan-500/80 text-white rounded"
-              title="Mask"
+              title="蒙版"
             >
               M
             </span>
@@ -65,7 +65,7 @@ export const ClipIndicators = memo(function ClipIndicators({
           {showSpeedBadge && (
             <span
               className="px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono"
-              title={`Speed: ${currentSpeed.toFixed(2)}x`}
+              title={`速度：${currentSpeed.toFixed(2)}x`}
             >
               {currentSpeed.toFixed(2)}x
             </span>
@@ -77,7 +77,7 @@ export const ClipIndicators = memo(function ClipIndicators({
       {isBroken && hasMediaId && (
         <div
           className="absolute bottom-1 right-1 p-0.5 rounded bg-destructive/90 text-destructive-foreground"
-          title="Media file missing - relink in Media Library"
+          title="媒体文件缺失，请在媒体库中重新链接"
         >
           <Link2Off className="w-3 h-3" />
         </div>

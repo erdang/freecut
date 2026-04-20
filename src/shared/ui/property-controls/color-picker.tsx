@@ -111,7 +111,7 @@ export const ColorPicker = memo(function ColorPicker({
           size="icon"
           className="h-7 w-7 flex-shrink-0"
           onClick={onReset}
-          title="Reset"
+          title="重置"
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </Button>

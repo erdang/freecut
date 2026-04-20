@@ -319,7 +319,7 @@ export const ClipContent = memo(function ClipContent({
   if (isCompositionAudioWrapper && composition) {
     return (
       <div className="absolute inset-0 flex flex-col">
-        {renderCompoundClipLabel(item.label || 'Compound Clip')}
+        {renderCompoundClipLabel(item.label || '复合片段')}
         {showVisualContent && showWaveforms && (
           <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
             <CompoundClipWaveform
@@ -345,7 +345,7 @@ export const ClipContent = memo(function ClipContent({
       <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
         <div className="text-[10px] text-muted-foreground truncate">Text</div>
         <div className="text-xs font-medium truncate flex-1">
-          {item.text || 'Empty text'}
+          {item.text || '空文本'}
         </div>
       </div>
     );
@@ -356,7 +356,7 @@ export const ClipContent = memo(function ClipContent({
     if (compositionVisualMediaId) {
       return (
         <div className="absolute inset-0 flex flex-col">
-          {renderCompoundClipLabel(item.label || 'Compound Clip')}
+          {renderCompoundClipLabel(item.label || '复合片段')}
           {showVisualContent && (
             <>
               {/* Row 2: Filmstrip - flex-1 */}
@@ -406,7 +406,7 @@ export const ClipContent = memo(function ClipContent({
     if (compositionSummary.hasOwnedAudio && composition && !hasCompositionAudioCompanion) {
       return (
         <div className="absolute inset-0 flex flex-col">
-          {renderCompoundClipLabel(item.label || 'Compound Clip')}
+          {renderCompoundClipLabel(item.label || '复合片段')}
           {showVisualContent && showWaveforms && (
             <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
               <CompoundClipWaveform
@@ -427,7 +427,7 @@ export const ClipContent = memo(function ClipContent({
     }
     return (
       <div className="absolute inset-0 flex flex-col overflow-hidden">
-        {renderCompoundClipLabel(item.label || 'Compound Clip')}
+        {renderCompoundClipLabel(item.label || '复合片段')}
       </div>
     );
   }
@@ -437,11 +437,11 @@ export const ClipContent = memo(function ClipContent({
     const enabledEffectsCount = item.effects?.filter(e => e.enabled).length ?? 0;
     return (
       <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
-        <div className="text-[10px] text-muted-foreground truncate">Adjustment Layer</div>
+        <div className="text-[10px] text-muted-foreground truncate">调整图层</div>
         <div className="text-xs font-medium truncate flex-1">
           {enabledEffectsCount > 0
-            ? `${enabledEffectsCount} effect${enabledEffectsCount > 1 ? 's' : ''}`
-            : 'No effects'}
+            ? `${enabledEffectsCount} 个效果`
+            : '无效果'}
         </div>
       </div>
     );

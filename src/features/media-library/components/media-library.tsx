@@ -73,7 +73,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
-      title="Copy to clipboard"
+      title="复制到剪贴板"
     >
       {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
     </button>
@@ -86,6 +86,18 @@ const GROUP_ICONS = {
   image: ImageIcon,
   gif: Film,
 } as const;
+
+const FILTER_TYPE_LABELS: Record<'video' | 'audio' | 'image', string> = {
+  video: '视频',
+  audio: '音频',
+  image: '图片',
+};
+
+const SORT_LABELS: Record<'name' | 'date' | 'size', string> = {
+  name: '名称',
+  date: '日期',
+  size: '大小',
+};
 
 interface MediaTypeGroupProps {
   groupKey: string;
@@ -204,10 +216,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         else images.push(item);
       }
     }
-    if (videos.length > 0) groups.push({ key: 'video', label: 'Videos', icon: 'video', items: videos });
-    if (audio.length > 0) groups.push({ key: 'audio', label: 'Audio', icon: 'audio', items: audio });
-    if (images.length > 0) groups.push({ key: 'image', label: 'Images', icon: 'image', items: images });
-    if (gifs.length > 0) groups.push({ key: 'gif', label: 'GIFs', icon: 'gif', items: gifs });
+    if (videos.length > 0) groups.push({ key: 'video', label: '视频', icon: 'video', items: videos });
+    if (audio.length > 0) groups.push({ key: 'audio', label: '音频', icon: 'audio', items: audio });
+    if (images.length > 0) groups.push({ key: 'image', label: '图片', icon: 'image', items: images });
+    if (gifs.length > 0) groups.push({ key: 'gif', label: 'GIF', icon: 'gif', items: gifs });
     return groups;
   }, [filteredMediaItems]);
   const compositions = useCompositionsStore((s) => s.compositions);
@@ -429,7 +441,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     try {
       const imported = await importFromUrl(url);
       if (imported && !imported.isDuplicate) {
-        showNotification({ type: 'success', message: `Imported "${imported.fileName}" from URL` });
+        showNotification({ type: 'success', message: `已从 URL 导入“${imported.fileName}”` });
       }
       setShowImportUrlDialog(false);
       setImportUrlValue('');
@@ -516,12 +528,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
     const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
     if (!supported) {
-      showNotification({ type: 'warning', message: 'Drag-drop not supported in this browser. Use Chrome or Edge.' });
+      showNotification({ type: 'warning', message: '当前浏览器不支持拖拽导入，请使用 Chrome 或 Edge。' });
       return;
     }
 
     if (errors.length > 0) {
-      showNotification({ type: 'error', message: `Some files were rejected: ${errors.join(', ')}` });
+      showNotification({ type: 'error', message: `以下文件未通过校验：${errors.join('，')}` });
     }
     if (entries.length > 0) {
       await handleImportHandles(entries.map((entry) => entry.handle));
@@ -606,12 +618,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const deleteSummary = useMemo(() => {
     const parts: string[] = [];
     if (pendingDeletion.mediaIds.length > 0) {
-      parts.push(`${pendingDeletion.mediaIds.length} media item${pendingDeletion.mediaIds.length === 1 ? '' : 's'}`);
+      parts.push(`${pendingDeletion.mediaIds.length} 个媒体资源`);
     }
     if (pendingDeletion.compositionIds.length > 0) {
-      parts.push(`${pendingDeletion.compositionIds.length} compound clip${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
+      parts.push(`${pendingDeletion.compositionIds.length} 个复合片段`);
     }
-    return parts.join(' and ');
+    return parts.join('、');
   }, [pendingDeletion.compositionIds.length, pendingDeletion.mediaIds.length]);
 
   const affectedMediaImpact = useMemo(() => (
@@ -680,10 +692,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             disabled={!currentProjectId}
             size="sm"
             className="h-7 gap-1.5 px-2.5"
-            title="Import media files"
+            title="导入媒体文件"
           >
             <FolderOpen className="w-3.5 h-3.5" />
-            <span>Import</span>
+            <span>导入</span>
           </Button>
 
           <Button
@@ -692,10 +704,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             variant="outline"
             size="sm"
             className="h-7 gap-1.5 border-border bg-background px-2.5 text-foreground hover:bg-accent"
-            title="Import media from URL"
+            title="从 URL 导入媒体"
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>From URL</span>
+            <span>从 URL 导入</span>
           </Button>
 
           {/* Missing media indicator */}
@@ -705,10 +717,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               variant="outline"
               size="sm"
               className="h-7 gap-1.5 border-destructive/25 bg-destructive/10 px-2.5 text-destructive hover:border-destructive/40 hover:bg-destructive/20 hover:text-destructive"
-              title="View missing media files"
+              title="查看缺失媒体文件"
             >
               <Link2Off className="w-3.5 h-3.5" />
-              <span>{currentProjectBrokenMediaIds.length} Missing</span>
+              <span>{currentProjectBrokenMediaIds.length} 个缺失</span>
             </Button>
           )}
 
@@ -721,11 +733,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               {/* Selection badge */}
               <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border">
                 <span className="tabular-nums">{selectedAssetCount}</span>
-                <span className="text-muted-foreground">selected</span>
+                <span className="text-muted-foreground">已选</span>
                 <button
                   onClick={clearSelection}
                   className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
-                  title="Clear selection"
+                  title="清空选择"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -738,10 +750,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   variant="ghost"
                   size="sm"
                   className="h-7 gap-1 px-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                  title="Generate proxies for selected"
+                  title="为已选资源生成代理"
                 >
                   <Zap className="w-3 h-3" />
-                  <span>Proxy ({selectedProxyEligibleCount})</span>
+                  <span>生成代理 ({selectedProxyEligibleCount})</span>
                 </Button>
               )}
 
@@ -751,10 +763,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 variant="ghost"
                 size="sm"
                 className="h-7 gap-1 px-2 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
-                title="Delete selected"
+                title="删除已选"
               >
                 <Trash2 className="w-3 h-3" />
-                <span>Delete</span>
+                <span>删除</span>
               </Button>
             </>
           )}
@@ -782,7 +794,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               onClick={clearError}
               className="h-6 px-2 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10"
             >
-              Dismiss
+              关闭
             </Button>
           </div>
         </div>
@@ -836,7 +848,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         <div className="relative group">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
           <Input
-            placeholder="Search media..."
+            placeholder="搜索媒体..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
@@ -867,7 +879,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               >
                 <Filter className="w-2.5 h-2.5" />
                 <span className="hidden @[280px]:inline ml-1">
-                  {filterByType ? filterByType.toUpperCase() : 'ALL'}
+                  {filterByType ? FILTER_TYPE_LABELS[filterByType] : '全部'}
                 </span>
               </Button>
             </DropdownMenuTrigger>
@@ -876,7 +888,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 onClick={() => setFilterByType(null)}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                All Types
+                所有类型
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
@@ -884,21 +896,21 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
                 <Video className="w-3 h-3 mr-2" />
-                Video
+                视频
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setFilterByType('audio')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
                 <FileAudio className="w-3 h-3 mr-2" />
-                Audio
+                音频
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setFilterByType('image')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
                 <ImageIcon className="w-3 h-3 mr-2" />
-                Image
+                图片
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -913,7 +925,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               >
                 <SortAsc className="w-2.5 h-2.5" />
                 <span className="hidden @[280px]:inline ml-1">
-                  {sortBy === 'name' ? 'NAME' : sortBy === 'date' ? 'DATE' : 'SIZE'}
+                  {SORT_LABELS[sortBy]}
                 </span>
               </Button>
             </DropdownMenuTrigger>
@@ -922,19 +934,19 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 onClick={() => setSortBy('date')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                Date (Newest)
+                日期（最新）
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSortBy('name')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                Name (A-Z)
+                名称（A-Z）
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSortBy('size')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                Size (Largest)
+                大小（由大到小）
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -949,7 +961,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 value={[mediaItemSize]}
                 onValueChange={([v]) => setMediaItemSize(v ?? 3)}
                 className="flex-1 min-w-6 max-w-24"
-                aria-label="Grid item size"
+                aria-label="网格项大小"
               />
             )}
             <div className="flex items-center border border-border rounded bg-secondary flex-shrink-0">
@@ -990,7 +1002,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             className="flex items-center gap-1.5 text-xs text-violet-300 hover:text-violet-100 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back</span>
+            <span>返回</span>
           </button>
           <span className="text-xs text-violet-400/60">/</span>
           <span className="text-xs text-violet-300 font-medium truncate">{activeCompLabel}</span>
@@ -1055,7 +1067,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary/20 border-2 border-primary">
                 <Upload className="w-7 h-7 text-primary animate-bounce" />
               </div>
-              <p className="text-base font-bold tracking-wide text-primary">DROP FILES HERE</p>
+              <p className="text-base font-bold tracking-wide text-primary">将文件拖到这里</p>
               <div className="flex flex-wrap justify-center gap-2 mt-2">
                 <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>
                 <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">WebM</span>
@@ -1081,7 +1093,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             <div className="flex-1 min-w-0">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-muted-foreground">
-                  Generating {generatingCount} {generatingCount === 1 ? 'proxy' : 'proxies'} in background
+                  正在后台生成 {generatingCount} 个代理文件
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground tabular-nums">
@@ -1092,7 +1104,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                     onClick={handleCancelAllProxies}
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Cancel all
+                    全部取消
                   </button>
                 </div>
               </div>
@@ -1119,20 +1131,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete selected assets?</AlertDialogTitle>
+            <AlertDialogTitle>删除已选资源？</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Are you sure you want to delete {deleteSummary || `${deleteAssetCount} selected asset${deleteAssetCount === 1 ? '' : 's'}`}?
-                  This action cannot be undone.
+                  确认删除 {deleteSummary || `${deleteAssetCount} 个已选资源`}？
+                  此操作不可撤销。
                 </p>
                 {affectedAssetInstanceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">Linked instances will be removed</p>
+                      <p className="font-medium">关联实例将一并移除</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {affectedAssetInstanceCount} clip{affectedAssetInstanceCount > 1 ? 's' : ''} across the timeline and nested compound clips reference these assets and will also be deleted.
+                        时间线及嵌套复合片段中共有 {affectedAssetInstanceCount} 个片段引用了这些资源，也会被删除。
                       </p>
                     </div>
                   </div>
@@ -1141,9 +1153,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete {deleteSummary || `${deleteAssetCount} asset${deleteAssetCount === 1 ? '' : 's'}`}{affectedAssetInstanceCount > 0 ? ` & ${affectedAssetInstanceCount} clip${affectedAssetInstanceCount > 1 ? 's' : ''}` : ''}
+              删除{deleteSummary || `${deleteAssetCount} 个资源`}{affectedAssetInstanceCount > 0 ? `（含 ${affectedAssetInstanceCount} 个片段）` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -1154,10 +1166,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <Upload className="h-4 w-4" />
-              Import From URL
+              从 URL 导入
             </DialogTitle>
             <DialogDescription>
-              Paste a direct `http` or `https` media link. The file will be imported into this project&apos;s media library.
+              粘贴一个直接可访问的 `http` 或 `https` 媒体链接，文件会被导入到当前项目的媒体库。
             </DialogDescription>
           </DialogHeader>
 
@@ -1172,7 +1184,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               className="h-9"
             />
             <p className="text-xs text-muted-foreground">
-              Supported sources: direct media files over HTTP(S).
+              支持来源：通过 HTTP(S) 可直接访问的媒体文件。
             </p>
           </div>
 
@@ -1182,7 +1194,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               onClick={() => handleImportUrlDialogChange(false)}
               disabled={isImportingFromUrl}
             >
-              Cancel
+              取消
             </Button>
             <Button
               onClick={() => void handleImportFromUrl()}
@@ -1190,7 +1202,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               className="gap-1.5"
             >
               {isImportingFromUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              <span>{isImportingFromUrl ? 'Importing...' : 'Import'}</span>
+              <span>{isImportingFromUrl ? '导入中...' : '导入'}</span>
             </Button>
           </DialogFooter>
         </DialogContent>

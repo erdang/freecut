@@ -978,7 +978,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
         if (isTimelineTemplateDragData(data)) {
           const templateDrop = buildTimelineTemplateItem(data, dropFrame);
           if (!templateDrop) {
-            toast.error('Unable to add dropped timeline item');
+            toast.error('无法添加拖拽到时间线的片段');
             return;
           }
 
@@ -1003,9 +1003,9 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
           addItems,
           currentTracks: useTimelineStore.getState().tracks,
           dropResult,
-          emptyMessage: 'Unable to add dropped media items',
+          emptyMessage: '无法添加拖拽的媒体片段',
           notify: toast,
-          partialFailureLabel: 'dropped media items',
+          partialFailureLabel: '拖拽的媒体片段',
           requestedCount: entries.length,
           setTracks: useTimelineStore.getState().setTracks,
         });

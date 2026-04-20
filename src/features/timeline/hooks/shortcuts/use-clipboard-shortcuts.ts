@@ -95,7 +95,7 @@ export function useClipboardShortcuts() {
             timing: transition.timing,
             durationInFrames: transition.durationInFrames,
           });
-          toast.success('Copied transition settings');
+          toast.success('已复制转场设置');
         }
         return;
       }
@@ -105,7 +105,7 @@ export function useClipboardShortcuts() {
         const selectedItems = items.filter((item) => selectedItemIds.includes(item.id));
         if (selectedItems.length > 0) {
           copyItems(selectedItems, currentFrame, 'copy');
-          toast.success(selectedItems.length === 1 ? 'Copied 1 item' : `Copied ${selectedItems.length} items`);
+          toast.success(selectedItems.length === 1 ? '已复制 1 个片段' : `已复制 ${selectedItems.length} 个片段`);
         }
       }
     },
@@ -125,7 +125,7 @@ export function useClipboardShortcuts() {
           copyItems(selectedItems, currentFrame, 'cut');
           removeItems(selectedItemIds);
           clearItemSelection();
-          toast.success(selectedItems.length === 1 ? 'Cut 1 item' : `Cut ${selectedItems.length} items`);
+          toast.success(selectedItems.length === 1 ? '已剪切 1 个片段' : `已剪切 ${selectedItems.length} 个片段`);
         }
       }
     },
@@ -145,7 +145,7 @@ export function useClipboardShortcuts() {
           timing: transitionClipboard.timing,
           durationInFrames: transitionClipboard.durationInFrames,
         });
-        toast.success('Pasted transition settings');
+        toast.success('已粘贴转场设置');
         return;
       }
       if (itemsClipboard && itemsClipboard.items.length > 0) {

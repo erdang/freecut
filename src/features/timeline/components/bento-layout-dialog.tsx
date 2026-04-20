@@ -32,11 +32,11 @@ interface BuiltInPreset {
 }
 
 const BUILT_IN_PRESETS: BuiltInPreset[] = [
-  { type: 'auto', label: 'Auto' },
-  { type: 'row', label: 'Side by Side' },
-  { type: 'column', label: 'Stacked' },
-  { type: 'pip', label: 'PiP' },
-  { type: 'focus-sidebar', label: 'Focus+Sidebar' },
+  { type: 'auto', label: '自动' },
+  { type: 'row', label: '并排' },
+  { type: 'column', label: '堆叠' },
+  { type: 'pip', label: '画中画' },
+  { type: 'focus-sidebar', label: '聚焦+侧边' },
   { type: 'grid', label: '2\u00D72', cols: 2, rows: 2 },
   { type: 'grid', label: '3\u00D73', cols: 3, rows: 3 },
 ];
@@ -319,7 +319,7 @@ function LayoutCanvas({
       ))}
       {canvasRects.length === 0 && (
         <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
-          No items to arrange
+          没有可排布的片段
         </div>
       )}
     </div>
@@ -470,9 +470,9 @@ function BentoLayoutDialogBody({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Bento Layout</DialogTitle>
+        <DialogTitle>拼贴布局</DialogTitle>
         <DialogDescription>
-          Arrange {itemCount} selected clip{itemCount !== 1 ? 's' : ''} — drag items to swap positions
+          排列已选中的 {itemCount} 个片段，拖动可交换位置
         </DialogDescription>
       </DialogHeader>
 
@@ -541,15 +541,15 @@ function BentoLayoutDialogBody({
 
       {/* Options bar */}
       <div className="flex items-center gap-4">
-        <NumberInput label="Gap" value={gap} onChange={setGap} min={0} max={200} />
-        <NumberInput label="Padding" value={padding} onChange={setPadding} min={0} max={200} />
+        <NumberInput label="间距" value={gap} onChange={setGap} min={0} max={200} />
+        <NumberInput label="内边距" value={padding} onChange={setPadding} min={0} max={200} />
       </div>
 
       {/* Save preset inline */}
       {isSaving ? (
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Preset name"
+            placeholder="预设名称"
             value={presetName}
             onChange={(e) => setPresetName(e.target.value)}
             onKeyDown={(e) => {
@@ -563,7 +563,7 @@ function BentoLayoutDialogBody({
             autoFocus
           />
           <Button size="sm" variant="secondary" onClick={handleSavePreset} disabled={!presetName.trim()}>
-            Save
+            保存
           </Button>
           <Button
             size="sm"
@@ -573,7 +573,7 @@ function BentoLayoutDialogBody({
               setPresetName('');
             }}
           >
-            Cancel
+            取消
           </Button>
         </div>
       ) : null}
@@ -581,16 +581,16 @@ function BentoLayoutDialogBody({
       <DialogFooter className="flex-row justify-between sm:justify-between">
         {!isSaving ? (
           <Button variant="secondary" size="sm" onClick={() => setIsSaving(true)}>
-            Save as Preset
+            另存为预设
           </Button>
         ) : (
           <div />
         )}
         <div className="flex gap-2">
           <Button variant="ghost" onClick={close}>
-            Cancel
+            取消
           </Button>
-          <Button onClick={handleApply}>Apply</Button>
+          <Button onClick={handleApply}>应用</Button>
         </div>
       </DialogFooter>
     </>

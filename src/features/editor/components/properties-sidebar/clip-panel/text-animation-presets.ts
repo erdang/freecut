@@ -38,16 +38,16 @@ export interface TextAnimationKeyframePayload {
 }
 
 const TEXT_ANIMATION_EFFECT_PRESETS: TextAnimationPreset[] = [
-  { id: 'fade', label: 'Fade' },
-  { id: 'rise', label: 'Rise' },
-  { id: 'drop', label: 'Drop' },
-  { id: 'left', label: 'Left' },
-  { id: 'right', label: 'Right' },
-  { id: 'tilt', label: 'Tilt' },
+  { id: 'fade', label: '淡入淡出' },
+  { id: 'rise', label: '上移' },
+  { id: 'drop', label: '下落' },
+  { id: 'left', label: '左移' },
+  { id: 'right', label: '右移' },
+  { id: 'tilt', label: '倾斜' },
 ];
 
 export const TEXT_ANIMATION_PRESETS: TextAnimationPresetOption[] = [
-  { id: 'none', label: 'None' },
+  { id: 'none', label: '无' },
   ...TEXT_ANIMATION_EFFECT_PRESETS,
 ];
 

@@ -177,7 +177,7 @@ export function CompositionsSection() {
           />
           <Layers className="w-3 h-3 text-violet-400" />
           <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
-            Compound Clips
+            复合片段
           </span>
           <span className="text-[10px] tabular-nums text-muted-foreground/60">
             {compositions.length}
@@ -223,20 +223,20 @@ export function CompositionsSection() {
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete compound clip?</AlertDialogTitle>
+            <AlertDialogTitle>删除复合片段？</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Are you sure you want to delete &ldquo;{deleteTarget?.name}&rdquo;?
-                  This action cannot be undone.
+                  确认删除“{deleteTarget?.name}”？
+                  此操作不可撤销。
                 </p>
                 {deleteImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <Trash2 className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">All remaining instances will be removed</p>
+                      <p className="font-medium">所有关联实例都会被移除</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {deleteImpact.totalReferenceCount} compound clip instance{deleteImpact.totalReferenceCount > 1 ? 's' : ''} across the timeline and nested compound clips will also be deleted.
+                        时间线及嵌套复合片段中共有 {deleteImpact.totalReferenceCount} 个复合片段实例也会被删除。
                       </p>
                     </div>
                   </div>
@@ -245,12 +245,12 @@ export function CompositionsSection() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete
+              删除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -503,16 +503,16 @@ const CompositionCard = memo(function CompositionCard({
 
         <ContextMenuContent>
           <ContextMenuItem onClick={onEnter}>
-            Enter Compound Clip
+            进入复合片段
           </ContextMenuItem>
           <ContextMenuItem onClick={onStartRename}>
-            Rename
+            重命名
           </ContextMenuItem>
           <ContextMenuItem
             onClick={onDelete}
             className="text-destructive focus:text-destructive"
           >
-            Delete
+            删除
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -586,7 +586,7 @@ const CompositionCard = memo(function CompositionCard({
                 <Layers className="w-2.5 h-2.5" />
               </div>
               <span className="text-[10px] text-muted-foreground">
-                {durationLabel} &middot; {itemCount} item{itemCount !== 1 ? 's' : ''}
+                {durationLabel} &middot; {itemCount} 个项目
               </span>
             </div>
           </div>
@@ -595,16 +595,16 @@ const CompositionCard = memo(function CompositionCard({
 
       <ContextMenuContent>
         <ContextMenuItem onClick={onEnter}>
-          Enter Compound Clip
+          进入复合片段
         </ContextMenuItem>
         <ContextMenuItem onClick={onStartRename}>
-          Rename
+          重命名
         </ContextMenuItem>
         <ContextMenuItem
           onClick={onDelete}
           className="text-destructive focus:text-destructive"
         >
-          Delete
+          删除
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

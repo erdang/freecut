@@ -134,8 +134,8 @@ export const CanvasPanel = memo(function CanvasPanel() {
         markDirty,
       });
     } catch (error) {
-      toast.error('Failed to update canvas settings', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+      toast.error('更新画布设置失败', {
+        description: error instanceof Error ? error.message : '请重试。',
       });
     }
   }, [currentProject, markDirty, updateProject]);
@@ -209,7 +209,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
   if (!currentProject) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-xs text-muted-foreground">No project loaded</p>
+        <p className="text-xs text-muted-foreground">未加载项目</p>
       </div>
     );
   }
@@ -217,7 +217,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
   return (
     <div className="space-y-4">
       {/* Canvas Section */}
-      <PropertySection title="Canvas" icon={LayoutDashboard} defaultOpen={true}>
+      <PropertySection title="画布" icon={LayoutDashboard} defaultOpen={true}>
         <LinkedDimensions
           width={width}
           height={height}
@@ -240,7 +240,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
             onClick={handleSwapDimensions}
           >
             <ArrowLeftRight className="w-3 h-3 mr-1.5" />
-            Swap
+            交换
           </Button>
           <Button
             variant="outline"
@@ -249,12 +249,12 @@ export const CanvasPanel = memo(function CanvasPanel() {
             onClick={handleResetDimensions}
           >
             <RotateCcw className="w-3 h-3 mr-1.5" />
-            Reset
+            重置
           </Button>
         </div>
 
         {/* Background Color */}
-        <PropertyRow label="Background">
+        <PropertyRow label="背景">
           <div className="flex items-center gap-1 w-full">
             <ColorPicker
               initialColor={storedBackgroundColor}
@@ -265,7 +265,7 @@ export const CanvasPanel = memo(function CanvasPanel() {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetBackgroundColor}
-              title="Reset to black"
+              title="重置为黑色"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
@@ -276,20 +276,20 @@ export const CanvasPanel = memo(function CanvasPanel() {
       <Separator />
 
       {/* Duration Section */}
-      <PropertySection title="Duration" icon={Clock} defaultOpen={true}>
-        <PropertyRow label="Duration">
+      <PropertySection title="时长" icon={Clock} defaultOpen={true}>
+        <PropertyRow label="时长">
           <span className="text-xs text-muted-foreground tabular-nums">
             {formatDuration(timelineDuration)}
           </span>
         </PropertyRow>
 
-        <PropertyRow label="Frame Rate">
+        <PropertyRow label="帧率">
           <span className="text-xs text-muted-foreground tabular-nums">
             {currentProject.metadata.fps} fps
           </span>
         </PropertyRow>
 
-        <PropertyRow label="Total Frames">
+        <PropertyRow label="总帧数">
           <span className="text-xs text-muted-foreground tabular-nums">
             {timelineDuration} fr
           </span>

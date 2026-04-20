@@ -15,7 +15,7 @@ export function PreviewZoomControls() {
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const currentLabel = zoom === -1
-    ? 'Auto'
+    ? '自适应'
     : zoomPresets.find((p) => p.value === zoom)?.label || `${Math.round(zoom * 100)}%`;
 
   const blurTrigger = useCallback(() => {
@@ -34,8 +34,8 @@ export function PreviewZoomControls() {
           variant="ghost"
           className="flex-shrink-0 text-muted-foreground hover:text-foreground gap-1 px-1.5"
           style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlButtonSize }}
-          data-tooltip={`Zoom: ${currentLabel}`}
-          aria-label={`Preview zoom: ${currentLabel}`}
+          data-tooltip={`缩放：${currentLabel}`}
+          aria-label={`预览缩放：${currentLabel}`}
           onKeyDown={(e) => {
             // Space is reserved for global play/pause
             if (e.key === ' ' || e.code === 'Space') e.preventDefault();

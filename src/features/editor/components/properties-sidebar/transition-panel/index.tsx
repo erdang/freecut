@@ -46,10 +46,10 @@ function getPresentationOptionLabel(config: Pick<PresentationConfig, 'label' | '
 }
 
 const EASE_OPTIONS = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'ease-in', label: 'In' },
-  { value: 'ease-out', label: 'Out' },
-  { value: 'ease-in-out', label: 'In & Out' },
+  { value: 'linear', label: '线性' },
+  { value: 'ease-in', label: '缓入' },
+  { value: 'ease-out', label: '缓出' },
+  { value: 'ease-in-out', label: '缓入缓出' },
 ] as const satisfies ReadonlyArray<{ value: TransitionTiming; label: string }>;
 
 function getSupportedEaseOptions(
@@ -245,22 +245,22 @@ export function TransitionPanel() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <Zap className="w-8 h-8 text-muted-foreground/50 mb-2" />
-        <p className="text-xs text-muted-foreground">Transition not found</p>
+        <p className="text-xs text-muted-foreground">未找到转场</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <PropertySection title="Transition" icon={Zap} defaultOpen={true}>
-        <PropertyRow label="Preset" tooltip="Transition style preset">
+      <PropertySection title="转场" icon={Zap} defaultOpen={true}>
+        <PropertyRow label="预设" tooltip="转场样式预设">
           <div className="w-full">
             <Select
               value={currentPresentationConfig ? getPresentationOptionValue(currentPresentationConfig) : undefined}
               onValueChange={handlePresentationPresetChange}
             >
               <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder="Select preset" />
+                <SelectValue placeholder="选择预设" />
               </SelectTrigger>
               <SelectContent>
                 {presentationConfigGroups.map(([category, configs]) => (
@@ -285,7 +285,7 @@ export function TransitionPanel() {
         </PropertyRow>
 
         {/* Duration slider */}
-        <PropertyRow label="Duration" tooltip="Transition duration">
+        <PropertyRow label="时长" tooltip="转场时长">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={selectedTransition.durationInFrames}
@@ -303,7 +303,7 @@ export function TransitionPanel() {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetDuration}
-              title="Reset to 1s"
+              title="重置为 1 秒"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
@@ -311,7 +311,7 @@ export function TransitionPanel() {
         </PropertyRow>
 
         {easeOptions.length > 0 && (
-          <PropertyRow label="Ease" tooltip="Easing curve for the transition">
+          <PropertyRow label="缓动" tooltip="转场缓动曲线">
             <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
               {easeOptions.map((option) => (
               <button
@@ -342,7 +342,7 @@ export function TransitionPanel() {
             onClick={handleDelete}
           >
             <Trash2 className="w-3 h-3 mr-1.5" />
-            Delete
+            删除
           </Button>
         </div>
       </PropertySection>

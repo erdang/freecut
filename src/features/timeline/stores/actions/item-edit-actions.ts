@@ -137,7 +137,7 @@ export function splitItem(
     }
     const relativeFrame = splitFrame - item.from;
     if (isInTransitionOverlap(item.id, relativeFrame, item.durationInFrames)) {
-      toast.warning('Cannot split inside a transition zone');
+      toast.warning('无法在转场区域内切分');
       return null;
     }
   }
@@ -204,7 +204,7 @@ export function splitAllItemsAtFrame(splitFrame: number): number {
 
       if (!canSplitGroup) {
         if (blockedByTransition) {
-          toast.warning('Cannot split inside a transition zone');
+          toast.warning('无法在转场区域内切分');
         }
         continue;
       }

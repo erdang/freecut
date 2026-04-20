@@ -90,7 +90,7 @@ export const CornerPinSection = memo(function CornerPinSection({
   if (!item || items.length > 1) return null;
 
   return (
-    <PropertySection title="Corner Pin" icon={Maximize2} defaultOpen={false}>
+    <PropertySection title="角点定位" icon={Maximize2} defaultOpen={false}>
       {/* Edit + Reset toolbar */}
       <div className="flex items-center gap-1 px-1 mb-2">
         <Button
@@ -98,10 +98,10 @@ export const CornerPinSection = memo(function CornerPinSection({
           size="sm"
           className="h-7 text-xs flex-1 gap-1"
           onClick={toggleEditMode}
-          title={isEditingThisItem ? 'Exit corner pin editor' : 'Edit corners on preview'}
+          title={isEditingThisItem ? '退出角点编辑' : '在预览区编辑角点'}
         >
           <Maximize2 className="w-3 h-3" />
-          {isEditingThisItem ? 'Editing...' : 'Edit'}
+          {isEditingThisItem ? '编辑中...' : '编辑'}
         </Button>
         {hasAnyOffset && (
           <Button
@@ -109,7 +109,7 @@ export const CornerPinSection = memo(function CornerPinSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleReset}
-            title="Reset corner pin"
+            title="重置角点定位"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>

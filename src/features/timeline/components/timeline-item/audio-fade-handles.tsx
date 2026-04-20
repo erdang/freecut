@@ -89,7 +89,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
         }}
         onMouseEnter={() => setHoveredHandle('in')}
         onMouseLeave={() => setHoveredHandle((current) => (current === 'in' ? null : current))}
-        aria-label="Adjust audio fade in"
+        aria-label="调整音频淡入"
       />
       <button
         type="button"
@@ -103,7 +103,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
         }}
         onMouseEnter={() => setHoveredHandle('out')}
         onMouseLeave={() => setHoveredHandle((current) => (current === 'out' ? null : current))}
-        aria-label="Adjust audio fade out"
+        aria-label="调整音频淡出"
       />
 
       {fadeInCurveDot && (
@@ -119,7 +119,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
           }}
           onMouseEnter={() => setHoveredHandle(null)}
           onMouseLeave={() => setHoveredHandle((current) => (current === 'in' ? null : current))}
-          aria-label="Adjust audio fade in curve"
+          aria-label="调整音频淡入曲线"
         />
       )}
       {fadeOutCurveDot && (
@@ -135,7 +135,7 @@ export const AudioFadeHandles = memo(function AudioFadeHandles({
           }}
           onMouseEnter={() => setHoveredHandle(null)}
           onMouseLeave={() => setHoveredHandle((current) => (current === 'out' ? null : current))}
-          aria-label="Adjust audio fade out curve"
+          aria-label="调整音频淡出曲线"
         />
       )}
 

@@ -100,16 +100,16 @@ describe('ItemContextMenu scene detection', () => {
     renderContextMenu();
 
     expect(mockGetSceneVerificationModelOptions).toHaveBeenCalledTimes(1);
-    expect(screen.getByText('Detect Scenes & Split')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Fast (Histogram)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AI (Gemma Turbo)' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'AI (Liquid Vision)' })).toBeInTheDocument();
+    expect(screen.getByText('场景检测并切分')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '快速（直方图）' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI（Gemma Turbo）' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'AI（Liquid Vision）' })).toBeInTheDocument();
   });
 
   it('dispatches the selected verification model when a scene detection option is clicked', () => {
     const { onDetectScenes } = renderContextMenu();
 
-    fireEvent.click(screen.getByRole('button', { name: 'AI (Liquid Vision)' }));
+    fireEvent.click(screen.getByRole('button', { name: 'AI（Liquid Vision）' }));
 
     expect(onDetectScenes).toHaveBeenCalledWith('optical-flow', 'lfm');
   });

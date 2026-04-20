@@ -400,9 +400,9 @@ export function useTimelineItemActions({
               ? getSceneVerificationModelLabel(progress.verificationModel)
               : 'AI';
             const stageLabels = {
-              'optical-flow': `Analyzing ${method === 'histogram' ? 'frames' : 'motion'} (${progress.sceneCuts} candidates)`,
-              'loading-model': `Loading ${modelLabel} model (${progress.percent.toFixed(0)}%)`,
-              'verifying': `Verifying cuts (${progress.sceneCuts}/${progress.totalSamples} confirmed)`,
+              'optical-flow': `正在分析${method === 'histogram' ? '帧' : '运动'}（${progress.sceneCuts} 个候选）`,
+              'loading-model': `正在加载${modelLabel}模型（${progress.percent.toFixed(0)}%）`,
+              'verifying': `正在校验切点（${progress.sceneCuts}/${progress.totalSamples} 已确认）`,
             };
             const label = stageLabels[progress.stage ?? 'optical-flow'];
             useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
@@ -415,7 +415,7 @@ export function useTimelineItemActions({
         });
 
         if (cuts.length === 0) {
-          toast.info('No scene cuts detected');
+          toast.info('未检测到场景切点');
           return;
         }
 
@@ -429,25 +429,25 @@ export function useTimelineItemActions({
           .map((frame) => frame + clipFrom);
 
         if (splitFrames.length === 0) {
-          toast.info('No scene cuts within clip bounds');
+          toast.info('片段范围内未检测到场景切点');
           return;
         }
 
         const splitCount = splitItemAtFrames(clipId, splitFrames);
 
         if (splitCount > 0) {
-          toast.success(`Split clip at ${splitCount} scene cut${splitCount > 1 ? 's' : ''}`);
+          toast.success(`已在 ${splitCount} 个场景切点处切分片段`);
         } else {
-          toast.info('No valid split points found');
+          toast.info('未找到有效切分点');
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
         if (error instanceof Error && error.message.includes('WebGPU')) {
-          toast.error('Optical flow scene detection requires WebGPU support');
+          toast.error('光流场景检测需要 WebGPU 支持');
         } else {
-          toast.error('Scene detection failed');
+          toast.error('场景检测失败');
         }
       } finally {
         if (video) {

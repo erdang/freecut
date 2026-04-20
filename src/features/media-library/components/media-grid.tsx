@@ -178,8 +178,8 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
               <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-primary/20 animate-pulse" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-mono text-foreground tracking-wider mb-1">LOADING MEDIA LIBRARY</p>
-              <p className="text-xs text-muted-foreground font-mono">Initializing storage...</p>
+              <p className="text-sm font-mono text-foreground tracking-wider mb-1">正在加载媒体库</p>
+              <p className="text-xs text-muted-foreground font-mono">正在初始化存储...</p>
             </div>
           </div>
         </div>
@@ -192,9 +192,9 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
             >
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
-            <p className="text-base font-bold text-foreground mb-2 tracking-wide">NO MEDIA FILES</p>
+            <p className="text-base font-bold text-foreground mb-2 tracking-wide">暂无媒体文件</p>
             <p className="text-sm text-muted-foreground font-light mb-3">
-              Drag and drop files or click to browse
+              拖拽文件到此处，或点击浏览导入
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>
@@ -237,20 +237,20 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !open && handleCancelDelete()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete media file?</AlertDialogTitle>
+            <AlertDialogTitle>删除媒体文件？</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Are you sure you want to delete "{filteredItems.find(m => m.id === mediaIdToDelete)?.fileName}"?
-                  This action cannot be undone.
+                  确认删除“{filteredItems.find(m => m.id === mediaIdToDelete)?.fileName}”？
+                  此操作不可撤销。
                 </p>
                 {affectedMediaImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">Timeline clips will be removed</p>
+                      <p className="font-medium">时间线片段将被移除</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {affectedMediaImpact.totalReferenceCount} clip{affectedMediaImpact.totalReferenceCount > 1 ? 's' : ''} across the timeline and nested compound clips reference this media and will also be deleted.
+                        时间线及嵌套复合片段中共有 {affectedMediaImpact.totalReferenceCount} 个片段引用此媒体，也会一并删除。
                       </p>
                     </div>
                   </div>
@@ -259,9 +259,9 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancelDelete}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={handleCancelDelete}>取消</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              Delete{affectedMediaImpact.totalReferenceCount > 0 ? ` & ${affectedMediaImpact.totalReferenceCount} clip${affectedMediaImpact.totalReferenceCount > 1 ? 's' : ''}` : ''}
+              删除{affectedMediaImpact.totalReferenceCount > 0 ? `（含 ${affectedMediaImpact.totalReferenceCount} 个片段）` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

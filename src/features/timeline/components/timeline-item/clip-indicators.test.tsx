@@ -17,6 +17,6 @@ describe('ClipIndicators', () => {
       />
     );
 
-    expect(screen.getByTitle('Speed: 1.25x')).toBeInTheDocument();
+    expect(screen.getByTitle('速度：1.25x')).toBeInTheDocument();
   });
 });

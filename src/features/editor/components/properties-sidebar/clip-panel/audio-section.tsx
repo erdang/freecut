@@ -285,8 +285,8 @@ export function AudioSection({ items }: AudioSectionProps) {
 
   return (
     <>
-      <PropertySection title="Audio" icon={Volume2} defaultOpen={true}>
-        <PropertyRow label="Gain">
+      <PropertySection title="音频" icon={Volume2} defaultOpen={true}>
+        <PropertyRow label="增益">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={volume}
@@ -304,18 +304,18 @@ export function AudioSection({ items }: AudioSectionProps) {
               currentValue={volume === 'mixed' ? 0 : volume}
             />
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={handleResetVolume}
-              title="Reset to 0 dB"
-            >
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetVolume}
+            title="重置为 0 分贝"
+          >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Fade In">
+        <PropertyRow label="淡入">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={fadeIn}
@@ -328,18 +328,18 @@ export function AudioSection({ items }: AudioSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={handleResetFadeIn}
-              title="Reset to 0"
-            >
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetFadeIn}
+            title="重置为 0"
+          >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Fade Out">
+        <PropertyRow label="淡出">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={fadeOut}
@@ -352,20 +352,20 @@ export function AudioSection({ items }: AudioSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={handleResetFadeOut}
-              title="Reset to 0"
-            >
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetFadeOut}
+            title="重置为 0"
+          >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
       </PropertySection>
 
-      <PropertySection title="Pitch" icon={Music} defaultOpen={true}>
-        <PropertyRow label="Semi Tones">
+      <PropertySection title="音高" icon={Music} defaultOpen={true}>
+        <PropertyRow label="半音">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={pitchSemitones}
@@ -378,18 +378,18 @@ export function AudioSection({ items }: AudioSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={handleResetPitchSemitones}
-              title="Reset semitone pitch"
-            >
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetPitchSemitones}
+            title="重置半音音高"
+          >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Cents">
+        <PropertyRow label="音分">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={pitchCents}
@@ -402,19 +402,19 @@ export function AudioSection({ items }: AudioSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 flex-shrink-0"
-              onClick={handleResetPitchCents}
-              title="Reset cent pitch"
-            >
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetPitchCents}
+            title="重置音分音高"
+          >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
       </PropertySection>
 
-      <PropertySection title="Equalizer" defaultOpen={true}>
+      <PropertySection title="均衡器" defaultOpen={true}>
         <AudioEqPanelContent items={items} targetLabel="" layoutMode="compact" />
       </PropertySection>
     </>

@@ -196,7 +196,7 @@ export const ClipPanel = memo(function ClipPanel() {
             className="text-xs gap-1 px-2"
           >
             <Film className="h-3 w-3" />
-            Video
+            视频
           </TabsTrigger>
           <TabsTrigger
             value="audio"
@@ -204,7 +204,7 @@ export const ClipPanel = memo(function ClipPanel() {
             className="text-xs gap-1 px-2"
           >
             <Volume2 className="h-3 w-3" />
-            Audio
+            音频
           </TabsTrigger>
           <TabsTrigger
             value="effects"
@@ -212,7 +212,7 @@ export const ClipPanel = memo(function ClipPanel() {
             className="text-xs gap-1 px-2"
           >
             <Sparkles className="h-3 w-3" />
-            Effects
+            效果
           </TabsTrigger>
         </TabsList>
 
@@ -266,7 +266,7 @@ export const ClipPanel = memo(function ClipPanel() {
               {/* Explanatory text for adjustment layers */}
               {hasAdjustmentItems && (
                 <div className="px-2 py-2 text-xs text-muted-foreground bg-purple-500/10 rounded border border-purple-500/20">
-                  Effects on adjustment layers apply to all items on tracks above.
+                  调整图层上的效果会作用于其上方轨道中的所有片段。
                 </div>
               )}
               <EffectsSection items={visualItems} />

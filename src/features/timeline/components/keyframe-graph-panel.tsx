@@ -95,17 +95,17 @@ interface KeyframeGraphPanelProps {
 type KeyframeEditorMode = 'graph' | 'dopesheet';
 const KEYFRAME_EDITOR_MODE_STORAGE_KEY = 'timeline:keyframeEditorMode';
 const EASING_OPTIONS: Array<{ value: EasingType; label: string }> = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'ease-in', label: 'Ease In' },
-  { value: 'ease-in-out', label: 'Ease In-Out' },
-  { value: 'ease-out', label: 'Ease Out' },
+  { value: 'linear', label: '线性' },
+  { value: 'ease-in', label: '缓入' },
+  { value: 'ease-in-out', label: '缓入缓出' },
+  { value: 'ease-out', label: '缓出' },
 ];
 const BEZIER_PRESETS = [
-  { value: 'soft', label: 'Soft', points: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 } },
-  { value: 'ease-out', label: 'Ease Out', points: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 } },
-  { value: 'ease-in', label: 'Ease In', points: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 } },
-  { value: 'ease-in-out', label: 'Ease In-Out', points: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 } },
-  { value: 'overshoot', label: 'Overshoot', points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 } },
+  { value: 'soft', label: '柔和', points: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 } },
+  { value: 'ease-out', label: '缓出', points: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 } },
+  { value: 'ease-in', label: '缓入', points: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 } },
+  { value: 'ease-in-out', label: '缓入缓出', points: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 } },
+  { value: 'overshoot', label: '超冲', points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 } },
 ] as const;
 const BEZIER_INPUT_KEYS = ['x1', 'y1', 'x2', 'y2'] as const;
 const SPRING_INPUT_KEYS = ['tension', 'friction', 'mass'] as const;
@@ -348,10 +348,10 @@ function AdvancedEasingControls({
     >
       {selectedBezierPoints && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-medium text-foreground">Bezier</span>
+          <span className="font-medium text-foreground">贝塞尔</span>
           <Select value={selectedBezierPreset} onValueChange={handleBezierPresetChange}>
             <SelectTrigger className="h-7 w-[130px] text-xs focus:ring-0 focus:ring-offset-0">
-              <SelectValue placeholder="Preset" />
+              <SelectValue placeholder="预设" />
             </SelectTrigger>
             <SelectContent>
               {BEZIER_PRESETS.map((preset) => (
@@ -360,7 +360,7 @@ function AdvancedEasingControls({
                 </SelectItem>
               ))}
               <SelectItem value="custom" className="text-xs">
-                Custom
+                自定义
               </SelectItem>
             </SelectContent>
           </Select>
@@ -383,16 +383,16 @@ function AdvancedEasingControls({
             className="h-7 px-2 text-[11px]"
             onClick={() => handleBezierPresetChange('soft')}
           >
-            Reset
+            重置
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            {hasMixedBezierConfig ? 'Mixed curves selected' : 'Drag graph handles for custom curves'}
+            {hasMixedBezierConfig ? '已选择混合曲线' : '拖动图形控制柄可自定义曲线'}
           </span>
         </div>
       )}
       {selectedSpringParameters && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-medium text-foreground">Spring</span>
+          <span className="font-medium text-foreground">弹簧</span>
           {SPRING_INPUT_KEYS.map((key) => (
             <label key={key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <span className="capitalize">{key}</span>
@@ -418,10 +418,10 @@ function AdvancedEasingControls({
               applySpring({ ...DEFAULT_SPRING_PARAMS });
             }}
           >
-            Reset
+            重置
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            {hasMixedSpringConfig ? 'Mixed spring settings selected' : 'Lower friction increases bounce'}
+            {hasMixedSpringConfig ? '已选择混合弹簧参数' : '降低摩擦会增加弹跳'}
           </span>
         </div>
       )}
@@ -1028,14 +1028,14 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     if (isKeyframeClipboardCut && (skippedUnsupported > 0 || skippedBlocked > 0)) {
       const reasons: string[] = [];
       if (skippedUnsupported > 0) {
-        reasons.push(`${skippedUnsupported} unsupported by the selected clip`);
+        reasons.push(`${skippedUnsupported} 个关键帧不受所选片段支持`);
       }
       if (skippedBlocked > 0) {
-        reasons.push(`${skippedBlocked} blocked by transition regions`);
+        reasons.push(`${skippedBlocked} 个关键帧位于转场阻塞区域`);
       }
 
-      toast.warning('Unable to paste cut keyframes here', {
-        description: `${reasons.join('. ')}. The cut keyframes stay in the clipboard.`,
+      toast.warning('无法在此粘贴剪切的关键帧', {
+        description: `${reasons.join('；')}。已剪切的关键帧仍保留在剪贴板中。`,
       });
       return;
     }
@@ -1044,17 +1044,17 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       const reasons: string[] = [];
       if (skippedUnsupported > 0) {
         reasons.push(
-          `${skippedUnsupported} unsupported by the selected clip`
+          `${skippedUnsupported} 个关键帧不受所选片段支持`
         );
       }
       if (skippedBlocked > 0) {
         reasons.push(
-          `${skippedBlocked} blocked by transition regions`
+          `${skippedBlocked} 个关键帧位于转场阻塞区域`
         );
       }
 
-      toast.warning('No keyframes pasted', {
-        description: reasons.join('. '),
+      toast.warning('未粘贴任何关键帧', {
+        description: reasons.join('；'),
       });
       return;
     }
@@ -1078,29 +1078,29 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
     const pastedCount = insertedRefs.length;
     const skippedCount = skippedUnsupported + skippedBlocked;
-    const actionLabel = isKeyframeClipboardCut ? 'Moved' : 'Pasted';
-    const keyframeLabel = `${pastedCount} keyframe${pastedCount === 1 ? '' : 's'}`;
+    const actionLabel = isKeyframeClipboardCut ? '已移动' : '已粘贴';
+    const keyframeLabel = `${pastedCount} 个关键帧`;
 
     if (skippedCount > 0) {
       const reasons: string[] = [];
       if (skippedUnsupported > 0) {
         reasons.push(
-          `${skippedUnsupported} unsupported by the selected clip`
+          `${skippedUnsupported} 个关键帧不受所选片段支持`
         );
       }
       if (skippedBlocked > 0) {
         reasons.push(
-          `${skippedBlocked} blocked by transition regions`
+          `${skippedBlocked} 个关键帧位于转场阻塞区域`
         );
       }
 
-      toast.warning(`${actionLabel} ${keyframeLabel}`, {
-        description: `${skippedCount} skipped. ${reasons.join('. ')}`,
+      toast.warning(`${actionLabel}${keyframeLabel}`, {
+        description: `已跳过 ${skippedCount} 个。${reasons.join('；')}`,
       });
       return;
     }
 
-    toast.success(`${actionLabel} ${keyframeLabel}`);
+    toast.success(`${actionLabel}${keyframeLabel}`);
   }, [
     availableProperties,
     clearKeyframeClipboard,
@@ -1442,7 +1442,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       >
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">
-            Keyframe Editor
+            关键帧编辑器
             {selectedItemForEditor && (
               <span className="ml-2 text-foreground">
                 - {selectedItemForEditor.label || selectedItemForEditor.type}
@@ -1464,7 +1464,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               setEditorMode('graph');
             }}
           >
-            Graph
+            曲线
           </Button>
           <Button
             variant={editorMode === 'dopesheet' ? 'secondary' : 'ghost'}
@@ -1475,7 +1475,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               setEditorMode('dopesheet');
             }}
           >
-            Sheet
+            表格
           </Button>
           <Button
             variant="ghost"
@@ -1551,7 +1551,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
             </ErrorBoundary>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              {selectedItemForEditor ? 'Loading...' : 'Select an item to view the editor'}
+              {selectedItemForEditor ? '加载中…' : '请选择一个片段查看编辑器'}
             </div>
           )}
         </div>

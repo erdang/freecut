@@ -50,8 +50,8 @@ describe('DopesheetEditor header frame inputs', () => {
       selectedKeyframeIds: new Set(['kf-x-1']),
     });
 
-    expect(screen.getByLabelText('Local frame')).toHaveValue(20);
-    expect(screen.getByLabelText('Global frame')).toHaveValue(50);
+    expect(screen.getByLabelText('本地帧')).toHaveValue(20);
+    expect(screen.getByLabelText('全局帧')).toHaveValue(50);
   });
 
   it('shows mixed selections as blank inputs with a dash placeholder', () => {
@@ -59,8 +59,8 @@ describe('DopesheetEditor header frame inputs', () => {
       selectedKeyframeIds: new Set(['kf-x-1', 'kf-x-2']),
     });
 
-    const localInput = screen.getByLabelText('Local frame') as HTMLInputElement;
-    const globalInput = screen.getByLabelText('Global frame') as HTMLInputElement;
+    const localInput = screen.getByLabelText('本地帧') as HTMLInputElement;
+    const globalInput = screen.getByLabelText('全局帧') as HTMLInputElement;
 
     expect(localInput.value).toBe('');
     expect(localInput).toHaveAttribute('placeholder', '-');
@@ -76,7 +76,7 @@ describe('DopesheetEditor header frame inputs', () => {
       selectedKeyframeIds: new Set(['kf-x-1']),
     });
 
-    const input = screen.getByLabelText('Local frame');
+    const input = screen.getByLabelText('本地帧');
     fireEvent.change(input, { target: { value: '24' } });
     fireEvent.blur(input);
 
@@ -93,7 +93,7 @@ describe('DopesheetEditor header frame inputs', () => {
       selectedKeyframeIds: new Set(['kf-x-1']),
     });
 
-    const input = screen.getByLabelText('Local frame');
+    const input = screen.getByLabelText('本地帧');
     fireEvent.change(input, { target: { value: '40' } });
     fireEvent.blur(input);
 
@@ -111,7 +111,7 @@ describe('DopesheetEditor header frame inputs', () => {
       selectedKeyframeIds: new Set(['kf-x-1', 'kf-y-1']),
     });
 
-    const input = screen.getByLabelText('Global frame');
+    const input = screen.getByLabelText('全局帧');
     fireEvent.change(input, { target: { value: '55' } });
     fireEvent.blur(input);
 

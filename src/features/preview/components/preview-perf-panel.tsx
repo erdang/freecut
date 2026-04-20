@@ -11,10 +11,10 @@ interface PreviewPerfPanelProps {
 
 function formatRenderSource(source: string) {
   return source === 'fast_scrub_overlay'
-    ? 'Overlay'
+    ? '叠加层'
     : source === 'playback_transition_overlay'
-      ? 'Transition'
-      : 'Player';
+      ? '转场'
+      : '播放器';
 }
 
 export const PreviewPerfPanel = memo(function PreviewPerfPanel({
@@ -31,19 +31,19 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
     ? null
     : snapshot.transitionSessionMode === 'dom'
       ? 'DOM'
-      : 'Canvas';
+      : '画布';
 
   return (
     <div
       className="absolute right-2 bottom-2 z-30 bg-black/80 text-white/90 rounded-md text-[10px] leading-[14px] font-mono pointer-events-none select-none backdrop-blur-sm"
       style={{ padding: '6px 8px', minWidth: 180 }}
       data-testid="preview-perf-panel"
-      title={`Toggle: Alt+Shift+P | URL: ?${PREVIEW_PERF_PANEL_QUERY_KEY}=1`}
+      title={`切换：Alt+Shift+P | URL 参数：?${PREVIEW_PERF_PANEL_QUERY_KEY}=1`}
     >
       <div style={{ marginBottom: 3 }}>
         <span style={{ color: srcColor }}>{srcLabel}</span>
         {snapshot.staleScrubOverlayDrops > 0 && (
-          <span style={{ color: '#f87171' }}> {snapshot.staleScrubOverlayDrops} stale</span>
+          <span style={{ color: '#f87171' }}> {snapshot.staleScrubOverlayDrops} 过期</span>
         )}
         {latestRenderSourceSwitch && (
           <span style={{ color: '#a1a1aa' }}>
@@ -55,23 +55,23 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
 
       <div>
         <span style={{ color: seekOk ? '#a1a1aa' : '#fbbf24' }}>
-          Seek {snapshot.seekLatencyAvgMs.toFixed(0)}ms
+          跳转 {snapshot.seekLatencyAvgMs.toFixed(0)}ms
         </span>
         {snapshot.seekLatencyTimeouts > 0 && (
-          <span style={{ color: '#f87171' }}> {snapshot.seekLatencyTimeouts} timeout</span>
+          <span style={{ color: '#f87171' }}> {snapshot.seekLatencyTimeouts} 超时</span>
         )}
         {snapshot.scrubDroppedFrames > 0 && (
           <span style={{ color: '#fbbf24' }}>
-            {' '}Scrub {snapshot.scrubDroppedFrames}/{snapshot.scrubUpdates} dropped
+            {' '}拖拽预览 {snapshot.scrubDroppedFrames}/{snapshot.scrubUpdates} 丢帧
           </span>
         )}
       </div>
 
       <div>
         <span style={{ color: qualOk ? '#a1a1aa' : '#fbbf24' }}>
-          Quality {snapshot.effectivePreviewQuality}x
+          质量 {snapshot.effectivePreviewQuality}x
           {snapshot.effectivePreviewQuality < snapshot.userPreviewQuality
-            && ` (cap ${snapshot.adaptiveQualityCap}x)`}
+            && `（上限 ${snapshot.adaptiveQualityCap}x）`}
         </span>
         {' '}
         <span style={{ color: frameOk ? '#a1a1aa' : '#f87171' }}>
@@ -85,36 +85,36 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
       </div>
 
       <div style={{ color: '#a1a1aa' }}>
-        Pool {snapshot.sourceWarmKeep}/{snapshot.sourceWarmTarget}
+        资源池 {snapshot.sourceWarmKeep}/{snapshot.sourceWarmTarget}
         {' '}({snapshot.sourcePoolSources}src {snapshot.sourcePoolElements}el)
         {snapshot.sourceWarmEvictions > 0 && (
-          <span style={{ color: '#fbbf24' }}> {snapshot.sourceWarmEvictions} evict</span>
+          <span style={{ color: '#fbbf24' }}> {snapshot.sourceWarmEvictions} 淘汰</span>
         )}
       </div>
 
       {(snapshot.preseekRequests > 0 || snapshot.preseekCachedBitmaps > 0) && (
         <div style={{ color: '#a1a1aa' }}>
-          Preseek {snapshot.preseekCacheHits + snapshot.preseekInflightReuses}/{snapshot.preseekRequests} hit
-          {' '}post {snapshot.preseekWorkerSuccesses}/{snapshot.preseekWorkerPosts}
-          {' '}cache {snapshot.preseekCachedBitmaps}
+          预寻帧 {snapshot.preseekCacheHits + snapshot.preseekInflightReuses}/{snapshot.preseekRequests} 命中
+          {' '}投递 {snapshot.preseekWorkerSuccesses}/{snapshot.preseekWorkerPosts}
+          {' '}缓存 {snapshot.preseekCachedBitmaps}
           {snapshot.preseekWaitMatches > 0 && (
             <span>
-              {' '}wait {snapshot.preseekWaitResolved}/{snapshot.preseekWaitMatches}
+              {' '}等待 {snapshot.preseekWaitResolved}/{snapshot.preseekWaitMatches}
             </span>
           )}
           {snapshot.preseekWorkerFailures > 0 && (
-            <span style={{ color: '#fbbf24' }}> {snapshot.preseekWorkerFailures} fail</span>
+            <span style={{ color: '#fbbf24' }}> {snapshot.preseekWorkerFailures} 失败</span>
           )}
           {snapshot.preseekWaitTimeouts > 0 && (
-            <span style={{ color: '#fbbf24' }}> {snapshot.preseekWaitTimeouts} timeout</span>
+            <span style={{ color: '#fbbf24' }}> {snapshot.preseekWaitTimeouts} 超时</span>
           )}
         </div>
       )}
 
       {(snapshot.unresolvedQueue > 0 || snapshot.pendingResolves > 0) && (
         <div style={{ color: '#fbbf24' }}>
-          Resolving {snapshot.pendingResolves} pending, {snapshot.unresolvedQueue} queued
-          {' '}({snapshot.resolveAvgMs.toFixed(0)}ms avg)
+          解析中：{snapshot.pendingResolves} 个进行中，{snapshot.unresolvedQueue} 个排队
+          {' '}（平均 {snapshot.resolveAvgMs.toFixed(0)}ms）
         </div>
       )}
 
@@ -122,8 +122,8 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
         <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 3, paddingTop: 3 }}>
           <div>
             <span style={{ color: transitionActive ? '#60a5fa' : '#a1a1aa' }}>
-              {transitionActive ? `Transition ${transitionMode}` : 'Last transition'}
-              {snapshot.transitionSessionComplex ? ' (complex)' : ''}
+              {transitionActive ? `转场 ${transitionMode}` : '最近转场'}
+              {snapshot.transitionSessionComplex ? '（复杂）' : ''}
             </span>
             {transitionActive && (
               <span style={{ color: '#a1a1aa' }}>
@@ -134,10 +134,10 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
           </div>
           {snapshot.transitionLastPrepareMs > 0 && (
             <div style={{ color: snapshot.transitionLastEntryMisses > 0 ? '#f87171' : '#a1a1aa' }}>
-              Prep {snapshot.transitionLastPrepareMs.toFixed(0)}ms
+              准备 {snapshot.transitionLastPrepareMs.toFixed(0)}ms
               {snapshot.transitionLastReadyLeadMs > 0
-                && ` lead ${snapshot.transitionLastReadyLeadMs.toFixed(0)}ms`}
-              {snapshot.transitionLastEntryMisses > 0 && ` ${snapshot.transitionLastEntryMisses} miss`}
+                && ` 提前 ${snapshot.transitionLastReadyLeadMs.toFixed(0)}ms`}
+              {snapshot.transitionLastEntryMisses > 0 && ` ${snapshot.transitionLastEntryMisses} 次未命中`}
               <span style={{ color: '#a1a1aa' }}> #{snapshot.transitionSessionCount}</span>
             </div>
           )}

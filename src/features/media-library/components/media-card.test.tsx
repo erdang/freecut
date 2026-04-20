@@ -190,7 +190,7 @@ describe('MediaCard', () => {
     const media = makeMedia();
     render(<MediaCard media={media} viewMode="list" />);
 
-    fireEvent.click(screen.getByText('Generate Proxy'));
+    fireEvent.click(screen.getByText('生成代理'));
 
     await waitFor(() => {
       expect(proxyServiceMocks.generateProxy).toHaveBeenCalledTimes(1);
@@ -208,7 +208,7 @@ describe('MediaCard', () => {
     const onRelink = vi.fn();
     render(<MediaCard media={makeMedia()} isBroken onRelink={onRelink} viewMode="grid" />);
 
-    fireEvent.click(screen.getByText('Relink File...'));
+    fireEvent.click(screen.getByText('重新关联文件...'));
 
     expect(onRelink).toHaveBeenCalledTimes(1);
   });
@@ -219,7 +219,7 @@ describe('MediaCard', () => {
 
     render(<MediaCard media={makeMedia()} viewMode="list" />);
 
-    fireEvent.click(screen.getByText('Cancel Proxy Generation'));
+    fireEvent.click(screen.getByText('取消生成代理'));
 
     expect(proxyServiceMocks.cancelProxy).toHaveBeenCalledWith('media-1', 'proxy-media-1');
   });

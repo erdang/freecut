@@ -266,7 +266,7 @@ export function useTimelineItemDropHandlers({
     useTrackDropPreviewStore.getState().clearGhostPreviews();
     addEffects(targetItemIds.map((itemId) => ({ itemId, effects })));
     if (targetItemIds.length > 1) {
-      toast.success(`Applied effect to ${targetItemIds.length} clips`);
+      toast.success(`已将效果应用到 ${targetItemIds.length} 个片段`);
     }
   }, [addEffects, resolveDirectEffectDropTemplate, resolveEffectDropTargets]);
 

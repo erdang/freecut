@@ -13,11 +13,11 @@ export function ColorScopesMonitor({ onClose }: ColorScopesMonitorProps) {
         className="flex items-center justify-between border-b border-border px-3 shrink-0"
         style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
       >
-        <span className="text-xs text-muted-foreground truncate">Color Scopes</span>
+        <span className="text-xs text-muted-foreground truncate">示波器</span>
         <button
           onClick={onClose}
           className="p-1 rounded hover:bg-muted transition-colors shrink-0"
-          aria-label="Close color scopes"
+          aria-label="关闭示波器"
         >
           <X className="w-3.5 h-3.5 text-muted-foreground" />
         </button>

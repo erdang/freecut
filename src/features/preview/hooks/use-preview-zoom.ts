@@ -5,7 +5,7 @@ import { usePlaybackStore } from '@/shared/state/playback';
  * Zoom presets for preview
  */
 const ZOOM_PRESETS = [
-  { label: 'Auto', value: 'fit' as const },
+  { label: '自适应', value: 'fit' as const },
   { label: '25%', value: 0.25 },
   { label: '50%', value: 0.5 },
   { label: '75%', value: 0.75 },

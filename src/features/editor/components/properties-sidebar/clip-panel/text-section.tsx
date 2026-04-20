@@ -625,30 +625,30 @@ export function TextSection({
   return (
     <>
       {showContentSection && (
-        <PropertySection title="Text" icon={Type} defaultOpen={true}>
+        <PropertySection title="文本" icon={Type} defaultOpen={true}>
           {/* Text Content */}
-          <PropertyRow label="Content">
+          <PropertyRow label="内容">
             <Textarea
               value={sharedValues.text ?? ''}
               onChange={handleTextChange}
-              placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
+              placeholder={sharedValues.text === undefined ? '混合' : '输入文本...'}
               className="min-h-[60px] text-xs flex-1 min-w-0"
               rows={3}
             />
           </PropertyRow>
 
           {/* Font Family */}
-          <PropertyRow label="Font" className="items-start">
+          <PropertyRow label="字体" className="items-start">
             <FontPicker
               value={sharedValues.fontFamily}
-              placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
+              placeholder={sharedValues.fontFamily === undefined ? '混合' : '选择字体'}
               previewText={fontPreviewText}
               onValueChange={handleFontFamilyChange}
             />
           </PropertyRow>
 
           {/* Font Size */}
-          <PropertyRow label="Size">
+          <PropertyRow label="大小">
             <NumberInput
               value={sharedValues.fontSize}
               onChange={handleFontSizeChange}
@@ -662,13 +662,13 @@ export function TextSection({
           </PropertyRow>
 
           {/* Font Weight */}
-          <PropertyRow label="Weight">
+          <PropertyRow label="字重">
             <Select
               value={sharedValues.fontWeight}
               onValueChange={handleFontWeightChange}
             >
               <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'} />
+                <SelectValue placeholder={sharedValues.fontWeight === undefined ? '混合' : '选择字重'} />
               </SelectTrigger>
               <SelectContent>
                 {supportedFontWeightOptions.map((weight) => (
@@ -681,15 +681,15 @@ export function TextSection({
           </PropertyRow>
 
           {/* Font Style */}
-          <PropertyRow label="Style">
+          <PropertyRow label="样式">
             <div className="flex gap-1">
               <Button
                 variant={isBoldActive ? 'secondary' : 'ghost'}
                 size="icon"
                 className="h-7 w-7"
                 onClick={handleBoldToggle}
-                title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
-                aria-label="Bold"
+                title={canUseBold ? '加粗' : '当前字体不支持加粗'}
+                aria-label="加粗"
                 aria-pressed={isBoldActive}
                 disabled={!canUseBold}
               >
@@ -700,8 +700,8 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={handleItalicToggle}
-                title="Italic"
-                aria-label="Italic"
+                title="斜体"
+                aria-label="斜体"
                 aria-pressed={isItalicActive}
               >
                 <Italic className="w-3.5 h-3.5" />
@@ -711,8 +711,8 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={handleUnderlineToggle}
-                title="Underline"
-                aria-label="Underline"
+                title="下划线"
+                aria-label="下划线"
                 aria-pressed={isUnderlineActive}
               >
                 <Underline className="w-3.5 h-3.5" />
@@ -721,14 +721,14 @@ export function TextSection({
           </PropertyRow>
 
           {/* Text Align */}
-          <PropertyRow label="Align">
+          <PropertyRow label="对齐">
             <div className="flex gap-1">
               <Button
                 variant={sharedValues.textAlign === 'left' ? 'secondary' : 'ghost'}
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('left')}
-                title="Align Left"
+                title="左对齐"
               >
                 <AlignLeft className="w-3.5 h-3.5" />
               </Button>
@@ -737,7 +737,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('center')}
-                title="Align Center"
+                title="居中对齐"
               >
                 <AlignCenter className="w-3.5 h-3.5" />
               </Button>
@@ -746,7 +746,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('right')}
-                title="Align Right"
+                title="右对齐"
               >
                 <AlignRight className="w-3.5 h-3.5" />
               </Button>
@@ -756,7 +756,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('top')}
-                title="Align Top"
+                title="顶部对齐"
               >
                 <AlignStartHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -765,7 +765,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('middle')}
-                title="Align Middle"
+                title="垂直居中"
               >
                 <AlignCenterHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -774,7 +774,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('bottom')}
-                title="Align Bottom"
+                title="底部对齐"
               >
                 <AlignEndHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -792,7 +792,7 @@ export function TextSection({
           />
 
           {/* Letter Spacing */}
-          <PropertyRow label="Spacing">
+          <PropertyRow label="字距">
             <NumberInput
               value={sharedValues.letterSpacing}
               onChange={handleLetterSpacingChange}
@@ -806,7 +806,7 @@ export function TextSection({
           </PropertyRow>
 
           {/* Line Height */}
-          <PropertyRow label="Line H.">
+          <PropertyRow label="行高">
             <NumberInput
               value={sharedValues.lineHeight}
               onChange={handleLineHeightChange}
@@ -822,8 +822,8 @@ export function TextSection({
       )}
 
       {showEffectSection && (
-        <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
-          <PropertyRow label="Presets" className="items-start">
+        <PropertySection title="效果" icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label="预设" className="items-start">
             <div className="grid w-full grid-cols-2 gap-1.5">
               {TEXT_EFFECT_PRESETS.map((preset) => (
                 <Button
@@ -848,7 +848,7 @@ export function TextSection({
             defaultColor="#000000"
           />
 
-          <PropertyRow label="Shadow X">
+          <PropertyRow label="阴影水平">
             <NumberInput
               value={shadowOffsetX}
               onChange={handleShadowOffsetXChange}
@@ -861,7 +861,7 @@ export function TextSection({
             />
           </PropertyRow>
 
-          <PropertyRow label="Shadow Y">
+          <PropertyRow label="阴影垂直">
             <NumberInput
               value={shadowOffsetY}
               onChange={handleShadowOffsetYChange}
@@ -874,7 +874,7 @@ export function TextSection({
             />
           </PropertyRow>
 
-          <PropertyRow label="Shadow B.">
+          <PropertyRow label="阴影模糊">
             <NumberInput
               value={shadowBlur}
               onChange={handleShadowBlurChange}
@@ -887,7 +887,7 @@ export function TextSection({
             />
           </PropertyRow>
 
-          <PropertyRow label="Stroke W.">
+          <PropertyRow label="描边宽">
             <NumberInput
               value={strokeWidth}
               onChange={handleStrokeWidthChange}
@@ -914,8 +914,8 @@ export function TextSection({
       )}
 
       {showAnimationSection && (
-        <PropertySection title="Animation" icon={Sparkles} defaultOpen={true}>
-          <PropertyRow label="Intro" className="items-start">
+        <PropertySection title="动画" icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label="入场" className="items-start">
             <div className="grid w-full grid-cols-4 gap-1.5">
               {TEXT_ANIMATION_PRESETS.map((preset) => (
                 <Button
@@ -930,7 +930,7 @@ export function TextSection({
               ))}
             </div>
           </PropertyRow>
-          <PropertyRow label="Outro" className="items-start">
+          <PropertyRow label="出场" className="items-start">
             <div className="grid w-full grid-cols-4 gap-1.5">
               {TEXT_ANIMATION_PRESETS.map((preset) => (
                 <Button
@@ -946,7 +946,7 @@ export function TextSection({
             </div>
           </PropertyRow>
           <div className="px-1 pt-1 text-[11px] text-muted-foreground">
-            Applies short ease-out text motion at the start or end of each selected clip.
+            在每个所选片段的开头或结尾应用短促的缓出文本动画。
           </div>
         </PropertySection>
       )}

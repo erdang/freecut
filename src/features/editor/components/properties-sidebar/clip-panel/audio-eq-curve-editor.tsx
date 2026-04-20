@@ -109,9 +109,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       ? {
         id: 'band1',
         kind: 'cut',
-        label: 'Band 1',
+        label: '频段 1',
         bandNumber: 1,
-        description: 'High Pass',
+        description: '高通',
         frequencyField: 'audioEqBand1FrequencyHz',
         activateField: 'audioEqBand1Enabled',
         minFrequencyHz: AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ,
@@ -122,9 +122,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       : {
         id: 'band1',
         kind: 'gain',
-        label: 'Band 1',
+        label: '频段 1',
         bandNumber: 1,
-        description: settings.band1Type === 'low-shelf' ? 'Low Shelf' : settings.band1Type === 'high-shelf' ? 'High Shelf' : 'Peak',
+        description: settings.band1Type === 'low-shelf' ? '低架' : settings.band1Type === 'high-shelf' ? '高架' : '峰值',
         frequencyField: 'audioEqBand1FrequencyHz',
         gainField: 'audioEqBand1GainDb',
         activateField: 'audioEqBand1Enabled',
@@ -138,9 +138,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       ? {
         id: 'band2',
         kind: 'notch',
-        label: 'Band 2',
+        label: '频段 2',
         bandNumber: 2,
-        description: 'Notch',
+        description: '陷波',
         frequencyField: 'audioEqLowFrequencyHz',
         activateField: 'audioEqLowEnabled',
         minFrequencyHz: AUDIO_EQ_LOW_MIN_FREQUENCY_HZ,
@@ -151,9 +151,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       : {
         id: 'band2',
         kind: 'gain',
-        label: 'Band 2',
+        label: '频段 2',
         bandNumber: 2,
-        description: settings.lowType === 'high-shelf' ? 'High Shelf' : settings.lowType === 'peaking' ? 'Peak' : 'Low Shelf',
+        description: settings.lowType === 'high-shelf' ? '高架' : settings.lowType === 'peaking' ? '峰值' : '低架',
         frequencyField: 'audioEqLowFrequencyHz',
         gainField: 'audioEqLowGainDb',
         activateField: 'audioEqLowEnabled',
@@ -167,9 +167,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       ? {
         id: 'band3',
         kind: 'notch',
-        label: 'Band 3',
+        label: '频段 3',
         bandNumber: 3,
-        description: 'Notch',
+        description: '陷波',
         frequencyField: 'audioEqLowMidFrequencyHz',
         activateField: 'audioEqLowMidEnabled',
         minFrequencyHz: AUDIO_EQ_LOW_MID_MIN_FREQUENCY_HZ,
@@ -180,9 +180,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       : {
         id: 'band3',
         kind: 'gain',
-        label: 'Band 3',
+        label: '频段 3',
         bandNumber: 3,
-        description: settings.lowMidType === 'high-shelf' ? 'High Shelf' : settings.lowMidType === 'peaking' ? 'Peak' : 'Low Shelf',
+        description: settings.lowMidType === 'high-shelf' ? '高架' : settings.lowMidType === 'peaking' ? '峰值' : '低架',
         frequencyField: 'audioEqLowMidFrequencyHz',
         gainField: 'audioEqLowMidGainDb',
         activateField: 'audioEqLowMidEnabled',
@@ -196,9 +196,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       ? {
         id: 'band4',
         kind: 'notch',
-        label: 'Band 4',
+        label: '频段 4',
         bandNumber: 4,
-        description: 'Notch',
+        description: '陷波',
         frequencyField: 'audioEqHighMidFrequencyHz',
         activateField: 'audioEqHighMidEnabled',
         minFrequencyHz: AUDIO_EQ_HIGH_MID_MIN_FREQUENCY_HZ,
@@ -209,9 +209,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       : {
         id: 'band4',
         kind: 'gain',
-        label: 'Band 4',
+        label: '频段 4',
         bandNumber: 4,
-        description: settings.highMidType === 'high-shelf' ? 'High Shelf' : settings.highMidType === 'peaking' ? 'Peak' : 'Low Shelf',
+        description: settings.highMidType === 'high-shelf' ? '高架' : settings.highMidType === 'peaking' ? '峰值' : '低架',
         frequencyField: 'audioEqHighMidFrequencyHz',
         gainField: 'audioEqHighMidGainDb',
         activateField: 'audioEqHighMidEnabled',
@@ -225,9 +225,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       ? {
         id: 'band5',
         kind: 'notch',
-        label: 'Band 5',
+        label: '频段 5',
         bandNumber: 5,
-        description: 'Notch',
+        description: '陷波',
         frequencyField: 'audioEqHighFrequencyHz',
         activateField: 'audioEqHighEnabled',
         minFrequencyHz: AUDIO_EQ_HIGH_MIN_FREQUENCY_HZ,
@@ -238,9 +238,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       : {
         id: 'band5',
         kind: 'gain',
-        label: 'Band 5',
+        label: '频段 5',
         bandNumber: 5,
-        description: settings.highType === 'low-shelf' ? 'Low Shelf' : settings.highType === 'peaking' ? 'Peak' : 'High Shelf',
+        description: settings.highType === 'low-shelf' ? '低架' : settings.highType === 'peaking' ? '峰值' : '高架',
         frequencyField: 'audioEqHighFrequencyHz',
         gainField: 'audioEqHighGainDb',
         activateField: 'audioEqHighEnabled',
@@ -254,9 +254,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       ? {
         id: 'band6',
         kind: 'cut',
-        label: 'Band 6',
+        label: '频段 6',
         bandNumber: 6,
-        description: 'Low Pass',
+        description: '低通',
         frequencyField: 'audioEqBand6FrequencyHz',
         activateField: 'audioEqBand6Enabled',
         minFrequencyHz: AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ,
@@ -267,9 +267,9 @@ function getAudioEqHandles(settings: ResolvedAudioEqSettings): ReadonlyArray<Aud
       : {
         id: 'band6',
         kind: 'gain',
-        label: 'Band 6',
+        label: '频段 6',
         bandNumber: 6,
-        description: settings.band6Type === 'low-shelf' ? 'Low Shelf' : settings.band6Type === 'high-shelf' ? 'High Shelf' : 'Peak',
+        description: settings.band6Type === 'low-shelf' ? '低架' : settings.band6Type === 'high-shelf' ? '高架' : '峰值',
         frequencyField: 'audioEqBand6FrequencyHz',
         gainField: 'audioEqBand6GainDb',
         activateField: 'audioEqBand6Enabled',
@@ -623,7 +623,7 @@ export function AudioEqCurveEditor({
           viewBox={`0 0 ${CURVE_WIDTH} ${CURVE_HEIGHT}`}
           preserveAspectRatio="none"
           className="h-full w-full"
-          aria-label="EQ curve editor"
+          aria-label="均衡器曲线编辑器"
         >
           {CURVE_GRID_LEVELS_DB.map((level) => (
             <line
@@ -698,7 +698,7 @@ export function AudioEqCurveEditor({
               key={handle.id}
               type="button"
               data-eq-band={handle.id}
-              aria-label={`${handle.label} EQ handle`}
+              aria-label={`${handle.label}均衡器手柄`}
               className={cn(
                 'absolute -translate-x-1/2 -translate-y-1/2 rounded-full border border-background shadow-sm transition-[transform,background-color,color] focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-1 flex items-center justify-center font-mono font-semibold leading-none',
                 isActive ? 'h-5 w-5 scale-110 bg-foreground text-background' : 'h-[18px] w-[18px] bg-primary text-primary-foreground',
@@ -729,12 +729,11 @@ export function AudioEqCurveEditor({
 
         {disabled ? (
           <div className="pointer-events-none absolute inset-x-0 top-2 text-center text-[10px] text-muted-foreground">
-            Mixed EQ values
+            均衡器值不一致
           </div>
         ) : null}
       </div>
     </div>
   );
 }
-
 

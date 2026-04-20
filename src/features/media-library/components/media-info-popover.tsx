@@ -20,30 +20,30 @@ interface MediaInfoPopoverProps {
 
 export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: MediaInfoPopoverProps) {
   const mediaType = getMediaType(media.mimeType);
-  const typeLabel = mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Audio' : 'Image';
+  const typeLabel = mediaType === 'video' ? '视频' : mediaType === 'audio' ? '音频' : '图片';
 
   const rows: Array<{ icon: React.ReactNode; label: string; value: string }> = [];
 
-  rows.push({ icon: <FileType className="w-3 h-3" />, label: 'Type', value: `${typeLabel} (${media.mimeType.split('/')[1]})` });
+  rows.push({ icon: <FileType className="w-3 h-3" />, label: '类型', value: `${typeLabel} (${media.mimeType.split('/')[1]})` });
 
   if ((mediaType === 'video' || mediaType === 'audio') && media.duration > 0) {
-    rows.push({ icon: <Clock className="w-3 h-3" />, label: 'Duration', value: formatDuration(media.duration) });
+    rows.push({ icon: <Clock className="w-3 h-3" />, label: '时长', value: formatDuration(media.duration) });
   }
 
   if ((mediaType === 'video' || mediaType === 'image') && media.width > 0 && media.height > 0) {
-    rows.push({ icon: <Maximize2 className="w-3 h-3" />, label: 'Dimensions', value: `${media.width} × ${media.height}` });
+    rows.push({ icon: <Maximize2 className="w-3 h-3" />, label: '分辨率', value: `${media.width} × ${media.height}` });
   }
 
   if (media.codec && media.codec !== 'importing...') {
     let codecStr = media.codec;
     if (media.audioCodec) codecStr += ` / ${media.audioCodec}`;
-    rows.push({ icon: <Film className="w-3 h-3" />, label: 'Codec', value: codecStr });
+    rows.push({ icon: <Film className="w-3 h-3" />, label: '编码', value: codecStr });
   }
 
-  rows.push({ icon: <HardDrive className="w-3 h-3" />, label: 'Size', value: formatBytes(media.fileSize) });
+  rows.push({ icon: <HardDrive className="w-3 h-3" />, label: '大小', value: formatBytes(media.fileSize) });
 
   if (mediaType === 'video' && media.fps > 0) {
-    rows.push({ icon: <Film className="w-3 h-3" />, label: 'Frame Rate', value: `${media.fps.toFixed(2)} fps` });
+    rows.push({ icon: <Film className="w-3 h-3" />, label: '帧率', value: `${media.fps.toFixed(2)} fps` });
   }
 
   return (
@@ -53,7 +53,7 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
           type="button"
           onClick={(e) => e.stopPropagation()}
           className={triggerClassName ?? 'p-0.5 rounded bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors'}
-          title="Media info"
+          title="媒体信息"
         >
           <Info className="w-3 h-3" />
         </button>
@@ -92,7 +92,7 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
             <div className="flex items-center gap-1.5 px-3 py-1.5">
               <Sparkles className="w-3 h-3 text-purple-400" />
               <span className="text-[10px] font-medium text-muted-foreground">
-                AI Captions ({media.aiCaptions.length})
+                AI 字幕（{media.aiCaptions.length}）
               </span>
             </div>
             <div className="px-3 pb-2 space-y-1.5 max-h-40 overflow-y-auto">
@@ -102,7 +102,7 @@ export function MediaInfoPopover({ media, triggerClassName, onSeekToCaption }: M
                     type="button"
                     className="text-primary/80 hover:text-primary font-mono flex-shrink-0 w-10 text-right cursor-pointer hover:underline"
                     onClick={(e) => { e.stopPropagation(); onSeekToCaption?.(caption.timeSec); }}
-                    title="Open in source monitor"
+                    title="在源监视器中打开"
                   >
                     {formatTimestamp(caption.timeSec)}
                   </button>

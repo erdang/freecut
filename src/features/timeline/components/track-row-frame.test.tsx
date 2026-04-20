@@ -95,7 +95,7 @@ describe('TrackRowFrame', () => {
   it('makes the full section divider row draggable when resizing is enabled', () => {
     render(<TrackSectionDivider onMouseDown={() => undefined} />);
 
-    const handle = screen.getByRole('button', { name: 'Resize video and audio track sections' });
+    const handle = screen.getByRole('button', { name: '调整视频与音频轨道分区高度' });
 
     expect(handle.className).toContain('cursor-row-resize');
     expect(handle.className).toContain('inset-0');

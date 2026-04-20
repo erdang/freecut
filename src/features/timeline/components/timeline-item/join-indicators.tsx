@@ -57,7 +57,7 @@ export const JoinIndicators = memo(function JoinIndicators({
           showLeft ? "opacity-100" : "opacity-0"
         )}
         style={joinIndicatorStyle}
-        title="Can join with previous clip (J)"
+        title="可与前一个片段拼接（J）"
       />
       <div
         className={cn(
@@ -65,7 +65,7 @@ export const JoinIndicators = memo(function JoinIndicators({
           showRight ? "opacity-100" : "opacity-0"
         )}
         style={joinIndicatorStyle}
-        title="Can join with next clip (J)"
+        title="可与后一个片段拼接（J）"
       />
     </>
   );

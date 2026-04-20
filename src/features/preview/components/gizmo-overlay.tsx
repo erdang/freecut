@@ -743,12 +743,12 @@ export function GizmoOverlay({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-2 py-1.5 text-xs text-muted-foreground border-b border-border mb-1">
-              Select Layer
+              选择图层
             </div>
             {contextMenu.items.map((item, index) => {
               const track = tracks.find((t) => t.id === item.trackId);
-              const trackName = track?.name ?? `Track ${index + 1}`;
-              const itemName = item.label || `${item.type} clip`;
+              const trackName = track?.name ?? `轨道 ${index + 1}`;
+              const itemName = item.label || `${item.type} 片段`;
 
               return (
                 <button

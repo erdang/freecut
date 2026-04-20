@@ -852,7 +852,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
             disabled={disabled || availableProperties.length === 0}
           >
             <SelectTrigger className="w-[140px] h-7 text-xs focus:ring-0 focus:ring-offset-0">
-              <SelectValue placeholder="Select property" />
+              <SelectValue placeholder="选择属性" />
             </SelectTrigger>
             <SelectContent>
               {availableProperties.map((prop) => (
@@ -865,7 +865,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
 
           {/* Keyframe count */}
           <span className="text-xs text-muted-foreground">
-            {keyframes.length} keyframe{keyframes.length !== 1 ? 's' : ''}
+            {keyframes.length} 个关键帧
           </span>
         </div>
 
@@ -884,7 +884,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                 <ChevronLeft className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Previous keyframe</TooltipContent>
+            <TooltipContent side="bottom">上一个关键帧</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -899,7 +899,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                 <ChevronRight className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Next keyframe</TooltipContent>
+            <TooltipContent side="bottom">下一个关键帧</TooltipContent>
           </Tooltip>
 
           {/* Separator */}
@@ -919,7 +919,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              {hasKeyframeAtCurrentFrame ? 'Keyframe exists at current frame' : 'Add keyframe at current frame'}
+              {hasKeyframeAtCurrentFrame ? '当前帧已存在关键帧' : '在当前帧添加关键帧'}
             </TooltipContent>
           </Tooltip>
 
@@ -937,8 +937,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
             </TooltipTrigger>
             <TooltipContent side="bottom">
               {selectedKeyframeIds.size > 0 
-                ? `Remove ${selectedKeyframeIds.size} selected keyframe${selectedKeyframeIds.size !== 1 ? 's' : ''}`
-                : 'Remove selected keyframes'}
+                ? `删除已选 ${selectedKeyframeIds.size} 个关键帧`
+                : '删除所选关键帧'}
             </TooltipContent>
           </Tooltip>
 
@@ -994,7 +994,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                 <ZoomOut className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Zoom out</TooltipContent>
+            <TooltipContent side="bottom">缩小</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1009,7 +1009,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                 <ZoomIn className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Zoom in</TooltipContent>
+            <TooltipContent side="bottom">放大</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1024,7 +1024,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                 <Maximize2 className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Fit to content</TooltipContent>
+            <TooltipContent side="bottom">适配内容</TooltipContent>
           </Tooltip>
 
           <Tooltip>
@@ -1039,7 +1039,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                 <RotateCcw className="h-3.5 w-3.5" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">Reset view</TooltipContent>
+            <TooltipContent side="bottom">重置视图</TooltipContent>
           </Tooltip>
         </div>
         </div>
@@ -1196,8 +1196,8 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       {/* Keyboard hints (shows when dragging) */}
       {showKeyboardHints && isDragging && dragState?.type === 'keyframe' && (
         <div className="text-xs text-muted-foreground text-center space-x-3">
-          <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Shift</kbd> constrain axis</span>
-          <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Alt</kbd> fine adjust</span>
+          <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Shift</kbd> 约束轴向</span>
+          <span><kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Alt</kbd> 精细调整</span>
         </div>
       )}
     </div>

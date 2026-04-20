@@ -72,7 +72,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
         }}
         onMouseEnter={() => setHoveredHandle('in')}
         onMouseLeave={() => setHoveredHandle((current) => (current === 'in' ? null : current))}
-        aria-label="Adjust video fade in"
+        aria-label="调整视频淡入"
       />
       <button
         type="button"
@@ -90,7 +90,7 @@ export const VideoFadeHandles = memo(function VideoFadeHandles({
         }}
         onMouseEnter={() => setHoveredHandle('out')}
         onMouseLeave={() => setHoveredHandle((current) => (current === 'out' ? null : current))}
-        aria-label="Adjust video fade out"
+        aria-label="调整视频淡出"
       />
 
       {hoveredHandle && visibleLabel && (

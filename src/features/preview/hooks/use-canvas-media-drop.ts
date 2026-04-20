@@ -122,8 +122,8 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
       return {
         allowed: false,
         source: 'library',
-        title: 'Drop On Timeline',
-        description: 'Compound clips still place best on the timeline.',
+        title: '请拖放到时间线',
+        description: '复合片段更适合放置在时间线中。',
       };
     }
 
@@ -131,8 +131,8 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
       return {
         allowed: false,
         source: 'library',
-        title: 'Drop On Timeline',
-        description: 'Text and shape presets still place best on the timeline.',
+        title: '请拖放到时间线',
+        description: '文本和形状预设更适合放置在时间线中。',
       };
     }
 
@@ -142,8 +142,8 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
         return {
           allowed: false,
           source: 'library',
-          title: 'Drop One Item',
-          description: 'Place one media item at a time on the canvas.',
+          title: '请一次拖放一个项目',
+          description: '画布中一次只能放置一个媒体项目。',
         };
       }
 
@@ -152,8 +152,8 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
         return {
           allowed: false,
           source: 'library',
-          title: 'Audio Goes On Timeline',
-          description: 'Canvas drop places visual layers only.',
+          title: '音频请放到时间线',
+          description: '画布拖放仅支持可视图层。',
         };
       }
     }
@@ -162,16 +162,16 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
       return {
         allowed: false,
         source: 'library',
-        title: 'Audio Goes On Timeline',
-        description: 'Canvas drop places visual layers only.',
+        title: '音频请放到时间线',
+        description: '画布拖放仅支持可视图层。',
       };
     }
 
     return {
       allowed: true,
       source: 'library',
-      title: 'Drop To Place',
-      description: 'Add this media at the playhead and drop position.',
+      title: '拖放以放置',
+      description: '将在播放头位置和拖放位置添加该媒体。',
     };
   }
 
@@ -184,16 +184,16 @@ function evaluateCanvasDrop(dataTransfer: DataTransfer): CanvasDropState | null 
     return {
       allowed: false,
       source: 'external-file',
-      title: 'Drop One File',
-      description: 'Canvas drop imports one visual file at a time.',
+      title: '请一次拖放一个文件',
+      description: '画布拖放一次只能导入一个可视文件。',
     };
   }
 
   return {
     allowed: true,
     source: 'external-file',
-    title: 'Import And Place',
-    description: 'Import this file and place it on the canvas.',
+    title: '导入并放置',
+    description: '导入该文件并放置到画布。',
   };
 }
 
@@ -237,13 +237,13 @@ export function useCanvasMediaDrop({
       });
 
       if (!placement) {
-        toast.warning('No unlocked compatible track is available for this drop.');
+        toast.warning('当前拖放位置没有可用的未锁定兼容轨道。');
         return;
       }
 
     const blobUrl = await resolveMediaUrl(media.id);
     if (!blobUrl) {
-      toast.error('Unable to load dropped media.');
+      toast.error('无法加载拖放的媒体文件。');
       return;
     }
 
@@ -298,7 +298,7 @@ export function useCanvasMediaDrop({
 
     if (dragData.type === 'media-item' && dragData.mediaId && dragData.mediaType && dragData.fileName) {
       if (!isVisualMediaType(dragData.mediaType)) {
-        toast.warning('Canvas drop places visual layers only.');
+        toast.warning('画布拖放仅支持可视图层。');
         return;
       }
       mediaId = dragData.mediaId;
@@ -307,7 +307,7 @@ export function useCanvasMediaDrop({
     } else if (dragData.type === 'media-items' && dragData.items?.length === 1) {
       const item = dragData.items[0];
       if (!item || !isVisualMediaType(item.mediaType)) {
-        toast.warning('Canvas drop places visual layers only.');
+        toast.warning('画布拖放仅支持可视图层。');
         return;
       }
       mediaId = item.mediaId;
@@ -322,7 +322,7 @@ export function useCanvasMediaDrop({
     const media = useMediaLibraryStore.getState().mediaById[mediaId]
       ?? useMediaLibraryStore.getState().mediaItems.find((item) => item.id === mediaId);
     if (!media) {
-      toast.error('Dropped media is no longer available.');
+      toast.error('拖放的媒体已不可用。');
       return;
     }
 
@@ -348,12 +348,12 @@ export function useCanvasMediaDrop({
       event.dataTransfer
     );
     if (!supported) {
-      toast.warning('Drag-drop not supported in this browser. Use Chrome or Edge.');
+      toast.warning('当前浏览器不支持拖拽导入，请使用 Chrome 或 Edge。');
       return;
     }
 
     if (errors.length > 0) {
-      toast.error(`Some files were rejected: ${errors.join(', ')}`);
+      toast.error(`以下文件未通过校验：${errors.join('，')}`);
     }
 
     const entry = entries[0];
@@ -362,7 +362,7 @@ export function useCanvasMediaDrop({
     }
 
     if (!isVisualMediaType(entry.mediaType)) {
-      toast.warning('Drop audio on the timeline instead.');
+      toast.warning('音频请拖放到时间线。');
       return;
     }
 
@@ -380,14 +380,14 @@ export function useCanvasMediaDrop({
         });
 
         if (metadata.type !== 'video') {
-          toast.error('Unable to inspect dropped video.');
+          toast.error('无法解析拖放的视频。');
           return;
         }
 
         preInspectedMetadata = metadata;
       } catch (error) {
-        toast.error('Unable to inspect dropped file.', {
-          description: error instanceof Error ? error.message : 'Please try again.',
+        toast.error('无法解析拖放的文件。', {
+          description: error instanceof Error ? error.message : '请重试。',
         });
         return;
       }
@@ -398,13 +398,13 @@ export function useCanvasMediaDrop({
       .importHandlesForPlacement([entry.handle]);
     const imported = importedMedia[0];
     if (!imported) {
-      toast.error('Unable to import dropped file.');
+      toast.error('无法导入拖放的文件。');
       return;
     }
 
     const importedType = getMediaType(imported.mimeType);
     if (!isVisualMediaType(importedType)) {
-      toast.warning('Drop audio on the timeline instead.');
+      toast.warning('音频请拖放到时间线。');
       return;
     }
 

@@ -1157,7 +1157,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         if (isTimelineTemplateDragData(data)) {
           const templateItem = buildTimelineTemplateItem(data, dropFrame);
           if (!templateItem) {
-            toast.error('Unable to add dropped timeline item');
+            toast.error('无法添加拖拽到时间线的片段');
             return;
           }
 
@@ -1178,9 +1178,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           addItems,
           currentTracks: useTimelineStore.getState().tracks,
           dropResult,
-          emptyMessage: 'Unable to add dropped media items',
+          emptyMessage: '无法添加拖拽的媒体片段',
           notify: toast,
-          partialFailureLabel: 'dropped media items',
+          partialFailureLabel: '拖拽的媒体片段',
           requestedCount: entries.length,
           setTracks: useTimelineStore.getState().setTracks,
         });
@@ -1257,7 +1257,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         {/* Locked track overlay indicator */}
         {isTrackLocked && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="text-xs text-muted-foreground/50 font-mono">LOCKED</div>
+            <div className="text-xs text-muted-foreground/50 font-mono">已锁定</div>
           </div>
         )}
       </div>

@@ -87,19 +87,19 @@ function MediaCardActionMenuItems({
       {isBroken && onRelink && (
         <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
           <RefreshCw className="w-3 h-3 mr-2" />
-          Relink File...
+          重新关联文件...
         </DropdownMenuItem>
       )}
       {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
         <DropdownMenuItem onClick={onGenerateProxy}>
           <Zap className="w-3 h-3 mr-2" />
-          Generate Proxy
+          生成代理
         </DropdownMenuItem>
       )}
       {isTranscribable && !isBroken && !isTranscribing && (
         <DropdownMenuItem onClick={onGenerateTranscript}>
           <FileText className="w-3 h-3 mr-2" />
-          {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
+          {hasTranscript ? '重新生成转写' : '音频转写'}
         </DropdownMenuItem>
       )}
       {isTranscribable && !isBroken && isTranscribing && (
@@ -112,35 +112,35 @@ function MediaCardActionMenuItems({
         <>
           <DropdownMenuItem disabled>
             <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-            Generating Proxy{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
+            正在生成代理{proxyProgress != null ? `（${Math.round(proxyProgress * 100)}%）` : '...'}
           </DropdownMenuItem>
           <DropdownMenuItem onClick={onCancelProxy}>
             <Square className="w-3 h-3 mr-2" />
-            Cancel Proxy Generation
+            取消生成代理
           </DropdownMenuItem>
         </>
       )}
       {hasProxy && (
         <DropdownMenuItem onClick={onDeleteProxy} className="text-destructive focus:text-destructive">
           <Trash2 className="w-3 h-3 mr-2" />
-          Delete Proxy
+          删除代理
         </DropdownMenuItem>
       )}
       {isTaggable && !isBroken && !isTagging && (
         <DropdownMenuItem onClick={onAnalyzeWithAI}>
           <Sparkles className="w-3 h-3 mr-2" />
-          {hasTags ? 'Re-analyze with AI' : 'Analyze with AI'}
+          {hasTags ? '使用 AI 重新分析' : '使用 AI 分析'}
         </DropdownMenuItem>
       )}
       {isTaggable && !isBroken && isTagging && (
         <DropdownMenuItem disabled>
           <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-          Analyzing...
+          正在分析...
         </DropdownMenuItem>
       )}
       <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
         <Trash2 className="w-3 h-3 mr-2" />
-        Delete
+        删除
       </DropdownMenuItem>
     </>
   );
@@ -279,7 +279,7 @@ export const MediaCard = memo(function MediaCard({
       store.clearTranscriptProgress(media.id);
       store.showNotification({
         type: 'success',
-        message: `Transcript ready for "${media.fileName}"`,
+        message: `“${media.fileName}”转写已完成`,
       });
     } catch (error) {
       if (isLocalInferenceCancellationError(error)) {
@@ -292,7 +292,7 @@ export const MediaCard = memo(function MediaCard({
       store.clearTranscriptProgress(media.id);
       store.showNotification({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to transcribe media',
+        message: error instanceof Error ? error.message : '媒体转写失败',
       });
     }
   };
@@ -309,7 +309,7 @@ export const MediaCard = memo(function MediaCard({
 
       if (mediaType === 'video') {
         const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-        if (!blobUrl) throw new Error('Could not load media file');
+        if (!blobUrl) throw new Error('无法加载媒体文件');
 
         const video = document.createElement('video');
         video.muted = true;
@@ -318,7 +318,7 @@ export const MediaCard = memo(function MediaCard({
 
         await new Promise<void>((resolve, reject) => {
           video.onloadedmetadata = () => resolve();
-          video.onerror = () => reject(new Error('Failed to load video'));
+          video.onerror = () => reject(new Error('视频加载失败'));
         });
 
         try {
@@ -329,7 +329,7 @@ export const MediaCard = memo(function MediaCard({
         }
       } else {
         const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-        if (!blobUrl) throw new Error('Could not load media file');
+        if (!blobUrl) throw new Error('无法加载媒体文件');
 
         const response = await fetch(blobUrl);
         const blob = await response.blob();
@@ -342,18 +342,18 @@ export const MediaCard = memo(function MediaCard({
         store.updateMediaCaptions(media.id, captions);
         store.showNotification({
           type: 'success',
-          message: `Generated ${captions.length} caption${captions.length === 1 ? '' : 's'} for "${media.fileName}"`,
+          message: `已为“${media.fileName}”生成 ${captions.length} 条 AI 字幕`,
         });
       } else {
         store.showNotification({
           type: 'info',
-          message: `No captions generated for "${media.fileName}"`,
+          message: `“${media.fileName}”未生成 AI 字幕`,
         });
       }
     } catch (error) {
       store.showNotification({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to analyze media',
+        message: error instanceof Error ? error.message : '媒体分析失败',
       });
     } finally {
       store.setTaggingMedia(media.id, false);
@@ -570,7 +570,7 @@ export const MediaCard = memo(function MediaCard({
 
   const transcriptProgressLabel = transcriptProgress
     ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(getTranscriptionOverallPercent(transcriptProgress))}%)`
-    : 'Transcribing...';
+    : '转写中...';
 
   const actionMenuItems = (
     <MediaCardActionMenuItems
@@ -681,7 +681,7 @@ export const MediaCard = memo(function MediaCard({
             <button
               type="button"
               onClick={handleAudioToggle}
-              aria-label={audioPlaying ? 'Stop audio' : 'Play audio'}
+              aria-label={audioPlaying ? '停止音频播放' : '播放音频'}
               aria-pressed={audioPlaying}
               className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors"
             >
@@ -702,7 +702,7 @@ export const MediaCard = memo(function MediaCard({
         {/* Info — single row: icon + name + duration */}
         <div className="flex-1 min-w-0 flex items-center gap-1.5">
           {isImporting ? (
-            <span className="text-[10px] text-muted-foreground">Importing...</span>
+            <span className="text-[10px] text-muted-foreground">导入中...</span>
           ) : (
             <>
               <div className="p-0.5 rounded bg-primary/90 text-primary-foreground flex-shrink-0">
@@ -803,7 +803,7 @@ export const MediaCard = memo(function MediaCard({
           <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2 pointer-events-none">
             <Loader2 className="w-6 h-6 text-white animate-spin" />
             <div className="text-[9px] text-white/60 uppercase tracking-wider">
-              Importing
+              导入中
             </div>
           </div>
         )}
@@ -827,7 +827,7 @@ export const MediaCard = memo(function MediaCard({
               </div>
             )}
             {!isBroken && hasCaptions && (
-              <div className="p-0.5 rounded bg-purple-500/90 text-white pointer-events-none" title={`${media.aiCaptions!.length} AI caption${media.aiCaptions!.length === 1 ? '' : 's'}`}>
+              <div className="p-0.5 rounded bg-purple-500/90 text-white pointer-events-none" title={`${media.aiCaptions!.length} 条 AI 字幕`}>
                 <Sparkles className="w-2.5 h-2.5" />
               </div>
             )}
@@ -842,7 +842,7 @@ export const MediaCard = memo(function MediaCard({
           <button
             type="button"
             onClick={handleAudioToggle}
-            aria-label={audioPlaying ? 'Stop audio' : 'Play audio'}
+            aria-label={audioPlaying ? '停止音频播放' : '播放音频'}
             aria-pressed={audioPlaying}
             className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group/play"
           >

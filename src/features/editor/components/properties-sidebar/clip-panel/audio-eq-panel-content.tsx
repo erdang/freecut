@@ -92,12 +92,12 @@ const FILTER_TYPE_PATHS: Record<FilterType, string> = {
 };
 
 const FILTER_TYPE_LABELS: Record<FilterType, string> = {
-  'high-pass': 'High Pass',
-  'low-shelf': 'Low Shelf',
-  'peaking': 'Peaking',
-  'notch': 'Notch',
-  'high-shelf': 'High Shelf',
-  'low-pass': 'Low Pass',
+  'high-pass': '高通',
+  'low-shelf': '低架',
+  'peaking': '峰值',
+  'notch': '陷波',
+  'high-shelf': '高架',
+  'low-pass': '低通',
 };
 
 const BAND1_FILTER_OPTIONS = ['low-shelf', 'peaking', 'high-shelf', 'high-pass'] as const satisfies ReadonlyArray<FilterType>;
@@ -252,7 +252,7 @@ function roundOutputGainDb(value: number): number {
 }
 
 function formatOutputGainDb(value: number | 'mixed'): string {
-  if (value === 'mixed') return 'Mixed';
+  if (value === 'mixed') return '混合';
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
 }
 
@@ -296,7 +296,7 @@ function EqOutputGainControl({
       )}
     >
       <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500 text-center">
-        Gain
+        增益
       </div>
       <div
         className={cn('relative mt-1 min-h-0 flex-1 w-full touch-none select-none', disabled ? 'pointer-events-none' : 'cursor-ns-resize')}
@@ -447,8 +447,8 @@ function BandCard({
             compact ? 'h-4 w-4' : 'h-5 w-5',
           )}
           onClick={onReset}
-          aria-label={`Reset ${title}`}
-          title={`Reset ${title}`}
+          aria-label={`重置${title}`}
+          title={`重置${title}`}
         >
           <RotateCcw className={cn(compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
         </button>
@@ -494,12 +494,12 @@ function CompactBandRows(props: CompactBandRowsProps) {
       {/* Band toggle buttons */}
       <div className="grid grid-cols-6 gap-1">
         {([
-          { label: 'B 1', active: props.eqBand1Enabled === 'mixed' ? false : props.eqBand1Enabled, field: 'audioEqBand1Enabled' as const, current: props.eqBand1Enabled },
-          { label: 'B 2', active: props.eqLowEnabled === 'mixed' ? false : props.eqLowEnabled, field: 'audioEqLowEnabled' as const, current: props.eqLowEnabled },
-          { label: 'B 3', active: props.eqLowMidEnabled === 'mixed' ? false : props.eqLowMidEnabled, field: 'audioEqLowMidEnabled' as const, current: props.eqLowMidEnabled },
-          { label: 'B 4', active: props.eqHighMidEnabled === 'mixed' ? false : props.eqHighMidEnabled, field: 'audioEqHighMidEnabled' as const, current: props.eqHighMidEnabled },
-          { label: 'B 5', active: props.eqHighEnabled === 'mixed' ? false : props.eqHighEnabled, field: 'audioEqHighEnabled' as const, current: props.eqHighEnabled },
-          { label: 'B 6', active: props.eqBand6Enabled === 'mixed' ? false : props.eqBand6Enabled, field: 'audioEqBand6Enabled' as const, current: props.eqBand6Enabled },
+          { label: '频段1', active: props.eqBand1Enabled === 'mixed' ? false : props.eqBand1Enabled, field: 'audioEqBand1Enabled' as const, current: props.eqBand1Enabled },
+          { label: '频段2', active: props.eqLowEnabled === 'mixed' ? false : props.eqLowEnabled, field: 'audioEqLowEnabled' as const, current: props.eqLowEnabled },
+          { label: '频段3', active: props.eqLowMidEnabled === 'mixed' ? false : props.eqLowMidEnabled, field: 'audioEqLowMidEnabled' as const, current: props.eqLowMidEnabled },
+          { label: '频段4', active: props.eqHighMidEnabled === 'mixed' ? false : props.eqHighMidEnabled, field: 'audioEqHighMidEnabled' as const, current: props.eqHighMidEnabled },
+          { label: '频段5', active: props.eqHighEnabled === 'mixed' ? false : props.eqHighEnabled, field: 'audioEqHighEnabled' as const, current: props.eqHighEnabled },
+          { label: '频段6', active: props.eqBand6Enabled === 'mixed' ? false : props.eqBand6Enabled, field: 'audioEqBand6Enabled' as const, current: props.eqBand6Enabled },
         ] as const).map((band) => (
           <button key={band.label} type="button" onClick={() => onFieldChange(band.field, band.current === 'mixed' ? true : !band.current)}
             className={cn('h-7 rounded-[4px] border text-[11px] font-semibold transition-colors', band.active ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-secondary/50 text-muted-foreground hover:bg-secondary')}>
@@ -781,8 +781,8 @@ export function AudioEqPanelContent({
   );
 
   const eqPresetPlaceholder = hasMixedEqSettings
-    ? 'Mixed'
-    : (selectedEqPresetId ? getAudioEqPresetById(selectedEqPresetId)?.label ?? 'Custom' : 'Custom');
+    ? '混合'
+    : (selectedEqPresetId ? getAudioEqPresetById(selectedEqPresetId)?.label ?? '自定义' : '自定义');
 
   const previewThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingPreviewRef = useRef<AudioEqPatch | null>(null);
@@ -872,7 +872,7 @@ export function AudioEqPanelContent({
   if (!isTrackMode && audioItems.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-sm text-zinc-500">
-        No audio clips on {targetLabel}.
+        {targetLabel} 上没有音频片段。
       </div>
     );
   }
@@ -885,17 +885,17 @@ export function AudioEqPanelContent({
             checked={eqEnabled}
             onCheckedChange={onEnabledChange}
             className="h-5 w-9 shrink-0 shadow-none ring-offset-0"
-            aria-label={`Turn ${targetLabel} EQ ${eqEnabled ? 'off' : 'on'}`}
+            aria-label={`${eqEnabled ? '关闭' : '开启'}${targetLabel}均衡器`}
           />
         ) : (
           <div className="h-2.5 w-2.5 rounded-full bg-primary" />
         )}
         <div className="text-sm font-medium text-foreground">
-          Equalizer{targetLabel ? ` - ${targetLabel}` : ''}
+          均衡器{targetLabel ? ` - ${targetLabel}` : ''}
         </div>
         <div className="ml-auto flex min-w-0 items-center gap-2">
           <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-            Preset
+            预设
           </div>
           <Select
             value={selectedEqPresetId ?? undefined}
@@ -920,7 +920,7 @@ export function AudioEqPanelContent({
             onClick={() => handleEqPresetChange('flat')}
             disabled={!eqEnabled}
           >
-            Reset EQ
+            重置均衡器
           </Button>
         </div>
       </div> : null}
@@ -932,7 +932,7 @@ export function AudioEqPanelContent({
               checked={clipEqEnabled}
               onCheckedChange={handleClipEqEnabledChange}
               className="shrink-0"
-              aria-label={`Turn clip EQ ${clipEqEnabled ? 'off' : 'on'}`}
+              aria-label={`${clipEqEnabled ? '关闭' : '开启'}片段均衡器`}
             />
             <Select
               value={selectedEqPresetId ?? undefined}
@@ -956,7 +956,7 @@ export function AudioEqPanelContent({
               className={cn('h-7 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground', !clipEqEnabled && 'opacity-40')}
               onClick={() => handleEqPresetChange('flat')}
               disabled={!clipEqEnabled}
-              aria-label="Reset EQ"
+              aria-label="重置均衡器"
             >
               <RotateCcw className="h-3 w-3" />
             </Button>
@@ -965,7 +965,7 @@ export function AudioEqPanelContent({
         <div className={cn('relative', !isCompactLayout && 'border-b border-border')}>
           {!isTrackMode && !isCompactLayout ? (
             <div className="pointer-events-none absolute right-3 top-1 z-10 text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-              {audioItems.length} {audioItems.length === 1 ? 'clip' : 'clips'}
+              {audioItems.length} 片段
             </div>
           ) : null}
           <div className="flex items-stretch gap-3 px-3 pb-3 pt-2">
@@ -1018,7 +1018,7 @@ export function AudioEqPanelContent({
               )}
             >
             <BandCard
-              title="Band 1"
+              title="频段 1"
               filterType={eqBand1Type === 'mixed' ? 'high-pass' : eqBand1Type}
               filterOptions={BAND1_FILTER_OPTIONS}
               onFilterTypeChange={(value) => handleEqFieldChange('audioEqBand1Type', value as typeof BAND1_FILTER_OPTIONS[number])}
@@ -1035,7 +1035,7 @@ export function AudioEqPanelContent({
                 audioEqBand1SlopeDbPerOct: 12,
               })}
             >
-              <div className="text-[10px] text-zinc-500">Frequency</div>
+              <div className="text-[10px] text-zinc-500">频率</div>
               <div className="flex items-center gap-1.5">
                 <NumberInput value={eqBand1FrequencyHz} onChange={(v) => handleEqFieldChange('audioEqBand1FrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand1FrequencyHz: v })} unit="Hz" min={AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ} max={AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ} step={1} className="flex-1" />
                 <RotaryKnob value={eqBand1FrequencyHz} onChange={(v) => handleEqFieldChange('audioEqBand1FrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand1FrequencyHz: v })} min={AUDIO_EQ_LOW_CUT_MIN_FREQUENCY_HZ} max={AUDIO_EQ_LOW_CUT_MAX_FREQUENCY_HZ} step={1} />
@@ -1045,7 +1045,7 @@ export function AudioEqPanelContent({
                 <SlopeButtons value={eqBand1SlopeDbPerOct} onChange={(v) => handleEqFieldChange('audioEqBand1SlopeDbPerOct', v)} />
               ) : (
                 <>
-                  <div className="text-[10px] text-zinc-500">Gain</div>
+                  <div className="text-[10px] text-zinc-500">增益</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput value={eqBand1GainDb} onChange={(v) => handleEqFieldChange('audioEqBand1GainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand1GainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} className="flex-1" />
                     <RotaryKnob value={eqBand1GainDb} onChange={(v) => handleEqFieldChange('audioEqBand1GainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand1GainDb: v })} min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} />
@@ -1053,7 +1053,7 @@ export function AudioEqPanelContent({
                   <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600"><span>{AUDIO_EQ_GAIN_DB_MIN} dB</span><span>{AUDIO_EQ_GAIN_DB_MAX > 0 ? `+${AUDIO_EQ_GAIN_DB_MAX}` : AUDIO_EQ_GAIN_DB_MAX}</span></div>
                   {(eqBand1Type === 'mixed' ? 'high-pass' : eqBand1Type) === 'peaking' ? (
                     <>
-                      <div className="text-[10px] text-zinc-500">Q Factor</div>
+                      <div className="text-[10px] text-zinc-500">Q 值</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput value={eqBand1Q} onChange={(v) => handleEqFieldChange('audioEqBand1Q', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand1Q: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} className="flex-1" />
                         <RotaryKnob value={eqBand1Q} onChange={(v) => handleEqFieldChange('audioEqBand1Q', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand1Q: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} />
@@ -1066,7 +1066,7 @@ export function AudioEqPanelContent({
             </BandCard>
 
             <BandCard
-              title="Band 2"
+              title="频段 2"
               filterType={eqLowType === 'mixed' ? 'low-shelf' : eqLowType}
               filterOptions={INNER_FILTER_OPTIONS}
               onFilterTypeChange={(value) => handleEqFieldChange('audioEqLowType', value === 'low-pass' || value === 'high-pass' ? 'low-shelf' : value)}
@@ -1076,7 +1076,7 @@ export function AudioEqPanelContent({
               onToggle={() => handleEqFieldChange('audioEqLowEnabled', eqLowEnabled === 'mixed' ? true : !eqLowEnabled)}
               onReset={() => handleEqPatchChange({ audioEqLowEnabled: true, audioEqLowType: 'low-shelf', audioEqLowFrequencyHz: AUDIO_EQ_LOW_FREQUENCY_HZ, audioEqLowGainDb: 0, audioEqLowQ: AUDIO_EQ_LOW_MID_Q })}
             >
-              <div className="text-[10px] text-zinc-500">Frequency</div>
+              <div className="text-[10px] text-zinc-500">频率</div>
               <div className="flex items-center gap-1.5">
                 <NumberInput value={eqLowFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqLowFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowFrequencyHz: v })} unit="Hz" min={lowRange.minFrequencyHz} max={lowRange.maxFrequencyHz} step={1} className="flex-1" />
                 <RotaryKnob value={eqLowFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqLowFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowFrequencyHz: v })} min={lowRange.minFrequencyHz} max={lowRange.maxFrequencyHz} step={1} />
@@ -1085,7 +1085,7 @@ export function AudioEqPanelContent({
               {(eqLowType === 'mixed' ? 'low-shelf' : eqLowType) !== 'notch' ? (
                 <>
                   <RangeButtons value={lowRangeId} onChange={(rangeId) => handleGainBandControlRangeChange('low', rangeId, 'audioEqLowFrequencyHz', eqLowFrequencyHz)} />
-                  <div className="text-[10px] text-zinc-500">Gain</div>
+                  <div className="text-[10px] text-zinc-500">增益</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput value={eqLow} onChange={(v) => handleEqFieldChange('audioEqLowGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} className="flex-1" />
                     <RotaryKnob value={eqLow} onChange={(v) => handleEqFieldChange('audioEqLowGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowGainDb: v })} min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} />
@@ -1093,7 +1093,7 @@ export function AudioEqPanelContent({
                   <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600"><span>{AUDIO_EQ_GAIN_DB_MIN} dB</span><span>{AUDIO_EQ_GAIN_DB_MAX > 0 ? `+${AUDIO_EQ_GAIN_DB_MAX}` : AUDIO_EQ_GAIN_DB_MAX}</span></div>
                   {(eqLowType === 'mixed' ? 'low-shelf' : eqLowType) === 'peaking' ? (
                     <>
-                      <div className="text-[10px] text-zinc-500">Q Factor</div>
+                      <div className="text-[10px] text-zinc-500">Q 值</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput value={eqLowQ} onChange={(v) => handleEqFieldChange('audioEqLowQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} className="flex-1" />
                         <RotaryKnob value={eqLowQ} onChange={(v) => handleEqFieldChange('audioEqLowQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} />
@@ -1106,7 +1106,7 @@ export function AudioEqPanelContent({
             </BandCard>
 
             <BandCard
-              title="Band 3"
+              title="频段 3"
               filterType={eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType}
               filterOptions={INNER_FILTER_OPTIONS}
               onFilterTypeChange={(value) => handleEqFieldChange('audioEqLowMidType', value === 'low-pass' || value === 'high-pass' ? 'peaking' : value)}
@@ -1116,7 +1116,7 @@ export function AudioEqPanelContent({
               onToggle={() => handleEqFieldChange('audioEqLowMidEnabled', eqLowMidEnabled === 'mixed' ? true : !eqLowMidEnabled)}
               onReset={() => handleEqPatchChange({ audioEqLowMidEnabled: true, audioEqLowMidType: 'peaking', audioEqLowMidFrequencyHz: AUDIO_EQ_LOW_MID_FREQUENCY_HZ, audioEqLowMidGainDb: 0, audioEqLowMidQ: AUDIO_EQ_LOW_MID_Q })}
             >
-              <div className="text-[10px] text-zinc-500">Frequency</div>
+              <div className="text-[10px] text-zinc-500">频率</div>
               <div className="flex items-center gap-1.5">
                 <NumberInput value={eqLowMidFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqLowMidFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidFrequencyHz: v })} unit="Hz" min={lowMidRange.minFrequencyHz} max={lowMidRange.maxFrequencyHz} step={1} className="flex-1" />
                 <RotaryKnob value={eqLowMidFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqLowMidFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidFrequencyHz: v })} min={lowMidRange.minFrequencyHz} max={lowMidRange.maxFrequencyHz} step={1} />
@@ -1125,7 +1125,7 @@ export function AudioEqPanelContent({
               {(eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType) !== 'notch' ? (
                 <>
                   <RangeButtons value={lowMidRangeId} onChange={(rangeId) => handleGainBandControlRangeChange('lowMid', rangeId, 'audioEqLowMidFrequencyHz', eqLowMidFrequencyHz)} />
-                  <div className="text-[10px] text-zinc-500">Gain</div>
+                  <div className="text-[10px] text-zinc-500">增益</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput value={eqLowMid} onChange={(v) => handleEqFieldChange('audioEqLowMidGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} className="flex-1" />
                     <RotaryKnob value={eqLowMid} onChange={(v) => handleEqFieldChange('audioEqLowMidGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidGainDb: v })} min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} />
@@ -1133,7 +1133,7 @@ export function AudioEqPanelContent({
                   <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600"><span>{AUDIO_EQ_GAIN_DB_MIN} dB</span><span>{AUDIO_EQ_GAIN_DB_MAX > 0 ? `+${AUDIO_EQ_GAIN_DB_MAX}` : AUDIO_EQ_GAIN_DB_MAX}</span></div>
                   {(eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType) === 'peaking' ? (
                     <>
-                      <div className="text-[10px] text-zinc-500">Q Factor</div>
+                      <div className="text-[10px] text-zinc-500">Q 值</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput value={eqLowMidQ} onChange={(v) => handleEqFieldChange('audioEqLowMidQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} className="flex-1" />
                         <RotaryKnob value={eqLowMidQ} onChange={(v) => handleEqFieldChange('audioEqLowMidQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqLowMidQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} />
@@ -1146,7 +1146,7 @@ export function AudioEqPanelContent({
             </BandCard>
 
             <BandCard
-              title="Band 4"
+              title="频段 4"
               filterType={eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType}
               filterOptions={INNER_FILTER_OPTIONS}
               onFilterTypeChange={(value) => handleEqFieldChange('audioEqHighMidType', value === 'low-pass' || value === 'high-pass' ? 'peaking' : value)}
@@ -1156,7 +1156,7 @@ export function AudioEqPanelContent({
               onToggle={() => handleEqFieldChange('audioEqHighMidEnabled', eqHighMidEnabled === 'mixed' ? true : !eqHighMidEnabled)}
               onReset={() => handleEqPatchChange({ audioEqHighMidEnabled: true, audioEqHighMidType: 'peaking', audioEqHighMidFrequencyHz: AUDIO_EQ_HIGH_MID_FREQUENCY_HZ, audioEqHighMidGainDb: 0, audioEqHighMidQ: AUDIO_EQ_HIGH_MID_Q })}
             >
-              <div className="text-[10px] text-zinc-500">Frequency</div>
+              <div className="text-[10px] text-zinc-500">频率</div>
               <div className="flex items-center gap-1.5">
                 <NumberInput value={eqHighMidFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqHighMidFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidFrequencyHz: v })} unit="Hz" min={highMidRange.minFrequencyHz} max={highMidRange.maxFrequencyHz} step={1} className="flex-1" />
                 <RotaryKnob value={eqHighMidFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqHighMidFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidFrequencyHz: v })} min={highMidRange.minFrequencyHz} max={highMidRange.maxFrequencyHz} step={1} />
@@ -1165,7 +1165,7 @@ export function AudioEqPanelContent({
               {(eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType) !== 'notch' ? (
                 <>
                   <RangeButtons value={highMidRangeId} onChange={(rangeId) => handleGainBandControlRangeChange('highMid', rangeId, 'audioEqHighMidFrequencyHz', eqHighMidFrequencyHz)} />
-                  <div className="text-[10px] text-zinc-500">Gain</div>
+                  <div className="text-[10px] text-zinc-500">增益</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput value={eqHighMid} onChange={(v) => handleEqFieldChange('audioEqHighMidGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} className="flex-1" />
                     <RotaryKnob value={eqHighMid} onChange={(v) => handleEqFieldChange('audioEqHighMidGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidGainDb: v })} min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} />
@@ -1173,7 +1173,7 @@ export function AudioEqPanelContent({
                   <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600"><span>{AUDIO_EQ_GAIN_DB_MIN} dB</span><span>{AUDIO_EQ_GAIN_DB_MAX > 0 ? `+${AUDIO_EQ_GAIN_DB_MAX}` : AUDIO_EQ_GAIN_DB_MAX}</span></div>
                   {(eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType) === 'peaking' ? (
                     <>
-                      <div className="text-[10px] text-zinc-500">Q Factor</div>
+                      <div className="text-[10px] text-zinc-500">Q 值</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput value={eqHighMidQ} onChange={(v) => handleEqFieldChange('audioEqHighMidQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} className="flex-1" />
                         <RotaryKnob value={eqHighMidQ} onChange={(v) => handleEqFieldChange('audioEqHighMidQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighMidQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} />
@@ -1186,7 +1186,7 @@ export function AudioEqPanelContent({
             </BandCard>
 
             <BandCard
-              title="Band 5"
+              title="频段 5"
               filterType={eqHighType === 'mixed' ? 'high-shelf' : eqHighType}
               filterOptions={INNER_FILTER_OPTIONS}
               onFilterTypeChange={(value) => handleEqFieldChange('audioEqHighType', value === 'low-pass' || value === 'high-pass' ? 'high-shelf' : value)}
@@ -1196,7 +1196,7 @@ export function AudioEqPanelContent({
               onToggle={() => handleEqFieldChange('audioEqHighEnabled', eqHighEnabled === 'mixed' ? true : !eqHighEnabled)}
               onReset={() => handleEqPatchChange({ audioEqHighEnabled: true, audioEqHighType: 'high-shelf', audioEqHighFrequencyHz: AUDIO_EQ_HIGH_FREQUENCY_HZ, audioEqHighGainDb: 0, audioEqHighQ: AUDIO_EQ_HIGH_MID_Q })}
             >
-              <div className="text-[10px] text-zinc-500">Frequency</div>
+              <div className="text-[10px] text-zinc-500">频率</div>
               <div className="flex items-center gap-1.5">
                 <NumberInput value={eqHighFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqHighFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighFrequencyHz: v })} unit="Hz" min={highRange.minFrequencyHz} max={highRange.maxFrequencyHz} step={1} className="flex-1" />
                 <RotaryKnob value={eqHighFrequencyHz} onChange={(v) => handleEqFieldChange('audioEqHighFrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighFrequencyHz: v })} min={highRange.minFrequencyHz} max={highRange.maxFrequencyHz} step={1} />
@@ -1205,7 +1205,7 @@ export function AudioEqPanelContent({
               {(eqHighType === 'mixed' ? 'high-shelf' : eqHighType) !== 'notch' ? (
                 <>
                   <RangeButtons value={highRangeId} onChange={(rangeId) => handleGainBandControlRangeChange('high', rangeId, 'audioEqHighFrequencyHz', eqHighFrequencyHz)} />
-                  <div className="text-[10px] text-zinc-500">Gain</div>
+                  <div className="text-[10px] text-zinc-500">增益</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput value={eqHigh} onChange={(v) => handleEqFieldChange('audioEqHighGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighGainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} className="flex-1" />
                     <RotaryKnob value={eqHigh} onChange={(v) => handleEqFieldChange('audioEqHighGainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighGainDb: v })} min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} />
@@ -1213,7 +1213,7 @@ export function AudioEqPanelContent({
                   <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600"><span>{AUDIO_EQ_GAIN_DB_MIN} dB</span><span>{AUDIO_EQ_GAIN_DB_MAX > 0 ? `+${AUDIO_EQ_GAIN_DB_MAX}` : AUDIO_EQ_GAIN_DB_MAX}</span></div>
                   {(eqHighType === 'mixed' ? 'high-shelf' : eqHighType) === 'peaking' ? (
                     <>
-                      <div className="text-[10px] text-zinc-500">Q Factor</div>
+                      <div className="text-[10px] text-zinc-500">Q 值</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput value={eqHighQ} onChange={(v) => handleEqFieldChange('audioEqHighQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} className="flex-1" />
                         <RotaryKnob value={eqHighQ} onChange={(v) => handleEqFieldChange('audioEqHighQ', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqHighQ: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} />
@@ -1226,7 +1226,7 @@ export function AudioEqPanelContent({
             </BandCard>
 
             <BandCard
-              title="Band 6"
+              title="频段 6"
               filterType={eqBand6Type === 'mixed' ? 'low-pass' : eqBand6Type}
               filterOptions={BAND6_FILTER_OPTIONS}
               onFilterTypeChange={(value) => handleEqFieldChange('audioEqBand6Type', value === 'high-pass' || value === 'notch' ? 'low-pass' : value)}
@@ -1243,7 +1243,7 @@ export function AudioEqPanelContent({
                 audioEqBand6SlopeDbPerOct: 12,
               })}
             >
-              <div className="text-[10px] text-zinc-500">Frequency</div>
+              <div className="text-[10px] text-zinc-500">频率</div>
               <div className="flex items-center gap-1.5">
                 <NumberInput value={eqBand6FrequencyHz} onChange={(v) => handleEqFieldChange('audioEqBand6FrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand6FrequencyHz: v })} unit="Hz" min={AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ} max={AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ} step={1} className="flex-1" />
                 <RotaryKnob value={eqBand6FrequencyHz} onChange={(v) => handleEqFieldChange('audioEqBand6FrequencyHz', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand6FrequencyHz: v })} min={AUDIO_EQ_HIGH_CUT_MIN_FREQUENCY_HZ} max={AUDIO_EQ_HIGH_CUT_MAX_FREQUENCY_HZ} step={1} />
@@ -1253,7 +1253,7 @@ export function AudioEqPanelContent({
                 <SlopeButtons value={eqBand6SlopeDbPerOct} onChange={(v) => handleEqFieldChange('audioEqBand6SlopeDbPerOct', v)} />
               ) : (
                 <>
-                  <div className="text-[10px] text-zinc-500">Gain</div>
+                  <div className="text-[10px] text-zinc-500">增益</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput value={eqBand6GainDb} onChange={(v) => handleEqFieldChange('audioEqBand6GainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand6GainDb: v })} unit="dB" min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} className="flex-1" />
                     <RotaryKnob value={eqBand6GainDb} onChange={(v) => handleEqFieldChange('audioEqBand6GainDb', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand6GainDb: v })} min={AUDIO_EQ_GAIN_DB_MIN} max={AUDIO_EQ_GAIN_DB_MAX} step={0.1} />
@@ -1261,7 +1261,7 @@ export function AudioEqPanelContent({
                   <div className="mt-0.5 flex justify-between text-[9px] text-zinc-600"><span>{AUDIO_EQ_GAIN_DB_MIN} dB</span><span>{AUDIO_EQ_GAIN_DB_MAX > 0 ? `+${AUDIO_EQ_GAIN_DB_MAX}` : AUDIO_EQ_GAIN_DB_MAX}</span></div>
                   {(eqBand6Type === 'mixed' ? 'low-pass' : eqBand6Type) === 'peaking' ? (
                     <>
-                      <div className="text-[10px] text-zinc-500">Q Factor</div>
+                      <div className="text-[10px] text-zinc-500">Q 值</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput value={eqBand6Q} onChange={(v) => handleEqFieldChange('audioEqBand6Q', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand6Q: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} className="flex-1" />
                         <RotaryKnob value={eqBand6Q} onChange={(v) => handleEqFieldChange('audioEqBand6Q', v)} onLiveChange={(v) => handleEqPatchLiveChange({ audioEqBand6Q: v })} min={AUDIO_EQ_Q_MIN} max={AUDIO_EQ_Q_MAX} step={0.05} />

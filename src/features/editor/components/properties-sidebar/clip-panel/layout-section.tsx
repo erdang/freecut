@@ -495,9 +495,9 @@ export const LayoutSection = memo(function LayoutSection({
   }, [items, onTransformChange, canvas]);
 
   return (
-    <PropertySection title="Transform" icon={Move} defaultOpen={true}>
+    <PropertySection title="变换" icon={Move} defaultOpen={true}>
       {/* Position */}
-      <PropertyRow label="Position">
+      <PropertyRow label="位置">
         <div className="flex items-start gap-1 w-full">
           <div className="grid grid-cols-2 gap-1 flex-1">
             <div className="flex items-center gap-0.5">
@@ -534,19 +534,19 @@ export const LayoutSection = memo(function LayoutSection({
             </div>
           </div>
           <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetPosition}
-            title="Reset to center"
-          >
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 flex-shrink-0"
+          onClick={handleResetPosition}
+          title="重置到中心"
+        >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
       </PropertyRow>
 
       {/* Dimensions */}
-      <PropertyRow label="Size">
+      <PropertyRow label="尺寸">
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={width}
@@ -569,7 +569,7 @@ export const LayoutSection = memo(function LayoutSection({
             size="icon"
             className={`h-7 w-7 flex-shrink-0 ${aspectLocked ? 'text-primary' : ''}`}
             onClick={onAspectLockToggle}
-            title={aspectLocked ? 'Unlock aspect ratio' : 'Lock aspect ratio'}
+            title={aspectLocked ? '解锁宽高比' : '锁定宽高比'}
           >
             {aspectLocked ? (
               <Link2 className="w-3.5 h-3.5" />
@@ -598,7 +598,7 @@ export const LayoutSection = memo(function LayoutSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetScale}
-            title="Reset to original size"
+            title="重置为原始尺寸"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
@@ -606,7 +606,7 @@ export const LayoutSection = memo(function LayoutSection({
       </PropertyRow>
 
       {/* Rotation */}
-      <PropertyRow label="Rotation">
+      <PropertyRow label="旋转">
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={rotation}
@@ -628,7 +628,7 @@ export const LayoutSection = memo(function LayoutSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetRotation}
-            title="Reset rotation"
+            title="重置旋转"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>

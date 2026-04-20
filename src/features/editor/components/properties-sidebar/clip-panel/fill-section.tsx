@@ -261,9 +261,9 @@ export const FillSection = memo(function FillSection({
   }, [items, itemIds, onTransformChange, canvas]);
 
   return (
-    <PropertySection title="Composite" icon={Droplet} defaultOpen={true}>
+    <PropertySection title="合成" icon={Droplet} defaultOpen={true}>
       {/* Opacity */}
-      <PropertyRow label="Opacity">
+      <PropertyRow label="不透明度">
         <div className="flex items-center gap-1 w-full">
           <SliderInput
             value={opacity}
@@ -285,7 +285,7 @@ export const FillSection = memo(function FillSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetOpacity}
-            title="Reset to 100%"
+            title="重置为 100%"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
@@ -293,13 +293,13 @@ export const FillSection = memo(function FillSection({
       </PropertyRow>
 
       {/* Blend Mode */}
-      <PropertyRow label="Blend">
+      <PropertyRow label="混合">
         <Select
           value={blendMode === 'mixed' ? undefined : blendMode}
           onValueChange={handleBlendModeChange}
         >
           <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-            <SelectValue placeholder={blendMode === 'mixed' ? 'Mixed' : 'Normal'} />
+            <SelectValue placeholder={blendMode === 'mixed' ? '混合' : '普通'} />
           </SelectTrigger>
           <SelectContent>
             {BLEND_MODE_GROUPS.map((group) => (
@@ -317,7 +317,7 @@ export const FillSection = memo(function FillSection({
       </PropertyRow>
 
       {/* Corner Radius */}
-      <PropertyRow label="Radius">
+      <PropertyRow label="圆角">
         <div className="flex items-center gap-1 w-full">
           <NumberInput
             value={cornerRadius}
@@ -339,7 +339,7 @@ export const FillSection = memo(function FillSection({
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleResetCornerRadius}
-            title="Reset to 0"
+            title="重置为 0"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>

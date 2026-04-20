@@ -331,19 +331,19 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
             <>
               {showJoinLeft && (
                 <ContextMenuItem onClick={onJoinLeft}>
-                  Join with Previous
+                  与前一个片段拼接
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
               {showJoinRight && (
                 <ContextMenuItem onClick={onJoinRight}>
-                  Join with Next
+                  与后一个片段拼接
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
               {canJoinSelected && (
                 <ContextMenuItem onClick={onJoinSelected}>
-                  Join Selected
+                  拼接所选片段
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
@@ -356,13 +356,13 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             {canLinkSelected && onLinkSelected && (
               <ContextMenuItem onClick={onLinkSelected}>
-                Link Clips
+                链接片段
                 <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.LINK_AUDIO_VIDEO)}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
             {canUnlinkSelected && onUnlinkSelected && (
               <ContextMenuItem onClick={onUnlinkSelected}>
-                Unlink Clips
+                取消链接片段
                 <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.UNLINK_AUDIO_VIDEO)}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
@@ -374,10 +374,10 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {hasKeyframes && (
           <>
             <ContextMenuSub>
-              <ContextMenuSubTrigger>Clear Keyframes</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger>清除关键帧</ContextMenuSubTrigger>
               <ContextMenuSubContent className="w-48">
                 <ContextMenuItem onClick={onClearAllKeyframes}>
-                  Clear All
+                  清除全部
                   <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.CLEAR_KEYFRAMES)}</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuSeparator />
@@ -399,7 +399,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {selectedCount >= 2 && onBentoLayout && (
           <>
             <ContextMenuItem onClick={onBentoLayout}>
-              Bento Layout...
+              拼贴布局...
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -409,7 +409,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {isVideoItem && playheadInBounds && onFreezeFrame && (
           <>
             <ContextMenuItem onClick={onFreezeFrame}>
-              Insert Freeze Frame
+              插入冻结帧
               <ContextMenuShortcut>Shift+F</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuSeparator />
@@ -420,21 +420,21 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             {isDetectingScenes ? (
               <ContextMenuItem disabled>
-                Detecting Scenes...
+                正在检测场景...
               </ContextMenuItem>
             ) : (
               <ContextMenuSub>
-                <ContextMenuSubTrigger>Detect Scenes &amp; Split</ContextMenuSubTrigger>
+                <ContextMenuSubTrigger>场景检测并切分</ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-48">
                   <ContextMenuItem onClick={() => onDetectScenes('histogram')}>
-                    Fast (Histogram)
+                    快速（直方图）
                   </ContextMenuItem>
                   {sceneVerificationModelOptions.map((option) => (
                     <ContextMenuItem
                       key={option.value}
                       onClick={() => onDetectScenes('optical-flow', option.value)}
                     >
-                      {`AI (${option.label})`}
+                      {`AI（${option.label}）`}
                     </ContextMenuItem>
                   ))}
                 </ContextMenuSubContent>
@@ -448,7 +448,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {isTextItem && onGenerateAudioFromText && (
           <>
             <ContextMenuItem onClick={onGenerateAudioFromText}>
-              Generate Audio from Text
+              从文本生成音频
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -458,17 +458,17 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             {isGeneratingCaptions ? (
               <ContextMenuItem disabled>
-                Updating Captions...
+                正在更新字幕...
               </ContextMenuItem>
             ) : (
               <>
                 <ContextMenuSub>
-                  <ContextMenuSubTrigger>Generate Captions for Segment</ContextMenuSubTrigger>
+                  <ContextMenuSubTrigger>为该片段生成字幕</ContextMenuSubTrigger>
                   <ContextMenuSubContent className="w-48">
                     {defaultCaptionModel && (
                       <>
                         <ContextMenuItem onClick={() => onGenerateCaptions(defaultCaptionModel)}>
-                          {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
+                          {`默认（${getMediaTranscriptionModelLabel(defaultCaptionModel)}）`}
                         </ContextMenuItem>
                         <ContextMenuSeparator />
                       </>
@@ -486,12 +486,12 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
 
                 {canRegenerateCaptions && onRegenerateCaptions && (
                   <ContextMenuSub>
-                    <ContextMenuSubTrigger>Regenerate Captions for Segment</ContextMenuSubTrigger>
+                    <ContextMenuSubTrigger>重新为该片段生成字幕</ContextMenuSubTrigger>
                     <ContextMenuSubContent className="w-48">
                       {defaultCaptionModel && (
                         <>
                           <ContextMenuItem onClick={() => onRegenerateCaptions(defaultCaptionModel)}>
-                            {`Default (${getMediaTranscriptionModelLabel(defaultCaptionModel)})`}
+                            {`默认（${getMediaTranscriptionModelLabel(defaultCaptionModel)}）`}
                           </ContextMenuItem>
                           <ContextMenuSeparator />
                         </>
@@ -516,17 +516,17 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {/* Composition operations */}
         {isCompositionItem && onEnterComposition && (
           <ContextMenuItem onClick={onEnterComposition}>
-            Open Compound Clip
+            打开复合片段
           </ContextMenuItem>
         )}
         {isCompositionItem && onDissolveComposition && (
           <ContextMenuItem onClick={onDissolveComposition}>
-            Dissolve Compound Clip
+            解散复合片段
           </ContextMenuItem>
         )}
         {canCreatePreComp && onCreatePreComp && (
           <ContextMenuItem onClick={onCreatePreComp}>
-            Create Compound Clip
+            创建复合片段
           </ContextMenuItem>
         )}
         {((isCompositionItem && (onEnterComposition || onDissolveComposition)) || (canCreatePreComp && onCreatePreComp)) && (
@@ -538,7 +538,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           disabled={!isSelected}
           className="text-destructive focus:text-destructive"
         >
-          Ripple Delete
+          波纹删除
           <ContextMenuShortcut>Ctrl+Del</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem
@@ -546,7 +546,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           disabled={!isSelected}
           className="text-destructive focus:text-destructive"
         >
-          Delete
+          删除
           <ContextMenuShortcut>Del</ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>

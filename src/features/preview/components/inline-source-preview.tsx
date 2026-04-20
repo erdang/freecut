@@ -107,7 +107,7 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
   if (!media) {
     return (
       <div className="w-full h-full bg-video-preview-background flex items-center justify-center text-sm text-muted-foreground">
-        Loading media...
+        正在加载媒体...
       </div>
     );
   }
@@ -126,7 +126,7 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
     <div
       className="w-full h-full bg-video-preview-background relative"
       style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
-      aria-label="Inline media preview"
+      aria-label="内联媒体预览"
     >
       <div
         className="min-w-full min-h-full grid place-items-center"
@@ -168,7 +168,7 @@ const InlineSourcePreviewContent = memo(function InlineSourcePreviewContent({
               </PlayerEmitterProvider>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-                Loading media...
+                正在加载媒体...
               </div>
             )}
           </div>

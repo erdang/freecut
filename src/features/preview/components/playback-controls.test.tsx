@@ -90,7 +90,7 @@ describe('PlaybackControls frame capture', () => {
 
     render(<PlaybackControls totalFrames={1000} fps={30} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Save frame' }));
+    fireEvent.click(screen.getByRole('button', { name: '保存帧' }));
 
     await waitFor(() => {
       expect(importGeneratedImageSpy).toHaveBeenCalledTimes(1);

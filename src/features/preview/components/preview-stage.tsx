@@ -57,7 +57,7 @@ export const PreviewStage = memo(function PreviewStage({
       className="w-full h-full bg-video-preview-background relative"
       style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
       onClick={onBackgroundClick}
-      aria-label="Video preview"
+      aria-label="视频预览"
     >
       <div
         className="min-w-full min-h-full grid place-items-center"
@@ -80,7 +80,7 @@ export const PreviewStage = memo(function PreviewStage({
           >
             {isResolving && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
-                <p className="text-white text-sm">Loading media...</p>
+                <p className="text-white text-sm">正在加载媒体...</p>
               </div>
             )}
 

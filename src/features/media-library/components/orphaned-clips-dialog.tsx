@@ -33,6 +33,12 @@ const itemTypeIcons = {
   image: Image,
 };
 
+const itemTypeLabels = {
+  video: '视频',
+  audio: '音频',
+  image: '图片',
+};
+
 export function OrphanedClipsDialog() {
   const showDialog = useMediaLibraryStore((s) => s.showOrphanedClipsDialog);
   const closeDialog = useMediaLibraryStore((s) => s.closeOrphanedClipsDialog);
@@ -146,12 +152,10 @@ export function OrphanedClipsDialog() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Link2Off className="w-5 h-5 text-destructive" />
-              Missing Media References
+              缺失媒体引用
             </DialogTitle>
             <DialogDescription>
-              {remainingOrphans.length} timeline clip
-              {remainingOrphans.length !== 1 ? 's' : ''} reference
-              {remainingOrphans.length === 1 ? 's' : ''} media that no longer exists.
+              {remainingOrphans.length} 个时间线片段引用的媒体已不存在。
             </DialogDescription>
           </DialogHeader>
 
@@ -168,7 +172,7 @@ export function OrphanedClipsDialog() {
               ) : (
                 <Wand2 className="w-4 h-4 mr-2" />
               )}
-              Auto-match from Library (by filename)
+              从媒体库自动匹配（按文件名）
             </Button>
 
             {/* List of orphaned clips */}
@@ -189,7 +193,7 @@ export function OrphanedClipsDialog() {
                         {orphan.fileName}
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        {orphan.itemType} clip - Media deleted
+                        {itemTypeLabels[orphan.itemType]}片段 · 媒体已删除
                       </p>
                     </div>
 
@@ -205,7 +209,7 @@ export function OrphanedClipsDialog() {
                         ) : (
                           <>
                             <Search className="w-3 h-3 mr-1" />
-                            Select
+                            选择
                           </>
                         )}
                       </Button>
@@ -231,7 +235,7 @@ export function OrphanedClipsDialog() {
               className="order-2 sm:order-1"
             >
               <Trash2 className="w-4 h-4 mr-2" />
-              Remove All Clips
+              移除全部片段
             </Button>
             <div className="flex-1" />
             <Button
@@ -239,10 +243,10 @@ export function OrphanedClipsDialog() {
               onClick={handleDismiss}
               className="text-muted-foreground order-1 sm:order-2"
             >
-              Keep as Broken
+              保持缺失状态
             </Button>
             <Button variant="outline" onClick={handleClose} className="order-3">
-              Close
+              关闭
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -257,9 +261,8 @@ export function OrphanedClipsDialog() {
         }}
         onSelect={handleMediaSelected}
         filterType={selectedOrphan?.itemType}
-        title={`Select replacement for "${selectedOrphan?.fileName}"`}
+        title={`为“${selectedOrphan?.fileName}”选择替换媒体`}
       />
     </>
   );
 }
-

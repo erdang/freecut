@@ -49,8 +49,8 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
           size="icon"
           className="flex-shrink-0"
           style={buttonStyle}
-          data-tooltip={muted ? 'Monitor muted' : `Monitor ${percent}%`}
-          aria-label="Monitor volume"
+          data-tooltip={muted ? '监听已静音' : `监听 ${percent}%`}
+          aria-label="监听音量"
         >
           <Icon className="w-3.5 h-3.5" />
         </Button>
@@ -62,9 +62,9 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
         sideOffset={6}
       >
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium">Monitor</span>
+          <span className="text-xs font-medium">监听</span>
           <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-            This device only
+            仅当前设备
           </span>
         </div>
         <div className="flex items-center gap-2">
@@ -73,7 +73,7 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
             size="icon"
             className="h-7 w-7 shrink-0"
             onClick={toggleMute}
-            aria-label={muted ? 'Unmute monitor' : 'Mute monitor'}
+            aria-label={muted ? '取消监听静音' : '监听静音'}
           >
             {muted ? (
               <VolumeX className="w-3.5 h-3.5" />
@@ -94,11 +94,11 @@ export function MonitorVolumeControl({ buttonStyle }: MonitorVolumeControlProps)
             className="flex-1"
           />
           <span className="text-xs text-muted-foreground tabular-nums w-9 text-right">
-            {muted ? 'Mute' : `${percent}%`}
+            {muted ? '静音' : `${percent}%`}
           </span>
         </div>
         <p className="text-[10px] text-muted-foreground leading-snug">
-          Preview only — does not affect the project's master bus or exports.
+          仅影响预览，不影响项目主总线或导出结果。
         </p>
       </PopoverContent>
     </Popover>

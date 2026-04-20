@@ -258,7 +258,7 @@ export function FontPicker({
             <Input
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search fonts..."
+              placeholder="搜索字体..."
               className="h-8 pl-9 text-xs"
               autoFocus
             />
@@ -266,7 +266,7 @@ export function FontPicker({
 
           <div className="rounded-md border bg-muted/20 p-3">
             <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-              {activePreviewFont?.label ?? 'Live Preview'}
+              {activePreviewFont?.label ?? '实时预览'}
             </p>
             <p
               className="mt-1 truncate text-lg"
@@ -281,14 +281,14 @@ export function FontPicker({
           </div>
 
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>All Fonts</span>
+            <span>全部字体</span>
             <span>{filteredFonts.length}</span>
           </div>
 
           <div
             className="max-h-52 space-y-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]"
             role="listbox"
-            aria-label="Font options"
+            aria-label="字体选项"
           >
             {isLoading ? (
               <div className="flex items-center justify-center py-8 text-muted-foreground">
@@ -296,7 +296,7 @@ export function FontPicker({
               </div>
             ) : filteredFonts.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                No fonts match your search.
+                没有匹配的字体。
               </div>
             ) : (
               filteredFonts.map((font) => {

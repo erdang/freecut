@@ -702,7 +702,7 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
 
   return (
 
-      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden" role="region" aria-label="Timeline">
+      <div className="timeline-bg h-full border-t border-border flex flex-col overflow-hidden" role="region" aria-label="时间线">
         {/* Timeline Header */}
         <TimelineHeader
           onZoomChange={zoomHandlers?.handleZoomChange}
@@ -729,7 +729,7 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
             style={{ height: EDITOR_LAYOUT_CSS_VALUES.timelineTracksHeaderHeight }}
           >
             <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
-              Tracks
+              轨道
             </span>
             <div className="flex items-center gap-1">
               {/* Add track button */}
@@ -739,8 +739,8 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
                 className="h-6 w-6"
                 onClick={handleAddTrack}
                 title={nextTrackKind === 'audio'
-                  ? 'Add audio track to audio section'
-                  : 'Add video track at top'}
+                  ? '在音频分区新增音频轨道'
+                  : '在顶部新增视频轨道'}
               >
                 <Plus className="w-3 h-3" />
               </Button>
@@ -753,12 +753,12 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
                 disabled={tracks.length === 0 || (!activeTrackId && selectedTrackIds.length === 0)}
                 title={
                   tracks.length === 0
-                    ? 'No tracks to remove'
+                    ? '没有可删除的轨道'
                     : !activeTrackId && selectedTrackIds.length === 0
-                    ? 'Select a track to remove'
+                    ? '请选择要删除的轨道'
                     : selectedTrackIds.length > 0
-                    ? `Remove ${selectedTrackIds.length} selected track(s)`
-                    : 'Remove active track'
+                    ? `删除已选 ${selectedTrackIds.length} 条轨道`
+                    : '删除当前轨道'
                 }
               >
                 <Minus className="w-3 h-3" />

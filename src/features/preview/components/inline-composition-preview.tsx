@@ -142,7 +142,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
   if (!composition || !compositionInput) {
     return (
       <div className="w-full h-full bg-video-preview-background flex items-center justify-center text-sm text-muted-foreground">
-        Loading compound clip...
+        正在加载复合片段...
       </div>
     );
   }
@@ -153,7 +153,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
     <div
       className="w-full h-full bg-video-preview-background relative"
       style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
-      aria-label="Inline compound clip preview"
+      aria-label="内联复合片段预览"
     >
       <div
         className="min-w-full min-h-full grid place-items-center"
@@ -194,7 +194,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
               </PlayerEmitterProvider>
             ) : (
               <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-                Loading compound clip...
+                正在加载复合片段...
               </div>
             )}
           </div>
