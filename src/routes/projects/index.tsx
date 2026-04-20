@@ -103,7 +103,7 @@ function ProjectsIndex() {
 
     // Validate file extension (handles browser-renamed files like "project.freecut (1).zip")
     if (!isValidBundleFile(file.name)) {
-      setImportError(`Please select a valid ${BUNDLE_EXTENSION} file`);
+      setImportError(`请选择有效的 ${BUNDLE_EXTENSION} 文件`);
       setImportDialogOpen(true);
       return;
     }
@@ -138,12 +138,12 @@ function ProjectsIndex() {
       // Handle "contains system files" or permission errors
       if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'SecurityError')) {
         setImportError(
-          'Cannot select system folders directly. Use "New Folder" in the picker to create a folder first, then select it.'
+          '不能直接选择系统目录。请先在选择器中点击“New Folder”创建文件夹，再选择它。'
         );
         return;
       }
       logger.error('Failed to select directory:', err);
-      setImportError('Failed to select destination folder. Please try a different location.');
+      setImportError('选择目标文件夹失败，请换一个位置再试。');
     }
   };
 
@@ -162,7 +162,7 @@ function ProjectsIndex() {
           finalDestination = await destinationDir.getDirectoryHandle(PROJECTS_FOLDER_NAME, { create: true });
         } catch (err) {
           logger.error('Failed to create FreeCutProjects folder:', err);
-          throw new Error(`Failed to create ${PROJECTS_FOLDER_NAME} folder. Try selecting a different location.`);
+          throw new Error(`创建 ${PROJECTS_FOLDER_NAME} 文件夹失败，请尝试选择其他位置。`);
         }
       }
 
@@ -187,7 +187,7 @@ function ProjectsIndex() {
       navigate({ to: '/editor/$projectId', params: { projectId: result.project.id } });
     } catch (err) {
       logger.error('Import failed:', err);
-      setImportError(err instanceof Error ? err.message : 'Import failed');
+      setImportError(err instanceof Error ? err.message : '导入失败');
       setImportProgress(null);
       setIsImporting(false);
     }
@@ -235,7 +235,7 @@ function ProjectsIndex() {
       setEditingProject(null);
     } catch (error) {
       logger.error('Failed to update project:', error);
-      toast.error('Failed to update project', { description: 'Please try again' });
+      toast.error('更新项目失败', { description: '请稍后再试' });
     } finally {
       setIsSubmitting(false);
     }
@@ -262,7 +262,7 @@ function ProjectsIndex() {
                   href="https://github.com/walterlow/freecut"
                   target="_blank"
                   rel="noopener noreferrer"
-                  data-tooltip="View on GitHub"
+                  data-tooltip="前往 GitHub"
                   data-tooltip-side="left"
                 >
                   <Github className="w-5 h-5" />
@@ -270,12 +270,12 @@ function ProjectsIndex() {
               </Button>
               <Button variant="outline" size="lg" className="gap-2" onClick={handleImportClick}>
                 <Upload className="w-4 h-4" />
-                Import Project
+                导入项目
               </Button>
               <Link to="/projects/new">
                 <Button size="lg" className="gap-2">
                   <Plus className="w-4 h-4" />
-                  New Project
+                  新建项目
                 </Button>
               </Link>
             </div>
@@ -295,7 +295,7 @@ function ProjectsIndex() {
         {error && (
           <div className="max-w-[1920px] mx-auto px-6 py-4">
             <div className="panel-bg border border-destructive/50 rounded-lg p-4 text-destructive">
-              <p className="font-medium">Error loading projects</p>
+              <p className="font-medium">加载项目失败</p>
               <p className="text-sm mt-1">{error}</p>
             </div>
           </div>
@@ -313,7 +313,7 @@ function ProjectsIndex() {
           <div className="max-w-[1920px] mx-auto px-6 py-16 flex items-center justify-center">
             <div className="text-center">
               <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading projects...</p>
+              <p className="text-muted-foreground">正在加载项目...</p>
             </div>
           </div>
         ) : (
@@ -329,8 +329,8 @@ function ProjectsIndex() {
       <Dialog open={!!editingProject} onOpenChange={(open) => !open && setEditingProject(null)}>
         <DialogContent className="max-w-[1200px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Edit Project</DialogTitle>
-            <DialogDescription>Update your project settings</DialogDescription>
+            <DialogTitle className="text-2xl">编辑项目</DialogTitle>
+            <DialogDescription>更新项目设置</DialogDescription>
           </DialogHeader>
           {editingProject && (
             <ProjectForm
@@ -358,20 +358,20 @@ function ProjectsIndex() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {importError ? 'Import Failed' : isImporting ? 'Importing Project' : 'Import Project'}
+              {importError ? '导入失败' : isImporting ? '正在导入项目' : '导入项目'}
             </DialogTitle>
             {!importError && !isImporting && pendingImportFile && (
               <DialogDescription>
-                Select where to extract media files
+                选择媒体文件解压保存的位置
               </DialogDescription>
             )}
             {!importError && isImporting && importProgress && (
               <DialogDescription>
-                {importProgress.stage === 'validating' && 'Validating bundle...'}
-                {importProgress.stage === 'extracting' && `Extracting${importProgress.currentFile ? `: ${importProgress.currentFile}` : '...'}`}
-                {importProgress.stage === 'importing_media' && `Importing${importProgress.currentFile ? `: ${importProgress.currentFile}` : '...'}`}
-                {importProgress.stage === 'linking' && 'Creating project...'}
-                {importProgress.stage === 'complete' && 'Import complete!'}
+                {importProgress.stage === 'validating' && '正在校验项目包...'}
+                {importProgress.stage === 'extracting' && `正在解压${importProgress.currentFile ? `：${importProgress.currentFile}` : '...'}`}
+                {importProgress.stage === 'importing_media' && `正在导入媒体${importProgress.currentFile ? `：${importProgress.currentFile}` : '...'}`}
+                {importProgress.stage === 'linking' && '正在创建项目...'}
+                {importProgress.stage === 'complete' && '导入完成！'}
               </DialogDescription>
             )}
           </DialogHeader>
@@ -385,7 +385,7 @@ function ProjectsIndex() {
                 className="w-full"
                 onClick={handleCloseImportDialog}
               >
-                Close
+                关闭
               </Button>
             </div>
           ) : isImporting && importProgress ? (
@@ -411,9 +411,9 @@ function ProjectsIndex() {
               {/* Destination selection */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium">Destination Folder</p>
+                  <p className="text-sm font-medium">目标文件夹</p>
                   {!destinationDir && (
-                    <p className="text-xs text-muted-foreground">Use "New Folder" in picker if needed</p>
+                    <p className="text-xs text-muted-foreground">如有需要，请在选择器里使用 “New Folder”</p>
                   )}
                 </div>
                 <Button
@@ -425,7 +425,7 @@ function ProjectsIndex() {
                   {destinationName ? (
                     <span className="truncate">{destinationName}</span>
                   ) : (
-                    <span className="text-muted-foreground">Select or create folder...</span>
+                    <span className="text-muted-foreground">选择或创建文件夹...</span>
                   )}
                 </Button>
 
@@ -438,7 +438,7 @@ function ProjectsIndex() {
                     className="w-4 h-4 rounded border-border accent-primary"
                   />
                   <span className="text-sm">
-                    Create in <code className="text-xs bg-muted px-1 py-0.5 rounded">{PROJECTS_FOLDER_NAME}</code> subfolder
+                    在 <code className="text-xs bg-muted px-1 py-0.5 rounded">{PROJECTS_FOLDER_NAME}</code> 子目录中创建
                   </span>
                 </label>
 
@@ -447,7 +447,7 @@ function ProjectsIndex() {
                 )}
                 {destinationDir && !importError && (
                   <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                    <p className="text-xs text-muted-foreground mb-1">Media will be saved to:</p>
+                    <p className="text-xs text-muted-foreground mb-1">媒体文件将保存到：</p>
                     <p className="text-sm font-semibold text-foreground break-all">
                       {getFullDestinationPath()}
                     </p>
@@ -457,13 +457,13 @@ function ProjectsIndex() {
 
               <DialogFooter className="gap-2 sm:gap-0">
                 <Button variant="outline" onClick={handleCloseImportDialog}>
-                  Cancel
+                  取消
                 </Button>
                 <Button
                   onClick={handleStartImport}
                   disabled={!destinationDir}
                 >
-                  Start Import
+                  开始导入
                 </Button>
               </DialogFooter>
             </div>
@@ -473,4 +473,3 @@ function ProjectsIndex() {
     </>
   );
 }
-

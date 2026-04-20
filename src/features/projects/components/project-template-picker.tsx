@@ -88,13 +88,13 @@ export function ProjectTemplatePicker({
              />
            </div>
            <div className="flex-1 text-left">
-             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Custom</p>
+             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">自定义</p>
              <h3 className={`font-medium text-sm transition-colors mt-1 ${
                isCustomSelected ? 'text-primary' : 'text-foreground group-hover:text-primary'
              }`}>
-               Custom Size
+               自定义尺寸
              </h3>
-             <p className="text-xs text-muted-foreground mt-2">Enter dimensions</p>
+             <p className="text-xs text-muted-foreground mt-2">手动输入宽高</p>
            </div>
          </button>
        )}

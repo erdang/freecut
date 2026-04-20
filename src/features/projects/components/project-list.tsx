@@ -298,14 +298,14 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
     clearSelection();
 
     if (failures.length === 0) {
-      toast.success(`Moved ${ids.length} project${ids.length === 1 ? '' : 's'} to trash`);
+      toast.success(`已将 ${ids.length} 个项目移入回收站`);
     } else if (failures.length < ids.length) {
       toast.warning(
-        `Moved ${ids.length - failures.length} to trash, ${failures.length} failed`,
+        `已移入回收站 ${ids.length - failures.length} 个，失败 ${failures.length} 个`,
         { description: failures[0]?.error }
       );
     } else {
-      toast.error('Failed to delete selected projects', { description: failures[0]?.error });
+      toast.error('删除所选项目失败', { description: failures[0]?.error });
     }
   };
 
@@ -323,7 +323,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="Search projects..."
+              placeholder="搜索项目..."
               value={localSearchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9 pr-9"
@@ -346,10 +346,10 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             onValueChange={(value) => setFilterResolution(value === 'all' ? undefined : value)}
           >
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="All Resolutions" />
+              <SelectValue placeholder="全部分辨率" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Resolutions</SelectItem>
+              <SelectItem value="all">全部分辨率</SelectItem>
               {uniqueResolutions.map((res) => (
                 <SelectItem key={res} value={res}>
                   {res}
@@ -364,10 +364,10 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             onValueChange={(value) => setFilterFps(value === 'all' ? undefined : Number(value))}
           >
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="All FPS" />
+              <SelectValue placeholder="全部帧率" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All FPS</SelectItem>
+              <SelectItem value="all">全部帧率</SelectItem>
               {uniqueFps.map((fps) => (
                 <SelectItem key={fps} value={fps.toString()}>
                   {fps} fps
@@ -384,24 +384,24 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+              <DropdownMenuLabel>排序方式</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setSortField('name')}>
-                Name {sortField === 'name' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                名称 {sortField === 'name' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSortField('updatedAt')}>
-                Last Modified{' '}
+                最近修改{' '}
                 {sortField === 'updatedAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSortField('createdAt')}>
-                Date Created {sortField === 'createdAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                创建时间 {sortField === 'createdAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSortField('resolution')}>
-                Resolution {sortField === 'resolution' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                分辨率 {sortField === 'resolution' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleSortDirection}>
-                {sortDirection === 'asc' ? 'Ascending' : 'Descending'}
+                {sortDirection === 'asc' ? '升序' : '降序'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -410,7 +410,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={handleClearFilters}>
               <X className="w-4 h-4 mr-2" />
-              Clear Filters
+              清空筛选
             </Button>
           )}
 
@@ -421,10 +421,10 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           {selectionCount > 0 && (
             <>
               <span className="text-sm text-muted-foreground whitespace-nowrap">
-                {selectionCount} selected
+                已选中 {selectionCount} 项
               </span>
               <Button variant="ghost" size="sm" onClick={clearSelection}>
-                Clear
+                清空
               </Button>
               <Button
                 variant="destructive"
@@ -433,7 +433,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
                 onClick={() => setShowBulkDeleteDialog(true)}
               >
                 <Trash2 className="w-4 h-4" />
-                Delete {selectionCount}
+                删除 {selectionCount} 项
               </Button>
             </>
           )}
@@ -443,10 +443,9 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       {/* Empty State - No Projects */}
       {isEmpty && (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h2 className="text-3xl font-semibold text-foreground mb-2">Welcome to FreeCut</h2>
+          <h2 className="text-3xl font-semibold text-foreground mb-2">欢迎使用 FreeCut</h2>
           <p className="text-muted-foreground max-w-md mb-6">
-            Get started by creating your first video project. Choose your resolution, frame rate, and
-            start editing!
+            从创建你的第一个视频项目开始。选择分辨率、帧率，然后立即开始剪辑。
           </p>
         </div>
       )}
@@ -457,13 +456,12 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
             <Search className="w-8 h-8 text-muted-foreground" />
           </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">No projects found</h3>
+          <h3 className="text-xl font-semibold text-foreground mb-2">未找到项目</h3>
           <p className="text-muted-foreground max-w-md mb-6">
-            We couldn't find any projects matching your search criteria. Try adjusting your filters or
-            search terms.
+            没有找到符合当前搜索条件的项目。试试调整筛选条件或关键词。
           </p>
           <Button variant="outline" onClick={handleClearFilters}>
-            Clear Filters
+            清空筛选
           </Button>
         </div>
       )}
@@ -474,8 +472,8 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
               {filteredProjects.length === allProjects.length
-                ? `${allProjects.length} project${allProjects.length === 1 ? '' : 's'}`
-                : `${filteredProjects.length} of ${allProjects.length} project${allProjects.length === 1 ? '' : 's'}`}
+                ? `${allProjects.length} 个项目`
+                : `${filteredProjects.length} / ${allProjects.length} 个项目`}
             </p>
           </div>
 
@@ -517,21 +515,20 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              Delete {selectionCount} project{selectionCount === 1 ? '' : 's'}?
+              删除这 ${selectionCount} 个项目？
             </AlertDialogTitle>
             <AlertDialogDescription>
-              These projects will be moved to trash. You can restore them from the Trash section
-              until they're permanently deleted.
+              这些项目将被移入回收站。在被永久删除前，你都可以在“回收站”区域中恢复它们。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isBulkDeleting}>取消</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmBulkDelete}
               disabled={isBulkDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isBulkDeleting ? 'Deleting...' : `Delete ${selectionCount}`}
+              {isBulkDeleting ? '删除中...' : `删除 ${selectionCount} 项`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

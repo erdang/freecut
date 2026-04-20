@@ -69,10 +69,10 @@ const log = createLogger('SettingsDialog');
 const TRANSCRIPTION_MODEL_OPTIONS = getMediaTranscriptionModelOptions();
 
 const SETTINGS_SECTIONS = [
-  { id: 'general', label: 'General', icon: Settings2 },
-  { id: 'timeline', label: 'Timeline', icon: Rows3 },
+  { id: 'general', label: '通用', icon: Settings2 },
+  { id: 'timeline', label: '时间线', icon: Rows3 },
   { id: 'whisper', label: 'Whisper', icon: AudioLines },
-  { id: 'storage', label: 'Storage', icon: HardDrive },
+  { id: 'storage', label: '存储', icon: HardDrive },
 ] as const;
 
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
@@ -330,10 +330,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0 sm:top-16 sm:max-h-[calc(100vh-4rem)] sm:translate-y-0 sm:origin-top">
         <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-4 pr-14">
-          <DialogTitle>Editor Settings</DialogTitle>
+          <DialogTitle>编辑器设置</DialogTitle>
           <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-8 shrink-0 gap-1.5">
             <RotateCcw className="w-3.5 h-3.5" />
-            Reset
+            重置
           </Button>
         </DialogHeader>
         <div className="flex min-h-0">
@@ -366,7 +366,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               {activeSection === 'general' && (
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Editor Density</Label>
+                    <Label className="text-sm">界面密度</Label>
                     <Select
                       value={editorDensity}
                       onValueChange={(value) => setSetting('editorDensity', value as typeof editorDensity)}
@@ -383,11 +383,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Compact fits more of the editor into a 1080p screen. Default restores the roomier layout.
+                      “紧凑”会在 1080p 屏幕中显示更多编辑器内容，“默认”则保留更宽松的布局。
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Auto-save</Label>
+                    <Label className="text-sm">自动保存</Label>
                     <Switch
                       checked={autoSaveInterval > 0}
                       onCheckedChange={(v) => setSetting('autoSaveInterval', v ? 5 : 0)}
@@ -395,7 +395,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </div>
                   {autoSaveInterval > 0 && (
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm text-muted-foreground">Interval</Label>
+                      <Label className="text-sm text-muted-foreground">间隔</Label>
                       <div className="w-32 flex items-center gap-2">
                         <Slider
                           value={[autoSaveInterval]}
@@ -409,7 +409,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Undo History Depth</Label>
+                    <Label className="text-sm">撤销历史深度</Label>
                     <div className="w-32 flex items-center gap-2">
                       <Slider
                         value={[maxUndoHistory]}
@@ -428,17 +428,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Snap by Default</Label>
-                      <p className="text-xs text-muted-foreground">Sets the initial snap state when a project opens.</p>
+                      <Label className="text-sm">默认开启吸附</Label>
+                      <p className="text-xs text-muted-foreground">设置项目打开时的初始吸附状态。</p>
                     </div>
                     <Switch checked={snapEnabled} onCheckedChange={(v) => setSetting('snapEnabled', v)} />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Show Waveforms</Label>
+                    <Label className="text-sm">显示波形</Label>
                     <Switch checked={showWaveforms} onCheckedChange={(v) => setSetting('showWaveforms', v)} />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Show Filmstrips</Label>
+                    <Label className="text-sm">显示胶片条</Label>
                     <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
                   </div>
                 </div>
@@ -447,7 +447,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               {activeSection === 'whisper' && (
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Default Model</Label>
+                    <Label className="text-sm">默认模型</Label>
                     <Select
                       value={defaultWhisperModel}
                       onValueChange={(value) =>
@@ -466,12 +466,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Used when transcription starts without an explicit model override.
+                      当转录任务没有手动指定模型时，将使用这里的默认值。
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Default Quantization</Label>
+                    <Label className="text-sm">默认量化方案</Label>
                     <Select
                       value={defaultWhisperQuantization}
                       onValueChange={(value) =>
@@ -490,24 +490,24 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Pick based on memory first. {defaultWhisperQuantizationOption.description}
+                      优先根据显存或内存大小选择。{defaultWhisperQuantizationOption.description}
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Default Language</Label>
+                    <Label className="text-sm">默认语言</Label>
                     <Combobox
                       value={defaultWhisperLanguageValue}
                       onValueChange={(value) =>
                         setSetting('defaultWhisperLanguage', getWhisperLanguageSettingValue(value))
                       }
                       options={WHISPER_LANGUAGE_OPTIONS}
-                      placeholder="Auto-detect"
-                      searchPlaceholder="Search languages..."
-                      emptyMessage="No languages match that search."
+                      placeholder="自动检测"
+                      searchPlaceholder="搜索语言..."
+                      emptyMessage="没有匹配的语言。"
                     />
                     <p className="text-xs text-muted-foreground">
-                      Choose Auto-detect to infer the language, or lock transcription to a known language for faster startup.
+                      选择“自动检测”可自动识别语言，也可以固定为某种已知语言以获得更快启动速度。
                     </p>
                   </div>
 
@@ -519,9 +519,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Generate Missing Proxies</Label>
+                      <Label className="text-sm">生成缺失代理</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Queue proxy generation for video in this project that does not have one yet
+                        为当前项目中尚未生成代理的视频排队生成代理文件
                       </p>
                     </div>
                     <Button
@@ -535,20 +535,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {proxyGenerateState === 'done' && <Check className="w-3.5 h-3.5" />}
                       {proxyGenerateState === 'idle' && <Film className="w-3.5 h-3.5" />}
                       {proxyGenerateState === 'queueing'
-                        ? 'Queueing...'
+                        ? '排队中...'
                         : proxyGenerateState === 'done'
-                          ? 'Queued'
+                          ? '已加入队列'
                           : missingProjectProxyCount > 0
-                            ? `Generate (${missingProjectProxyCount})`
-                            : 'Up to date'}
+                            ? `生成（${missingProjectProxyCount}）`
+                            : '已是最新'}
                     </Button>
                   </div>
                   <Separator className="bg-white/8" />
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Clear Project Cache</Label>
+                      <Label className="text-sm">清除项目缓存</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Waveforms, filmstrips, GIF frames, decoded audio
+                        波形、胶片条、GIF 帧缓存、已解码音频
                       </p>
                     </div>
                     <Button
@@ -561,14 +561,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {clearState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {clearState === 'done' && <Check className="w-3.5 h-3.5" />}
                       {clearState === 'idle' && <Trash2 className="w-3.5 h-3.5" />}
-                      {clearState === 'clearing' ? 'Clearing...' : clearState === 'done' ? 'Cleared' : 'Clear'}
+                      {clearState === 'clearing' ? '清除中...' : clearState === 'done' ? '已清除' : '清除'}
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Regenerate Thumbnails</Label>
+                      <Label className="text-sm">重新生成缩略图</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Re-create media library thumbnails for this project
+                        为当前项目重新生成媒体库缩略图
                       </p>
                     </div>
                     <Button
@@ -581,14 +581,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {regenState === 'working' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {regenState === 'done' && <Check className="w-3.5 h-3.5" />}
                       {regenState === 'idle' && <ImagePlus className="w-3.5 h-3.5" />}
-                      {regenState === 'working' ? regenProgress : regenState === 'done' ? 'Done' : 'Regenerate'}
+                      {regenState === 'working' ? regenProgress : regenState === 'done' ? '完成' : '重新生成'}
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Delete Proxies</Label>
+                      <Label className="text-sm">删除代理文件</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Remove generated proxy videos for this project
+                        删除当前项目已生成的代理视频
                       </p>
                     </div>
                     <Button
@@ -601,7 +601,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {proxyState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {proxyState === 'done' && <Check className="w-3.5 h-3.5" />}
                       {proxyState === 'idle' && <Film className="w-3.5 h-3.5" />}
-                      {proxyState === 'clearing' ? 'Deleting...' : proxyState === 'done' ? 'Deleted' : 'Delete'}
+                      {proxyState === 'clearing' ? '删除中...' : proxyState === 'done' ? '已删除' : '删除'}
                     </Button>
                   </div>
                   <Separator className="bg-white/8" />
@@ -616,22 +616,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear project cache?</AlertDialogTitle>
+            <AlertDialogTitle>清除项目缓存？</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete cached waveforms, filmstrips, GIF frames, and decoded audio
-              for the current project ({mediaItems.length} media items).
-              These will be regenerated automatically when needed. Your project data,
-              media files, thumbnails, and proxies will not be affected.
+              这会删除当前项目（共 {mediaItems.length} 个媒体项）的波形、胶片条、
+              GIF 帧缓存和已解码音频。它们会在后续需要时自动重新生成。
+              项目数据、媒体文件、缩略图和代理文件不会受到影响。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 void handleClearCache();
               }}
             >
-              Clear Cache
+              清除缓存
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

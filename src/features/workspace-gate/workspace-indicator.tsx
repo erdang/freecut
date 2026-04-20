@@ -142,7 +142,7 @@ export function WorkspaceIndicator() {
           variant="outline"
           size="lg"
           className="gap-2 max-w-[220px]"
-          data-tooltip="Workspace folder"
+          data-tooltip="工作区文件夹"
           data-tooltip-side="bottom"
         >
           <FolderOpen className="w-4 h-4 shrink-0" />
@@ -151,7 +151,7 @@ export function WorkspaceIndicator() {
       </PopoverTrigger>
       <PopoverContent className="w-80 p-2" align="end">
         <div className="text-xs font-medium text-muted-foreground px-2 py-1">
-          Workspaces
+          工作区
         </div>
 
         <div className="flex flex-col">
@@ -171,7 +171,7 @@ export function WorkspaceIndicator() {
                 </span>
                 {isActive && (
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
-                    <Check className="w-3 h-3" /> Active
+                    <Check className="w-3 h-3" /> 当前
                   </span>
                 )}
                 {isConfirming ? (
@@ -182,7 +182,7 @@ export function WorkspaceIndicator() {
                       className="h-7 px-2 text-xs"
                       onClick={() => setConfirmRemoveId(null)}
                     >
-                      Cancel
+                      取消
                     </Button>
                     <Button
                       variant="destructive"
@@ -190,7 +190,7 @@ export function WorkspaceIndicator() {
                       className="h-7 px-2 text-xs"
                       onClick={() => void handleRemove(record.id, isActive)}
                     >
-                      Remove
+                      移除
                     </Button>
                   </>
                 ) : (
@@ -202,14 +202,14 @@ export function WorkspaceIndicator() {
                         className="h-7 px-2 text-xs"
                         onClick={() => void handleSwitch(record.id)}
                       >
-                        Switch
+                        切换
                       </Button>
                     )}
                     <Button
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      aria-label="Remove workspace"
+                      aria-label="移除工作区"
                       onClick={() => setConfirmRemoveId(record.id)}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -230,7 +230,7 @@ export function WorkspaceIndicator() {
           onClick={() => void handleAdd()}
         >
           <Plus className="w-4 h-4" />
-          Add workspace…
+          添加工作区…
         </Button>
       </PopoverContent>
     </Popover>

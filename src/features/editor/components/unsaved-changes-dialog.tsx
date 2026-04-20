@@ -55,20 +55,19 @@ export function UnsavedChangesDialog({
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Unsaved Changes</AlertDialogTitle>
+          <AlertDialogTitle>有未保存的更改</AlertDialogTitle>
           <AlertDialogDescription>
             {projectName ? (
               <>
-                You have unsaved changes in <strong>{projectName}</strong>. Would
-                you like to save before leaving?
+                <strong>{projectName}</strong> 中仍有未保存的更改。离开前要先保存吗？
               </>
             ) : (
-              'You have unsaved changes. Would you like to save before leaving?'
+              '当前有未保存的更改。离开前要先保存吗？'
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="gap-2 sm:gap-0">
-          <AlertDialogCancel disabled={isSaving}>Cancel</AlertDialogCancel>
+          <AlertDialogCancel disabled={isSaving}>取消</AlertDialogCancel>
           <Button
             variant="destructive"
             onClick={handleDiscard}
@@ -76,7 +75,7 @@ export function UnsavedChangesDialog({
             className="gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            Discard
+            放弃更改
           </Button>
           <AlertDialogAction
             onClick={handleSaveAndExit}
@@ -84,7 +83,7 @@ export function UnsavedChangesDialog({
             className="gap-2"
           >
             <Save className="w-4 h-4" />
-            {isSaving ? 'Saving...' : 'Save & Exit'}
+            {isSaving ? '保存中...' : '保存并退出'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

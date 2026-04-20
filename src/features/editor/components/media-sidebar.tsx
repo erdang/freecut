@@ -325,11 +325,11 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
   // Category items for the vertical nav
   const categories = [
-    { id: 'media' as const, icon: Film, label: 'Media' },
-    { id: 'text' as const, icon: Type, label: 'Text' },
-    { id: 'shapes' as const, icon: Pentagon, label: 'Shapes' },
-    { id: 'effects' as const, icon: Layers, label: 'Effects' },
-    { id: 'transitions' as const, icon: Blend, label: 'Transitions' },
+    { id: 'media' as const, icon: Film, label: '媒体' },
+    { id: 'text' as const, icon: Type, label: '文字' },
+    { id: 'shapes' as const, icon: Pentagon, label: '图形' },
+    { id: 'effects' as const, icon: Layers, label: '效果' },
+    { id: 'transitions' as const, icon: Blend, label: '转场' },
     { id: 'ai' as const, icon: WandSparkles, label: 'AI' },
   ];
 
@@ -382,7 +382,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             onClick={toggleLeftSidebar}
             className="rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
             style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
-            data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
+            data-tooltip={leftSidebarOpen ? '收起面板' : '展开面板'}
             data-tooltip-side="right"
           >
             {leftSidebarOpen ? (
@@ -432,9 +432,9 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }
             `}
-            data-tooltip={keyframeEditorOpen ? 'Hide Keyframe Editor' : 'Keyframe Editor'}
+            data-tooltip={keyframeEditorOpen ? '隐藏关键帧编辑器' : '关键帧编辑器'}
             data-tooltip-side="right"
-            aria-label={keyframeEditorOpen ? 'Hide keyframe editor' : 'Show keyframe editor'}
+            aria-label={keyframeEditorOpen ? '隐藏关键帧编辑器' : '显示关键帧编辑器'}
           >
             <LineChart className="w-4 h-4" />
           </button>
@@ -472,7 +472,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               className="shrink-0"
               style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
               onClick={toggleMediaFullColumn}
-              data-tooltip={mediaFullColumn ? 'Dock to preview' : 'Expand full column'}
+              data-tooltip={mediaFullColumn ? '停靠到预览区' : '展开为完整列'}
               data-tooltip-side="bottom"
             >
               {mediaFullColumn ? (
@@ -493,7 +493,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div className="space-y-3">
               <button
                 draggable={true}
-                onDragStart={handleTemplateDragStart({ itemType: 'text', label: 'Text' })}
+                onDragStart={handleTemplateDragStart({ itemType: 'text', label: '文字' })}
                 onDragEnd={handleTemplateDragEnd}
                 onClick={() => {
                   if (shouldSuppressGeneratedItemClick()) return;
@@ -505,7 +505,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   <Type className="w-4 h-4 text-timeline-text" />
                 </div>
                 <span className="text-sm text-muted-foreground group-hover:text-foreground">
-                  Add Text
+                  添加文字
                 </span>
               </button>
             </div>
@@ -516,7 +516,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div className="grid grid-cols-3 gap-1.5">
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Rectangle', shapeType: 'rectangle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '矩形', shapeType: 'rectangle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -528,13 +528,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Square className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Rectangle
+                      矩形
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Circle', shapeType: 'circle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '圆形', shapeType: 'circle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -546,13 +546,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Circle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Circle
+                      圆形
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Triangle', shapeType: 'triangle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '三角形', shapeType: 'triangle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -564,13 +564,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Triangle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Triangle
+                      三角形
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Ellipse', shapeType: 'ellipse' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '椭圆', shapeType: 'ellipse' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -582,13 +582,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Circle className="w-3.5 h-2.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Ellipse
+                      椭圆
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Star', shapeType: 'star' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '星形', shapeType: 'star' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -600,13 +600,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Star className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Star
+                      星形
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Polygon', shapeType: 'polygon' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '多边形', shapeType: 'polygon' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -618,13 +618,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Hexagon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Polygon
+                      多边形
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Heart', shapeType: 'heart' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '爱心', shapeType: 'heart' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -636,20 +636,20 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Heart className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Heart
+                      爱心
                     </span>
                   </button>
 
                   <button
                     onClick={() => useMaskEditorStore.getState().startShapePenMode()}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                    title="Draw a custom path shape with the pen tool"
+                    title="使用钢笔工具绘制自定义路径图形"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Pen className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      Pen
+                      钢笔
                     </span>
                   </button>
             </div>
@@ -661,7 +661,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {/* Blank Adjustment Layer */}
               <button
                 draggable={true}
-                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: 'Adjustment Layer' })}
+                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: '调整图层' })}
                 onDragEnd={handleTemplateDragEnd}
                 onClick={() => {
                   if (shouldSuppressGeneratedItemClick()) return;
@@ -674,7 +674,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                    Blank Adjustment Layer
+                    空白调整图层
                   </div>
                 </div>
               </button>
@@ -682,7 +682,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {/* Presets */}
               <div>
                 <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                  Presets
+                  预设
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {EFFECT_PRESETS.map((preset) => (

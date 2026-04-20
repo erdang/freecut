@@ -64,30 +64,30 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
     setClearLocalFiles(false);
 
     if (!result.success) {
-      toast.error('Failed to delete project', { description: result.error });
+      toast.error('删除项目失败', { description: result.error });
       return;
     }
 
     if (wantedLocalDelete && !result.localFilesDeleted) {
-      toast.warning(`Moved "${result.originalName}" to trash`, {
-        description: 'Local files were not removed — you may need to delete the folder manually.',
+      toast.warning(`已将“${result.originalName}”移入回收站`, {
+        description: '本地文件未删除，你可能仍需手动删除对应文件夹。',
       });
       return;
     }
 
-    toast.success(`Moved "${result.originalName}" to trash`, {
+    toast.success(`已将“${result.originalName}”移入回收站`, {
       description: wantedLocalDelete
-        ? 'Local files deleted — undo will not restore them.'
-        : 'You can undo this for the next few seconds.',
+        ? '本地文件已删除，撤销操作将无法恢复它们。'
+        : '你可以在接下来的几秒内撤销。',
       duration: 8000,
       action: {
-        label: 'Undo',
+        label: '撤销',
         onClick: async () => {
           const undo = await restoreProject(projectId);
           if (undo.success) {
-            toast.success(`Restored "${result.originalName}"`);
+            toast.success(`已恢复“${result.originalName}”`);
           } else {
-            toast.error('Failed to restore project', { description: undo.error });
+            toast.error('恢复项目失败', { description: undo.error });
           }
         },
       },
@@ -103,7 +103,7 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
     setIsDuplicating(false);
 
     if (!result.success) {
-      toast.error('Failed to duplicate project', { description: result.error });
+      toast.error('复制项目失败', { description: result.error });
     }
   };
 
@@ -185,7 +185,7 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
           <div className="flex items-center gap-2 text-white">
             <PlayCircle className="w-6 h-6" />
-            <span className="font-medium">Double-click to open</span>
+            <span className="font-medium">双击打开</span>
           </div>
         </div>
 
@@ -234,12 +234,12 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <PlayCircle className="w-4 h-4" />
-                  Open in Editor
+                  在编辑器中打开
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleEdit} className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4" />
-                Edit Settings
+                编辑设置
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleDuplicate}
@@ -247,7 +247,7 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
                 className="flex items-center gap-2"
               >
                 <Copy className="w-4 h-4" />
-                {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+                {isDuplicating ? '复制中...' : '复制项目'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -256,7 +256,7 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
                 className="flex items-center gap-2 text-destructive focus:text-destructive"
               >
                 <Trash2 className="w-4 h-4" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting ? '删除中...' : '删除'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -271,11 +271,10 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
-                Delete Project
+                删除项目
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete <strong>{project.name}</strong>? This action cannot be
-                undone and will permanently remove the project and all its contents.
+                确认要删除 <strong>{project.name}</strong> 吗？此操作无法撤销，项目及其全部内容都将被永久移除。
               </AlertDialogDescription>
             </AlertDialogHeader>
             {project.rootFolderHandle && (
@@ -289,21 +288,21 @@ export function ProjectCard({ project, onEdit, isSelected = false, onCardMouseDo
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                     <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
-                    Also delete local files on disk
+                    同时删除磁盘上的本地文件
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Remove files from the linked folder{project.rootFolderName ? ` "${project.rootFolderName}"` : ''}. This cannot be undone.
+                    删除关联文件夹{project.rootFolderName ? `“${project.rootFolderName}”` : ''}中的文件。此操作无法撤销。
                   </p>
                 </div>
               </label>
             )}
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete Project
+                删除项目
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>

@@ -91,7 +91,7 @@ export const Toolbar = memo(function Toolbar({
       className="panel-header flex flex-shrink-0 items-center gap-2.5 border-b border-border px-3"
       style={{ height: EDITOR_LAYOUT_CSS_VALUES.toolbarHeight }}
       role="toolbar"
-      aria-label="Editor toolbar"
+      aria-label="编辑器工具栏"
     >
       <div className="flex items-center gap-2.5">
         <Button
@@ -99,9 +99,9 @@ export const Toolbar = memo(function Toolbar({
           size="icon"
           className="h-8 w-8"
           onClick={handleBackClick}
-          data-tooltip="Back to Projects"
+          data-tooltip="返回项目列表"
           data-tooltip-side="right"
-          aria-label="Back to projects"
+          aria-label="返回项目列表"
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -117,7 +117,7 @@ export const Toolbar = memo(function Toolbar({
 
         <div className="flex flex-col -space-y-0.5">
           <h1 className="text-sm font-medium leading-none">
-            {project?.name || 'Untitled Project'}
+            {project?.name || '未命名项目'}
           </h1>
           <span className="font-mono text-[11px] text-muted-foreground">
             {project?.width}x{project?.height} | {project?.fps}fps
@@ -153,9 +153,9 @@ export const Toolbar = memo(function Toolbar({
           size="icon"
           className="h-7 w-7 relative"
           onClick={openWhatsNew}
-          data-tooltip="What's New"
+          data-tooltip="最近更新"
           data-tooltip-side="bottom"
-          aria-label="What's new"
+          aria-label="最近更新"
         >
           <Sparkles className="h-4 w-4" />
           {hasUnseenWhatsNew && (
@@ -170,9 +170,9 @@ export const Toolbar = memo(function Toolbar({
           size="icon"
           className="h-7 w-7"
           onClick={() => setShowSettingsDialog(true)}
-          data-tooltip="Settings"
+          data-tooltip="设置"
           data-tooltip-side="bottom"
-          aria-label="Settings"
+          aria-label="设置"
         >
           <Settings className="h-4 w-4" />
         </Button>
@@ -181,9 +181,9 @@ export const Toolbar = memo(function Toolbar({
           size="icon"
           className="h-7 w-7"
           onClick={() => setShowShortcutsDialog(true)}
-          data-tooltip="Keyboard Shortcuts"
+          data-tooltip="快捷键"
           data-tooltip-side="bottom"
-          aria-label="Keyboard shortcuts"
+          aria-label="快捷键"
         >
           <Keyboard className="h-4 w-4" />
         </Button>
@@ -197,9 +197,9 @@ export const Toolbar = memo(function Toolbar({
             href="https://github.com/walterlow/freecut"
             target="_blank"
             rel="noopener noreferrer"
-            data-tooltip="View on GitHub"
+            data-tooltip="前往 GitHub"
             data-tooltip-side="bottom"
-            aria-label="View on GitHub"
+            aria-label="前往 GitHub"
           >
             <Github className="h-4 w-4" />
           </a>
@@ -209,7 +209,7 @@ export const Toolbar = memo(function Toolbar({
           size="sm"
           className="gap-1.5"
           onClick={handleSave}
-          aria-label="Save project"
+          aria-label="保存项目"
         >
           <div className="relative">
             <Save className="h-4 w-4" />
@@ -217,25 +217,25 @@ export const Toolbar = memo(function Toolbar({
               <span className="absolute -right-1 -top-1 h-2 w-2 animate-pulse rounded-full bg-orange-500" />
             )}
           </div>
-          Save
+          保存
         </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="gap-1.5 glow-primary-sm">
               <Download className="h-4 w-4" />
-              Export
+              导出
               <ChevronDown className="h-3 w-3" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             <DropdownMenuItem onClick={onExport} className="gap-2">
               <Video className="h-4 w-4" />
-              Export Video
+              导出视频
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onExportBundle} className="gap-2">
               <FolderArchive className="h-4 w-4" />
-              Download Project (.zip)
+              下载项目包（.zip）
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -255,9 +255,9 @@ function DebugPopover({ projectId }: { projectId: string }) {
           variant="outline"
           size="icon"
           className={cn('h-7 w-7', debugPanelOpen && 'bg-amber-500/20 border-amber-500/50 text-amber-400')}
-          data-tooltip={debugPanelOpen ? undefined : 'Debug Panel'}
+          data-tooltip={debugPanelOpen ? undefined : '调试面板'}
           data-tooltip-side="bottom"
-          aria-label="Debug panel"
+          aria-label="调试面板"
         >
           <Bug className="h-4 w-4" />
         </Button>

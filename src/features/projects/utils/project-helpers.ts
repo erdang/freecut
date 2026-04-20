@@ -12,7 +12,7 @@ function generateProjectId(): string {
 }
 
 /**
- * Format date to relative time (e.g., "2 hours ago", "3 days ago")
+ * Format date to relative time in Chinese.
  */
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -26,13 +26,13 @@ export function formatRelativeTime(timestamp: number): string {
   const months = Math.floor(days / 30);
   const years = Math.floor(days / 365);
 
-  if (seconds < 60) return 'just now';
-  if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
-  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-  if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`;
-  if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`;
-  if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`;
-  return `${years} year${years > 1 ? 's' : ''} ago`;
+  if (seconds < 60) return '刚刚';
+  if (minutes < 60) return `${minutes} 分钟前`;
+  if (hours < 24) return `${hours} 小时前`;
+  if (days < 7) return `${days} 天前`;
+  if (weeks < 4) return `${weeks} 周前`;
+  if (months < 12) return `${months} 个月前`;
+  return `${years} 年前`;
 }
 
 /**
@@ -181,7 +181,7 @@ export function duplicateProject(project: Project): Project {
   return {
     ...project,
     id: generateProjectId(),
-    name: `${project.name} (Copy)`,
+    name: `${project.name}（副本）`,
     createdAt: now,
     updatedAt: now,
   };
@@ -195,7 +195,7 @@ export function formatProjectUpgradeBackupName(
   fromVersion: number,
   toVersion: number
 ): string {
-  return `${projectName} (Backup before upgrade v${fromVersion} to v${toVersion})`;
+  return `${projectName}（升级前备份 v${fromVersion} -> v${toVersion}）`;
 }
 
 /**

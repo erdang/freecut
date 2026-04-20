@@ -42,12 +42,12 @@ function NewProject() {
           params: { projectId: result.project.id },
         });
       } else {
-        toast.error('Failed to create project', { description: result.error });
+        toast.error('创建项目失败', { description: result.error });
         setIsSubmitting(false);
       }
     } catch (error) {
       logger.error('Failed to create project:', error);
-      toast.error('Failed to create project', { description: 'Please try again' });
+      toast.error('创建项目失败', { description: '请稍后再试' });
       setIsSubmitting(false);
     }
   };
@@ -70,7 +70,7 @@ function NewProject() {
               href="https://github.com/walterlow/freecut"
               target="_blank"
               rel="noopener noreferrer"
-              data-tooltip="View on GitHub"
+              data-tooltip="前往 GitHub"
               data-tooltip-side="left"
             >
               <Github className="w-5 h-5" />
@@ -86,4 +86,3 @@ function NewProject() {
     </div>
   );
 }
-

@@ -4,16 +4,16 @@ export interface ProjectFpsOption {
 }
 
 export const DEFAULT_PROJECT_FPS_OPTIONS: readonly ProjectFpsOption[] = [
-  { label: '24 fps (Film)', value: 24 },
+  { label: '24 fps（电影）', value: 24 },
   { label: '25 fps (PAL)', value: 25 },
-  { label: '30 fps (Standard)', value: 30 },
-  { label: '50 fps (PAL High)', value: 50 },
-  { label: '60 fps (Smooth)', value: 60 },
+  { label: '30 fps（标准）', value: 30 },
+  { label: '50 fps（PAL 高帧率）', value: 50 },
+  { label: '60 fps（流畅）', value: 60 },
 ] as const;
 
 export const LEGACY_PROJECT_FPS_OPTIONS: readonly ProjectFpsOption[] = [
-  { label: '120 fps (Legacy)', value: 120 },
-  { label: '240 fps (Legacy)', value: 240 },
+  { label: '120 fps（兼容旧项目）', value: 120 },
+  { label: '240 fps（兼容旧项目）', value: 240 },
 ] as const;
 
 export const ALLOWED_PROJECT_FPS_VALUES = [

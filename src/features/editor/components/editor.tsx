@@ -124,14 +124,14 @@ export const Editor = memo(function Editor({ projectId, project, migration }: Ed
         toVersion: migration.currentSchemaVersion,
         backupName,
       });
-      toast.success('Backup created before upgrade', {
+      toast.success('已在升级前创建备份', {
         description: backup.name,
       });
       setUpgradeApproved(true);
     } catch (error) {
       logger.error('Failed to create upgrade backup:', error);
-      toast.error('Failed to create backup before upgrade', {
-        description: error instanceof Error ? error.message : 'Please try again.',
+      toast.error('升级前创建备份失败', {
+        description: error instanceof Error ? error.message : '请稍后再试。',
       });
     } finally {
       setIsPreparingUpgrade(false);
@@ -361,10 +361,10 @@ export const LoadedEditor = memo(function LoadedEditor({
     try {
       await saveTimeline(projectId);
       logger.debug('Project saved successfully');
-      toast.success('Project saved');
+      toast.success('项目已保存');
     } catch (error) {
       logger.error('Failed to save project:', error);
-      toast.error('Failed to save project');
+      toast.error('保存项目失败');
       throw error; // Re-throw so callers know save failed
     } finally {
       isSavingRef.current = false;

@@ -95,13 +95,13 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
       });
       setState({ kind: 'done', report });
       toast.success(
-        `Migrated ${report.projects} project(s) and ${report.media} media item(s)`,
+        `已迁移 ${report.projects} 个项目和 ${report.media} 个媒体文件`,
       );
       await onMigrated?.();
     } catch (error) {
       logger.error('Migration failed', error);
-      toast.error('Migration failed', {
-        description: error instanceof Error ? error.message : 'Unknown error',
+      toast.error('迁移失败', {
+        description: error instanceof Error ? error.message : '未知错误',
       });
       setState({ kind: 'prompt' });
     }
@@ -110,12 +110,12 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
   const handleDeleteLegacy = useCallback(async () => {
     try {
       await deleteLegacyIDB();
-      toast.success('Legacy browser storage cleared');
+      toast.success('已清除旧版浏览器存储');
       setState({ kind: 'dismissed' });
     } catch (error) {
       logger.error('Failed to delete legacy IDB', error);
-      toast.error('Failed to clear legacy storage', {
-        description: error instanceof Error ? error.message : 'Unknown error',
+      toast.error('清除旧版存储失败', {
+        description: error instanceof Error ? error.message : '未知错误',
       });
     } finally {
       setConfirmDelete(false);
@@ -131,7 +131,7 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
     const percent = computePercent(progress);
     // Show label from progress if available; fall back to a generic line
     // during the brief gap before the first tick arrives.
-    const label = progress?.phaseLabel ?? 'Preparing migration…';
+    const label = progress?.phaseLabel ?? '正在准备迁移…';
     const countsLine = progress
       ? `${progress.processed} of ${progress.total}`
       : null;
@@ -147,8 +147,7 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
           <div className="flex-1 min-w-0">
             <div className="font-medium truncate">{label}</div>
             <div className="text-muted-foreground text-xs mt-0.5">
-              This can take a moment for large libraries. Please don't close
-              this tab.
+              如果媒体库较大，这一步可能需要一些时间。请不要关闭当前标签页。
             </div>
           </div>
           <div className="text-xs font-mono tabular-nums text-muted-foreground shrink-0">
@@ -180,10 +179,10 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
           <div className="flex items-start gap-3">
             <Database className="h-4 w-4 mt-0.5" />
             <div className="flex-1">
-              <div className="font-medium">Migration complete</div>
+              <div className="font-medium">迁移完成</div>
               <div className="text-muted-foreground text-xs mt-1">
-                {report.projects} project(s), {report.media} media, {report.thumbnails} thumbnail(s), {report.transcripts} transcript(s)
-                {report.errors.length > 0 && ` · ${report.errors.length} error(s) logged`}
+                {report.projects} 个项目、{report.media} 个媒体、{report.thumbnails} 张缩略图、{report.transcripts} 条转录
+                {report.errors.length > 0 && ` · 记录了 ${report.errors.length} 个错误`}
               </div>
             </div>
             <Button
@@ -192,10 +191,10 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
               className="gap-2"
               onClick={() => setConfirmDelete(true)}
             >
-              <Trash2 className="h-3 w-3" /> Delete legacy storage
+              <Trash2 className="h-3 w-3" /> 删除旧版存储
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setState({ kind: 'dismissed' })}>
-              Dismiss
+              关闭
             </Button>
           </div>
         </div>
@@ -203,18 +202,17 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
         <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Delete legacy browser storage?</AlertDialogTitle>
+              <AlertDialogTitle>删除旧版浏览器存储？</AlertDialogTitle>
               <AlertDialogDescription>
-                This permanently deletes the old IndexedDB database
-                (<span className="font-mono">video-editor-db</span>) from this browser.
-                Your workspace folder is unaffected. Only do this after you've
-                verified the migration succeeded.
+                这会从当前浏览器中永久删除旧的 IndexedDB 数据库
+                （<span className="font-mono">video-editor-db</span>）。
+                你的工作区文件夹不会受影响。请在确认迁移成功后再执行此操作。
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction onClick={() => void handleDeleteLegacy()}>
-                Delete
+                删除
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -229,17 +227,17 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
       <div className="flex items-start gap-3">
         <Database className="h-4 w-4 mt-0.5 text-muted-foreground" />
         <div className="flex-1">
-          <div className="font-medium">Legacy projects found</div>
+          <div className="font-medium">发现旧版项目数据</div>
           <div className="text-muted-foreground text-xs mt-1">
-            Existing projects from before the workspace folder migration are in this browser's
-            IndexedDB. Bring them into your workspace so you can see them alongside new projects.
+            在工作区迁移之前创建的旧项目仍保存在当前浏览器的 IndexedDB 中。
+            迁移到工作区后，你就能和新项目一起统一查看它们。
           </div>
         </div>
         <Button size="sm" onClick={() => void handleMigrate()}>
-          Migrate
+          立即迁移
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setState({ kind: 'dismissed' })}>
-          Later
+          稍后
         </Button>
       </div>
     </div>

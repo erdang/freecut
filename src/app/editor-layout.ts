@@ -79,8 +79,8 @@ type RightSidebarLayoutBounds = Pick<EditorLayout, 'rightSidebarMinWidth' | 'rig
 export const DEFAULT_EDITOR_DENSITY_PRESET: EditorDensityPresetName = 'compact';
 
 export const EDITOR_DENSITY_OPTIONS = [
-  { value: 'compact', label: 'Compact' },
-  { value: 'default', label: 'Default' },
+  { value: 'compact', label: '紧凑' },
+  { value: 'default', label: '默认' },
 ] as const satisfies ReadonlyArray<{
   value: EditorDensityPresetName;
   label: string;

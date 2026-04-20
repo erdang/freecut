@@ -97,12 +97,12 @@ export function ProjectForm({
         <div className="panel-header border-b border-border">
           <div className="max-w-[1400px] mx-auto px-6 py-5">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-1">
-              {isEditing ? 'Edit Project' : 'Create New Project'}
+              {isEditing ? '编辑项目' : '创建新项目'}
             </h1>
             <p className="text-sm text-muted-foreground">
               {isEditing
-                ? 'Update your project settings'
-                : 'Set up your video editing workspace'}
+                ? '更新项目设置'
+                : '配置你的视频编辑工作区'}
             </p>
           </div>
         </div>
@@ -116,21 +116,21 @@ export function ProjectForm({
             <div className={`panel-bg border border-border rounded-lg p-6 ${hideHeader ? '' : 'lg:sticky lg:top-6'}`}>
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-8 w-1 bg-primary rounded-full" />
-                <h2 className="text-lg font-medium text-foreground">Project Details</h2>
+                <h2 className="text-lg font-medium text-foreground">项目信息</h2>
               </div>
 
               <div className="space-y-5">
                 {/* Project Name */}
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
-                    Project Name <span className="text-destructive">*</span>
+                    项目名称 <span className="text-destructive">*</span>
                   </label>
                   <input
                     id="name"
                     type="text"
                     {...register('name')}
                     className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                    placeholder="Enter project name..."
+                    placeholder="输入项目名称..."
                   />
                   {errors.name && (
                     <p className="mt-1.5 text-sm text-destructive">{errors.name.message}</p>
@@ -143,14 +143,14 @@ export function ProjectForm({
                     htmlFor="description"
                     className="block text-sm font-medium text-foreground mb-2"
                   >
-                    Description
+                    项目描述
                   </label>
                   <textarea
                     id="description"
                     rows={4}
                     {...register('description')}
                     className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
-                    placeholder="Brief description of your project..."
+                    placeholder="简单描述一下你的项目..."
                   />
                   {errors.description && (
                     <p className="mt-1.5 text-sm text-destructive">{errors.description.message}</p>
@@ -160,7 +160,7 @@ export function ProjectForm({
                 {/* Frame Rate */}
                 <div>
                   <label htmlFor="fps" className="block text-sm font-medium text-foreground mb-2">
-                    Frame Rate
+                    帧率
                   </label>
                   <Select
                     value={fps.toString()}
@@ -188,7 +188,7 @@ export function ProjectForm({
             <div className="panel-bg border border-border rounded-lg p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-8 w-1 bg-primary rounded-full" />
-                <h2 className="text-lg font-medium text-foreground">Resolution</h2>
+                <h2 className="text-lg font-medium text-foreground">分辨率</h2>
               </div>
 
               <ProjectTemplatePicker
@@ -200,7 +200,7 @@ export function ProjectForm({
               {selectedTemplateId === 'custom' && (
                 <div className="mt-5 flex items-center gap-3">
                   <div className="flex-1">
-                    <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">Width (px)</label>
+                    <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">宽度（px）</label>
                     <input
                       id="width"
                       type="number"
@@ -213,7 +213,7 @@ export function ProjectForm({
                   </div>
                   <span className="text-muted-foreground mt-4">×</span>
                   <div className="flex-1">
-                    <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
+                    <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">高度（px）</label>
                     <input
                       id="height"
                       type="number"
@@ -235,17 +235,17 @@ export function ProjectForm({
           <div className="flex gap-3 justify-end">
             {onCancel ? (
               <Button type="button" variant="outline" size="lg" disabled={isSubmitting} onClick={onCancel}>
-                Cancel
+                取消
               </Button>
             ) : (
               <Link to="/projects">
                 <Button type="button" variant="outline" size="lg" disabled={isSubmitting}>
-                  Cancel
+                  取消
                 </Button>
               </Link>
             )}
             <Button type="submit" size="lg" className="min-w-[160px]" disabled={!isValid || isSubmitting}>
-              {isSubmitting ? 'Saving...' : isEditing ? 'Update Project' : 'Create Project'}
+              {isSubmitting ? '保存中...' : isEditing ? '更新项目' : '创建项目'}
             </Button>
           </div>
         </form>

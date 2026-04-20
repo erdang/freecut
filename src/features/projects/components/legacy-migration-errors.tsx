@@ -84,19 +84,19 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
     try {
       const report = await migrateFromLegacyIDB();
       if (report.errors.length === 0) {
-        toast.success('Retry succeeded — all items migrated.');
+        toast.success('重试成功，所有条目均已迁移。');
         setState({ kind: 'idle' });
       } else {
         toast.warning(
-          `Retry completed with ${report.errors.length} item(s) still failing.`,
+          `重试完成，但仍有 ${report.errors.length} 个条目失败。`,
         );
         setState({ kind: 'show', errors: report.errors });
       }
       await onRetried?.();
     } catch (error) {
       logger.error('retry migration failed', error);
-      toast.error('Retry failed', {
-        description: error instanceof Error ? error.message : 'Unknown error',
+      toast.error('重试失败', {
+        description: error instanceof Error ? error.message : '未知错误',
       });
       // Fall back to whatever the persisted state looks like now.
       const errors = await getMigrationErrors();
@@ -117,7 +117,7 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
     return (
       <div className="panel-bg border border-border rounded-lg p-4 flex items-center gap-3 text-sm">
         <RefreshCw className="h-4 w-4 animate-spin" />
-        <span>Retrying migration…</span>
+        <span>正在重试迁移…</span>
       </div>
     );
   }
@@ -130,13 +130,13 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
         <AlertTriangle className="h-4 w-4 mt-0.5 text-yellow-500 shrink-0" />
         <div className="flex-1 min-w-0">
           <div className="font-medium">
-            {total} item{total === 1 ? '' : 's'} failed to migrate
+            有 {total} 个条目迁移失败
           </div>
           <div className="text-muted-foreground text-xs mt-1">
             {grouped
               .map(({ store, count }) => `${count} ${store}`)
               .join(', ')}
-            . Retry to copy anything still missing from the legacy database.
+            。你可以重试，把旧数据库中仍未迁移成功的内容再复制一次。
           </div>
 
           {expanded && (
@@ -154,21 +154,21 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
           )}
         </div>
         <Button size="sm" onClick={() => void handleRetry()} className="gap-2">
-          <RefreshCw className="h-3 w-3" /> Retry
+          <RefreshCw className="h-3 w-3" /> 重试
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setExpanded((v) => !v)}
         >
-          {expanded ? 'Hide details' : 'Show details'}
+          {expanded ? '隐藏详情' : '查看详情'}
         </Button>
         <Button
           variant="ghost"
           size="sm"
           onClick={() => setState({ kind: 'dismissed' })}
         >
-          Dismiss
+          关闭
         </Button>
       </div>
     </div>
