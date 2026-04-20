@@ -553,23 +553,28 @@ export async function createCompositionRenderer(
     domVideoElementProvider,
   };
 
+  // Track the SubComposition identity we last built each entry from so we only
+  // rebuild when the Zustand store produced a new reference (effects added,
+  // items changed, etc.). Using reference equality keeps the per-frame cost
+  // near-zero when nothing edited the sub-comp.
+  const subCompRenderDataSource = new Map<string, SubComposition>();
+
+  const refreshSubCompRenderData = (compositionById: Record<string, SubComposition>) => {
+    const reachableIds = collectReachableCompositionIdsFromTracks(tracks, compositionById);
+    for (const compositionId of reachableIds) {
+      const subComp = compositionById[compositionId];
+      if (!subComp) continue;
+      if (subCompRenderDataSource.get(compositionId) === subComp) continue;
+      subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
+      subCompRenderDataSource.set(compositionId, subComp);
+    }
+  };
+
   // Synchronously populate sub-comp render data from the current compositions
   // store. Without this, the first renderFrame after creation would fall into
   // the `if (!subData) return;` path in renderCompositionItem and skip all
   // compound clips — producing a black frame until preload() finishes.
-  {
-    const initialCompositionById = useCompositionsStore.getState().compositionById;
-    const initialReachableIds = collectReachableCompositionIdsFromTracks(
-      tracks,
-      initialCompositionById,
-    );
-    for (const compositionId of initialReachableIds) {
-      const subComp = initialCompositionById[compositionId];
-      if (!subComp) continue;
-      if (subCompRenderData.has(compositionId)) continue;
-      subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
-    }
-  }
+  refreshSubCompRenderData(useCompositionsStore.getState().compositionById);
 
   const getPrewarmContext = (): OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null => {
     if (prewarmAttempted) return prewarmCtx;
@@ -908,8 +913,9 @@ export async function createCompositionRenderer(
           continue;
         }
 
-        if (!subCompRenderData.has(compositionId)) {
+        if (subCompRenderDataSource.get(compositionId) !== subComp) {
           subCompRenderData.set(compositionId, buildSubCompRenderDataEntry(subComp));
+          subCompRenderDataSource.set(compositionId, subComp);
         }
 
         for (const subItem of subComp.items) {
@@ -1142,6 +1148,16 @@ export async function createCompositionRenderer(
           ctx.drawImage(cached, 0, 0);
           return;
         }
+      }
+
+      // Refresh sub-comp render data so edits inside compound clips (effects,
+      // items, keyframes) show up during playback. Reference-equality keeps
+      // unchanged compositions at ~zero cost; only mutated entries rebuild.
+      // This matters for nested compounds where `renderCompositionItem` reads
+      // sub-item effects directly from the cached snapshot — without this
+      // refresh, effects added after renderer creation stay invisible.
+      if (renderMode === 'preview') {
+        refreshSubCompRenderData(useCompositionsStore.getState().compositionById);
       }
 
       // Clear canvas
@@ -1977,6 +1993,7 @@ export async function createCompositionRenderer(
       imageElements.clear();
       gifFramesMap.clear(); // Clear GIF frame references (actual frames are managed by gifFrameCache)
       subCompRenderData.clear(); // Release sub-composition render data references
+      subCompRenderDataSource.clear();
       prewarmCtx = null;
       prewarmCanvas = null;
       prewarmAttempted = false;

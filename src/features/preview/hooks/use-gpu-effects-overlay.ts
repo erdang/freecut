@@ -14,12 +14,24 @@ function hasEnabledGpuEffect(effects: ItemEffect[] | undefined): boolean {
   return effects?.some((e) => e.enabled && e.effect.type === 'gpu-effect') ?? false;
 }
 
-function subCompositionHasGpuEffectsOrBlend(subComp: SubComposition): boolean {
-  return subComp.items.some(
-    (subItem) =>
-      hasEnabledGpuEffect(subItem.effects)
-      || (subItem.blendMode !== undefined && subItem.blendMode !== 'normal'),
-  );
+function subCompositionHasGpuEffectsOrBlend(
+  subComp: SubComposition,
+  compositionById?: Record<string, SubComposition>,
+  visited: Set<string> = new Set(),
+): boolean {
+  if (visited.has(subComp.id)) return false;
+  visited.add(subComp.id);
+  return subComp.items.some((subItem) => {
+    if (hasEnabledGpuEffect(subItem.effects)) return true;
+    if (subItem.blendMode !== undefined && subItem.blendMode !== 'normal') return true;
+    if (subItem.type === 'composition' && compositionById) {
+      const nested = compositionById[subItem.compositionId];
+      if (nested && subCompositionHasGpuEffectsOrBlend(nested, compositionById, visited)) {
+        return true;
+      }
+    }
+    return false;
+  });
 }
 
 /**
@@ -53,7 +65,7 @@ export function shouldForceContinuousPreviewOverlay(
     if (item.blendMode && item.blendMode !== 'normal') return true;
     if (item.type === 'composition' && compositionById) {
       const subComp = compositionById[item.compositionId];
-      if (subComp && subCompositionHasGpuEffectsOrBlend(subComp)) return true;
+      if (subComp && subCompositionHasGpuEffectsOrBlend(subComp, compositionById)) return true;
     }
     return false;
   });
