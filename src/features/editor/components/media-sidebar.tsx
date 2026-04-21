@@ -46,11 +46,10 @@ import { useMaskEditorStore } from '@/features/editor/deps/preview';
 import type { VisualEffect, GpuEffect } from '@/types/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
 import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
-import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
+import { useEffectPreviews, tEffectCategory, tEffectText } from '@/features/editor/deps/effects-contract';
 import { createLogger } from '@/shared/logging/logger';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 import { AiPanel } from './ai-panel';
-import { tEffectCategory, tEffectText } from '@/features/effects/utils/effect-localization';
 import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
