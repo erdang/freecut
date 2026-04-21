@@ -237,7 +237,7 @@ export function createRelinkingActions(
           );
           get().showNotification({
             type: 'error',
-            message: 'Selected media not found',
+            message: '未找到所选媒体',
           });
           return false;
         }
@@ -270,7 +270,7 @@ export function createRelinkingActions(
         if (relinkedItemIds.length === 0) {
           get().showNotification({
             type: 'error',
-            message: 'Clip not found',
+            message: '未找到片段',
           });
           return false;
         }

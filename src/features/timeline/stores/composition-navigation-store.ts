@@ -145,7 +145,7 @@ const MAX_DEPTH = 16;
 export const useCompositionNavigationStore = create<
   CompositionNavigationState & CompositionNavigationActions
 >()((set, get) => ({
-  breadcrumbs: [{ compositionId: null, label: 'Main Timeline' }],
+  breadcrumbs: [{ compositionId: null, label: '主时间线' }],
   activeCompositionId: null,
   stashStack: [],
 
@@ -273,7 +273,7 @@ export const useCompositionNavigationStore = create<
     }
 
     set({
-      breadcrumbs: [{ compositionId: null, label: 'Main Timeline' }],
+      breadcrumbs: [{ compositionId: null, label: '主时间线' }],
       activeCompositionId: null,
       stashStack: [],
     });

@@ -60,7 +60,7 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
             event.success();
           } catch (error) {
             event.failure(error);
-            toast.error('Auto-save failed');
+            toast.error('自动保存失败');
           } finally {
             isSavingRef.current = false;
           }
@@ -75,4 +75,3 @@ export function useAutoSave({ isDirty, onSave, enabled = true }: UseAutoSaveOpti
     };
   }, [autoSaveInterval, isDirty, onSave, enabled]);
 }
-

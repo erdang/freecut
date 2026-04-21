@@ -528,7 +528,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
     const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
     if (!supported) {
-      showNotification({ type: 'warning', message: '当前浏览器不支持拖拽导入，请使用 Chrome 或 Edge。' });
+      showNotification({ type: 'warning', message: '当前浏览器不支持拖拽导入，请使用支持该能力的现代浏览器。' });
       return;
     }
 

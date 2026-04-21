@@ -103,7 +103,7 @@ const DefaultPlayPauseButton: React.FC<{
     <button
       onClick={onToggle}
       className="p-2 rounded-full hover:bg-white/20 transition-colors"
-      aria-label={isPlaying ? 'Pause' : 'Play'}
+      aria-label={isPlaying ? '暂停' : '播放'}
     >
       {isPlaying ? (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
@@ -270,7 +270,7 @@ const DefaultControls: React.FC<{
               onPlaybackRateChange(Number(event.target.value));
             }}
             className="bg-transparent text-sm text-white border border-white/30 rounded px-2 py-1"
-            aria-label="Playback rate"
+            aria-label="播放速度"
           >
             <option value="0.5">0.5x</option>
             <option value="1">1x</option>
@@ -281,7 +281,7 @@ const DefaultControls: React.FC<{
           <button
             onClick={onToggleFullscreen}
             className="p-2 rounded-full hover:bg-white/20 transition-colors"
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            aria-label={isFullscreen ? '退出全屏' : '进入全屏'}
           >
             {isFullscreen ? (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">

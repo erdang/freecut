@@ -495,7 +495,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="clip" className="text-xs">裁剪（硬边）</SelectItem>
-                <SelectItem value="alpha" className="text-xs">Alpha（软边）</SelectItem>
+                <SelectItem value="alpha" className="text-xs">透明度（软边）</SelectItem>
               </SelectContent>
             </Select>
           </PropertyRow>

@@ -193,7 +193,7 @@ export function useTimelineItemActions({
     const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
     const forceTranscription = options?.forceTranscription ?? false;
     const replaceExisting = options?.replaceExisting ?? false;
-    const overlayLabel = forceTranscription ? 'Regenerating captions' : 'Generating captions';
+    const overlayLabel = forceTranscription ? '正在重新生成字幕' : '正在生成字幕';
 
     const run = async () => {
       let updatedTranscriptStatus = previousStatus;
@@ -235,7 +235,7 @@ export function useTimelineItemActions({
         } else {
           overlayStore.upsertOverlay(clipId, {
             id: CAPTION_GENERATION_OVERLAY_ID,
-            label: replaceExisting ? 'Replacing captions' : 'Adding captions',
+            label: replaceExisting ? '正在替换字幕' : '正在添加字幕',
             tone: 'info',
           });
           updatedTranscriptStatus = 'ready';
@@ -251,10 +251,10 @@ export function useTimelineItemActions({
         const successMessage = replaceExisting
           ? result.insertedItemCount > 0
             ? result.removedItemCount > 0
-              ? `Replaced ${result.removedItemCount} caption clip${result.removedItemCount === 1 ? '' : 's'} with ${result.insertedItemCount} updated clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${getMediaTranscriptionModelLabel(model)}`
-              : `Regenerated ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment using ${getMediaTranscriptionModelLabel(model)}`
-            : `Removed ${result.removedItemCount} generated caption clip${result.removedItemCount === 1 ? '' : 's'} for this segment using ${getMediaTranscriptionModelLabel(model)}`
-          : `Inserted ${result.insertedItemCount} caption clip${result.insertedItemCount === 1 ? '' : 's'} for this segment with ${getMediaTranscriptionModelLabel(model)}`;
+              ? `已为该片段替换字幕：移除 ${result.removedItemCount} 条，新增 ${result.insertedItemCount} 条（${getMediaTranscriptionModelLabel(model)}）`
+              : `已为该片段重新生成 ${result.insertedItemCount} 条字幕（${getMediaTranscriptionModelLabel(model)}）`
+            : `已移除该片段 ${result.removedItemCount} 条已生成字幕（${getMediaTranscriptionModelLabel(model)}）`
+          : `已为该片段生成 ${result.insertedItemCount} 条字幕（${getMediaTranscriptionModelLabel(model)}）`;
 
         store.showNotification({
           type: 'success',
@@ -271,7 +271,7 @@ export function useTimelineItemActions({
         store.clearTranscriptProgress(mediaId);
         store.showNotification({
           type: 'error',
-          message: error instanceof Error ? error.message : 'Failed to generate captions for segment',
+          message: error instanceof Error ? error.message : '该片段字幕生成失败',
         });
       } finally {
         useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
@@ -357,7 +357,7 @@ export function useTimelineItemActions({
       try {
         overlayStore.upsertOverlay(clipId, {
           id: SCENE_DETECTION_OVERLAY_ID,
-          label: 'Detecting scenes',
+          label: '正在检测场景',
           progress: 0,
           tone: 'info',
         });

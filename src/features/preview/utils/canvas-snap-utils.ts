@@ -25,14 +25,14 @@ interface SnapResult {
 function getTranslateSnapPoints(canvasWidth: number, canvasHeight: number) {
   return {
     vertical: [
-      { pos: 0, label: 'Edge' },
+      { pos: 0, label: '边缘' },
       { pos: canvasWidth * 0.5, label: '50%' },
-      { pos: canvasWidth, label: 'Edge' },
+      { pos: canvasWidth, label: '边缘' },
     ],
     horizontal: [
-      { pos: 0, label: 'Edge' },
+      { pos: 0, label: '边缘' },
       { pos: canvasHeight * 0.5, label: '50%' },
-      { pos: canvasHeight, label: 'Edge' },
+      { pos: canvasHeight, label: '边缘' },
     ],
   };
 }

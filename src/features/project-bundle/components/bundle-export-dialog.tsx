@@ -42,15 +42,15 @@ type ExportStatus = 'idle' | 'saving' | 'exporting' | 'completed' | 'failed';
 function getStageLabel(stage: ExportProgress['stage']): string {
   switch (stage) {
     case 'collecting':
-      return 'Collecting project data...';
+      return '正在收集项目数据...';
     case 'hashing':
-      return 'Computing file hashes...';
+      return '正在计算文件哈希...';
     case 'packaging':
-      return 'Packaging files...';
+      return '正在打包文件...';
     case 'complete':
-      return 'Complete!';
+      return '完成！';
     default:
-      return 'Processing...';
+      return '处理中...';
   }
 }
 
@@ -129,7 +129,7 @@ export function BundleExportDialog({
       setResult(exportResult);
       setStatus('completed');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Export failed');
+      setError(err instanceof Error ? err.message : '导出失败');
       setStatus('failed');
     }
   }, [projectId, onBeforeExport, fileHandle]);
@@ -181,16 +181,16 @@ export function BundleExportDialog({
             {isCompleted && <CheckCircle2 className="h-5 w-5 text-green-500" />}
             {isFailed && <AlertCircle className="h-5 w-5 text-destructive" />}
             {status === 'idle' && <FolderArchive className="h-5 w-5" />}
-            {status === 'saving' && 'Saving project...'}
-            {status === 'exporting' && 'Exporting project...'}
-            {isCompleted && 'Export complete!'}
-            {isFailed && 'Export failed'}
-            {status === 'idle' && 'Export Project'}
+            {status === 'saving' && '正在保存项目...'}
+            {status === 'exporting' && '正在导出项目...'}
+            {isCompleted && '导出完成！'}
+            {isFailed && '导出失败'}
+            {status === 'idle' && '导出项目'}
           </DialogTitle>
           <DialogDescription>
-            {isExporting && 'Creating project bundle with all media files'}
-            {isCompleted && (usedStreaming ? 'Your project bundle has been saved' : 'Your project bundle is ready to download')}
-            {isFailed && 'Something went wrong during export'}
+            {isExporting && '正在创建包含全部媒体文件的项目包'}
+            {isCompleted && (usedStreaming ? '项目包已保存' : '项目包已可下载')}
+            {isFailed && '导出过程中出现错误'}
           </DialogDescription>
         </DialogHeader>
 
@@ -205,7 +205,7 @@ export function BundleExportDialog({
                 </div>
                 <div className="flex items-center justify-between text-sm gap-2">
                   <span className="text-muted-foreground truncate">
-                    {status === 'saving' ? 'Saving latest changes...' : getStageLabel(progress.stage)}
+                    {status === 'saving' ? '正在保存最新更改...' : getStageLabel(progress.stage)}
                   </span>
                   <span className="font-medium tabular-nums flex-shrink-0">{Math.round(progress.percent)}%</span>
                 </div>
@@ -214,7 +214,7 @@ export function BundleExportDialog({
               {/* Current file */}
               {progress.currentFile && (
                 <div className="rounded-md bg-muted/50 px-3 py-2 min-w-0 overflow-hidden">
-                  <p className="text-xs text-muted-foreground mb-1">Current file</p>
+                  <p className="text-xs text-muted-foreground mb-1">当前文件</p>
                   <p className="text-sm truncate" title={progress.currentFile}>
                     {progress.currentFile}
                   </p>
@@ -225,7 +225,7 @@ export function BundleExportDialog({
               {elapsedSeconds > 0 && (
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-muted-foreground">Elapsed:</span>
+                  <span className="text-muted-foreground">已耗时：</span>
                   <span className="font-medium tabular-nums">{formatDuration(elapsedSeconds)}</span>
                 </div>
               )}
@@ -239,32 +239,32 @@ export function BundleExportDialog({
                 <CheckCircle2 className="h-4 w-4 text-green-600" />
                 <AlertDescription className="text-green-700 dark:text-green-400">
                   {usedStreaming
-                    ? 'Project bundle saved to disk successfully!'
-                    : 'Project bundle created successfully!'}
+                    ? '项目打包文件已成功保存到磁盘！'
+                    : '项目打包文件创建成功！'}
                 </AlertDescription>
               </Alert>
 
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-sm">
                   <FolderArchive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">File:</span>
+                  <span className="text-muted-foreground">文件：</span>
                   <span className="font-medium truncate">{result.filename}</span>
                 </div>
                 <div className="flex flex-wrap gap-x-6 gap-y-2">
                   <div className="flex items-center gap-2 text-sm">
                     <HardDrive className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Size:</span>
+                    <span className="text-muted-foreground">大小：</span>
                     <span className="font-medium">{formatBytes(result.size)}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <FileVideo className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-muted-foreground">Media files:</span>
+                      <span className="text-muted-foreground">媒体文件数：</span>
                     <span className="font-medium">{result.mediaCount}</span>
                   </div>
                   {elapsedSeconds > 0 && (
                     <div className="flex items-center gap-2 text-sm">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className="text-muted-foreground">Time taken:</span>
+                      <span className="text-muted-foreground">总耗时：</span>
                       <span className="font-medium">{formatDuration(elapsedSeconds)}</span>
                     </div>
                   )}
@@ -287,12 +287,12 @@ export function BundleExportDialog({
           {isCompleted && (
             <>
               <Button variant="outline" onClick={onClose}>
-                Close
+                关闭
               </Button>
               {!usedStreaming && (
                 <Button onClick={handleDownload}>
                   <Download className="mr-2 h-4 w-4" />
-                  Download
+                  下载
                 </Button>
               )}
             </>
@@ -300,7 +300,7 @@ export function BundleExportDialog({
 
           {isFailed && (
             <Button variant="outline" onClick={onClose}>
-              Close
+              关闭
             </Button>
           )}
         </div>

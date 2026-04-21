@@ -486,7 +486,7 @@ function ImageSource({ src }: { src: string }) {
       <img
         src={src}
         style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-        alt="Source preview"
+        alt="源预览"
       />
     </AbsoluteFill>
   );

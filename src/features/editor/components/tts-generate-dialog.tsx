@@ -182,7 +182,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         type="button"
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm glow-primary-sm transition-colors hover:bg-primary/90"
         onClick={togglePlay}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? '暂停' : '播放'}
       >
         {isPlaying
           ? <Pause className="h-3 w-3" />
@@ -198,7 +198,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         max={100}
         step={0.1}
         className="min-w-0 flex-1"
-        aria-label="Seek"
+        aria-label="跳转"
       />
       <span className="shrink-0 select-none font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatTime(currentTime)}
@@ -276,15 +276,15 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
   const handleGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setError('Open a project before generating audio.');
+      setError('请先打开项目再生成音频。');
       return;
     }
     if (!trimmedText) {
-      setError('Enter some text to synthesize.');
+      setError('请输入要合成的文本。');
       return;
     }
     if (!isWebGpuSupported) {
-      setError('WebGPU is required for Kitten TTS. Try Chrome 113+, Edge 113+, or Safari 26+.');
+      setError('Kitten TTS 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。');
       return;
     }
 
@@ -298,7 +298,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     setResult(null);
     setInserted(false);
     setIsGenerating(true);
-    setProgress('Preparing local TTS...');
+    setProgress('正在准备本地语音合成...');
 
     const thisSession = sessionIdRef.current;
 
@@ -328,7 +328,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       setError(
         generationError instanceof Error
           ? generationError.message
-          : 'Failed to generate speech.'
+          : '语音生成失败。'
       );
       setProgress(null);
     } finally {
@@ -367,19 +367,19 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         setInserted(true);
         showNotification({
           type: 'success',
-          message: `Added "${media.fileName}" to timeline and linked with text.`,
+          message: `已将“${media.fileName}”添加到时间线并与文本关联。`,
         });
       } else {
         showNotification({
           type: 'warning',
-          message: `Saved "${media.fileName}" but no audio track is available.`,
+          message: `已保存“${media.fileName}”，但当前没有可用音频轨道。`,
         });
       }
     } catch (insertError) {
       setError(
         insertError instanceof Error
           ? insertError.message
-          : 'Failed to save and insert audio.'
+          : '保存并插入音频失败。'
       );
     } finally {
       setIsInserting(false);
@@ -398,33 +398,33 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <WandSparkles className="h-4 w-4" />
-            Generate Audio from Text
+            文字转语音
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Generate speech and insert it at the text clip's position.
+            生成语音并插入到文字片段位置。
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {!isWebGpuSupported && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-              WebGPU is not available in this browser. Kitten TTS needs Chrome 113+, Edge 113+, or Safari 26+.
+              当前浏览器不支持 WebGPU。Kitten TTS 需要 Chrome 113+、Edge 113+ 或 Safari 26+。
             </div>
           )}
 
           {/* Text input */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label htmlFor="tts-dialog-text">Text</Label>
+              <Label htmlFor="tts-dialog-text">文本</Label>
               <span className={`text-[11px] ${trimmedText.length <= 500 ? 'text-muted-foreground' : 'text-amber-400'}`}>
-                {trimmedText.length}/500 recommended
+                {trimmedText.length}/500（建议）
               </span>
             </div>
             <Textarea
               id="tts-dialog-text"
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="Enter the text you want to hear spoken..."
+              placeholder="输入你想听到的朗读内容..."
               className="min-h-28 resize-y bg-secondary/30 text-sm"
               disabled={isGenerating || isInserting}
             />
@@ -433,7 +433,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
           {/* Model + Voice */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Model</Label>
+              <Label>模型</Label>
               <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating || isInserting}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
@@ -449,7 +449,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
             </div>
 
             <div className="space-y-1.5">
-              <Label>Voice</Label>
+              <Label>音色</Label>
               <Select value={voice} onValueChange={(value) => setVoice(value as KittenTtsVoice)} disabled={isGenerating || isInserting}>
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
@@ -467,7 +467,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
           {/* Speed */}
           <SliderInput
-            label="Speed"
+            label="语速"
             value={speed}
             onChange={setSpeed}
             min={0.5}
@@ -499,14 +499,14 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 : 'border-border bg-secondary/20'
             }`}>
               <p className="text-[11px] text-muted-foreground">
-                {result.voice} Â· {result.model} Â· {result.duration > 0 ? `${result.duration.toFixed(1)}s` : '—'}
+                {result.voice} · {result.model} · {result.duration > 0 ? `${result.duration.toFixed(1)}s` : '—'}
               </p>
               <MiniAudioPlayer src={result.objectUrl} />
 
               {inserted && (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400">
                   <CheckCircle2 className="h-3 w-3" />
-                  Inserted & linked
+                  已插入并关联
                 </span>
               )}
             </div>
@@ -524,7 +524,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
               {isGenerating
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <WandSparkles className="h-3.5 w-3.5" />}
-              {isGenerating ? 'Generating...' : result ? 'Regenerate' : 'Generate'}
+              {isGenerating ? '生成中...' : result ? '重新生成' : '生成'}
             </Button>
 
             {result && !inserted && (
@@ -537,7 +537,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 {isInserting
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <CheckCircle2 className="h-3.5 w-3.5" />}
-                {isInserting ? 'Inserting...' : 'Insert & Link'}
+                {isInserting ? '插入中...' : '插入并关联'}
               </Button>
             )}
           </div>

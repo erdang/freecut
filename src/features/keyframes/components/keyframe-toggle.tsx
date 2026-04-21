@@ -171,12 +171,12 @@ export function KeyframeToggle({
           )}
           aria-label={
             isInTransition
-              ? 'Keyframes blocked (transition region)'
+              ? '关键帧不可用（转场区间）'
               : isOutsideBounds
-                ? 'Playhead outside clip bounds'
+                ? '播放头超出片段范围'
                 : hasKeyframe
-                  ? 'Remove keyframe'
-                  : 'Add keyframe'
+                  ? '移除关键帧'
+                  : '添加关键帧'
           }
         >
           <Diamond
@@ -191,11 +191,11 @@ export function KeyframeToggle({
         {isInTransition && transitionBlockedRange ? (
           <>{getTransitionBlockedMessage(transitionBlockedRange)}</>
         ) : isOutsideBounds ? (
-          <>Playhead is outside clip bounds</>
+          <>播放头超出片段范围</>
         ) : hasKeyframe ? (
-          <>Remove keyframe at frame {relativeFrame}</>
+          <>移除第 {relativeFrame} 帧的关键帧</>
         ) : (
-          <>Add keyframe at frame {relativeFrame}</>
+          <>在第 {relativeFrame} 帧添加关键帧</>
         )}
       </TooltipContent>
     </Tooltip>

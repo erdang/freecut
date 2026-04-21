@@ -41,7 +41,7 @@ export async function validateSnapshotData(
   if (!data || typeof data !== 'object') {
     errors.push({
       path: '',
-      message: 'Snapshot must be a valid JSON object',
+      message: '快照必须是有效的 JSON 对象',
       code: 'invalid_type',
     });
     return { valid: false, errors, warnings };
@@ -53,13 +53,13 @@ export async function validateSnapshotData(
   if (typeof snapshot.version !== 'string') {
     errors.push({
       path: 'version',
-      message: 'Missing or invalid version field',
+      message: '缺少版本字段或版本字段无效',
       code: 'missing_field',
     });
   } else if (!isVersionCompatible(snapshot.version)) {
     warnings.push({
       path: 'version',
-      message: `Snapshot version ${snapshot.version} may not be fully compatible with current version ${SNAPSHOT_VERSION}`,
+      message: `快照版本 ${snapshot.version} 可能与当前版本 ${SNAPSHOT_VERSION} 不完全兼容`,
       code: 'version_mismatch',
     });
   }
@@ -86,14 +86,14 @@ export async function validateSnapshotData(
           : 'current normalized format';
         warnings.push({
           path: 'project.schemaVersion',
-          message: `Snapshot will be upgraded from ${appliedRange} during import`,
+          message: `导入时快照将从 ${appliedRange} 升级`,
           code: 'version_mismatch',
         });
       }
     } catch (error) {
       errors.push({
         path: 'project',
-        message: `Snapshot migration failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        message: `快照迁移失败：${error instanceof Error ? error.message : '未知错误'}`,
         code: 'schema_mismatch',
       });
     }
@@ -105,7 +105,7 @@ export async function validateSnapshotData(
     if (!checksumValid) {
       warnings.push({
         path: 'checksum',
-        message: 'Snapshot checksum does not match - data may have been modified',
+        message: '快照校验和不匹配，数据可能已被修改',
         code: 'unknown_field',
       });
     }

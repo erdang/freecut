@@ -93,7 +93,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
       await fn();
       showStatus('success', successMsg);
     } catch (error) {
-      showStatus('error', error instanceof Error ? error.message : 'Unknown error');
+      showStatus('error', error instanceof Error ? error.message : '未知错误');
     }
   };
 
@@ -185,52 +185,52 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
 
   const exportActions: DebugAction[] = [
     {
-      label: 'Download JSON',
+      label: '下载 JSON',
       icon: <Download className="h-3.5 w-3.5" />,
-      action: () => runAction(handleExportJson, 'Downloaded .freecut.json'),
-      description: 'Download project as JSON file',
+      action: () => runAction(handleExportJson, '已下载 .freecut.json'),
+      description: '将项目下载为 JSON 文件',
     },
     {
-      label: 'Copy to Clipboard',
+      label: '复制到剪贴板',
       icon: <Clipboard className="h-3.5 w-3.5" />,
-      action: () => runAction(handleCopyToClipboard, 'Copied to clipboard'),
-      description: 'Copy project JSON to clipboard',
+      action: () => runAction(handleCopyToClipboard, '已复制到剪贴板'),
+      description: '将项目 JSON 复制到剪贴板',
     },
   ];
 
   const importActions: DebugAction[] = [
     {
-      label: 'Import from File',
+      label: '从文件导入',
       icon: <Upload className="h-3.5 w-3.5" />,
-      action: () => runAction(handleImportFromFile, 'Imported successfully'),
-      description: 'Import project from JSON file',
+      action: () => runAction(handleImportFromFile, '导入成功'),
+      description: '从 JSON 文件导入项目',
     },
     {
-      label: 'Import from Clipboard',
+      label: '从剪贴板导入',
       icon: <ClipboardPaste className="h-3.5 w-3.5" />,
-      action: () => runAction(handleImportFromClipboard, 'Imported successfully'),
-      description: 'Import project from clipboard',
+      action: () => runAction(handleImportFromClipboard, '导入成功'),
+      description: '从剪贴板导入项目',
     },
   ];
 
   const inspectActions: DebugAction[] = [
     {
-      label: 'Log Snapshot',
+      label: '打印快照',
       icon: <FileJson className="h-3.5 w-3.5" />,
-      action: () => runAction(handleLogSnapshot, 'Logged to console'),
-      description: 'Log project snapshot to console',
+      action: () => runAction(handleLogSnapshot, '已输出到控制台'),
+      description: '将项目快照输出到控制台',
     },
     {
-      label: 'Log DB Stats',
+      label: '打印数据库统计',
       icon: <Database className="h-3.5 w-3.5" />,
-      action: () => runAction(handleLogDBStats, 'Logged to console'),
-      description: 'Log IndexedDB statistics',
+      action: () => runAction(handleLogDBStats, '已输出到控制台'),
+      description: '输出 IndexedDB 统计信息',
     },
     {
-      label: 'Validate Schema',
+      label: '校验 Schema',
       icon: <CheckCircle className="h-3.5 w-3.5" />,
-      action: () => runAction(handleValidateProject, 'Validation complete'),
-      description: 'Validate project against schema',
+      action: () => runAction(handleValidateProject, '校验完成'),
+      description: '按 Schema 校验项目',
     },
   ];
 
@@ -253,7 +253,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
           {/* Header */}
           <div className="flex items-center gap-2 px-3 py-2 border-b border-zinc-700">
             <Bug className="h-4 w-4 text-amber-500" />
-            <span className="font-medium">Debug Panel</span>
+            <span className="font-medium">调试面板</span>
           </div>
 
           {/* Status Bar */}
@@ -271,7 +271,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
               )}
               {status.type === 'success' && <CheckCircle className="h-3 w-3" />}
               {status.type === 'error' && <XCircle className="h-3 w-3" />}
-              <span className="truncate">{status.message || 'Processing...'}</span>
+              <span className="truncate">{status.message || '处理中...'}</span>
             </div>
           )}
 
@@ -279,7 +279,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
           <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
             <CollapsibleTrigger asChild>
               <button className="w-full px-3 py-2 flex items-center justify-between hover:bg-zinc-800/50 text-xs text-zinc-400">
-                <span>Project: {projectId.slice(0, 8)}...</span>
+                <span>项目: {projectId.slice(0, 8)}...</span>
                 <ChevronDown
                   className={cn(
                     'h-3.5 w-3.5 transition-transform',
@@ -294,7 +294,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                 {/* Overlays Section */}
                 <div>
                   <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
-                    Overlays
+                    叠加层
                   </div>
                   <div className="space-y-0.5">
                     <Button
@@ -305,12 +305,12 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                         showVideoDebugOverlay && "bg-amber-500/20 text-amber-300"
                       )}
                       onClick={toggleVideoDebugOverlay}
-                      title="Show debug info on video clips"
+                      title="在视频片段上显示调试信息"
                     >
                       <Eye className="h-3.5 w-3.5" />
-                      Video Debug Overlay
+                      视频调试叠加
                       {showVideoDebugOverlay && (
-                        <span className="ml-auto text-[10px] bg-amber-500/30 px-1.5 py-0.5 rounded">ON</span>
+                        <span className="ml-auto text-[10px] bg-amber-500/30 px-1.5 py-0.5 rounded">开</span>
                       )}
                     </Button>
                   </div>
@@ -319,7 +319,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                 {/* Export Section */}
                 <div>
                   <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
-                    Export
+                    导出
                   </div>
                   <div className="space-y-0.5">
                     {exportActions.map((action) => (
@@ -331,7 +331,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                 {/* Import Section */}
                 <div>
                   <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
-                    Import
+                    导入
                   </div>
                   <div className="space-y-0.5">
                     {importActions.map((action) => (
@@ -343,7 +343,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                 {/* Inspect Section */}
                 <div>
                   <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium">
-                    Inspect
+                    检查
                   </div>
                   <div className="space-y-0.5">
                     {inspectActions.map((action) => (
@@ -356,7 +356,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                 <div>
                   <div className="px-1 py-1 text-[10px] uppercase tracking-wider text-zinc-500 font-medium flex items-center gap-1">
                     <FlaskConical className="h-3 w-3" />
-                    Test Fixtures
+                    测试样例
                   </div>
                   <div className="space-y-2 px-1">
                     <Select
@@ -364,7 +364,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                       onValueChange={(value) => setSelectedFixture(value as FixtureType)}
                     >
                       <SelectTrigger className="h-7 text-xs bg-zinc-800 border-zinc-700">
-                        <SelectValue placeholder="Select fixture..." />
+                        <SelectValue placeholder="选择样例..." />
                       </SelectTrigger>
                       <SelectContent className="bg-zinc-800 border-zinc-700">
                         {availableFixtures.map((fixture) => (
@@ -388,20 +388,20 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                         variant="ghost"
                         size="sm"
                         className="flex-1 h-7 text-xs gap-1"
-                        onClick={() => runAction(handleGenerateFixture, 'Fixture created')}
+                        onClick={() => runAction(handleGenerateFixture, '样例已创建')}
                         disabled={status.type === 'loading'}
-                        title="Create fixture project and open in editor"
+                        title="创建样例项目并在编辑器中打开"
                       >
                         <Play className="h-3 w-3" />
-                        Create
+                        创建
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="flex-1 h-7 text-xs gap-1"
-                        onClick={() => runAction(handleDownloadFixture, 'Downloaded')}
+                        onClick={() => runAction(handleDownloadFixture, '已下载')}
                         disabled={status.type === 'loading'}
-                        title="Download fixture as JSON"
+                        title="将样例下载为 JSON"
                       >
                         <Download className="h-3 w-3" />
                         JSON
@@ -410,9 +410,9 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => runAction(handleLogFixture, 'Logged')}
+                        onClick={() => runAction(handleLogFixture, '已输出')}
                         disabled={status.type === 'loading'}
-                        title="Log fixture to console"
+                        title="将样例输出到控制台"
                       >
                         <FileJson className="h-3 w-3" />
                       </Button>
@@ -423,7 +423,7 @@ export function ProjectDebugPanel({ projectId }: ProjectDebugPanelProps) {
                 {/* Console Hint */}
                 <div className="px-1 pt-2 border-t border-zinc-800">
                   <p className="text-[10px] text-zinc-500">
-                    Also available via <code className="bg-zinc-800 px-1 rounded">window.__DEBUG__</code>
+                    也可通过 <code className="bg-zinc-800 px-1 rounded">window.__DEBUG__</code> 使用
                   </p>
                 </div>
               </div>

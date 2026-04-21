@@ -868,7 +868,7 @@ export const VideoContent: React.FC<{
           justifyContent: 'center',
         }}
       >
-        <p style={{ color: '#666', fontSize: 14 }}>Media unavailable</p>
+        <p style={{ color: '#666', fontSize: 14 }}>媒体不可用</p>
       </div>
     );
   }

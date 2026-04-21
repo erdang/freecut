@@ -768,7 +768,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
             <Alert className="border-green-900 bg-green-950">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <AlertDescription className="text-green-400">
-                {exportMode === 'audio' ? 'Audio' : 'Video'} exported successfully!
+                {exportMode === 'audio' ? '音频' : '视频'}导出成功！
               </AlertDescription>
             </Alert>
 
@@ -776,14 +776,14 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               {fileSize && (
                 <div className="flex items-center gap-2 text-sm">
                   <HardDrive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">File size:</span>
+                  <span className="text-muted-foreground">文件大小：</span>
                   <span className="font-medium">{formatFileSize(fileSize)}</span>
                 </div>
               )}
               {elapsedSeconds > 0 && (
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Time taken:</span>
+                  <span className="text-muted-foreground">总耗时：</span>
                   <span className="font-medium">{formatTime(elapsedSeconds)}</span>
                 </div>
               )}
@@ -791,11 +791,11 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={handleClose}>
-                Close
+                关闭
               </Button>
               <Button onClick={downloadVideo}>
                 <Download className="mr-2 h-4 w-4" />
-                Download
+                下载
               </Button>
             </div>
           </div>
@@ -811,7 +811,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
             <div className="flex justify-end">
               <Button variant="outline" onClick={handleClose}>
-                Close
+                关闭
               </Button>
             </div>
           </div>
@@ -822,12 +822,12 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
           <div className="space-y-4 py-4">
             <Alert>
               <X className="h-4 w-4" />
-              <AlertDescription>The export process was cancelled.</AlertDescription>
+              <AlertDescription>导出过程已取消。</AlertDescription>
             </Alert>
 
             <div className="flex justify-end">
               <Button variant="outline" onClick={handleClose}>
-                Close
+                关闭
               </Button>
             </div>
           </div>

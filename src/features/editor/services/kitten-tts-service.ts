@@ -17,7 +17,7 @@ async function fetchCached(url: string, onProgress?: (stage: string) => void): P
   const cache = await caches.open(MODEL_CACHE_NAME);
   const cached = await cache.match(url);
   if (cached) {
-    onProgress?.('Loading model from cache...');
+    onProgress?.('正在从缓存加载模型...');
     const blob = await cached.blob();
     return URL.createObjectURL(blob);
   }
@@ -30,7 +30,7 @@ async function fetchCached(url: string, onProgress?: (stage: string) => void): P
     response = await fetch(url, { signal: controller.signal });
   } catch (error) {
     if (controller.signal.aborted) {
-      throw new Error(`Download timed out for ${url}`);
+      throw new Error(`下载超时：${url}`);
     }
     throw error;
   } finally {
@@ -38,7 +38,7 @@ async function fetchCached(url: string, onProgress?: (stage: string) => void): P
   }
 
   if (!response.ok) {
-    throw new Error(`Failed to download ${url}: ${response.status}`);
+    throw new Error(`下载失败：${url}（状态码 ${response.status}）`);
   }
 
   // Clone before consuming so we can store the original in the cache
@@ -240,16 +240,16 @@ class KittenTtsService {
       const { KittenTTSEngine } = await this.getModule();
       const engine = new KittenTTSEngine();
 
-      onProgress?.('Initializing WebGPU...');
+      onProgress?.('正在初始化 WebGPU...');
       await engine.init();
 
-      onProgress?.(`Downloading ${config.label} model (${config.downloadLabel})...`);
+      onProgress?.(`正在下载 ${config.label} 模型（${config.downloadLabel}）...`);
       const [modelBlobUrl, voicesBlobUrl] = await Promise.all([
         fetchCached(config.modelUrl, onProgress),
         fetchCached(config.voicesUrl),
       ]);
 
-      onProgress?.('Loading model weights...');
+      onProgress?.('正在加载模型权重...');
       await engine.loadModel(modelBlobUrl, voicesBlobUrl);
 
       URL.revokeObjectURL(modelBlobUrl);
@@ -330,11 +330,11 @@ class KittenTtsService {
   }: GenerateSpeechOptions): Promise<{ blob: Blob; file: File; duration: number }> {
     const trimmedText = text.trim();
     if (!trimmedText) {
-      throw new Error('Enter some text to synthesize.');
+      throw new Error('请输入要合成的文本。');
     }
 
     if (!this.isSupported()) {
-      throw new Error('WebGPU is not available in this browser.');
+      throw new Error('当前浏览器不支持 WebGPU。');
     }
 
     return this.withGenerationLock(model, async () => {
@@ -344,10 +344,10 @@ class KittenTtsService {
       this.incrementJobs(model);
 
       try {
-        onProgress?.('Preparing text...');
+        onProgress?.('正在准备文本...');
         const { ids } = await textToInputIds(trimmedText);
 
-        onProgress?.('Generating speech...');
+        onProgress?.('正在生成语音...');
         const { waveform } = await runtime.engine.generate(
           ids,
           voice,

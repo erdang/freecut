@@ -464,7 +464,7 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
   const buildGenericExternalGhostPreviews = useCallback((dropFrame: number, itemCount: number): GhostPreviewItem[] => {
     const previews = buildGhostPreviewsForEntries([
       {
-        label: itemCount > 1 ? `${itemCount} files` : 'Drop media',
+        label: itemCount > 1 ? `${itemCount} 个文件` : '拖放媒体',
         mediaType: zone === 'audio' ? 'audio' : 'image',
         duration: 3,
       },
@@ -1035,9 +1035,9 @@ export const TimelineMediaDropZone = memo(function TimelineMediaDropZone({
       addItems,
       currentTracks: useTimelineStore.getState().tracks,
       dropResult,
-      emptyMessage: 'Unable to add dropped files to the timeline',
+      emptyMessage: '无法将拖入的文件添加到时间线',
       notify: toast,
-      partialFailureLabel: 'dropped files',
+      partialFailureLabel: '拖入的文件',
       requestedCount: droppedEntries.length,
       setTracks: useTimelineStore.getState().setTracks,
     });

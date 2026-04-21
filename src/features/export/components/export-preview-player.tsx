@@ -167,7 +167,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
           size="icon"
           className="h-8 w-8 glow-primary-sm flex-shrink-0"
           onClick={togglePlay}
-          aria-label={isPlaying ? 'Pause' : 'Play'}
+          aria-label={isPlaying ? '暂停' : '播放'}
         >
           {isPlaying ? (
             <Pause className="w-4 h-4" />
@@ -194,7 +194,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
           max={100}
           step={0.1}
           className="flex-1 min-w-0 py-2"
-          aria-label="Seek"
+          aria-label="跳转"
         />
 
         {/* Volume */}
@@ -204,7 +204,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
             size="icon"
             className="h-7 w-7"
             onClick={toggleMute}
-            aria-label={isMuted ? 'Unmute' : 'Mute'}
+            aria-label={isMuted ? '取消静音' : '静音'}
           >
             {isMuted || volume === 0 ? (
               <VolumeX className="w-3.5 h-3.5" />
@@ -218,7 +218,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
             max={100}
             step={1}
             className="w-16"
-            aria-label="Volume"
+            aria-label="音量"
           />
         </div>
 
@@ -229,7 +229,7 @@ export function ExportPreviewPlayer({ src, isVideo }: ExportPreviewPlayerProps) 
             size="icon"
             className="h-7 w-7 flex-shrink-0"
             onClick={handleFullscreen}
-            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            aria-label={isFullscreen ? '退出全屏' : '全屏'}
           >
             {isFullscreen ? <Minimize className="w-3.5 h-3.5" /> : <Maximize className="w-3.5 h-3.5" />}
           </Button>

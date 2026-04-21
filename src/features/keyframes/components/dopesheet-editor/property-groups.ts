@@ -13,12 +13,12 @@ const PROPERTY_GROUP_DEFINITIONS: Array<{
 }> = [
   {
     id: 'transform',
-    label: 'Transform',
+    label: '变换',
     properties: ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'cornerRadius'],
   },
   {
     id: 'audio',
-    label: 'Audio',
+    label: '音频',
     properties: ['volume'],
   },
 ];
@@ -48,7 +48,7 @@ export function getPropertyAccordionGroups(
   if (otherProperties.length > 0) {
     groups.push({
       id: 'other',
-      label: 'Other',
+      label: '其他',
       properties: otherProperties,
     });
   }

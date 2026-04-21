@@ -183,16 +183,16 @@ class MusicgenService {
       const module = await this.getModule();
       const config = getMusicgenModelDefinition(model);
       const cached = await this.isModelCached(model);
-      const loadVerb = cached ? 'Loading' : 'Downloading';
+      const loadVerb = cached ? '正在加载' : '正在下载';
       const downloadCache = new Map<string, { loaded: number; total: number }>();
 
-      onProgress?.('Loading MusicGen tokenizer...');
+      onProgress?.('正在加载 MusicGen 分词器...');
       const tokenizer = await module.AutoTokenizer.from_pretrained(config.modelId);
 
       onProgress?.(
         cached
-          ? `Loading ${config.label} from cache...`
-          : `Downloading ${config.label} (${config.downloadLabel})...`,
+          ? `正在从缓存加载 ${config.label}...`
+          : `正在下载 ${config.label}（${config.downloadLabel}）...`,
       );
       const runtimeModel = await module.MusicgenForConditionalGeneration.from_pretrained(
         config.modelId,
@@ -222,7 +222,7 @@ class MusicgenService {
             if (totalExpected > 0) {
               const fraction = Math.min(0.99, totalLoaded / totalExpected);
               onProgress?.(
-                `${loadVerb} ${config.label} (${Math.round(fraction * 100)}%)...`,
+                `${loadVerb} ${config.label}（${Math.round(fraction * 100)}%）...`,
                 fraction,
               );
             }
@@ -310,15 +310,15 @@ class MusicgenService {
   }: GenerateMusicOptions): Promise<{ blob: Blob; file: File; duration: number }> {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt) {
-      throw new Error('Describe the music you want to generate.');
+      throw new Error('请描述你想生成的音乐。');
     }
 
     if (!this.isSupported()) {
-      throw new Error('WebGPU is not available in this browser.');
+      throw new Error('当前浏览器不支持 WebGPU。');
     }
 
     if (signal?.aborted) {
-      throw new DOMException('Music generation cancelled.', 'AbortError');
+      throw new DOMException('音乐生成已取消。', 'AbortError');
     }
 
     const config = getMusicgenModelDefinition(model);
@@ -334,24 +334,24 @@ class MusicgenService {
 
       try {
         if (signal?.aborted) {
-          throw new DOMException('Music generation cancelled.', 'AbortError');
+          throw new DOMException('音乐生成已取消。', 'AbortError');
         }
 
-        onProgress?.('Preparing prompt...');
+        onProgress?.('正在准备提示词...');
         const inputs = runtime.tokenizer(trimmedPrompt);
 
         const maxNewTokens = getMusicgenMaxNewTokens(model, clampedDuration);
         let tokenCount = 0;
 
-        onProgress?.('Generating music...', 0);
+        onProgress?.('正在生成音乐...', 0);
         const streamer = {
           put: () => {
             if (signal?.aborted) {
-              throw new DOMException('Music generation cancelled.', 'AbortError');
+              throw new DOMException('音乐生成已取消。', 'AbortError');
             }
             tokenCount++;
             const fraction = Math.min(tokenCount / maxNewTokens, 1);
-            onProgress?.(`Generating music... ${Math.round(fraction * 100)}%`, fraction);
+            onProgress?.(`正在生成音乐... ${Math.round(fraction * 100)}%`, fraction);
           },
           end: () => { /* done */ },
         };
@@ -363,7 +363,7 @@ class MusicgenService {
           streamer,
         });
 
-        onProgress?.('Encoding WAV...');
+        onProgress?.('正在编码 WAV...');
         const sampleRate = runtime.model.config.audio_encoder.sampling_rate;
         const audio = new module.RawAudio(audioValues.data, sampleRate);
         const blob = audio.toBlob();

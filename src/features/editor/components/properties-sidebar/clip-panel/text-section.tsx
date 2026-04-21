@@ -47,10 +47,10 @@ import {
 } from './text-animation-presets';
 
 const FONT_WEIGHT_OPTIONS = [
-  { value: 'normal', label: 'Regular' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'semibold', label: 'Semibold' },
-  { value: 'bold', label: 'Bold' },
+  { value: 'normal', label: '常规' },
+  { value: 'medium', label: '中等' },
+  { value: 'semibold', label: '半粗' },
+  { value: 'bold', label: '粗体' },
 ] as const;
 
 const FONT_WEIGHT_VALUES = FONT_WEIGHT_MAP as Record<NonNullable<TextItem['fontWeight']>, number>;
@@ -68,7 +68,7 @@ const EMPTY_TEXT_STROKE: NonNullable<TextItem['stroke']> = {
 const TEXT_EFFECT_PRESETS = [
   {
     id: 'none',
-    label: 'None',
+    label: '无',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: undefined,
       stroke: undefined,
@@ -76,7 +76,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'shadow',
-    label: 'Shadow',
+    label: '阴影',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: {
         offsetX: 4,
@@ -89,7 +89,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'outline',
-    label: 'Outline',
+    label: '描边',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: undefined,
       stroke: {
@@ -100,7 +100,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'glow',
-    label: 'Glow',
+    label: '发光',
     getUpdates: (color: string): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: {
         offsetX: 0,
@@ -783,7 +783,7 @@ export function TextSection({
 
           {/* Text Color */}
           <ColorPicker
-            label="Color"
+            label="颜色"
             color={sharedValues.color ?? '#ffffff'}
             onChange={handleColorChange}
             onLiveChange={handleColorLiveChange}
@@ -840,7 +840,7 @@ export function TextSection({
           </PropertyRow>
 
           <ColorPicker
-            label="Shadow"
+            label="阴影颜色"
             color={sharedValues.shadowColor || '#000000'}
             onChange={handleShadowColorChange}
             onLiveChange={handleShadowColorLiveChange}
@@ -902,7 +902,7 @@ export function TextSection({
 
           {(strokeWidth === 'mixed' || strokeWidth > 0) && (
             <ColorPicker
-              label="Stroke"
+              label="描边颜色"
               color={sharedValues.strokeColor || '#111827'}
               onChange={handleStrokeColorChange}
               onLiveChange={handleStrokeColorLiveChange}

@@ -81,7 +81,7 @@ export function useTimelineItemDropHandlers({
       dragState.setInvalidHint({
         x: e.clientX,
         y: e.clientY,
-        message: 'No adjacent clip on this edge',
+        message: '该边缘没有相邻片段',
       });
       return;
     }
@@ -91,7 +91,7 @@ export function useTimelineItemDropHandlers({
       dragState.setInvalidHint({
         x: e.clientX,
         y: e.clientY,
-        message: 'Drop on the existing transition bridge to replace it',
+        message: '请拖到现有转场连接处进行替换',
       });
       return;
     }
@@ -101,7 +101,7 @@ export function useTimelineItemDropHandlers({
       dragState.setInvalidHint({
         x: e.clientX,
         y: e.clientY,
-        message: target.reason ?? 'This cut cannot accept a transition',
+        message: target.reason ?? '该剪切点无法添加转场',
       });
       return;
     }

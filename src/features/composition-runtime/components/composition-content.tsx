@@ -428,7 +428,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
           justifyContent: 'center',
         }}
       >
-        <p style={{ color: '#a855f7', fontSize: 14 }}>Composition not found</p>
+        <p style={{ color: '#a855f7', fontSize: 14 }}>未找到合成内容</p>
       </AbsoluteFill>
     );
   }

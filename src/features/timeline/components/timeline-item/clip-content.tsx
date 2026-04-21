@@ -343,7 +343,7 @@ export const ClipContent = memo(function ClipContent({
   if (item.type === 'text') {
     return (
       <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
-        <div className="text-[10px] text-muted-foreground truncate">Text</div>
+        <div className="text-[10px] text-muted-foreground truncate">文本</div>
         <div className="text-xs font-medium truncate flex-1">
           {item.text || '空文本'}
         </div>

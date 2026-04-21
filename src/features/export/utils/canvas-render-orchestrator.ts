@@ -166,7 +166,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
   const plan = getPacketRemuxPlan(settings, composition);
   if (!plan) return null;
   if (signal?.aborted) {
-    throw new DOMException('Render cancelled', 'AbortError');
+    throw new DOMException('渲染已取消', 'AbortError');
   }
 
   const mediabunny: MediabunnyModule = await import('mediabunny');
@@ -227,7 +227,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
       phase: 'preparing',
       progress: 5,
       totalFrames: durationInFrames,
-      message: 'Preparing packet remux...',
+      message: '正在准备封包直通...',
     });
 
     // Create output resources only after all validation checks pass.
@@ -266,7 +266,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
           progress: Math.round(clamped * 90),
           currentFrame: Math.round(clamped * durationInFrames),
           totalFrames: durationInFrames,
-          message: 'Remuxing packets...',
+          message: '正在重封装封包...',
         });
       };
 
@@ -274,7 +274,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
 
       const buffer = target.buffer;
       if (!buffer) {
-        throw new Error('No output buffer generated');
+        throw new Error('未生成输出缓冲区');
       }
 
       const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
@@ -284,7 +284,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
         progress: 100,
         currentFrame: durationInFrames,
         totalFrames: durationInFrames,
-        message: 'Complete!',
+        message: '完成！',
       });
 
       getLog().info('Packet remux export completed', {
@@ -308,7 +308,7 @@ async function tryPacketRemuxComposition(options: RenderEngineOptions): Promise<
     const isCanceled = signal?.aborted
       || (error instanceof Error && error.name === 'ConversionCanceledError');
     if (isCanceled) {
-      throw new DOMException('Render cancelled', 'AbortError');
+      throw new DOMException('渲染已取消', 'AbortError');
     }
 
     getLog().warn('Packet remux path failed; falling back to frame render', { error });
@@ -345,7 +345,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
 
   // Validate inputs
   if (durationInFrames <= 0) {
-    throw new Error('Composition has no duration');
+    throw new Error('合成内容时长为 0');
   }
 
   const totalFrames = durationInFrames;
@@ -355,12 +355,12 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     phase: 'preparing',
     progress: 0,
     totalFrames,
-    message: 'Loading encoder...',
+    message: '正在加载编码器...',
   });
 
   // Check for abort
   if (signal?.aborted) {
-    throw new DOMException('Render cancelled', 'AbortError');
+    throw new DOMException('渲染已取消', 'AbortError');
   }
 
   // Fast path: when the timeline is a single unmodified clip, remux packets directly.
@@ -377,7 +377,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     phase: 'preparing',
     progress: 5,
     totalFrames,
-    message: 'Processing audio...',
+    message: '正在处理音频...',
   });
 
   // Process audio in parallel with setup
@@ -399,7 +399,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     phase: 'preparing',
     progress: 15,
     totalFrames,
-    message: 'Creating encoder...',
+    message: '正在创建编码器...',
   });
 
   // Create output format
@@ -455,7 +455,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     phase: 'preparing',
     progress: 20,
     totalFrames,
-    message: 'Setting up video encoder...',
+    message: '正在设置视频编码器...',
   });
 
   // Create video source for explicit frame capture (at export resolution)
@@ -531,7 +531,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     progress: 0,
     currentFrame: 0,
     totalFrames,
-    message: 'Rendering frames...',
+    message: '正在渲染帧...',
   });
 
   // Create a composition renderer
@@ -556,7 +556,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
           try { await pendingEncode; } catch { /* discarded — aborting */ }
         }
         await output.cancel();
-        throw new DOMException('Render cancelled', 'AbortError');
+        throw new DOMException('渲染已取消', 'AbortError');
       }
 
       // Render frame to canvas first — this overlaps with the previous frame's
@@ -608,7 +608,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
         progress,
         currentFrame: frame,
         totalFrames,
-        message: `Rendering frame ${frame + 1}/${totalFrames}`,
+        message: `正在渲染帧 ${frame + 1}/${totalFrames}`,
       });
     }
 
@@ -620,7 +620,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       progress: 95,
       currentFrame: totalFrames,
       totalFrames,
-      message: 'Finalizing video...',
+      message: '正在完成视频封装...',
     });
 
     // Close audio source before finalizing (signals no more audio data)
@@ -639,7 +639,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
     // Get the buffer
     const buffer = target.buffer;
     if (!buffer) {
-      throw new Error('No output buffer generated');
+      throw new Error('未生成输出缓冲区');
     }
 
     const blob = new Blob([buffer], { type: getMimeType(settings.container, settings.codec) });
@@ -649,7 +649,7 @@ export async function renderComposition(options: RenderEngineOptions): Promise<C
       progress: 100,
       currentFrame: totalFrames,
       totalFrames,
-      message: 'Complete!',
+      message: '完成！',
     });
 
     // Cleanup
@@ -779,7 +779,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
 
   // Validate inputs
   if (durationInFrames <= 0) {
-    throw new Error('Composition has no duration');
+    throw new Error('合成内容时长为 0');
   }
 
   const durationSeconds = durationInFrames / fps;
@@ -788,12 +788,12 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     phase: 'preparing',
     progress: 0,
     totalFrames: durationInFrames,
-    message: 'Loading encoder...',
+    message: '正在加载编码器...',
   });
 
   // Check for abort
   if (signal?.aborted) {
-    throw new DOMException('Render cancelled', 'AbortError');
+    throw new DOMException('渲染已取消', 'AbortError');
   }
 
   // Dynamically import mediabunny (AC-3 decoder is loaded lazily by canvas-audio when needed)
@@ -815,24 +815,24 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     phase: 'preparing',
     progress: 10,
     totalFrames: durationInFrames,
-    message: 'Processing audio...',
+    message: '正在处理音频...',
   });
 
   // Process audio
   if (!(await canvasAudio.hasAudioContent(composition))) {
-    throw new Error('No audio content found in composition');
+    throw new Error('合成内容中未找到音频');
   }
 
   const audioData = await canvasAudio.processAudio(composition, signal);
   if (!audioData) {
-    throw new Error('Failed to process audio');
+    throw new Error('音频处理失败');
   }
 
   onProgress({
     phase: 'preparing',
     progress: 50,
     totalFrames: durationInFrames,
-    message: 'Creating encoder...',
+    message: '正在创建编码器...',
   });
 
   // Create output format
@@ -874,8 +874,8 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
 
     if (!isSupported) {
       throw new Error(
-        `${audioCodec.toUpperCase()} encoding is not supported in this browser. ` +
-        `Try exporting as WAV (lossless) instead.`
+        `当前浏览器不支持 ${audioCodec.toUpperCase()} 编码。` +
+        '请尝试导出为 WAV（无损）。'
       );
     }
     getLog().info(`Using ${audioCodec.toUpperCase()} codec`);
@@ -904,7 +904,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     phase: 'encoding',
     progress: 60,
     totalFrames: durationInFrames,
-    message: 'Encoding audio...',
+    message: '正在编码音频...',
   });
 
   // Start the output
@@ -917,7 +917,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     phase: 'finalizing',
     progress: 90,
     totalFrames: durationInFrames,
-    message: 'Finalizing audio...',
+    message: '正在完成音频封装...',
   });
 
   // Close audio source
@@ -929,7 +929,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
   // Get the buffer
   const buffer = target.buffer;
   if (!buffer) {
-    throw new Error('No output buffer generated');
+    throw new Error('未生成输出缓冲区');
   }
 
   const blob = new Blob([buffer], { type: getMimeType(settings.container) });
@@ -938,7 +938,7 @@ export async function renderAudioOnly(options: AudioRenderOptions): Promise<Clie
     phase: 'finalizing',
     progress: 100,
     totalFrames: durationInFrames,
-    message: 'Complete!',
+    message: '完成！',
   });
 
   return {

@@ -3073,8 +3073,8 @@ export const DopesheetEditor = memo(function DopesheetEditor({
                 handleGroupAutoKeyToggle(group);
               }}
               disabled={disabled || unlockedRows.length === 0 || !onPropertyValueCommit}
-              title={groupAutoKeyEnabled ? `Auto-key enabled for ${group.label}` : `Enable auto-key for ${group.label}`}
-              aria-label={groupAutoKeyEnabled ? `Auto-key enabled for ${group.label}` : `Enable auto-key for ${group.label}`}
+              title={groupAutoKeyEnabled ? `${group.label}已启用自动关键帧` : `为${group.label}启用自动关键帧`}
+              aria-label={groupAutoKeyEnabled ? `${group.label}已启用自动关键帧` : `为${group.label}启用自动关键帧`}
               aria-pressed={groupAutoKeyEnabled}
             >
               <Timer className={MINI_ICON_CLASS} />
@@ -3085,7 +3085,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
             className="group flex min-w-0 flex-1 items-center gap-px rounded-sm px-0 text-left leading-none transition-colors hover:bg-background/40"
             onClick={() => toggleGroup(group.id)}
             aria-expanded={isOpen}
-            aria-label={`${isOpen ? 'Collapse' : 'Expand'} ${group.label}`}
+            aria-label={`${isOpen ? '收起' : '展开'}${group.label}`}
           >
             {isOpen ? (
               <ChevronDown className={cn(MINI_ICON_CLASS, 'flex-shrink-0 text-muted-foreground transition-colors group-hover:text-foreground/80')} />

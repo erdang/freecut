@@ -572,7 +572,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
     return [{
       left: frameToPixelsNow(finalPosition),
       width: frameToPixelsNow(placeholderDuration),
-      label: itemCount > 1 ? `${itemCount} files` : 'Drop media',
+      label: itemCount > 1 ? `${itemCount} 个文件` : '拖放媒体',
       type: 'external-file',
       targetTrackId: track.id,
     }];
@@ -1210,9 +1210,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       addItems,
       currentTracks: useTimelineStore.getState().tracks,
       dropResult,
-      emptyMessage: 'Unable to add dropped files to the timeline',
+      emptyMessage: '无法将拖入的文件添加到时间线',
       notify: toast,
-      partialFailureLabel: 'dropped files',
+      partialFailureLabel: '拖入的文件',
       requestedCount: droppedEntries.length,
       setTracks: useTimelineStore.getState().setTracks,
     });

@@ -2378,13 +2378,13 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       if (item.type === 'video' || item.type === 'audio' || item.type === 'composition') {
         handleSlipSlideStart(e, activeTool);
       } else {
-        setPointerHint({ x: e.clientX, y: e.clientY, message: 'Use slip/slide on source-based clips only', tone: 'warning' });
+        setPointerHint({ x: e.clientX, y: e.clientY, message: '仅源媒体片段支持滑移/滑动工具', tone: 'warning' });
       }
       return;
     }
     if (activeTool === 'rate-stretch' && !trackLocked && !isStretching) {
       if (!isRateStretchableItem(item)) {
-        setPointerHint({ x: e.clientX, y: e.clientY, message: "This clip can't be rate stretched", tone: 'warning' });
+        setPointerHint({ x: e.clientX, y: e.clientY, message: '该片段不支持变速拉伸', tone: 'warning' });
         return;
       }
 

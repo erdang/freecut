@@ -97,7 +97,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
     if (!item.src) {
       return (
         <AbsoluteFill style={{ backgroundColor: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p style={{ color: '#666', fontSize: 14 }}>Media not loaded</p>
+          <p style={{ color: '#666', fontSize: 14 }}>媒体未加载</p>
         </AbsoluteFill>
       );
     }
@@ -152,7 +152,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
       });
       return (
         <AbsoluteFill style={{ backgroundColor: '#2a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p style={{ color: '#ff6b6b', fontSize: 14 }}>Invalid source position</p>
+          <p style={{ color: '#ff6b6b', fontSize: 14 }}>无效的源位置</p>
         </AbsoluteFill>
       );
     }
@@ -373,7 +373,7 @@ export const Item = React.memo<ItemProps>(({ item, muted = false, visible = true
     if (!item.src) {
       return (
         <AbsoluteFill style={{ backgroundColor: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <p style={{ color: '#666', fontSize: 14 }}>Image not loaded</p>
+          <p style={{ color: '#666', fontSize: 14 }}>图片未加载</p>
         </AbsoluteFill>
       );
     }

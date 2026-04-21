@@ -147,12 +147,12 @@ export async function resolveDroppedMediaEntriesFromExternalFiles({
 }: ResolveDroppedMediaEntriesFromExternalFilesOptions): Promise<DroppedMediaEntry[] | null> {
   const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(dataTransfer);
   if (!supported) {
-    notify.warning('Drag-drop not supported in this browser. Use Chrome or Edge.');
+    notify.warning('当前浏览器不支持拖放，请使用 Chrome 或 Edge。');
     return null;
   }
 
   if (errors.length > 0) {
-    notify.error(`Some files were rejected: ${errors.join(', ')}`);
+    notify.error(`部分文件被拒绝：${errors.join(', ')}`);
   }
 
   if (entries.length === 0) {
@@ -162,8 +162,8 @@ export async function resolveDroppedMediaEntriesFromExternalFiles({
   try {
     await preflightFirstTimelineVideoProjectMatch(entries);
   } catch (error) {
-    notify.error('Unable to inspect dropped file.', {
-      description: error instanceof Error ? error.message : 'Please try again.',
+    notify.error('无法检查拖入的文件。', {
+      description: error instanceof Error ? error.message : '请重试。',
     });
     return null;
   }
@@ -172,19 +172,19 @@ export async function resolveDroppedMediaEntriesFromExternalFiles({
   try {
     importedMedia = await importHandlesForPlacement(entries.map((entry) => entry.handle));
   } catch (error) {
-    notify.error('Unable to import dropped files.', {
-      description: error instanceof Error ? error.message : 'Please try again.',
+    notify.error('无法导入拖入的文件。', {
+      description: error instanceof Error ? error.message : '请重试。',
     });
     return null;
   }
   if (importedMedia.length === 0) {
-    notify.error('Unable to import dropped files');
+    notify.error('无法导入拖入的文件');
     return null;
   }
 
   const droppedEntries = buildDroppedMediaEntriesFromImportedMedia(importedMedia);
   if (droppedEntries.length === 0) {
-    notify.warning('Dropped files were imported, but none could be placed on the timeline.');
+    notify.warning('拖入的文件已导入，但没有可放置到时间线的内容。');
     return null;
   }
 

@@ -435,7 +435,7 @@ export const LoadedEditor = memo(function LoadedEditor({
       className="h-screen bg-background flex flex-col overflow-hidden"
       style={editorLayoutCssVars as import('react').CSSProperties}
       role="application"
-      aria-label="FreeCut Video Editor"
+      aria-label="FreeCut 视频编辑器"
     >
       {/* Top Toolbar */}
       <InteractionLockRegion locked={isMaskEditingActive}>
