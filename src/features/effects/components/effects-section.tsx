@@ -1,4 +1,4 @@
-import { useCallback, useMemo, memo, useRef, useState, useEffect } from 'react';
+import { useCallback, useMemo, memo, useRef, useState, useEffect, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Sparkles, Plus, Eye, EyeOff, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -244,10 +244,18 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
 
   const openPicker = useCallback(() => {
-    triggerPreviews();
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (rect) {
+      setPanelStyle({
+        position: 'fixed',
+        top: `${rect.bottom + 4}px`,
+        left: `${rect.left}px`,
+        width: `${rect.width}px`,
+      });
+    }
     setSearchQuery('');
     setPickerOpen(true);
-  }, [triggerPreviews]);
+  }, []);
 
   const closePicker = useCallback(() => {
     setPickerOpen(false);
@@ -256,7 +264,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   }, []);
 
   // Position panel when opened
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pickerOpen || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPanelStyle({
@@ -268,6 +276,36 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     // Focus search input after render
     requestAnimationFrame(() => searchInputRef.current?.focus());
   }, [pickerOpen]);
+
+  // Defer expensive preview generation so opening the picker stays responsive.
+  useEffect(() => {
+    if (!pickerOpen) return;
+
+    let cancelled = false;
+    let idleId: number | null = null;
+    let timeoutId: number | null = null;
+
+    const run = () => {
+      if (cancelled) return;
+      triggerPreviews();
+    };
+
+    if (typeof requestIdleCallback === 'function') {
+      idleId = requestIdleCallback(run, { timeout: 600 });
+    } else {
+      timeoutId = window.setTimeout(run, 120);
+    }
+
+    return () => {
+      cancelled = true;
+      if (idleId !== null && typeof cancelIdleCallback === 'function') {
+        cancelIdleCallback(idleId);
+      }
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [pickerOpen, triggerPreviews]);
 
   // Close on click outside
   useEffect(() => {

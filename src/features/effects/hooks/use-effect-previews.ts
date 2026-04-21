@@ -20,6 +20,7 @@ const PREVIEW_HEIGHT = 45;
 
 // Module-level cache — persists across component mounts
 const previewCache = new Map<string, string>();
+const previewFailureCache = new Set<string>();
 let pipelineInstance: EffectsPipeline | null = null;
 let pipelinePromise: Promise<EffectsPipeline | null> | null = null;
 
@@ -195,40 +196,99 @@ export function useEffectPreviews(
       ...effects.map(({ id }) => id),
       ...presetIds.map((id) => `preset:${id}`),
     ];
-    const missing = allIds.filter((id) => !previewCache.has(id));
+    const missing = allIds.filter((id) => !previewCache.has(id) && !previewFailureCache.has(id));
     if (missing.length === 0 || generatingRef.current) return;
 
     generatingRef.current = true;
 
     (async () => {
-      const pipeline = await getOrCreatePipeline();
-      if (!pipeline) {
+      const yieldToBrowser = async () => {
+        await new Promise<void>((resolve) => {
+          if (typeof requestAnimationFrame === 'function') {
+            requestAnimationFrame(() => resolve());
+          } else {
+            setTimeout(resolve, 0);
+          }
+        });
+      };
+
+      const syncPreviewsFromCache = () => {
+        const result = new Map<string, string>();
+        for (const id of allIds) {
+          const url = previewCache.get(id);
+          if (url) result.set(id, url);
+        }
+        setPreviews(result);
+      };
+
+      try {
+        const pipeline = await getOrCreatePipeline();
+        if (!pipeline) {
+          for (const id of missing) {
+            previewFailureCache.add(id);
+          }
+          return;
+        }
+
+        const source = createSampleCanvas();
+        let generatedSinceYield = 0;
+        let cacheChanged = false;
+
+        for (const { id, def } of effects) {
+          if (previewCache.has(id) || previewFailureCache.has(id)) continue;
+          try {
+            const url = await renderEffectPreview(pipeline, source, id, def);
+            if (url) {
+              previewCache.set(id, url);
+              cacheChanged = true;
+            } else {
+              previewFailureCache.add(id);
+            }
+          } catch {
+            previewFailureCache.add(id);
+          }
+
+          generatedSinceYield += 1;
+          if (generatedSinceYield >= 2) {
+            if (cacheChanged) {
+              syncPreviewsFromCache();
+              cacheChanged = false;
+            }
+            generatedSinceYield = 0;
+            await yieldToBrowser();
+          }
+        }
+
+        for (const presetId of presetIds) {
+          const cacheKey = `preset:${presetId}`;
+          if (previewCache.has(cacheKey) || previewFailureCache.has(cacheKey)) continue;
+          try {
+            const url = await renderPresetPreview(pipeline, source, presetId);
+            if (url) {
+              previewCache.set(cacheKey, url);
+              cacheChanged = true;
+            } else {
+              previewFailureCache.add(cacheKey);
+            }
+          } catch {
+            previewFailureCache.add(cacheKey);
+          }
+
+          generatedSinceYield += 1;
+          if (generatedSinceYield >= 2) {
+            if (cacheChanged) {
+              syncPreviewsFromCache();
+              cacheChanged = false;
+            }
+            generatedSinceYield = 0;
+            await yieldToBrowser();
+          }
+        }
+
+        syncPreviewsFromCache();
+      } finally {
         generatingRef.current = false;
-        return;
       }
-
-      const source = createSampleCanvas();
-
-      for (const { id, def } of effects) {
-        if (previewCache.has(id)) continue;
-        const url = await renderEffectPreview(pipeline, source, id, def);
-        if (url) previewCache.set(id, url);
-      }
-
-      for (const presetId of presetIds) {
-        const cacheKey = `preset:${presetId}`;
-        if (previewCache.has(cacheKey)) continue;
-        const url = await renderPresetPreview(pipeline, source, presetId);
-        if (url) previewCache.set(cacheKey, url);
-      }
-
-      const result = new Map<string, string>();
-      for (const id of allIds) {
-        const url = previewCache.get(id);
-        if (url) result.set(id, url);
-      }
-      setPreviews(result);
-      generatingRef.current = false;
     })();
   }, [effects, presetIds]);
 
