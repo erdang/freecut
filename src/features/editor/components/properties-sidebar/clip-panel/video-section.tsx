@@ -31,8 +31,6 @@ import { getMixedValue } from '../utils';
 import {
   cropPixelsToRatio,
   cropSignedPixelsToRatio,
-  cropSignedRatioToPixels,
-  cropRatioToPixels,
   getCropSoftnessReferenceDimension,
   normalizeCropSettings,
 } from '@/shared/utils/media-crop';
@@ -66,27 +64,6 @@ function getCropDimensions(item: VideoItem): CropDimensions {
     width: Math.max(1, item.sourceWidth ?? item.transform?.width ?? 1920),
     height: Math.max(1, item.sourceHeight ?? item.transform?.height ?? 1080),
   };
-}
-
-function getCropPixels(
-  crop: CropSettings | undefined,
-  edge: CropEdge,
-  dimensions: CropDimensions,
-): number {
-  const dimension = edge === 'left' || edge === 'right'
-    ? dimensions.width
-    : dimensions.height;
-  return cropRatioToPixels(crop?.[edge], dimension);
-}
-
-function getCropSoftnessPixels(
-  crop: CropSettings | undefined,
-  dimensions: CropDimensions,
-): number {
-  return cropSignedRatioToPixels(
-    crop?.softness,
-    Math.max(1, getCropSoftnessReferenceDimension(dimensions.width, dimensions.height)),
-  );
 }
 
 function buildCropUpdate(
