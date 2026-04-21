@@ -291,6 +291,12 @@ function normalizeItem(
       rotation: normalized.transform.rotation !== undefined
         ? ((normalized.transform.rotation % 360) + 360) % 360
         : undefined,
+      flipHorizontal: normalized.transform.flipHorizontal !== undefined
+        ? !!normalized.transform.flipHorizontal
+        : undefined,
+      flipVertical: normalized.transform.flipVertical !== undefined
+        ? !!normalized.transform.flipVertical
+        : undefined,
       // Ensure opacity is 0-1
       opacity: normalized.transform.opacity !== undefined
         ? Math.max(0, Math.min(1, normalized.transform.opacity))

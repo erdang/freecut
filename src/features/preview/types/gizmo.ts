@@ -29,6 +29,8 @@ export interface Transform {
   width: number;
   height: number;
   rotation: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   opacity: number;
   /** Corner radius for rounded corners (optional, preserved during transform) */
   cornerRadius?: number;

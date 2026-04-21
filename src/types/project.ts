@@ -111,6 +111,8 @@ export interface ProjectTimeline {
       width?: number;
       height?: number;
       rotation?: number;
+      flipHorizontal?: boolean;
+      flipVertical?: boolean;
       opacity?: number;
       cornerRadius?: number;
       aspectRatioLocked?: boolean;

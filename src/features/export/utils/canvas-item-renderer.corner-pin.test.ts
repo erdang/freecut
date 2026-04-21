@@ -33,6 +33,7 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     clip: vi.fn(),
     translate: vi.fn(),
     rotate: vi.fn(),
+    scale: vi.fn(),
     fill: vi.fn(),
     clearRect: vi.fn(),
     globalAlpha: 1,
@@ -194,5 +195,67 @@ describe('canvas-item-renderer corner pin export path', () => {
     expect(ctx.globalAlpha).toBe(0.35);
     expect(ctx.drawImage).toHaveBeenCalledWith(flattenedCanvas, 0, 0);
     expect(canvasPool.release).toHaveBeenCalledWith(flattenedCanvas);
+  });
+
+  it('applies flip transforms before drawing corner-pinned content', async () => {
+    const item: ShapeItem = {
+      id: 'shape-3',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Pinned shape',
+      shapeType: 'rectangle',
+      fillColor: '#ffffff',
+      cornerPin: {
+        topLeft: [0, 0],
+        topRight: [20, -10],
+        bottomRight: [8, 12],
+        bottomLeft: [-12, 6],
+      },
+      transform: {
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 180,
+        rotation: 0,
+        flipHorizontal: true,
+        opacity: 1,
+      },
+    };
+
+    const ctx = createMockCtx();
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1280, height: 720, fps: 30 },
+      canvasPool: {} as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+    };
+    const transform: ItemTransform = {
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 180,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    await renderItem(ctx, item, transform, 0, rctx);
+
+    expect(ctx.translate).toHaveBeenCalled();
+    expect(ctx.scale).toHaveBeenCalledWith(-1, 1);
+    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
   });
 });

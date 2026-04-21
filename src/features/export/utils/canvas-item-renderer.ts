@@ -95,6 +95,32 @@ export interface ItemTransform {
   cornerRadius: number;
 }
 
+function applyItemTransformToContext(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  canvasSettings: CanvasSettings,
+): void {
+  const centerX = canvasSettings.width / 2 + transform.x;
+  const centerY = canvasSettings.height / 2 + transform.y;
+  const flipScaleX = item.transform?.flipHorizontal ? -1 : 1;
+  const flipScaleY = item.transform?.flipVertical ? -1 : 1;
+  const hasFlip = flipScaleX !== 1 || flipScaleY !== 1;
+
+  if (transform.rotation === 0 && !hasFlip) {
+    return;
+  }
+
+  ctx.translate(centerX, centerY);
+  if (transform.rotation !== 0) {
+    ctx.rotate((transform.rotation * Math.PI) / 180);
+  }
+  if (hasFlip) {
+    ctx.scale(flipScaleX, flipScaleY);
+  }
+  ctx.translate(-centerX, -centerY);
+}
+
 export type RenderImageSource = HTMLImageElement | ImageBitmap;
 
 export interface WorkerLoadedImage {
@@ -232,14 +258,7 @@ export async function renderItem(
     ctx.globalAlpha = transform.opacity;
   }
 
-  // Apply rotation
-  if (transform.rotation !== 0) {
-    const centerX = rctx.canvasSettings.width / 2 + transform.x;
-    const centerY = rctx.canvasSettings.height / 2 + transform.y;
-    ctx.translate(centerX, centerY);
-    ctx.rotate((transform.rotation * Math.PI) / 180);
-    ctx.translate(-centerX, -centerY);
-  }
+  applyItemTransformToContext(ctx, item, transform, rctx.canvasSettings);
 
   // Apply corner radius clipping
   if (transform.cornerRadius > 0) {
@@ -351,14 +370,7 @@ async function renderItemWithCornerPin(
     ctx.globalAlpha = transform.opacity;
   }
 
-  // Apply rotation around item center
-  const centerX = rctx.canvasSettings.width / 2 + transform.x;
-  const centerY = rctx.canvasSettings.height / 2 + transform.y;
-  if (transform.rotation !== 0) {
-    ctx.translate(centerX, centerY);
-    ctx.rotate((transform.rotation * Math.PI) / 180);
-    ctx.translate(-centerX, -centerY);
-  }
+  applyItemTransformToContext(ctx, item, transform, rctx.canvasSettings);
 
   try {
     if (needsFlattenedOpacity) {

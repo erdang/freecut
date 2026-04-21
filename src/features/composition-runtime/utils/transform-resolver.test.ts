@@ -1,0 +1,40 @@
+import { describe, expect, it } from 'vitest';
+import { toTransformStyle } from './transform-resolver';
+
+describe('toTransformStyle', () => {
+  it('includes horizontal flip in the CSS transform', () => {
+    const style = toTransformStyle(
+      {
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 180,
+        rotation: 45,
+        opacity: 1,
+        cornerRadius: 0,
+      },
+      { width: 1920, height: 1080, fps: 30 },
+      { flipHorizontal: true },
+    );
+
+    expect(style.transform).toBe('rotate(45deg) scale(-1, 1)');
+  });
+
+  it('supports vertical-only flips without rotation', () => {
+    const style = toTransformStyle(
+      {
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 180,
+        rotation: 0,
+        opacity: 1,
+        cornerRadius: 0,
+      },
+      { width: 1920, height: 1080, fps: 30 },
+      { flipVertical: true },
+    );
+
+    expect(style.transform).toBe('scale(1, -1)');
+  });
+});

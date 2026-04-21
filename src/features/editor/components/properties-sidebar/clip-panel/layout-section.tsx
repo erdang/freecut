@@ -2,7 +2,8 @@ import { useCallback, useMemo, memo } from 'react';
 import { Move, RotateCcw, Link2, Link2Off } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
-import type { TimelineItem } from '@/types/timeline';
+import { Switch } from '@/components/ui/switch';
+import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
@@ -26,6 +27,7 @@ import {
 
 interface LayoutSectionProps {
   items: TimelineItem[];
+  videoItems?: VideoItem[];
   canvas: CanvasSettings;
   onTransformChange: (ids: string[], updates: Partial<TransformProperties>) => void;
   aspectLocked: boolean;
@@ -49,12 +51,14 @@ type TransformValues = {
  */
 export const LayoutSection = memo(function LayoutSection({
   items,
+  videoItems = [],
   canvas,
   onTransformChange,
   aspectLocked,
   onAspectLockToggle,
 }: LayoutSectionProps) {
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const videoItemIds = useMemo(() => videoItems.map((item) => item.id), [videoItems]);
   const itemIdSet = useMemo(() => new Set(itemIds), [itemIds]);
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
@@ -150,6 +154,22 @@ export const LayoutSection = memo(function LayoutSection({
       rotation: getValue((r) => r.rotation),
     };
   }, [items, resolvedTransformsByItem]);
+
+  const flipHorizontal = useMemo(() => {
+    if (videoItems.length === 0) return false as boolean | 'mixed';
+    const firstValue = videoItems[0]?.transform?.flipHorizontal ?? false;
+    return videoItems.every((item) => (item.transform?.flipHorizontal ?? false) === firstValue)
+      ? firstValue
+      : 'mixed';
+  }, [videoItems]);
+
+  const flipVertical = useMemo(() => {
+    if (videoItems.length === 0) return false as boolean | 'mixed';
+    const firstValue = videoItems[0]?.transform?.flipVertical ?? false;
+    return videoItems.every((item) => (item.transform?.flipVertical ?? false) === firstValue)
+      ? firstValue
+      : 'mixed';
+  }, [videoItems]);
 
   // Store current aspect ratio for linked dimensions
   const currentAspectRatio = useMemo(() => {
@@ -494,6 +514,16 @@ export const LayoutSection = memo(function LayoutSection({
     });
   }, [items, onTransformChange, canvas]);
 
+  const handleFlipHorizontalChange = useCallback((checked: boolean) => {
+    if (videoItemIds.length === 0) return;
+    onTransformChange(videoItemIds, { flipHorizontal: checked });
+  }, [onTransformChange, videoItemIds]);
+
+  const handleFlipVerticalChange = useCallback((checked: boolean) => {
+    if (videoItemIds.length === 0) return;
+    onTransformChange(videoItemIds, { flipVertical: checked });
+  }, [onTransformChange, videoItemIds]);
+
   return (
     <PropertySection title="Transform" icon={Move} defaultOpen={true}>
       {/* Position */}
@@ -634,6 +664,33 @@ export const LayoutSection = memo(function LayoutSection({
           </Button>
         </div>
       </PropertyRow>
+
+      {videoItems.length > 0 && (
+        <PropertyRow label="Flip">
+          <div className="flex items-center justify-between gap-3 w-full">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={flipHorizontal === 'mixed' ? false : flipHorizontal}
+                onCheckedChange={handleFlipHorizontalChange}
+                aria-label="Flip video horizontally"
+              />
+              <span>
+                Horizontal{flipHorizontal === 'mixed' ? ' (mixed)' : ''}
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={flipVertical === 'mixed' ? false : flipVertical}
+                onCheckedChange={handleFlipVerticalChange}
+                aria-label="Flip video vertically"
+              />
+              <span>
+                Vertical{flipVertical === 'mixed' ? ' (mixed)' : ''}
+              </span>
+            </label>
+          </div>
+        </PropertyRow>
+      )}
     </PropertySection>
   );
 });

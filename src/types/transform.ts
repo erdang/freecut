@@ -14,6 +14,10 @@ export interface TransformProperties {
   height?: number;
   /** Rotation in degrees (clockwise). Default: 0 */
   rotation?: number;
+  /** Flip content horizontally around its center. Default: false */
+  flipHorizontal?: boolean;
+  /** Flip content vertically around its center. Default: false */
+  flipVertical?: boolean;
   /** Opacity from 0 (transparent) to 1 (opaque). Default: 1 */
   opacity?: number;
   /** Border radius in pixels. Default: 0 */

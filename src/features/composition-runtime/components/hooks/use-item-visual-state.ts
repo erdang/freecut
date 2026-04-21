@@ -228,7 +228,12 @@ export function useItemVisualState(
       cornerRadius: resolved.cornerRadius * uniformScale,
       opacity: computedFinalOpacity,
     };
-    const style = toTransformStyle(scaledResolved, renderCanvas);
+    const previewTransformFlags = itemPreview?.transform;
+    const style = toTransformStyle(scaledResolved, renderCanvas, {
+      ...item.transform,
+      flipHorizontal: previewTransformFlags?.flipHorizontal ?? item.transform?.flipHorizontal,
+      flipVertical: previewTransformFlags?.flipVertical ?? item.transform?.flipVertical,
+    });
 
     return {
       transform: resolved,
