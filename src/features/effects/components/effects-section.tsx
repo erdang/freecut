@@ -12,12 +12,14 @@ import { PropertySection } from '@/shared/ui/property-controls';
 import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels';
 import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
 import { useEffectPreviews } from '../hooks/use-effect-previews';
-import { getAutoKeyframeOperation } from '@/features/effects/deps/keyframes-contract';
+import {
+  getAutoKeyframeOperation,
+  getResolvedAnimatedEffectParamValue,
+} from '@/features/effects/deps/keyframes-contract';
 import {
   buildEffectAnimatableProperty,
   type AnimatableProperty,
 } from '@/types/keyframe';
-import { getResolvedAnimatedEffectParamValue } from '@/features/keyframes/utils/effect-animatable-properties';
 
 interface EffectsSectionProps {
   /** Visual items (already filtered to exclude audio) */

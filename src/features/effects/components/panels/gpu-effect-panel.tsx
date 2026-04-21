@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
 import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
-import { KeyframeToggle } from '@/features/keyframes/components/keyframe-toggle';
+import { KeyframeToggle } from '@/features/effects/deps/keyframes-contract';
 import type { AnimatableProperty } from '@/types/keyframe';
 import { ColorPicker, PropertyRow, SliderInput } from '@/shared/ui/property-controls';
 
