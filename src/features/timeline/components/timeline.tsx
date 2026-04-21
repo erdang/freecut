@@ -12,8 +12,12 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { useEditorStore } from '@/app/state/editor';
 import { useTimelineStore } from '../stores/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
+import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { useSettingsStore, useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
+import type { TimelineItem } from '@/types/timeline';
 
 import { Button } from '@/components/ui/button';
 import { Plus, Minus } from 'lucide-react';
@@ -118,6 +122,7 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     actualDuration: Math.max(duration, 10),
     timelineWidth: 0,
   });
+  const [captionGeneratingTrackIds, setCaptionGeneratingTrackIds] = useState<Set<string>>(new Set());
   const [trackRowsViewportHeight, setTrackRowsViewportHeight] = useState(0);
   const [sectionDividerPosition, setSectionDividerPosition] = useState<number | null>(null);
 
@@ -565,6 +570,126 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
     syncTrackSelectionAfterRemoval(emptyTrackIds, remainingTracks[0]?.id ?? null);
   }, [removeTracks, syncTrackSelectionAfterRemoval, tracks]);
 
+  const handleGenerateTrackCaptions = useCallback(async (trackId: string) => {
+    if (captionGeneratingTrackIds.has(trackId)) {
+      return;
+    }
+
+    const track = tracks.find((entry) => entry.id === trackId);
+    if (!track) {
+      return;
+    }
+
+    const trackItems = useItemsStore.getState().itemsByTrackId[trackId] ?? [];
+    const captionableClips = trackItems.filter((item): item is Extract<TimelineItem, { type: 'video' | 'audio' }> & { mediaId: string } => (
+      (item.type === 'video' || item.type === 'audio')
+      && typeof item.mediaId === 'string'
+      && item.mediaId.length > 0
+    ));
+
+    if (captionableClips.length === 0) {
+      useMediaLibraryStore.getState().showNotification({
+        type: 'warning',
+        message: `轨道“${track.name}”没有可生成字幕的音视频片段`,
+      });
+      return;
+    }
+
+    const clipIdsByMediaId = new Map<string, string[]>();
+    for (const clip of captionableClips) {
+      const existingClipIds = clipIdsByMediaId.get(clip.mediaId) ?? [];
+      existingClipIds.push(clip.id);
+      clipIdsByMediaId.set(clip.mediaId, existingClipIds);
+    }
+
+    setCaptionGeneratingTrackIds((previous) => {
+      const next = new Set(previous);
+      next.add(trackId);
+      return next;
+    });
+
+    try {
+      let insertedCount = 0;
+      let removedCount = 0;
+      let failedMediaCount = 0;
+      const store = useMediaLibraryStore.getState();
+      const defaultModel = useSettingsStore.getState().defaultWhisperModel;
+
+      for (const [mediaId, clipIds] of clipIdsByMediaId) {
+        const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
+        try {
+          const existingTranscript = await mediaTranscriptionService.getTranscript(mediaId);
+          const needsTranscription = !existingTranscript
+            || (defaultModel !== undefined && existingTranscript.model !== defaultModel);
+
+          if (needsTranscription) {
+            store.setTranscriptStatus(mediaId, 'transcribing');
+            store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
+            await mediaTranscriptionService.transcribeMedia(mediaId, {
+              model: defaultModel,
+              onProgress: (progress) => {
+                useMediaLibraryStore.getState().setTranscriptProgress(mediaId, progress);
+              },
+            });
+          }
+
+          store.setTranscriptStatus(mediaId, 'ready');
+          store.clearTranscriptProgress(mediaId);
+
+          const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
+            clipIds,
+            replaceExisting: true,
+          });
+
+          insertedCount += result.insertedItemCount;
+          removedCount += result.removedItemCount;
+        } catch (error) {
+          if (isLocalInferenceCancellationError(error)) {
+            store.setTranscriptStatus(mediaId, previousStatus);
+            store.clearTranscriptProgress(mediaId);
+            store.showNotification({
+              type: 'info',
+              message: `已取消轨道“${track.name}”的字幕生成`,
+            });
+            return;
+          }
+
+          failedMediaCount += 1;
+          store.setTranscriptStatus(mediaId, 'error');
+          store.clearTranscriptProgress(mediaId);
+          logger.warn('Failed to generate captions for track media', { trackId, mediaId, error });
+        }
+      }
+
+      if (insertedCount === 0 && removedCount === 0 && failedMediaCount > 0) {
+        store.showNotification({
+          type: 'error',
+          message: `轨道“${track.name}”字幕生成失败，请稍后重试`,
+        });
+        return;
+      }
+
+      if (failedMediaCount > 0) {
+        store.showNotification({
+          type: 'warning',
+          message: `轨道“${track.name}”字幕已部分生成（新增 ${insertedCount} 条，${failedMediaCount} 个媒体失败）`,
+        });
+        return;
+      }
+
+      store.showNotification({
+        type: 'success',
+        message: `轨道“${track.name}”字幕生成完成（新增 ${insertedCount} 条）`,
+      });
+    } finally {
+      setCaptionGeneratingTrackIds((previous) => {
+        const next = new Set(previous);
+        next.delete(trackId);
+        return next;
+      });
+    }
+  }, [captionGeneratingTrackIds, tracks]);
+
   /**
    * Handle removing selected tracks
    * Removes all selected tracks or the active track if none selected.
@@ -653,6 +778,11 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
                   onAddAudioTrack={appendAudioTrackToSection}
                   onDeleteTrack={() => handleDeleteTrack(track.id)}
                   onDeleteEmptyTracks={() => handleDeleteEmptyTracks(track.id)}
+                  onGenerateTrackCaptions={() => {
+                    void handleGenerateTrackCaptions(track.id);
+                  }}
+                  canGenerateTrackCaptions={!track.locked}
+                  isGeneratingTrackCaptions={captionGeneratingTrackIds.has(track.id)}
                   onSelect={(e) => {
                     if (trackDragJustDroppedRef.current) return;
                     if (e.shiftKey && activeTrackId) {

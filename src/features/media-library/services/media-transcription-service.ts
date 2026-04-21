@@ -19,9 +19,10 @@ import {
   buildCaptionTextItems,
   buildCaptionTrack,
   findReplaceableCaptionItemsForClip,
-  findCompatibleCaptionTrackForRanges,
+  findDedicatedCaptionTrackForRanges,
   getCaptionTextItemTemplate,
   getCaptionRangeForClip,
+  isDedicatedCaptionTrack,
 } from '../utils/caption-items';
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
@@ -168,7 +169,7 @@ class MediaTranscriptionService {
 
       let targetTrack = preferredTrackId
         ? newTracks.find((track) => track.id === preferredTrackId) ?? null
-        : findCompatibleCaptionTrackForRanges(
+        : findDedicatedCaptionTrackForRanges(
             newTracks,
             plannedItems,
             [{ startFrame: clipRange.startFrame, endFrame: clipRange.endFrame }],
@@ -178,6 +179,23 @@ class MediaTranscriptionService {
         targetTrack = buildCaptionTrack(newTracks);
         newTracks.push(targetTrack);
         newTracks.sort((a, b) => a.order - b.order);
+      } else {
+        const desiredCaptionOrder = buildCaptionTrack(newTracks).order;
+        const shouldPromoteToVideoTrack = targetTrack.kind !== 'video';
+        const shouldMoveAboveVideoTracks = targetTrack.order > desiredCaptionOrder;
+
+        if (shouldPromoteToVideoTrack || shouldMoveAboveVideoTracks) {
+          const trackIndex = newTracks.findIndex((track) => track.id === targetTrack!.id);
+          if (trackIndex >= 0) {
+            const upgradedTrack = {
+              ...targetTrack,
+              kind: 'video' as const,
+              order: shouldMoveAboveVideoTracks ? desiredCaptionOrder : targetTrack.order,
+            };
+            newTracks[trackIndex] = upgradedTrack;
+            targetTrack = upgradedTrack;
+          }
+        }
       }
 
       const clipCaptionItems = buildCaptionTextItems({
@@ -206,7 +224,7 @@ class MediaTranscriptionService {
     }
 
     const tracksChanged = newTracks.length !== timeline.tracks.length
-      || newTracks.some((track, index) => track.id !== timeline.tracks[index]?.id);
+      || newTracks.some((track, index) => track !== timeline.tracks[index]);
     if (tracksChanged) {
       timeline.setTracks(newTracks);
     }
@@ -283,7 +301,7 @@ class MediaTranscriptionService {
     }
 
     const preferredTrack = tracks.find((track) => track.id === trackIds[0]);
-    if (!preferredTrack || preferredTrack.visible === false || preferredTrack.locked || preferredTrack.isGroup) {
+    if (!preferredTrack || !isDedicatedCaptionTrack(preferredTrack, items)) {
       return null;
     }
 

@@ -61,11 +61,11 @@ describe('TrackHeader', () => {
   it('renders a unified disable control for video tracks', () => {
     const { onToggleDisabled } = renderTrackHeader(makeTrack({ kind: 'video', visible: true, muted: false }));
 
-    expect(screen.getByRole('button', { name: 'Disable track' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Hide track' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Mute track' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '禁用轨道' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '隐藏轨道' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '静音轨道' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Disable track' }));
+    fireEvent.click(screen.getByRole('button', { name: '禁用轨道' }));
 
     expect(onToggleDisabled).toHaveBeenCalledTimes(1);
   });
@@ -73,9 +73,9 @@ describe('TrackHeader', () => {
   it('derives the disable state from audio mute status', () => {
     const { container } = renderTrackHeader(makeTrack({ id: 'track-2', name: 'A1', kind: 'audio', muted: true }));
 
-    expect(screen.getByRole('button', { name: 'Enable track' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Show track' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Unmute track' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '启用轨道' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '显示轨道' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '取消静音轨道' })).not.toBeInTheDocument();
     expect(container.querySelector('[data-track-id="track-2"]')).toHaveAttribute('data-track-disabled', 'true');
   });
 
@@ -86,7 +86,7 @@ describe('TrackHeader', () => {
       onToggleDisabled,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Enable track' }));
+    fireEvent.click(screen.getByRole('button', { name: '启用轨道' }));
 
     expect(onToggleDisabled).toHaveBeenCalledTimes(1);
   });
@@ -112,7 +112,7 @@ describe('TrackHeader', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Disable sync lock' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '关闭同步锁' })).toBeInTheDocument();
 
     rerender(
       <TrackHeader
@@ -134,6 +134,36 @@ describe('TrackHeader', () => {
       />
     );
 
-    expect(screen.getByRole('button', { name: 'Enable sync lock' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '开启同步锁' })).toBeInTheDocument();
+  });
+
+  it('shows and triggers generate captions action in the context menu', () => {
+    const onGenerateTrackCaptions = vi.fn();
+    render(
+      <TrackHeader
+        track={makeTrack()}
+        isActive={false}
+        isSelected={false}
+        canDeleteTrack
+        canDeleteEmptyTracks
+        onToggleLock={() => undefined}
+        onToggleSyncLock={() => undefined}
+        onToggleDisabled={() => undefined}
+        onToggleSolo={() => undefined}
+        onSelect={() => undefined}
+        onCloseGaps={() => undefined}
+        onAddVideoTrack={() => undefined}
+        onAddAudioTrack={() => undefined}
+        onDeleteTrack={() => undefined}
+        onDeleteEmptyTracks={() => undefined}
+        onGenerateTrackCaptions={onGenerateTrackCaptions}
+        canGenerateTrackCaptions
+      />
+    );
+
+    fireEvent.contextMenu(screen.getByText('V1'));
+    fireEvent.click(screen.getByText('为该轨道生成字幕'));
+
+    expect(onGenerateTrackCaptions).toHaveBeenCalledTimes(1);
   });
 });

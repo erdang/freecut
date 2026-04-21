@@ -21,6 +21,39 @@ interface BuildCaptionTextItemsOptions {
   styleTemplate?: CaptionTextItemTemplate;
 }
 
+const CAPTION_TRACK_NAME_ALIASES = new Set([
+  'captions',
+  'caption',
+  'subtitles',
+  'subtitle',
+  '字幕',
+]);
+const VIDEO_TRACK_NAME_REGEX = /^V(\d+)$/i;
+
+function normalizeTrackName(name: string | undefined): string {
+  return (name ?? '').trim().toLowerCase();
+}
+
+function isVideoTrackForCaptionOrdering(track: TimelineTrack): boolean {
+  if (track.isGroup) {
+    return false;
+  }
+
+  if (track.kind === 'video') {
+    return true;
+  }
+
+  return VIDEO_TRACK_NAME_REGEX.test(track.name);
+}
+
+function hasRangeOverlap(
+  item: TimelineItem,
+  ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
+): boolean {
+  const itemEnd = item.from + item.durationInFrames;
+  return ranges.some((range) => item.from < range.endFrame && itemEnd > range.startFrame);
+}
+
 export type CaptionTextItemTemplate = Pick<
   TextItem,
   | 'fontSize'
@@ -254,16 +287,32 @@ export function findCompatibleCaptionTrackForRanges(
 }
 
 export function buildCaptionTrack(tracks: readonly TimelineTrack[]): TimelineTrack {
-  const maxOrder = tracks.reduce((highest, track) => Math.max(highest, track.order), -1);
+  const minOrder = tracks.reduce((lowest, track) => Math.min(lowest, track.order), Number.POSITIVE_INFINITY);
+  const firstVideoOrder = tracks.reduce((lowest, track) => {
+    if (!isVideoTrackForCaptionOrdering(track)) {
+      return lowest;
+    }
+
+    if (CAPTION_TRACK_NAME_ALIASES.has(normalizeTrackName(track.name))) {
+      return lowest;
+    }
+
+    return Math.min(lowest, track.order);
+  }, Number.POSITIVE_INFINITY);
+  const order = Number.isFinite(firstVideoOrder)
+    ? firstVideoOrder - 1
+    : (Number.isFinite(minOrder) ? minOrder - 1 : 0);
+
   return {
     id: `track-captions-${Date.now()}`,
-    name: 'Captions',
+    name: '字幕',
+    kind: 'video',
     height: DEFAULT_TRACK_HEIGHT,
     locked: false,
     visible: true,
     muted: false,
     solo: false,
-    order: maxOrder + 1,
+    order,
     items: [],
   };
 }
@@ -292,6 +341,57 @@ export function findGeneratedCaptionItemsForClip(
   return items.filter((item): item is TextItem & { captionSource: GeneratedCaptionSource } =>
     isGeneratedCaptionTextItem(item) && item.captionSource.clipId === clipId
   );
+}
+
+export function isDedicatedCaptionTrack(
+  track: TimelineTrack,
+  items: readonly TimelineItem[],
+): boolean {
+  if (track.visible === false || track.locked || track.isGroup) {
+    return false;
+  }
+
+  const trackItems = items.filter((item) => item.trackId === track.id);
+  if (trackItems.length === 0) {
+    return CAPTION_TRACK_NAME_ALIASES.has(normalizeTrackName(track.name));
+  }
+
+  const hasOnlyTextItems = trackItems.every((item) => item.type === 'text');
+  if (!hasOnlyTextItems) {
+    return false;
+  }
+
+  const isCaptionNamedTrack = CAPTION_TRACK_NAME_ALIASES.has(normalizeTrackName(track.name));
+  const hasOnlyGeneratedCaptionItems = trackItems.every((item) => isGeneratedCaptionTextItem(item));
+  return isCaptionNamedTrack || hasOnlyGeneratedCaptionItems;
+}
+
+export function findDedicatedCaptionTrackForRanges(
+  tracks: readonly TimelineTrack[],
+  items: readonly TimelineItem[],
+  ranges: ReadonlyArray<{ startFrame: number; endFrame: number }>,
+): TimelineTrack | null {
+  const sortedTracks = [...tracks].sort((a, b) => a.order - b.order);
+
+  for (const track of sortedTracks) {
+    if (!isDedicatedCaptionTrack(track, items)) {
+      continue;
+    }
+
+    const hasOverlap = items.some((item) => {
+      if (item.trackId !== track.id) {
+        return false;
+      }
+
+      return hasRangeOverlap(item, ranges);
+    });
+
+    if (!hasOverlap) {
+      return track;
+    }
+  }
+
+  return null;
 }
 
 function isLegacyGeneratedCaptionItemForClip(

@@ -32,6 +32,9 @@ interface TrackHeaderProps {
   onAddAudioTrack: () => void;
   onDeleteTrack: () => void;
   onDeleteEmptyTracks: () => void;
+  onGenerateTrackCaptions?: () => void;
+  canGenerateTrackCaptions?: boolean;
+  isGeneratingTrackCaptions?: boolean;
 }
 
 /**
@@ -43,7 +46,9 @@ function areTrackHeaderPropsEqual(prev: TrackHeaderProps, next: TrackHeaderProps
     prev.isActive === next.isActive &&
     prev.isSelected === next.isSelected &&
     prev.canDeleteTrack === next.canDeleteTrack &&
-    prev.canDeleteEmptyTracks === next.canDeleteEmptyTracks
+    prev.canDeleteEmptyTracks === next.canDeleteEmptyTracks &&
+    prev.canGenerateTrackCaptions === next.canGenerateTrackCaptions &&
+    prev.isGeneratingTrackCaptions === next.isGeneratingTrackCaptions
   );
   // Callbacks (onToggleLock, etc.) are ignored - they're recreated each render but functionality is same
 }
@@ -73,6 +78,9 @@ export const TrackHeader = memo(function TrackHeader({
   onAddAudioTrack,
   onDeleteTrack,
   onDeleteEmptyTracks,
+  onGenerateTrackCaptions,
+  canGenerateTrackCaptions,
+  isGeneratingTrackCaptions,
 }: TrackHeaderProps) {
   const itemCount = useItemsStore((s) => s.itemsByTrackId[track.id]?.length ?? 0);
   const syncLockEnabled = isTrackSyncLockActive(track);
@@ -215,6 +223,18 @@ export const TrackHeader = memo(function TrackHeader({
       </ContextMenuTrigger>
 
       <ContextMenuContent className="w-52">
+        {onGenerateTrackCaptions && (
+          <>
+            <ContextMenuItem
+              disabled={!canGenerateTrackCaptions || isGeneratingTrackCaptions}
+              onClick={onGenerateTrackCaptions}
+            >
+              {isGeneratingTrackCaptions ? '正在为该轨道生成字幕...' : '为该轨道生成字幕'}
+            </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
         <ContextMenuItem onClick={onCloseGaps}>
           Close All Gaps
         </ContextMenuItem>

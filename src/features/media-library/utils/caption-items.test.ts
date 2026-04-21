@@ -11,7 +11,9 @@ vi.mock('../deps/timeline-contract', () => ({
 }));
 
 import {
+  buildCaptionTrack,
   buildCaptionTextItems,
+  findDedicatedCaptionTrackForRanges,
   findGeneratedCaptionItemsForClip,
   findReplaceableCaptionItemsForClip,
   getCaptionTextItemTemplate,
@@ -23,6 +25,39 @@ import {
 import type { TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
 
 describe('caption-items', () => {
+  it('creates caption tracks above all non-caption video tracks', () => {
+    const track = buildCaptionTrack([
+      {
+        id: 'track-v1',
+        name: 'V1',
+        kind: 'video',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-a1',
+        name: 'A1',
+        kind: 'audio',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+
+    expect(track.name).toBe('字幕');
+    expect(track.kind).toBe('video');
+    expect(track.order).toBe(-1);
+  });
+
   it('normalizes empty and invalid transcript segments', () => {
     const normalized = normalizeCaptionSegments([
       { text: '  Hello  ', start: 0, end: 1.2 },
@@ -292,5 +327,109 @@ describe('caption-items', () => {
     );
 
     expect(replaceableCaptions.map((item) => item.id)).toEqual(['legacy-caption']);
+  });
+
+  it('selects a dedicated caption track instead of regular media tracks', () => {
+    const tracks: TimelineTrack[] = [
+      {
+        id: 'track-video',
+        name: 'V1',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-captions',
+        name: '字幕',
+        kind: 'video',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ];
+
+    const items: TimelineItem[] = [
+      {
+        id: 'clip-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 100,
+        durationInFrames: 60,
+        label: 'Clip',
+        src: 'blob:test',
+      },
+    ];
+
+    const track = findDedicatedCaptionTrackForRanges(
+      tracks,
+      items,
+      [{ startFrame: 110, endFrame: 150 }],
+    );
+
+    expect(track?.id).toBe('track-captions');
+  });
+
+  it('skips dedicated caption tracks that overlap and picks the next free caption track', () => {
+    const tracks: TimelineTrack[] = [
+      {
+        id: 'track-captions-1',
+        name: '字幕',
+        kind: 'video',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-captions-2',
+        name: '字幕',
+        kind: 'video',
+        height: 64,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ];
+
+    const items: TimelineItem[] = [
+      {
+        id: 'caption-1',
+        type: 'text',
+        trackId: 'track-captions-1',
+        from: 100,
+        durationInFrames: 40,
+        label: 'caption 1',
+        mediaId: 'media-1',
+        text: 'caption 1',
+        color: '#ffffff',
+        captionSource: {
+          type: 'transcript',
+          clipId: 'clip-1',
+          mediaId: 'media-1',
+        },
+      },
+    ];
+
+    const track = findDedicatedCaptionTrackForRanges(
+      tracks,
+      items,
+      [{ startFrame: 120, endFrame: 150 }],
+    );
+
+    expect(track?.id).toBe('track-captions-2');
   });
 });
