@@ -14,10 +14,31 @@ export type AnimatableProperty =
   | 'rotation'
   | 'opacity'
   | 'cornerRadius'
+  | 'cropLeft'
+  | 'cropRight'
+  | 'cropTop'
+  | 'cropBottom'
+  | 'cropSoftness'
   | 'volume';
 
 /** Transform/visual properties animatable via gizmo (excludes non-spatial props like volume) */
-export type TransformAnimatableProperty = Exclude<AnimatableProperty, 'volume'>;
+export type TransformAnimatableProperty =
+  | 'x'
+  | 'y'
+  | 'width'
+  | 'height'
+  | 'anchorX'
+  | 'anchorY'
+  | 'rotation'
+  | 'opacity'
+  | 'cornerRadius';
+
+export type CropAnimatableProperty =
+  | 'cropLeft'
+  | 'cropRight'
+  | 'cropTop'
+  | 'cropBottom'
+  | 'cropSoftness';
 
 /** Basic easing functions for interpolation between keyframes */
 export type BasicEasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
@@ -157,6 +178,11 @@ export const PROPERTY_LABELS: Record<AnimatableProperty, string> = {
   rotation: 'Rotation',
   opacity: 'Opacity',
   cornerRadius: 'Corner Radius',
+  cropLeft: 'Crop Left',
+  cropRight: 'Crop Right',
+  cropTop: 'Crop Top',
+  cropBottom: 'Crop Bottom',
+  cropSoftness: 'Crop Softness',
   volume: 'Volume (dB)',
 };
 

@@ -32,7 +32,7 @@ import { resolveMediaUrl } from '@/features/export/deps/media-library';
 import { VideoSourcePool } from '@/features/export/deps/player-contract';
 
 // Import subsystems
-import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
+import { getAnimatedCrop, getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
   renderEffectsFromMaskedSource,
   getAdjustmentLayerEffects,
@@ -1394,10 +1394,11 @@ export async function createCompositionRenderer(
 
         // Corner pin warps the shape, exposing content below
         if (item.cornerPin) return false;
-        if (hasMediaCrop(item.crop)) return false;
 
         // Get animated transform at current frame
         const itemKeyframes = getCurrentKeyframes(item.id);
+        const animatedCrop = getAnimatedCrop(item, itemKeyframes, frame, canvasSettings);
+        if (hasMediaCrop(animatedCrop)) return false;
         const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
 
         // Check opacity (must be 1.0)

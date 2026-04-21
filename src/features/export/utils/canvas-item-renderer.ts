@@ -24,7 +24,7 @@ import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 
 // Subsystem imports
-import { getAnimatedTransform } from './canvas-keyframes';
+import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes';
 import {
   renderEffectsFromMaskedSource,
   getAdjustmentLayerEffects,
@@ -231,6 +231,28 @@ export interface TransitionParticipantRenderState<TItem extends TimelineItem = T
   renderSpan: RenderTimelineSpan;
 }
 
+function applyAnimatedCropToItem<TItem extends TimelineItem>(
+  item: TItem,
+  frame: number,
+  rctx: ItemRenderContext,
+  renderSpan?: RenderTimelineSpan,
+): TItem {
+  if (item.type !== 'video' && item.type !== 'image') {
+    return item;
+  }
+
+  const itemKeyframes = rctx.getCurrentKeyframes?.(item.id) ?? rctx.keyframesMap.get(item.id);
+  const crop = getAnimatedCrop(item, itemKeyframes, frame, rctx.canvasSettings, renderSpan);
+  if (crop === item.crop) {
+    return item;
+  }
+
+  return {
+    ...item,
+    crop,
+  } as TItem;
+}
+
 // ---------------------------------------------------------------------------
 // Core item dispatch
 // ---------------------------------------------------------------------------
@@ -251,9 +273,11 @@ export async function renderItem(
   sourceFrameOffset: number = 0,
   renderSpan?: RenderTimelineSpan,
 ): Promise<void> {
+  const frameResolvedItem = applyAnimatedCropToItem(item, frame, rctx, renderSpan);
+
   // Corner pin: render to temp canvas, then warp onto main canvas
-  if (hasCornerPin(item.cornerPin)) {
-    await renderItemWithCornerPin(ctx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
+  if (hasCornerPin(frameResolvedItem.cornerPin)) {
+    await renderItemWithCornerPin(ctx, frameResolvedItem, transform, frame, rctx, sourceFrameOffset, renderSpan);
     return;
   }
 
@@ -264,7 +288,7 @@ export async function renderItem(
     ctx.globalAlpha = transform.opacity;
   }
 
-  applyItemTransformToContext(ctx, item, transform, rctx.canvasSettings);
+  applyItemTransformToContext(ctx, frameResolvedItem, transform, rctx.canvasSettings);
 
   // Apply corner radius clipping
   if (transform.cornerRadius > 0) {
@@ -275,7 +299,7 @@ export async function renderItem(
     ctx.clip();
   }
 
-  await renderItemContent(ctx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
+  await renderItemContent(ctx, frameResolvedItem, transform, frame, rctx, sourceFrameOffset, renderSpan);
 
   ctx.restore();
 }
@@ -1776,6 +1800,8 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
       } as TItem;
     }
   }
+
+  effectiveClip = applyAnimatedCropToItem(effectiveClip, frame, rctx, renderSpan);
 
   const itemEffects = (
     rctx.renderMode === 'preview'

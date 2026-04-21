@@ -111,7 +111,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
     s.editingItemId === item.id ? s.previewCornerPin : null
   );
   const effectiveCornerPin = cornerPinPreview ?? item.cornerPin;
-  const effectiveCrop = state.propertiesPreview?.crop ?? mediaContent?.crop;
+  const effectiveCrop = state.propertiesPreview?.crop ?? state.animatedCrop ?? mediaContent?.crop;
   const cornerPinTargetRect = useMemo(() => {
     if (mediaContent?.fitMode === 'contain') {
       return resolveCornerPinTargetRect(
@@ -256,7 +256,7 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
         sourceHeight={mediaContent.sourceHeight ?? state.transform.height}
         containerWidth={state.transform.width}
         containerHeight={state.transform.height}
-        crop={state.propertiesPreview?.crop ?? mediaContent.crop}
+        crop={effectiveCrop}
       >
         {children}
       </ContainedMediaLayout>

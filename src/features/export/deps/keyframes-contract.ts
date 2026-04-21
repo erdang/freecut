@@ -8,3 +8,4 @@ export {
   interpolatePropertyValue,
 } from '@/features/keyframes/utils/interpolation';
 export { resolveAnimatedTransform } from '@/features/keyframes/utils/animated-transform-resolver';
+export { resolveAnimatedCrop } from '@/features/keyframes/utils/animated-crop-resolver';

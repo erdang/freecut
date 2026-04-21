@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemEffect } from '@/types/effects';
+import type { ItemKeyframes } from '@/types/keyframe';
 import type { VideoItem } from '@/types/timeline';
 import type { ActiveTransition } from './canvas-transitions';
 import type { ItemRenderContext } from './canvas-item-renderer';
@@ -134,7 +135,13 @@ describe('resolveTransitionParticipantRenderState', () => {
 
     const result = resolveTransitionParticipantRenderState(baseItem, activeTransition, 12, 4, rctx);
 
-    expect(result.item.crop).toEqual(liveCrop);
+    expect(result.item.crop).toEqual({
+      left: 0.2,
+      right: 0,
+      top: 0,
+      bottom: 0,
+      softness: 0,
+    });
     expect(result.item.cornerPin).toEqual(liveCornerPin);
     expect(result.transform.x).toBe(45);
     expect(result.transform.y).toBe(30);
@@ -198,6 +205,63 @@ describe('resolveTransitionParticipantRenderState', () => {
       sourceStart: 20,
     });
     expect(result.transform.opacity).toBe(1);
+  });
+
+  it('resolves animated crop for transition participants during export rendering', () => {
+    const clip: VideoItem = {
+      id: 'crop-video',
+      type: 'video',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Crop clip',
+      src: 'crop.mp4',
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 200,
+        height: 100,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+    const keyframes: ItemKeyframes = {
+      itemId: clip.id,
+      properties: [
+        {
+          property: 'cropLeft',
+          keyframes: [
+            { id: 'crop-start', frame: 0, value: 0, easing: 'linear' },
+            { id: 'crop-end', frame: 10, value: 192, easing: 'linear' },
+          ],
+        },
+      ],
+    };
+    const activeTransition = createActiveTransition({ leftClip: clip });
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: {} as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      getCurrentKeyframes: () => keyframes,
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map([[clip.id, keyframes]]),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+    };
+
+    const result = resolveTransitionParticipantRenderState(clip, activeTransition, 5, 4, rctx);
+
+    expect(result.item.crop?.left).toBeCloseTo(0.05, 5);
   });
 
   it('extends the outgoing clip past its visible end for transition postroll', () => {

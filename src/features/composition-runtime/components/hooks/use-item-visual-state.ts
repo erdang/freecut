@@ -5,9 +5,10 @@ import { useGizmoStore, type ItemPropertiesPreview } from '@/features/compositio
 import { useMaskEditorStore } from '@/features/composition-runtime/deps/stores';
 import { useTimelineStore } from '@/features/composition-runtime/deps/stores';
 import type { TimelineItem } from '@/types/timeline';
-import type { ResolvedTransform, CanvasSettings } from '@/types/transform';
+import type { ResolvedTransform, CanvasSettings, CropSettings } from '@/types/transform';
 import {
   toTransformStyle,
+  getSourceDimensions,
 } from '../../utils/transform-resolver';
 import { getShapePath, rotatePath } from '../../utils/shape-path';
 import { useItemKeyframesFromContext } from '../../contexts/keyframes-context';
@@ -20,6 +21,7 @@ import {
 } from '../../utils/frame-scene';
 import { applyPreviewPathVerticesToShape } from '../../utils/preview-path-override';
 import { expandTextTransformToFitContent } from '../../utils/text-layout';
+import { resolveAnimatedCrop } from '@/features/composition-runtime/deps/keyframes';
 
 /**
  * Consolidated visual state for an item.
@@ -34,6 +36,8 @@ interface ItemVisualState {
   fadeOpacity: number;
   /** Final opacity (transform.opacity * fadeOpacity) */
   finalOpacity: number;
+  /** Source-relative crop after keyframe interpolation */
+  animatedCrop: CropSettings | undefined;
 
   /** Combined CSS filter string (legacy — always empty, effects render via GPU) */
   cssFilter: string;
@@ -135,7 +139,7 @@ export function useItemVisualState(
   );
 
   // === TRANSFORM COMPUTATION ===
-  const { transform, transformStyle, fadeOpacity, finalOpacity } = useMemo(() => {
+  const { transform, transformStyle, fadeOpacity, finalOpacity, animatedCrop } = useMemo(() => {
 
     // Check if this item has an active single-item gizmo preview
     const isGizmoPreviewActive = activeGizmo?.itemId === item.id && previewTransform !== null;
@@ -146,6 +150,10 @@ export function useItemVisualState(
 
     // Check for item properties preview (fades)
     const propertiesPreview = itemPreview?.properties;
+    const sourceDimensions = getSourceDimensions(item);
+    const resolvedAnimatedCrop = sourceDimensions
+      ? resolveAnimatedCrop(item.crop, itemKeyframes ?? undefined, relativeFrame, sourceDimensions)
+      : item.crop;
 
     const animatedResolved = resolveItemTransformAtRelativeFrame(item, {
       canvas: logicalCanvas,
@@ -242,6 +250,7 @@ export function useItemVisualState(
       transformStyle: style,
       fadeOpacity: computedFadeOpacity,
       finalOpacity: computedFinalOpacity,
+      animatedCrop: resolvedAnimatedCrop,
     };
   }, [
     activeGizmo,
@@ -416,6 +425,7 @@ export function useItemVisualState(
     transformStyle,
     fadeOpacity,
     finalOpacity,
+    animatedCrop,
     cssFilter,
     scanlinesEffect,
     halftoneStyles,

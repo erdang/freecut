@@ -24,6 +24,7 @@ import {
 import {
   DopesheetEditor,
   getBezierPresetForEasing,
+  getCropPropertyValue,
   getTransitionBlockedRanges,
   interpolatePropertyValue,
   getAnimatablePropertiesForItem,
@@ -138,6 +139,20 @@ function getBaseKeyframeValue(
 ): number {
   if (property === 'volume') {
     return item.volume ?? 0;
+  }
+
+  if (
+    property === 'cropLeft'
+    || property === 'cropRight'
+    || property === 'cropTop'
+    || property === 'cropBottom'
+    || property === 'cropSoftness'
+  ) {
+    const sourceDimensions = getSourceDimensions(item);
+    return getCropPropertyValue(item.crop, property, {
+      width: Math.max(1, sourceDimensions?.width ?? item.transform?.width ?? canvas.width),
+      height: Math.max(1, sourceDimensions?.height ?? item.transform?.height ?? canvas.height),
+    });
   }
 
   const resolved = resolveTransform(item, canvas, getSourceDimensions(item));

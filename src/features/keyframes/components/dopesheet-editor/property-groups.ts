@@ -17,6 +17,11 @@ const PROPERTY_GROUP_DEFINITIONS: Array<{
     properties: ['x', 'y', 'width', 'height', 'anchorX', 'anchorY', 'rotation', 'opacity', 'cornerRadius'],
   },
   {
+    id: 'crop',
+    label: 'Crop',
+    properties: ['cropLeft', 'cropRight', 'cropTop', 'cropBottom', 'cropSoftness'],
+  },
+  {
     id: 'audio',
     label: 'Audio',
     properties: ['volume'],

@@ -25,6 +25,11 @@ describe('getAnimatablePropertiesForItem', () => {
       'cornerRadius',
       'anchorX',
       'anchorY',
+      'cropLeft',
+      'cropRight',
+      'cropTop',
+      'cropBottom',
+      'cropSoftness',
       'volume',
     ]);
   });
