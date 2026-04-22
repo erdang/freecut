@@ -33,6 +33,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { getMusicgenModelDefinition } from '@/shared/utils/musicgen-models';
+import { getStoredTtsQuality, setStoredTtsQuality } from '@/shared/utils/tts-settings';
 import { SliderInput } from '@/shared/ui/property-controls';
 import {
   importMediaLibraryService,
@@ -63,7 +64,7 @@ import {
   type MusicgenModelId,
 } from '../services/musicgen-service';
 
-const DEFAULT_PROMPT = 'Welcome to free cut. This voice was generated locally in the browser with WebGPU.';
+const DEFAULT_PROMPT = 'Welcome to freecut. This voice was generated locally in the browser with WebGPU.';
 
 const MUSIC_PROMPT_PRESETS = [
   { label: 'Lo-fi Chill', prompt: 'Warm lo-fi beat with dusty drums, mellow bass, and a dreamy synth lead' },
@@ -260,8 +261,8 @@ export const AiPanel = memo(function AiPanel() {
 
   const [ttsText, setTtsText] = useState(DEFAULT_PROMPT);
   const [ttsVoice, setTtsVoice] = useState<KokoroTtsVoice>('af_heart');
-  const [ttsModel, setTtsModel] = useState<KokoroTtsModel>('q8');
-  const [ttsSpeed, setTtsSpeed] = useState(1.25);
+  const [ttsModel, setTtsModel] = useState<KokoroTtsModel>(() => getStoredTtsQuality());
+  const [ttsSpeed, setTtsSpeed] = useState(1);
   const [isTtsGenerating, setIsTtsGenerating] = useState(false);
   const [ttsProgress, setTtsProgress] = useState<string | null>(null);
   const [ttsError, setTtsError] = useState<string | null>(null);
@@ -301,6 +302,10 @@ export const AiPanel = memo(function AiPanel() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    setStoredTtsQuality(ttsModel);
+  }, [ttsModel]);
 
   const isTtsSupported = kokoroTtsService.isSupported();
   const isMusicSupported = musicgenService.isSupported();
@@ -706,7 +711,7 @@ export const AiPanel = memo(function AiPanel() {
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent className="max-h-72">
                 {KOKORO_TTS_VOICE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value} className="text-xs">
                     {option.label}

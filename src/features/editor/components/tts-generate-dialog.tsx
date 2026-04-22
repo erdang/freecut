@@ -25,6 +25,7 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { SliderInput } from '@/shared/ui/property-controls';
+import { getStoredTtsQuality, setStoredTtsQuality } from '@/shared/utils/tts-settings';
 import {
   importMediaLibraryService,
   useMediaLibraryStore,
@@ -232,8 +233,8 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
   const [text, setText] = useState('');
   const [voice, setVoice] = useState<KokoroTtsVoice>('af_heart');
-  const [model, setModel] = useState<KokoroTtsModel>('q8');
-  const [speed, setSpeed] = useState(1.25);
+  const [model, setModel] = useState<KokoroTtsModel>(() => getStoredTtsQuality());
+  const [speed, setSpeed] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isInserting, setIsInserting] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
@@ -254,12 +255,17 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         resultUrlRef.current = null;
       }
       setText(initialText);
+      setModel(getStoredTtsQuality());
       setError(null);
       setProgress(null);
       setResult(null);
       setInserted(false);
     }
   }, [isOpen, initialText]);
+
+  useEffect(() => {
+    setStoredTtsQuality(model);
+  }, [model]);
 
   // Cleanup blob URL when dialog closes
   useEffect(() => {
@@ -455,7 +461,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72">
                   {KOKORO_TTS_VOICE_OPTIONS.map((option) => (
                     <SelectItem key={option.value} value={option.value} className="text-xs">
                       {option.label}
