@@ -10,14 +10,13 @@ import {
 import type { GpuEffect, ItemEffect } from '@/types/effects';
 import type { TimelineItem } from '@/types/timeline';
 
-function isAnimatableColorNumberParam(
+function isAnimatableGpuNumberParam(
   definition: ReturnType<typeof getGpuEffect>,
   paramKey: string,
 ): boolean {
   const param = definition?.params[paramKey];
   return Boolean(
     definition &&
-      definition.category === 'color' &&
       param?.type === 'number' &&
       param.animatable,
   );
@@ -56,7 +55,7 @@ export function getAnimatableEffectPropertiesForItem(item: TimelineItem): Animat
 
     const gpuEffect = effectEntry.effect;
     const definition = getGpuEffect(gpuEffect.gpuEffectType);
-    if (!definition || definition.category !== 'color') {
+    if (!definition) {
       continue;
     }
 
@@ -94,7 +93,7 @@ export function getEffectPropertyBaseValue(
   }
 
   const definition = getGpuEffect(parsed.gpuEffectType);
-  if (!isAnimatableColorNumberParam(definition, parsed.paramKey)) {
+  if (!isAnimatableGpuNumberParam(definition, parsed.paramKey)) {
     return null;
   }
 
@@ -113,7 +112,7 @@ export function getResolvedAnimatedEffectParamValue(
 
   const gpuEffect = effectEntry.effect;
   const definition = getGpuEffect(gpuEffect.gpuEffectType);
-  if (!isAnimatableColorNumberParam(definition, paramKey)) {
+  if (!isAnimatableGpuNumberParam(definition, paramKey)) {
     return getNumericGpuEffectParamValue(gpuEffect, paramKey, definition);
   }
 
@@ -131,7 +130,7 @@ export function getResolvedAnimatedEffectParamValue(
   return interpolatePropertyValue(keyframes, relativeFrame, baseValue);
 }
 
-export function resolveAnimatedColorEffects(
+export function resolveAnimatedGpuEffects(
   effects: ItemEffect[] | undefined,
   itemKeyframes: ItemKeyframes | undefined,
   relativeFrame: number,
@@ -149,7 +148,7 @@ export function resolveAnimatedColorEffects(
 
     const gpuEffect = effectEntry.effect;
     const definition = getGpuEffect(gpuEffect.gpuEffectType);
-    if (!definition || definition.category !== 'color') {
+    if (!definition) {
       return effectEntry;
     }
 
@@ -201,6 +200,8 @@ export function resolveAnimatedColorEffects(
 
   return changed ? resolvedEffects : effects;
 }
+
+export const resolveAnimatedColorEffects = resolveAnimatedGpuEffects;
 
 export function isEffectProperty(property: AnimatableProperty): boolean {
   return isEffectAnimatableProperty(property);

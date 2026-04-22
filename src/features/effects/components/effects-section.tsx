@@ -95,7 +95,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
 
       const definition = getGpuEffect(effect.effect.gpuEffectType);
       const param = definition?.params[paramKey];
-      if (!definition || definition.category !== 'color' || param?.type !== 'number' || !param.animatable) {
+      if (!definition || param?.type !== 'number' || !param.animatable) {
         return null;
       }
 
@@ -112,7 +112,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       }
 
       const definition = getGpuEffect(gpuEffect.gpuEffectType);
-      if (!definition || definition.category !== 'color') {
+      if (!definition) {
         return gpuEffect;
       }
 
@@ -191,7 +191,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       const gpuEff = effect.effect as GpuEffect;
       const definition = getGpuEffect(gpuEff.gpuEffectType);
       const param = definition?.params[paramKey];
-      const autoOperations = typeof value === 'number' && definition && definition.category === 'color' && param?.type === 'number' && param.animatable
+      const autoOperations = typeof value === 'number' && definition && param?.type === 'number' && param.animatable
         ? visualItems.flatMap((item) => {
             const targetEffect = getMappedEffectEntry(item, effectId);
             if (!targetEffect || targetEffect.effect.type !== 'gpu-effect') {
@@ -263,7 +263,6 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
           if (
             typeof paramValue !== 'number' ||
             !definition ||
-            definition.category !== 'color' ||
             param?.type !== 'number' ||
             !param.animatable
           ) {
