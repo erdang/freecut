@@ -10,6 +10,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog';
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog';
+import { getTextItemPlainText } from '@/shared/utils/text-item-spans';
 import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
 import {
   isTranscriptionCancellationError,
@@ -175,7 +176,7 @@ export function useTimelineItemActions({
     void insertFreezeFrame(item.id, currentFrame);
   }, [item.id, item.type]);
 
-  const textContent = item.type === 'text' ? item.text : '';
+  const textContent = item.type === 'text' ? getTextItemPlainText(item) : '';
   const hasSpeakableText = textContent.trim().length > 0;
 
   const handleGenerateAudioFromText = useCallback(() => {

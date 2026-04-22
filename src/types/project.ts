@@ -92,6 +92,16 @@ export interface ProjectTimeline {
     fontStyle?: 'normal' | 'italic';
     underline?: boolean;
     color?: string;
+    textSpans?: Array<{
+      text: string;
+      fontSize?: number;
+      fontFamily?: string;
+      fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+      fontStyle?: 'normal' | 'italic';
+      underline?: boolean;
+      color?: string;
+      letterSpacing?: number;
+    }>;
     backgroundColor?: string;
     backgroundRadius?: number;
     textAlign?: 'left' | 'center' | 'right';

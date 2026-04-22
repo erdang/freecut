@@ -22,6 +22,7 @@ import type { ItemEffect } from '@/types/effects';
 import { createLogger } from '@/shared/logging/logger';
 import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
+import { getTextItemSpans } from '@/shared/utils/text-item-spans';
 
 // Subsystem imports
 import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes';
@@ -1157,9 +1158,7 @@ function renderTextItem(
   const fontStyle = item.fontStyle ?? 'normal';
   const fontWeightName = item.fontWeight ?? 'normal';
   const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? 400;
-  const underline = item.underline ?? false;
   const lineHeight = item.lineHeight ?? 1.2;
-  const letterSpacing = item.letterSpacing ?? 0;
   const textAlign = item.textAlign ?? 'center';
   const verticalAlign = item.verticalAlign ?? 'middle';
   const padding = Math.max(0, item.textPadding ?? 16);
@@ -1191,27 +1190,45 @@ function renderTextItem(
     }
   }
 
-  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
-  ctx.fillStyle = item.color ?? '#ffffff';
-
   const availableWidth = Math.max(1, transform.width - padding * 2);
-  const lineHeightPx = fontSize * lineHeight;
+  const spans = getTextItemSpans(item);
+  const renderedLines = spans.flatMap((span) => {
+    const spanFontSize = span.fontSize ?? fontSize;
+    const spanFontFamily = span.fontFamily ?? fontFamily;
+    const spanFontStyle = span.fontStyle ?? fontStyle;
+    const spanFontWeightName = span.fontWeight ?? fontWeightName;
+    const spanFontWeight = FONT_WEIGHT_MAP[spanFontWeightName] ?? fontWeight;
+    const spanLetterSpacing = span.letterSpacing ?? item.letterSpacing ?? 0;
+    const spanUnderline = span.underline ?? item.underline ?? false;
+    const spanColor = span.color ?? item.color ?? '#ffffff';
+    const spanLineHeightPx = spanFontSize * lineHeight;
 
-  const metrics = ctx.measureText('Hg');
-  const ascent = metrics.fontBoundingBoxAscent ?? fontSize * 0.8;
-  const descent = metrics.fontBoundingBoxDescent ?? fontSize * 0.2;
-  const fontHeight = ascent + descent;
+    ctx.font = `${spanFontStyle} ${spanFontWeight} ${spanFontSize}px "${spanFontFamily}", sans-serif`;
+    const metrics = ctx.measureText('Hg');
+    const ascent = metrics.fontBoundingBoxAscent ?? spanFontSize * 0.8;
+    const descent = metrics.fontBoundingBoxDescent ?? spanFontSize * 0.2;
+    const fontHeight = ascent + descent;
+    const halfLeading = (spanLineHeightPx - fontHeight) / 2;
+    const baselineOffset = halfLeading + ascent;
+    const lines = wrapText(ctx, span.text ?? '', availableWidth, spanLetterSpacing, textMeasureCache);
 
-  const halfLeading = (lineHeightPx - fontHeight) / 2;
+    return lines.map((line) => ({
+      text: line,
+      fontSize: spanFontSize,
+      fontFamily: spanFontFamily,
+      fontStyle: spanFontStyle,
+      fontWeight: spanFontWeight,
+      letterSpacing: spanLetterSpacing,
+      underline: spanUnderline,
+      color: spanColor,
+      lineHeightPx: spanLineHeightPx,
+      baselineOffset,
+    }));
+  });
 
   ctx.textBaseline = 'alphabetic';
 
-  const baselineOffset = halfLeading + ascent;
-
-  const text = item.text ?? '';
-  const lines = wrapText(ctx, text, availableWidth, letterSpacing, textMeasureCache);
-
-  const totalTextHeight = lines.length * lineHeightPx;
+  const totalTextHeight = renderedLines.reduce((sum, line) => sum + line.lineHeightPx, 0);
   const availableHeight = transform.height - padding * 2;
 
   let textBlockTop: number;
@@ -1235,9 +1252,9 @@ function renderTextItem(
     ctx.shadowOffsetY = item.textShadow.offsetY;
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    const lineY = textBlockTop + i * lineHeightPx + baselineOffset;
+  let currentTop = textBlockTop;
+  for (const renderedLine of renderedLines) {
+    const lineY = currentTop + renderedLine.baselineOffset;
 
     let lineX: number;
     switch (textAlign) {
@@ -1256,27 +1273,32 @@ function renderTextItem(
         break;
     }
 
+    ctx.font = `${renderedLine.fontStyle} ${renderedLine.fontWeight} ${renderedLine.fontSize}px "${renderedLine.fontFamily}", sans-serif`;
+    ctx.fillStyle = renderedLine.color;
+
     if (item.stroke && item.stroke.width > 0) {
       ctx.strokeStyle = item.stroke.color;
       ctx.lineWidth = item.stroke.width * 2;
       ctx.lineJoin = 'round';
-      drawTextWithLetterSpacing(ctx, line, lineX, lineY, letterSpacing, true, textMeasureCache);
+      drawTextWithLetterSpacing(ctx, renderedLine.text, lineX, lineY, renderedLine.letterSpacing, true, textMeasureCache);
     }
 
-    drawTextWithLetterSpacing(ctx, line, lineX, lineY, letterSpacing, false, textMeasureCache);
+    drawTextWithLetterSpacing(ctx, renderedLine.text, lineX, lineY, renderedLine.letterSpacing, false, textMeasureCache);
 
-    if (underline) {
+    if (renderedLine.underline) {
       drawUnderline(
         ctx,
-        line,
+        renderedLine.text,
         lineX,
         lineY,
         textAlign,
-        letterSpacing,
-        fontSize,
+        renderedLine.letterSpacing,
+        renderedLine.fontSize,
         textMeasureCache,
       );
     }
+
+    currentTop += renderedLine.lineHeightPx;
   }
 
   ctx.restore();

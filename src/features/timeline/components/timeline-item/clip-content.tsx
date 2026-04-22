@@ -12,6 +12,7 @@ import { useItemsStore } from '../../stores/items-store';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { useZoomStore } from '../../stores/zoom-store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
+import { getTextItemPlainText } from '@/shared/utils/text-item-spans';
 import {
   getCompositionVisualSegments,
   summarizeCompositionClipContent,
@@ -424,7 +425,7 @@ export const ClipContent = memo(function ClipContent({
       <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
         <div className="text-[10px] text-muted-foreground truncate">Text</div>
         <div className="text-xs font-medium truncate flex-1">
-          {item.text || 'Empty text'}
+          {getTextItemPlainText(item) || 'Empty text'}
         </div>
       </div>
     );

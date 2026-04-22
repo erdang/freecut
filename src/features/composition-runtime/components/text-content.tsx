@@ -3,6 +3,7 @@ import { useGizmoStore } from '@/features/composition-runtime/deps/stores';
 import type { TextItem } from '@/types/timeline';
 import { loadFont, FONT_WEIGHT_MAP } from '../utils/fonts';
 import { useCompositionSpace } from '../contexts/composition-space-context';
+import { getTextItemSpans } from '@/shared/utils/text-item-spans';
 
 /**
  * Text content with live property preview support.
@@ -21,8 +22,6 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
   const preview = itemPreview?.properties;
 
   // Use preview values if available, otherwise use item's stored values
-  const fontSize = (preview?.fontSize ?? item.fontSize ?? 60) * scale;
-  const letterSpacing = (preview?.letterSpacing ?? item.letterSpacing ?? 0) * scaleX;
   const lineHeight = preview?.lineHeight ?? item.lineHeight ?? 1.2;
   const color = preview?.color ?? item.color;
   const backgroundColor = preview?.backgroundColor ?? item.backgroundColor;
@@ -40,7 +39,7 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
   // Load the Google Font and get the CSS fontFamily value
   // loadFont() blocks rendering until the font is ready (works for both preview and server render)
   const fontName = item.fontFamily ?? 'Inter';
-  const fontFamily = loadFont(fontName);
+  loadFont(fontName);
 
   // Get font weight from shared map
   const fontWeight = FONT_WEIGHT_MAP[item.fontWeight ?? 'normal'] ?? 400;
@@ -66,6 +65,7 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
     : undefined;
 
   const strokeWidth = stroke?.width ? `${stroke.width * scale * 2}px` : undefined;
+  const spans = getTextItemSpans(item);
 
   return (
     <div
@@ -83,27 +83,48 @@ export const TextContent: React.FC<{ item: TextItem }> = ({ item }) => {
     >
       <div
         style={{
-          fontSize,
-          // Use the fontFamily returned by loadFont (includes proper CSS value)
-          fontFamily: fontFamily,
-          fontWeight,
-          fontStyle: item.fontStyle ?? 'normal',
-          textDecoration: item.underline ? 'underline' : 'none',
-          color,
           textAlign: item.textAlign ?? 'center',
-          lineHeight,
-          letterSpacing,
           textShadow: cssTextShadow,
           WebkitTextStrokeWidth: strokeWidth,
           WebkitTextStrokeColor: stroke?.color,
-          // Best practice: use inline-block and pre-wrap to match measureText behavior
-          display: 'inline-block',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0,
           width: '100%',
         }}
       >
-        {item.text}
+        {spans.map((span, index) => {
+          const spanFontName = span.fontFamily ?? fontName;
+          const spanFontFamily = loadFont(spanFontName);
+          const spanFontWeight = FONT_WEIGHT_MAP[span.fontWeight ?? item.fontWeight ?? 'normal'] ?? fontWeight;
+          const spanFontSize = (span.fontSize ?? preview?.fontSize ?? item.fontSize ?? 60) * scale;
+          const spanLetterSpacing = (span.letterSpacing ?? preview?.letterSpacing ?? item.letterSpacing ?? 0) * scaleX;
+          const spanColor = span.color ?? color;
+          const spanFontStyle = span.fontStyle ?? item.fontStyle ?? 'normal';
+          const spanUnderline = span.underline ?? item.underline ?? false;
+
+          return (
+            <div
+              key={`${index}:${span.text}`}
+              style={{
+                fontSize: spanFontSize,
+                fontFamily: spanFontFamily,
+                fontWeight: spanFontWeight,
+                fontStyle: spanFontStyle,
+                textDecoration: spanUnderline ? 'underline' : 'none',
+                color: spanColor,
+                lineHeight,
+                letterSpacing: spanLetterSpacing,
+                display: 'block',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+                width: '100%',
+              }}
+            >
+              {span.text}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

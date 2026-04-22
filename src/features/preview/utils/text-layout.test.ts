@@ -114,4 +114,31 @@ describe('expandTextTransformForPreview', () => {
 
     expect(expanded.height).toBeGreaterThan(64);
   });
+
+  it('expands height for stacked text spans with their own sizes', () => {
+    const expanded = expandTextTransformForPreview(
+      {
+        ...baseItem,
+        text: 'Headline\nSubtitle',
+        textSpans: [
+          {
+            text: 'Headline',
+            fontSize: 56,
+            fontWeight: 'bold',
+          },
+          {
+            text: 'Subtitle',
+            fontSize: 28,
+            color: '#cbd5e1',
+          },
+        ],
+      },
+      {
+        ...baseTransform,
+        height: 70,
+      }
+    );
+
+    expect(expanded.height).toBeGreaterThan(70);
+  });
 });

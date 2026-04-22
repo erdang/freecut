@@ -107,4 +107,73 @@ describe('canvas-item-renderer text backgrounds', () => {
     expect(ctx.fill).toHaveBeenCalled();
     expect(ctx.fillText).toHaveBeenCalled();
   });
+
+  it('renders each text span as its own stacked line during export', async () => {
+    const item: TextItem = {
+      id: 'text-2',
+      type: 'text',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 90,
+      label: 'Title',
+      text: 'Tag\nHeadline\nSubtitle',
+      textSpans: [
+        { text: 'Tag', fontSize: 20, color: '#cbd5e1' },
+        { text: 'Headline', fontSize: 48, fontWeight: 'bold' },
+        { text: 'Subtitle', fontSize: 28, color: '#94a3b8' },
+      ],
+      color: '#ffffff',
+      textPadding: 24,
+      fontSize: 48,
+      fontFamily: 'Inter',
+      fontWeight: 'normal',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 420,
+        height: 180,
+        rotation: 0,
+        opacity: 1,
+      },
+    };
+
+    const ctx = createMockCtx();
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1280, height: 720, fps: 30 },
+      canvasPool: {} as ItemRenderContext['canvasPool'],
+      textMeasureCache: {
+        measure: vi.fn((_: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) => {
+          const width = text.length * 10;
+          return width + Math.max(0, text.length - 1) * letterSpacing;
+        }),
+      } as unknown as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+    };
+    const transform: ItemTransform = {
+      x: 0,
+      y: 0,
+      width: 420,
+      height: 180,
+      anchorX: 210,
+      anchorY: 90,
+      rotation: 0,
+      opacity: 1,
+      cornerRadius: 0,
+    };
+
+    await renderItem(ctx, item, transform, 0, rctx);
+
+    expect(ctx.fillText).toHaveBeenCalledTimes(3);
+  });
 });

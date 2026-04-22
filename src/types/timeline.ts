@@ -129,9 +129,21 @@ export type AudioItem = BaseTimelineItem & {
   offset?: number; // Trim offset in source audio
 };
 
+export type TextSpan = {
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  underline?: boolean;
+  color?: string;
+  letterSpacing?: number;
+};
+
 export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
+  textSpans?: TextSpan[];
   textRole?: 'caption';
   captionSource?: GeneratedCaptionSource;
   // Typography

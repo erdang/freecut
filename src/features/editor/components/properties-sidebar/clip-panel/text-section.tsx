@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { TextItem, TimelineItem } from '@/types/timeline';
+import type { TextItem, TextSpan, TimelineItem } from '@/types/timeline';
 import type { CanvasSettings } from '@/types/transform';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { useGizmoStore, type ItemPropertiesPreview } from '@/features/editor/deps/preview';
@@ -45,6 +45,16 @@ import {
   type TextAnimationPhase,
   type TextAnimationPresetOptionId,
 } from './text-animation-presets';
+import {
+  TEXT_STYLE_PRESETS,
+  buildTextStylePresetUpdates,
+  type TextStylePresetId,
+} from './text-style-presets';
+import {
+  buildTextItemLabelFromText,
+  getTextItemPlainText,
+  getTextItemSpans,
+} from '@/shared/utils/text-item-spans';
 
 const FONT_WEIGHT_OPTIONS = [
   { value: 'normal', label: 'Regular' },
@@ -144,6 +154,58 @@ function normalizeTextStroke(
   return stroke;
 }
 
+function areTextSpansEqual(left: TextSpan[], right: TextSpan[]): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function cloneTextSpans(spans: TextSpan[]): TextSpan[] {
+  return spans.map((span) => ({ ...span }));
+}
+
+function buildSpanLayout(
+  baseSpans: TextSpan[],
+  item: TextItem,
+  count: 2 | 3,
+): TextSpan[] {
+  const existing = cloneTextSpans(baseSpans);
+  const baseSize = item.fontSize ?? 60;
+  const defaults: TextSpan[] = count === 2
+    ? [
+        { text: existing[0]?.text || item.text || 'Headline' },
+        {
+          text: existing[1]?.text || 'Subtitle',
+          fontSize: Math.max(24, Math.round(baseSize * 0.48)),
+          fontWeight: 'medium',
+          color: '#cbd5e1',
+          letterSpacing: 1,
+        },
+      ]
+    : [
+        {
+          text: existing[0]?.text || 'Tag',
+          fontSize: Math.max(18, Math.round(baseSize * 0.3)),
+          fontWeight: 'semibold',
+          color: '#cbd5e1',
+          letterSpacing: 2,
+        },
+        {
+          text: existing[1]?.text || item.text || 'Headline',
+        },
+        {
+          text: existing[2]?.text || 'Subtitle',
+          fontSize: Math.max(22, Math.round(baseSize * 0.42)),
+          fontWeight: 'medium',
+          color: '#cbd5e1',
+          letterSpacing: 1,
+        },
+      ];
+
+  return defaults.map((span, index) => ({
+    ...span,
+    ...(existing[index] ?? {}),
+  }));
+}
+
 /**
  * Text section - properties for text items (font, color, alignment, etc.)
  */
@@ -177,6 +239,18 @@ export function TextSection({
     () => ({ ...EMPTY_TEXT_STROKE, ...(textItems[0]?.stroke ?? {}) }),
     [textItems]
   );
+  const sharedTextSpans = useMemo(() => {
+    if (textItems.length === 0) return undefined;
+    const first = getTextItemSpans(textItems[0]!);
+    return textItems.every((item) => areTextSpansEqual(getTextItemSpans(item), first))
+      ? first
+      : undefined;
+  }, [textItems]);
+  const activeEditorSpans = useMemo(
+    () => sharedTextSpans ?? (textItems[0] ? getTextItemSpans(textItems[0]) : []),
+    [sharedTextSpans, textItems]
+  );
+  const firstTextItem = textItems[0];
 
   // Get shared values across selected text items
   const sharedValues = useMemo(() => {
@@ -184,7 +258,9 @@ export function TextSection({
 
     const first = textItems[0]!;
     return {
-      text: textItems.every(i => i.text === first.text) ? first.text : undefined,
+      text: textItems.every(i => getTextItemPlainText(i) === getTextItemPlainText(first))
+        ? getTextItemPlainText(first)
+        : undefined,
       fontSize: textItems.every(i => (i.fontSize ?? 60) === (first.fontSize ?? 60)) ? (first.fontSize ?? 60) : 'mixed' as const,
       fontFamily: textItems.every(i => (i.fontFamily ?? 'Inter') === (first.fontFamily ?? 'Inter')) ? (first.fontFamily ?? 'Inter') : undefined,
       fontWeight: textItems.every(i => (i.fontWeight ?? 'normal') === (first.fontWeight ?? 'normal')) ? (first.fontWeight ?? 'normal') : undefined,
@@ -256,15 +332,119 @@ export function TextSection({
     queueMicrotask(() => clearPreview());
   }, [clearPreview]);
 
+  const updateTextItemsFromSpans = useCallback(
+    (nextSpans: TextSpan[] | undefined) => {
+      const sanitizedSpans = nextSpans
+        ?.map((span) => ({ ...span }))
+        ?? undefined;
+      const plainText = sanitizedSpans
+        ? sanitizedSpans.map((span) => span.text).join('\n')
+        : (sharedValues?.text ?? firstTextItem?.text ?? '');
+      const label = buildTextItemLabelFromText(plainText);
+      textItems.forEach((item) => {
+        updateItem(item.id, {
+          text: plainText,
+          textSpans: sanitizedSpans,
+          label,
+        });
+      });
+    },
+    [firstTextItem?.text, sharedValues?.text, textItems, updateItem]
+  );
+
   // Handlers
   const handleTextChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       const newText = e.target.value;
       textItems.forEach((item) => {
-        updateItem(item.id, { text: newText, label: newText.split('\n')[0] || 'Text' });
+        updateItem(item.id, {
+          text: newText,
+          textSpans: undefined,
+          label: buildTextItemLabelFromText(newText),
+        });
       });
     },
     [textItems, updateItem]
+  );
+
+  const handleApplySpanLayout = useCallback(
+    (layout: 'single' | 'two' | 'three') => {
+      if (!firstTextItem) {
+        return;
+      }
+      if (layout === 'single') {
+        updateTextItemsFromSpans(undefined);
+        return;
+      }
+      const nextSpans = buildSpanLayout(
+        activeEditorSpans,
+        firstTextItem,
+        layout === 'two' ? 2 : 3,
+      );
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, firstTextItem, updateTextItemsFromSpans]
+  );
+
+  const handleSpanTextChange = useCallback(
+    (index: number, value: string) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        text: value,
+      };
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, updateTextItemsFromSpans]
+  );
+
+  const handleSpanFontSizeChange = useCallback(
+    (index: number, value: number) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        fontSize: value,
+      };
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, updateTextItemsFromSpans]
+  );
+
+  const handleSpanColorChange = useCallback(
+    (index: number, value: string) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        color: value,
+      };
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, updateTextItemsFromSpans]
+  );
+
+  const handleSpanWeightChange = useCallback(
+    (index: number, value: string) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        fontWeight: value as TextSpan['fontWeight'],
+      };
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, updateTextItemsFromSpans]
+  );
+
+  const handleSpanItalicToggle = useCallback(
+    (index: number) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      const current = nextSpans[index];
+      nextSpans[index] = {
+        ...(current ?? { text: '' }),
+        fontStyle: current?.fontStyle === 'italic' ? 'normal' : 'italic',
+      };
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, updateTextItemsFromSpans]
   );
 
   // Live preview for fontSize (during drag)
@@ -622,6 +802,14 @@ export function TextSection({
     [finalizePreviewChange, sharedValues?.color, textItems, updateTextItems]
   );
 
+  const handleApplyTextStylePreset = useCallback(
+    (presetId: TextStylePresetId) => {
+      updateTextItems(buildTextStylePresetUpdates(presetId, canvas));
+      finalizePreviewChange();
+    },
+    [canvas, finalizePreviewChange, updateTextItems]
+  );
+
   const handleApplyTextAnimationPreset = useCallback(
     (phase: TextAnimationPhase, presetId: TextAnimationPresetOptionId) => {
       const keyframes = useTimelineStore.getState().keyframes;
@@ -665,7 +853,7 @@ export function TextSection({
     return null;
   }
 
-  const fontPreviewText = sharedValues.text ?? textItems[0]?.text ?? '';
+  const fontPreviewText = sharedValues.text ?? (firstTextItem ? getTextItemPlainText(firstTextItem) : '');
   const isBoldActive = sharedValues.fontWeight === 'bold';
   const canUseBold = supportedFontWeightOptions.some((weight) => weight.value === 'bold');
   const isItalicActive = sharedValues.fontStyle === 'italic';
@@ -685,13 +873,119 @@ export function TextSection({
         <PropertySection title="Text" icon={Type} defaultOpen={true}>
           {/* Text Content */}
           <PropertyRow label="Content">
-            <Textarea
-              value={sharedValues.text ?? ''}
-              onChange={handleTextChange}
-              placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
-              className="min-h-[60px] text-xs flex-1 min-w-0"
-              rows={3}
-            />
+            <div className="flex flex-1 min-w-0 flex-col gap-2">
+              <div className="grid w-full grid-cols-3 gap-1.5">
+                <Button
+                  variant={firstTextItem?.textSpans?.length ? 'outline' : 'secondary'}
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplySpanLayout('single')}
+                >
+                  Single
+                </Button>
+                <Button
+                  variant={activeEditorSpans.length === 2 ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplySpanLayout('two')}
+                >
+                  2 Spans
+                </Button>
+                <Button
+                  variant={activeEditorSpans.length >= 3 ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplySpanLayout('three')}
+                >
+                  3 Spans
+                </Button>
+              </div>
+              {firstTextItem?.textSpans?.length ? (
+                <div className="space-y-2">
+                  {activeEditorSpans.map((span, index) => (
+                    <div key={`${index}:${span.text}`} className="rounded-md border border-border/70 p-2">
+                      <div className="mb-2 text-[11px] font-medium text-muted-foreground">
+                        {`Span ${index + 1}`}
+                      </div>
+                      <Textarea
+                        value={span.text}
+                        onChange={(e) => handleSpanTextChange(index, e.target.value)}
+                        placeholder={`Span ${index + 1} text`}
+                        className="min-h-[52px] text-xs"
+                        rows={2}
+                      />
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <NumberInput
+                          value={span.fontSize ?? firstTextItem.fontSize ?? 60}
+                          onChange={(value) => handleSpanFontSizeChange(index, value)}
+                          min={8}
+                          max={500}
+                          step={1}
+                          unit="px"
+                          className="min-w-0"
+                        />
+                        <Select
+                          value={span.fontWeight ?? firstTextItem.fontWeight ?? 'normal'}
+                          onValueChange={(value) => handleSpanWeightChange(index, value)}
+                        >
+                          <SelectTrigger className="h-7 text-xs min-w-0">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FONT_WEIGHT_OPTIONS.map((weight) => (
+                              <SelectItem key={weight.value} value={weight.value} className="text-xs">
+                                {weight.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <ColorPicker
+                            color={span.color ?? firstTextItem.color ?? '#ffffff'}
+                            onChange={(value) => handleSpanColorChange(index, value)}
+                          />
+                        </div>
+                        <Button
+                          variant={(span.fontStyle ?? 'normal') === 'italic' ? 'secondary' : 'ghost'}
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => handleSpanItalicToggle(index)}
+                          title="Italic span"
+                        >
+                          <Italic className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Textarea
+                  value={sharedValues.text ?? ''}
+                  onChange={handleTextChange}
+                  placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
+                  className="min-h-[60px] text-xs flex-1 min-w-0"
+                  rows={3}
+                />
+              )}
+            </div>
+          </PropertyRow>
+
+          <PropertyRow label="Presets" className="items-start">
+            <div className="grid w-full grid-cols-2 gap-1.5">
+              {TEXT_STYLE_PRESETS.map((preset) => (
+                <Button
+                  key={preset.id}
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-[11px]"
+                  onClick={() => handleApplyTextStylePreset(preset.id)}
+                >
+                  {preset.label}
+                </Button>
+              ))}
+            </div>
           </PropertyRow>
 
           {/* Font Family */}
