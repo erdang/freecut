@@ -12,6 +12,7 @@ import { PropertySection } from '@/shared/ui/property-controls';
 import { GpuEffectPanel, GpuWheelsPanel, GpuCurvesPanel } from './panels';
 import { getGpuCategoriesWithEffects, getGpuEffect, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
 import { useEffectPreviews } from '../hooks/use-effect-previews';
+import { getMappedSelectionEffectEntry } from '../utils/effect-selection';
 import {
   getAutoKeyframeOperation,
   getResolvedAnimatedEffectParamValue,
@@ -54,10 +55,6 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   // Multi-select shows first item's effects
   const effects: ItemEffect[] = visualItems[0]?.effects ?? [];
   const displayItem = visualItems[0] ?? null;
-  const effectIndexById = useMemo(
-    () => new Map(effects.map((effect, index) => [effect.id, index])),
-    [effects],
-  );
   const itemKeyframes = useKeyframesStore(
     useShallow(
       useCallback(
@@ -76,14 +73,9 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
 
   const getMappedEffectEntry = useCallback(
     (item: TimelineItem, displayEffectId: string): ItemEffect | null => {
-      const effectIndex = effectIndexById.get(displayEffectId);
-      if (effectIndex === undefined) {
-        return null;
-      }
-
-      return item.effects?.[effectIndex] ?? null;
+      return getMappedSelectionEffectEntry(effects, item.effects, displayEffectId);
     },
-    [effectIndexById],
+    [effects],
   );
 
   const getKeyframeProperty = useCallback(

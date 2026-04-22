@@ -22,6 +22,15 @@ function isAnimatableGpuNumberParam(
   );
 }
 
+function isGpuEffectParamVisible(
+  definition: ReturnType<typeof getGpuEffect>,
+  effectParams: Record<string, number | boolean | string>,
+  paramKey: string,
+): boolean {
+  const param = definition?.params[paramKey];
+  return Boolean(definition && (param?.visibleWhen?.(effectParams) ?? true));
+}
+
 function getNumericGpuEffectParamValue(
   effect: GpuEffect,
   paramKey: string,
@@ -61,6 +70,10 @@ export function getAnimatableEffectPropertiesForItem(item: TimelineItem): Animat
 
     for (const [paramKey, param] of Object.entries(definition.params)) {
       if (param.type !== 'number' || !param.animatable) {
+        continue;
+      }
+
+      if (!isGpuEffectParamVisible(definition, gpuEffect.params, paramKey)) {
         continue;
       }
 
@@ -121,6 +134,10 @@ export function getResolvedAnimatedEffectParamValue(
     return null;
   }
 
+  if (!isGpuEffectParamVisible(definition, gpuEffect.params, paramKey)) {
+    return baseValue;
+  }
+
   const property = buildEffectAnimatableProperty(gpuEffect.gpuEffectType, effectEntry.id, paramKey);
   const keyframes = getPropertyKeyframes(itemKeyframes, property);
   if (keyframes.length === 0) {
@@ -157,6 +174,10 @@ export function resolveAnimatedGpuEffects(
 
     for (const [paramKey, param] of Object.entries(definition.params)) {
       if (param.type !== 'number' || !param.animatable) {
+        continue;
+      }
+
+      if (!isGpuEffectParamVisible(definition, nextParams, paramKey)) {
         continue;
       }
 
