@@ -34,6 +34,7 @@ import { clampSlideDeltaToPreserveTransitions } from '../../utils/transition-uti
 import { calculateTransitionPortions } from '@/core/timeline/transitions/transition-planner';
 import {
   expandItemIdsWithAttachedCaptions,
+  getAttachedCaptionItemIds,
   getLinkedItemIds,
   getUniqueLinkedItemAnchorIds,
 } from '../../utils/linked-items';
@@ -108,6 +109,63 @@ function requestPostEditWarmForItems(
   usePreviewBridgeStore.getState().requestPostEditWarm(primaryFrame, uniqueItemIds, warmFrames);
 }
 
+function trimAttachedCaptionsToClipBounds(clipIds: Iterable<string>): string[] {
+  const store = useItemsStore.getState();
+  const items = store.items;
+  const captionUpdates: Array<{ id: string; from: number; durationInFrames: number }> = [];
+  const captionIdsToRemove = new Set<string>();
+
+  for (const clipId of clipIds) {
+    const clip = store.itemById[clipId];
+    if (!clip || clip.type === 'text') continue;
+
+    const clipStart = clip.from;
+    const clipEnd = clip.from + clip.durationInFrames;
+    for (const captionId of getAttachedCaptionItemIds(items, clipId)) {
+      const caption = store.itemById[captionId];
+      if (!caption || caption.type !== 'text') continue;
+
+      const captionStart = caption.from;
+      const captionEnd = caption.from + caption.durationInFrames;
+      const nextStart = Math.max(captionStart, clipStart);
+      const nextEnd = Math.min(captionEnd, clipEnd);
+
+      if (nextEnd <= nextStart) {
+        captionIdsToRemove.add(caption.id);
+        continue;
+      }
+
+      const nextDuration = nextEnd - nextStart;
+      if (nextStart !== caption.from || nextDuration !== caption.durationInFrames) {
+        captionUpdates.push({
+          id: caption.id,
+          from: nextStart,
+          durationInFrames: nextDuration,
+        });
+      }
+    }
+  }
+
+  if (captionIdsToRemove.size > 0) {
+    const removedIds = Array.from(captionIdsToRemove);
+    store._removeItems(removedIds);
+    useKeyframesStore.getState()._removeKeyframesForItems(removedIds);
+  }
+
+  for (const update of captionUpdates) {
+    if (captionIdsToRemove.has(update.id)) continue;
+    store._updateItem(update.id, {
+      from: update.from,
+      durationInFrames: update.durationInFrames,
+    });
+  }
+
+  return [
+    ...captionUpdates.map((update) => update.id),
+    ...captionIdsToRemove,
+  ];
+}
+
 function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: number): void {
   const itemsStore = useItemsStore.getState();
   const itemsBefore = itemsStore.items;
@@ -138,9 +196,13 @@ function applySynchronizedTrim(id: string, handle: 'start' | 'end', trimAmount: 
     }
   }
 
+  const didShrink = handle === 'start' ? actualTrimAmount > 0 : actualTrimAmount < 0;
+  const affectedCaptionIds = didShrink
+    ? trimAttachedCaptionsToClipBounds(synchronizedItems.map((item) => item.id))
+    : [];
   const affectedIds = synchronizedItems.map((item) => item.id);
   applyTransitionRepairs(affectedIds);
-  requestPostEditWarmForItems(affectedIds);
+  requestPostEditWarmForItems([...affectedIds, ...affectedCaptionIds]);
   useTimelineSettingsStore.getState().markDirty();
 }
 

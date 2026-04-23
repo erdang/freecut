@@ -26,6 +26,7 @@ import {
 } from '../stores/actions/sync-lock-ripple';
 import { findHandleNeighborWithTransitions } from '../utils/transition-linked-neighbors';
 import {
+  buildAttachedCaptionBoundsPreviewUpdates,
   buildSynchronizedLinkedMoveUpdates,
   getSynchronizedLinkedCounterpartPair,
   getSynchronizedLinkedItems,
@@ -549,14 +550,30 @@ export function useTimelineTrim(item: TimelineItem, timelineDuration: number, tr
         const synchronizedItems = linkedSelectionEnabled
           ? getSynchronizedLinkedItems(allItems, currentItem.id)
           : [currentItem];
+        const captionClipBounds: Array<{ id: string; from: number; durationInFrames: number }> = [];
+
         for (const linkedItem of synchronizedItems) {
+          const previewUpdate = handle === 'end'
+            ? applyTrimEndPreview(linkedItem, deltaFrames, fps)
+            : applyTrimStartPreview(linkedItem, deltaFrames, fps);
+
+          const previewDuration = previewUpdate.durationInFrames ?? linkedItem.durationInFrames;
+          const isShorter = previewDuration < linkedItem.durationInFrames;
+          if (isShorter) {
+            captionClipBounds.push({
+              id: linkedItem.id,
+              from: previewUpdate.from ?? linkedItem.from,
+              durationInFrames: previewDuration,
+            });
+          }
+
           if (linkedItem.id === currentItem.id) continue;
-          linkedPreviewUpdates.push(
-            handle === 'end'
-              ? applyTrimEndPreview(linkedItem, deltaFrames, fps)
-              : applyTrimStartPreview(linkedItem, deltaFrames, fps),
-          );
+          linkedPreviewUpdates.push(previewUpdate);
         }
+
+        linkedPreviewUpdates.push(
+          ...buildAttachedCaptionBoundsPreviewUpdates(allItems, captionClipBounds),
+        );
       }
 
       useLinkedEditPreviewStore.getState().setUpdates(linkedPreviewUpdates);

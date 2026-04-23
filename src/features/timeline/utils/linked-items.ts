@@ -329,6 +329,52 @@ export function buildLinkedMovePreviewUpdates(
   });
 }
 
+export function buildAttachedCaptionBoundsPreviewUpdates(
+  items: TimelineItem[],
+  clipBounds: Array<{ id: string; from: number; durationInFrames: number }>,
+): PreviewItemUpdate[] {
+  if (clipBounds.length === 0) {
+    return [];
+  }
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const updatesByCaptionId = new Map<string, PreviewItemUpdate>();
+
+  for (const bounds of clipBounds) {
+    const clip = itemById.get(bounds.id);
+    if (!clip || clip.type === 'text' || bounds.durationInFrames <= 0) continue;
+
+    const clipStart = bounds.from;
+    const clipEnd = bounds.from + bounds.durationInFrames;
+
+    for (const captionId of getAttachedCaptionItemIds(items, clip.id)) {
+      const caption = itemById.get(captionId);
+      if (!caption || caption.type !== 'text') continue;
+
+      const captionStart = caption.from;
+      const captionEnd = caption.from + caption.durationInFrames;
+      const nextStart = Math.max(captionStart, clipStart);
+      const nextEnd = Math.min(captionEnd, clipEnd);
+
+      if (nextEnd <= nextStart) {
+        updatesByCaptionId.set(caption.id, { id: caption.id, hidden: true });
+        continue;
+      }
+
+      const nextDuration = nextEnd - nextStart;
+      if (nextStart !== caption.from || nextDuration !== caption.durationInFrames) {
+        updatesByCaptionId.set(caption.id, {
+          id: caption.id,
+          from: nextStart,
+          durationInFrames: nextDuration,
+        });
+      }
+    }
+  }
+
+  return [...updatesByCaptionId.values()];
+}
+
 export function canLinkItems(items: TimelineItem[]): boolean {
   if (items.length !== 2) return false;
 
