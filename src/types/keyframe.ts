@@ -3,11 +3,57 @@
  * Supports animating transform properties over time with easing.
  */
 
+import { getGpuEffect } from '@/infrastructure/gpu/effects';
+
 /** Properties that can be animated via keyframes */
-export type AnimatableProperty = 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity' | 'cornerRadius' | 'volume';
+export type BuiltInAnimatableProperty =
+  | 'x'
+  | 'y'
+  | 'width'
+  | 'height'
+  | 'anchorX'
+  | 'anchorY'
+  | 'rotation'
+  | 'opacity'
+  | 'cornerRadius'
+  | 'cropLeft'
+  | 'cropRight'
+  | 'cropTop'
+  | 'cropBottom'
+  | 'cropSoftness'
+  | 'volume'
+  | 'textStyleScale'
+  | 'fontSize'
+  | 'lineHeight'
+  | 'textPadding'
+  | 'backgroundRadius'
+  | 'textShadowOffsetX'
+  | 'textShadowOffsetY'
+  | 'textShadowBlur'
+  | 'strokeWidth';
+
+export type EffectAnimatableProperty = `effect:${string}:${string}:${string}`;
+
+export type AnimatableProperty = BuiltInAnimatableProperty | EffectAnimatableProperty;
 
 /** Transform/visual properties animatable via gizmo (excludes non-spatial props like volume) */
-export type TransformAnimatableProperty = Exclude<AnimatableProperty, 'volume'>;
+export type TransformAnimatableProperty =
+  | 'x'
+  | 'y'
+  | 'width'
+  | 'height'
+  | 'anchorX'
+  | 'anchorY'
+  | 'rotation'
+  | 'opacity'
+  | 'cornerRadius';
+
+export type CropAnimatableProperty =
+  | 'cropLeft'
+  | 'cropRight'
+  | 'cropTop'
+  | 'cropBottom'
+  | 'cropSoftness';
 
 /** Basic easing functions for interpolation between keyframes */
 export type BasicEasingType = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out';
@@ -137,16 +183,103 @@ export interface ItemKeyframes {
 /**
  * Display labels for animatable properties
  */
-export const PROPERTY_LABELS: Record<AnimatableProperty, string> = {
+const BUILT_IN_PROPERTY_LABELS: Record<BuiltInAnimatableProperty, string> = {
   x: 'X Position',
   y: 'Y Position',
   width: 'Width',
   height: 'Height',
+  anchorX: 'Anchor X',
+  anchorY: 'Anchor Y',
   rotation: 'Rotation',
   opacity: 'Opacity',
   cornerRadius: 'Corner Radius',
+  cropLeft: 'Crop Left',
+  cropRight: 'Crop Right',
+  cropTop: 'Crop Top',
+  cropBottom: 'Crop Bottom',
+  cropSoftness: 'Crop Softness',
   volume: 'Volume (dB)',
+  textStyleScale: 'Preset Scale',
+  fontSize: 'Font Size',
+  lineHeight: 'Line Height',
+  textPadding: 'Text Padding',
+  backgroundRadius: 'Background Radius',
+  textShadowOffsetX: 'Shadow X',
+  textShadowOffsetY: 'Shadow Y',
+  textShadowBlur: 'Shadow Blur',
+  strokeWidth: 'Stroke Width',
 };
+
+const BUILT_IN_ANIMATABLE_PROPERTIES = new Set<BuiltInAnimatableProperty>(
+  Object.keys(BUILT_IN_PROPERTY_LABELS) as BuiltInAnimatableProperty[],
+);
+
+export function isBuiltInAnimatableProperty(
+  property: AnimatableProperty | string,
+): property is BuiltInAnimatableProperty {
+  return BUILT_IN_ANIMATABLE_PROPERTIES.has(property as BuiltInAnimatableProperty);
+}
+
+export function buildEffectAnimatableProperty(
+  gpuEffectType: string,
+  effectId: string,
+  paramKey: string,
+): EffectAnimatableProperty {
+  return `effect:${gpuEffectType}:${effectId}:${paramKey}`;
+}
+
+export function parseEffectAnimatableProperty(
+  property: AnimatableProperty | string,
+): { gpuEffectType: string; effectId: string; paramKey: string } | null {
+  if (!property.startsWith('effect:')) {
+    return null;
+  }
+
+  const [, gpuEffectType = '', effectId = '', paramKey = ''] = property.split(':');
+  if (!gpuEffectType || !effectId || !paramKey) {
+    return null;
+  }
+
+  return { gpuEffectType, effectId, paramKey };
+}
+
+export function isEffectAnimatableProperty(
+  property: AnimatableProperty | string,
+): property is EffectAnimatableProperty {
+  return parseEffectAnimatableProperty(property) !== null;
+}
+
+export function getAnimatablePropertyLabel(property: AnimatableProperty): string {
+  if (isBuiltInAnimatableProperty(property)) {
+    return BUILT_IN_PROPERTY_LABELS[property];
+  }
+
+  const parsed = parseEffectAnimatableProperty(property);
+  if (!parsed) {
+    return property;
+  }
+
+  const definition = getGpuEffect(parsed.gpuEffectType);
+  const param = definition?.params[parsed.paramKey];
+  if (definition && param) {
+    return `${definition.name}: ${param.label}`;
+  }
+
+  return parsed.paramKey;
+}
+
+export const PROPERTY_LABELS = new Proxy<Record<string, string>>(
+  { ...BUILT_IN_PROPERTY_LABELS },
+  {
+    get(target, prop) {
+      if (typeof prop !== 'string') {
+        return undefined;
+      }
+
+      return target[prop] ?? getAnimatablePropertyLabel(prop as AnimatableProperty);
+    },
+  },
+) as Record<AnimatableProperty, string>;
 
 /**
  * Default spring parameters

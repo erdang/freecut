@@ -2,6 +2,16 @@ import type { CropSettings, TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
 import type { BlendMode } from './blend-modes';
 import type { AudioEqSettings } from './audio';
+import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids';
+
+export interface TimelineItemCornerPin {
+  topLeft: [number, number];
+  topRight: [number, number];
+  bottomRight: [number, number];
+  bottomLeft: [number, number];
+  referenceWidth?: number;
+  referenceHeight?: number;
+}
 
 // Base type for all timeline items (following Composition pattern)
 type BaseTimelineItem = {
@@ -85,12 +95,7 @@ type BaseTimelineItem = {
   // Blend mode for layer compositing (default: 'normal')
   blendMode?: BlendMode;
   // Corner pin transform (perspective warp)
-  cornerPin?: {
-    topLeft: [number, number];
-    topRight: [number, number];
-    bottomRight: [number, number];
-    bottomLeft: [number, number];
-  };
+  cornerPin?: TimelineItemCornerPin;
 };
 
 export interface GeneratedCaptionSource {
@@ -125,9 +130,41 @@ export type AudioItem = BaseTimelineItem & {
   offset?: number; // Trim offset in source audio
 };
 
+export type TextSpan = {
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  underline?: boolean;
+  color?: string;
+  letterSpacing?: number;
+};
+
+export type TextSingleLayoutDraft = {
+  text: string;
+  fontSize?: number;
+  fontFamily?: string;
+  fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+  fontStyle?: 'normal' | 'italic';
+  underline?: boolean;
+  color?: string;
+  letterSpacing?: number;
+};
+
+export type TextLayoutDrafts = {
+  single?: TextSingleLayoutDraft;
+  twoSpans?: TextSpan[];
+  threeSpans?: TextSpan[];
+};
+
 export type TextItem = BaseTimelineItem & {
   type: 'text';
   text: string;
+  textSpans?: TextSpan[];
+  textLayoutDrafts?: TextLayoutDrafts;
+  textStylePresetId?: TextStylePresetId;
+  textStyleScale?: number;
   textRole?: 'caption';
   captionSource?: GeneratedCaptionSource;
   // Typography
@@ -139,11 +176,13 @@ export type TextItem = BaseTimelineItem & {
   // Colors
   color: string; // Text color (hex or oklch)
   backgroundColor?: string; // Background color behind text (optional)
+  backgroundRadius?: number; // Background box radius in pixels (default: 0)
   // Text layout
   textAlign?: 'left' | 'center' | 'right'; // Horizontal alignment (default: 'center')
   verticalAlign?: 'top' | 'middle' | 'bottom'; // Vertical alignment (default: 'middle')
   lineHeight?: number; // Line height multiplier (default: 1.2)
   letterSpacing?: number; // Letter spacing in pixels (default: 0)
+  textPadding?: number; // Inset padding inside the text box in pixels (default: 16)
   // Text effects
   textShadow?: {
     offsetX: number;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineTrack, VideoItem } from '@/types/timeline';
+import type { SubComposition } from '../stores/compositions-store';
 import {
   buildDroppedCompositionTimelineItems,
   compositionHasOwnedAudio,
@@ -38,7 +39,7 @@ function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
 
 describe('dropped-composition', () => {
   it('detects owned audio through nested compound clips and builds a linked wrapper pair', () => {
-    const compositionById = {
+    const compositionById: Record<string, SubComposition> = {
       'comp-child': {
         id: 'comp-child',
         name: 'Child',
@@ -113,7 +114,7 @@ describe('dropped-composition', () => {
         durationInFrames: 40,
       },
     };
-    const composition = {
+    const composition: SubComposition = {
       id: 'comp-parent',
       name: 'Parent',
       tracks: [makeTrack({ id: 'parent-v1', name: 'V1', kind: 'video', order: 0 })],

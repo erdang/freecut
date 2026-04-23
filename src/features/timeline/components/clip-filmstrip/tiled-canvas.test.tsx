@@ -12,7 +12,9 @@ describe('TiledCanvas', () => {
       scale: vi.fn(),
       clearRect: vi.fn(),
     } as unknown as CanvasRenderingContext2D;
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+    (vi.spyOn(HTMLCanvasElement.prototype, 'getContext') as unknown as {
+      mockReturnValue: (value: CanvasRenderingContext2D) => void;
+    }).mockReturnValue(ctx);
 
     const renderTile = vi.fn();
 
@@ -38,7 +40,9 @@ describe('TiledCanvas', () => {
       scale: vi.fn(),
       clearRect: vi.fn(),
     } as unknown as CanvasRenderingContext2D;
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx);
+    (vi.spyOn(HTMLCanvasElement.prototype, 'getContext') as unknown as {
+      mockReturnValue: (value: CanvasRenderingContext2D) => void;
+    }).mockReturnValue(ctx);
 
     const renderTile = vi.fn();
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { AudioItem, CompositionItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import type { AudioItem, CompositionItem, TextItem, TimelineTrack, VideoItem } from '@/types/timeline';
 import { useItemsStore } from '../items-store';
 import { useTransitionsStore } from '../transitions-store';
 import { useKeyframesStore } from '../keyframes-store';
@@ -19,6 +19,7 @@ import {
   splitItem,
   trimItemBreakingTransition,
   trimItemStart,
+  trimItemEnd,
 } from './item-actions';
 
 function makeTrack(overrides: Partial<TimelineTrack> & Pick<TimelineTrack, 'id' | 'name' | 'order'>): TimelineTrack {
@@ -75,6 +76,22 @@ function makeAudioItem(overrides: Partial<AudioItem> = {}): AudioItem {
   } as AudioItem;
 }
 
+function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
+  return {
+    id: 'caption-1',
+    type: 'text',
+    trackId: 'caption-track',
+    from: 0,
+    durationInFrames: 60,
+    label: 'Caption',
+    text: 'Caption',
+    color: '#ffffff',
+    textRole: 'caption',
+    captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+    ...overrides,
+  } as TextItem;
+}
+
 function makeCompositionItem(overrides: Partial<CompositionItem> = {}): CompositionItem {
   return {
     id: 'comp-1',
@@ -104,6 +121,7 @@ describe('linked edit tools', () => {
     useItemsStore.getState().setTracks([
       makeTrack({ id: 'video-track', name: 'V1', order: 0, kind: 'video' }),
       makeTrack({ id: 'audio-track', name: 'A1', order: 1, kind: 'audio' }),
+      makeTrack({ id: 'caption-track', name: 'C1', order: 2, kind: 'video' }),
     ]);
     useItemsStore.getState().setItems([]);
     useTransitionsStore.getState().setTransitions([]);
@@ -121,6 +139,40 @@ describe('linked edit tools', () => {
     const itemById = useItemsStore.getState().itemById;
     expect(itemById['video-1']).toMatchObject({ from: 10, durationInFrames: 50, sourceStart: 10, sourceEnd: 60 });
     expect(itemById['audio-1']).toMatchObject({ from: 10, durationInFrames: 50, sourceStart: 10, sourceEnd: 60 });
+  });
+
+  it('clips and removes attached captions when a regular start trim shortens the clip', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem(),
+      makeAudioItem(),
+      makeTextItem({ id: 'caption-before', from: 0, durationInFrames: 8 }),
+      makeTextItem({ id: 'caption-overlap', from: 6, durationInFrames: 10 }),
+      makeTextItem({ id: 'caption-inside', from: 20, durationInFrames: 10 }),
+    ]);
+
+    trimItemStart('video-1', 10);
+
+    const itemById = useItemsStore.getState().itemById;
+    expect(itemById['caption-before']).toBeUndefined();
+    expect(itemById['caption-overlap']).toMatchObject({ from: 10, durationInFrames: 6 });
+    expect(itemById['caption-inside']).toMatchObject({ from: 20, durationInFrames: 10 });
+  });
+
+  it('clips and removes attached captions when a regular end trim shortens the clip', () => {
+    useItemsStore.getState().setItems([
+      makeVideoItem(),
+      makeAudioItem(),
+      makeTextItem({ id: 'caption-inside', from: 20, durationInFrames: 10 }),
+      makeTextItem({ id: 'caption-overlap', from: 45, durationInFrames: 10 }),
+      makeTextItem({ id: 'caption-after', from: 55, durationInFrames: 5 }),
+    ]);
+
+    trimItemEnd('video-1', -10);
+
+    const itemById = useItemsStore.getState().itemById;
+    expect(itemById['caption-inside']).toMatchObject({ from: 20, durationInFrames: 10 });
+    expect(itemById['caption-overlap']).toMatchObject({ from: 45, durationInFrames: 5 });
+    expect(itemById['caption-after']).toBeUndefined();
   });
 
   it('trims only the targeted clip when linked selection is off', () => {

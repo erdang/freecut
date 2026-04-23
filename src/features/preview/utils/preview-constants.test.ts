@@ -3,7 +3,7 @@ import type { CompositionInputProps } from '@/types/export';
 import { toTrackTopologyFingerprint } from './preview-constants';
 
 function makeTracks(
-  overrides: Partial<CompositionInputProps['tracks'][number]['items'][number]> = {},
+  overrides: Partial<CompositionInputProps['tracks'][number]['items'][number]> & Record<string, unknown> = {},
 ): CompositionInputProps['tracks'] {
   return [
     {

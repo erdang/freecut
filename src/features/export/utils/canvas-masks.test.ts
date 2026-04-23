@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ShapeItem, TimelineTrack } from '@/types/timeline';
 
 const mocks = vi.hoisted(() => ({
   getShapePathMock: vi.fn(
@@ -8,6 +9,9 @@ const mocks = vi.hoisted(() => ({
     }
   ),
   rotatePathMock: vi.fn((path: string) => path),
+  drawCornerPinImageMock: vi.fn(),
+  hasCornerPinMock: vi.fn((cornerPin?: unknown) => Boolean(cornerPin)),
+  resolveCornerPinForSizeMock: vi.fn((cornerPin?: unknown) => cornerPin ?? null),
   resolveActiveShapeMasksAtFrameMock: vi.fn(
     (masks: Array<{ id?: string; mask?: { id: string }; trackOrder?: number }>, options: {
       frame: number;
@@ -40,13 +44,17 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('@/features/export/deps/composition-runtime', () => ({
+  drawCornerPinImage: mocks.drawCornerPinImageMock,
   getShapePath: mocks.getShapePathMock,
+  hasCornerPin: mocks.hasCornerPinMock,
+  resolveCornerPinForSize: mocks.resolveCornerPinForSizeMock,
   rotatePath: mocks.rotatePathMock,
   resolveActiveShapeMasksAtFrame: mocks.resolveActiveShapeMasksAtFrameMock,
 }));
 
 import {
   buildMaskFrameIndex,
+  buildPreparedMask,
   getActiveMasksForFrame,
   type MaskCanvasSettings,
 } from './canvas-masks';
@@ -63,12 +71,45 @@ beforeAll(() => {
     rect() {}
   }
 
+  class MockCanvasRenderingContext2D {
+    public fillStyle = '';
+    public strokeStyle = '';
+    public lineWidth = 0;
+    public filter = '';
+    public globalCompositeOperation: GlobalCompositeOperation = 'source-over';
+
+    fill() {}
+    stroke() {}
+    drawImage() {}
+    save() {}
+    restore() {}
+    translate() {}
+    rotate() {}
+    clearRect() {}
+    fillRect() {}
+  }
+
+  class MockOffscreenCanvas {
+    public width: number;
+    public height: number;
+
+    constructor(width: number, height: number) {
+      this.width = width;
+      this.height = height;
+    }
+
+    getContext() {
+      return new MockCanvasRenderingContext2D();
+    }
+  }
+
   vi.stubGlobal('Path2D', MockPath2D);
+  vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
 });
 
 describe('canvas mask animation', () => {
   const canvas: MaskCanvasSettings = { width: 1920, height: 1080, fps: 30 };
-  const track = {
+  const track: TimelineTrack = {
     id: 'track-1',
     name: 'Masks',
     height: 60,
@@ -92,10 +133,14 @@ describe('canvas mask animation', () => {
       },
     ],
   };
+  const baseMask = track.items[0] as ShapeItem;
 
   beforeEach(() => {
     mocks.getShapePathMock.mockClear();
     mocks.rotatePathMock.mockClear();
+    mocks.drawCornerPinImageMock.mockClear();
+    mocks.hasCornerPinMock.mockClear();
+    mocks.resolveCornerPinForSizeMock.mockClear();
     mocks.resolveActiveShapeMasksAtFrameMock.mockClear();
   });
 
@@ -112,12 +157,12 @@ describe('canvas mask animation', () => {
     expect((frame12Masks[0]!.path as { value?: string }).value).toContain('12');
     expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
       1,
-      [{ mask: track.items[0], trackOrder: 0 }],
+      [{ mask: baseMask, trackOrder: 0 }],
       expect.objectContaining({ frame: 10 })
     );
     expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
       2,
-      [{ mask: track.items[0], trackOrder: 0 }],
+      [{ mask: baseMask, trackOrder: 0 }],
       expect.objectContaining({ frame: 12 })
     );
   });
@@ -142,7 +187,7 @@ describe('canvas mask animation', () => {
       ...track,
       items: [
         {
-          ...track.items[0],
+          ...baseMask,
           id: 'mask-path',
           shapeType: 'path' as const,
           pathVertices: [
@@ -188,5 +233,42 @@ describe('canvas mask animation', () => {
 
     expect(activeMasks).toHaveLength(1);
     expect((activeMasks[0]!.path as { value?: string }).value).toContain('77');
+  });
+
+  it('rasterizes corner-pinned shape masks into bitmap masks', () => {
+    const preparedMask = buildPreparedMask(
+      {
+        ...baseMask,
+        cornerPin: {
+          topLeft: [0, 0],
+          topRight: [20, 10],
+          bottomRight: [0, 0],
+          bottomLeft: [0, 0],
+          referenceWidth: 100,
+          referenceHeight: 100,
+        },
+      },
+      {
+        x: 24,
+        y: 18,
+        width: 140,
+        height: 120,
+        anchorX: 70,
+        anchorY: 60,
+        rotation: 12,
+        opacity: 1,
+        cornerRadius: 0,
+      },
+      canvas,
+    );
+
+    expect(preparedMask.bitmapMask).toBeDefined();
+    expect(preparedMask.path).toBeUndefined();
+    expect(mocks.resolveCornerPinForSizeMock).toHaveBeenCalledWith(
+      expect.objectContaining({ referenceWidth: 100, referenceHeight: 100 }),
+      140,
+      120,
+    );
+    expect(mocks.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
   });
 });

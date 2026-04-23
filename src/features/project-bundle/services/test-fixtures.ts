@@ -277,6 +277,8 @@ function createTransition(
     rightClipId,
     trackId,
     durationInFrames: duration,
+    presentation: 'fade',
+    timing: 'linear',
   };
 }
 

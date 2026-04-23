@@ -105,12 +105,18 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     sidebarWidth: normalizeSidebarWidth(
       currentState.sidebarWidth,
       layout.leftSidebarDefaultWidth,
-      getLeftEditorSidebarBounds(layout)
+      getLeftEditorSidebarBounds({
+        leftSidebarMinWidth: layout.leftSidebarMinWidth,
+        leftSidebarMaxWidth: layout.leftSidebarMaxWidth,
+      })
     ),
     rightSidebarWidth: normalizeSidebarWidth(
       currentState.rightSidebarWidth,
       layout.rightSidebarDefaultWidth,
-      getRightEditorSidebarBounds(layout)
+      getRightEditorSidebarBounds({
+        rightSidebarMinWidth: layout.rightSidebarMinWidth,
+        rightSidebarMaxWidth: layout.rightSidebarMaxWidth,
+      })
     ),
   })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),

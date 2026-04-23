@@ -22,9 +22,10 @@ import type { ItemEffect } from '@/types/effects';
 import { createLogger } from '@/shared/logging/logger';
 import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
+import { getTextItemSpans } from '@/shared/utils/text-item-spans';
 
 // Subsystem imports
-import { getAnimatedTransform } from './canvas-keyframes';
+import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes';
 import {
   renderEffectsFromMaskedSource,
   getAdjustmentLayerEffects,
@@ -37,7 +38,8 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
-import { applyMasks, svgPathToPath2D, type MaskCanvasSettings } from './canvas-masks';
+import type { ResolvedTransform } from '@/types/transform';
+import { applyMasks, buildPreparedMask, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
 import type { ScrubbingCache } from '@/features/export/deps/preview';
 import { gifFrameCache, type CachedGifFrames } from '@/features/export/deps/timeline';
@@ -55,10 +57,12 @@ import {
   applyPreviewPathVerticesToShape,
   hasCornerPin,
   drawCornerPinImage,
-  getShapePath,
-  rotatePath,
+  resolveCornerPinTargetRect,
+  resolveCornerPinForSize,
+  expandTextTransformToFitContent,
   type PreviewPathVerticesOverride,
 } from '@/features/export/deps/composition-runtime';
+import { resolveAnimatedTextItem } from '@/features/export/deps/keyframes';
 import { calculateMediaCropLayout } from '@/shared/utils/media-crop';
 import {
   getItemRenderTimelineSpan,
@@ -90,9 +94,47 @@ export interface ItemTransform {
   y: number;
   width: number;
   height: number;
+  anchorX?: number;
+  anchorY?: number;
   rotation: number;
   opacity: number;
   cornerRadius: number;
+}
+
+function resolveItemTransform(transform: ItemTransform): ResolvedTransform {
+  return {
+    ...transform,
+    anchorX: transform.anchorX ?? transform.width / 2,
+    anchorY: transform.anchorY ?? transform.height / 2,
+  };
+}
+
+function applyItemTransformToContext(
+  ctx: OffscreenCanvasRenderingContext2D,
+  item: TimelineItem,
+  transform: ItemTransform,
+  canvasSettings: CanvasSettings,
+): void {
+  const left = canvasSettings.width / 2 + transform.x - transform.width / 2;
+  const top = canvasSettings.height / 2 + transform.y - transform.height / 2;
+  const centerX = left + (transform.anchorX ?? transform.width / 2);
+  const centerY = top + (transform.anchorY ?? transform.height / 2);
+  const flipScaleX = item.transform?.flipHorizontal ? -1 : 1;
+  const flipScaleY = item.transform?.flipVertical ? -1 : 1;
+  const hasFlip = flipScaleX !== 1 || flipScaleY !== 1;
+
+  if (transform.rotation === 0 && !hasFlip) {
+    return;
+  }
+
+  ctx.translate(centerX, centerY);
+  if (transform.rotation !== 0) {
+    ctx.rotate((transform.rotation * Math.PI) / 180);
+  }
+  if (hasFlip) {
+    ctx.scale(flipScaleX, flipScaleY);
+  }
+  ctx.translate(-centerX, -centerY);
 }
 
 export type RenderImageSource = HTMLImageElement | ImageBitmap;
@@ -199,6 +241,28 @@ export interface TransitionParticipantRenderState<TItem extends TimelineItem = T
   renderSpan: RenderTimelineSpan;
 }
 
+function applyAnimatedCropToItem<TItem extends TimelineItem>(
+  item: TItem,
+  frame: number,
+  rctx: ItemRenderContext,
+  renderSpan?: RenderTimelineSpan,
+): TItem {
+  if (item.type !== 'video' && item.type !== 'image') {
+    return item;
+  }
+
+  const itemKeyframes = rctx.getCurrentKeyframes?.(item.id) ?? rctx.keyframesMap.get(item.id);
+  const crop = getAnimatedCrop(item, itemKeyframes, frame, rctx.canvasSettings, renderSpan);
+  if (crop === item.crop) {
+    return item;
+  }
+
+  return {
+    ...item,
+    crop,
+  } as TItem;
+}
+
 // ---------------------------------------------------------------------------
 // Core item dispatch
 // ---------------------------------------------------------------------------
@@ -218,39 +282,66 @@ export async function renderItem(
   rctx: ItemRenderContext,
   sourceFrameOffset: number = 0,
   renderSpan?: RenderTimelineSpan,
+  preCornerPinMasks: EffectSourceMask[] = [],
 ): Promise<void> {
+  const itemKeyframes = rctx.getCurrentKeyframes?.(item.id) ?? rctx.keyframesMap.get(item.id);
+  const animatedTextItem = item.type === 'text'
+    ? resolveAnimatedTextItem(item, itemKeyframes, frame - item.from, rctx.canvasSettings)
+    : item;
+  const frameResolvedItem = applyAnimatedCropToItem(animatedTextItem, frame, rctx, renderSpan);
+  const resolvedTransform = resolveItemTransform(transform);
+  const frameResolvedTransform = frameResolvedItem.type === 'text'
+    ? expandTextTransformToFitContent(frameResolvedItem, resolvedTransform)
+    : resolvedTransform;
+
   // Corner pin: render to temp canvas, then warp onto main canvas
-  if (hasCornerPin(item.cornerPin)) {
-    await renderItemWithCornerPin(ctx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
+  if (hasCornerPin(frameResolvedItem.cornerPin)) {
+    await renderItemWithCornerPin(
+      ctx,
+      frameResolvedItem,
+      frameResolvedTransform,
+      frame,
+      rctx,
+      sourceFrameOffset,
+      renderSpan,
+      preCornerPinMasks,
+    );
     return;
   }
 
   ctx.save();
 
   // Apply opacity only if it's not the default value (1.0)
-  if (transform.opacity !== 1) {
-    ctx.globalAlpha = transform.opacity;
+  if (frameResolvedTransform.opacity !== 1) {
+    ctx.globalAlpha = frameResolvedTransform.opacity;
   }
 
-  // Apply rotation
-  if (transform.rotation !== 0) {
-    const centerX = rctx.canvasSettings.width / 2 + transform.x;
-    const centerY = rctx.canvasSettings.height / 2 + transform.y;
-    ctx.translate(centerX, centerY);
-    ctx.rotate((transform.rotation * Math.PI) / 180);
-    ctx.translate(-centerX, -centerY);
-  }
+  applyItemTransformToContext(ctx, frameResolvedItem, frameResolvedTransform, rctx.canvasSettings);
 
   // Apply corner radius clipping
-  if (transform.cornerRadius > 0) {
-    const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
-    const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+  if (frameResolvedTransform.cornerRadius > 0) {
+    const left = rctx.canvasSettings.width / 2 + frameResolvedTransform.x - frameResolvedTransform.width / 2;
+    const top = rctx.canvasSettings.height / 2 + frameResolvedTransform.y - frameResolvedTransform.height / 2;
     ctx.beginPath();
-    ctx.roundRect(left, top, transform.width, transform.height, transform.cornerRadius);
+    ctx.roundRect(
+      left,
+      top,
+      frameResolvedTransform.width,
+      frameResolvedTransform.height,
+      frameResolvedTransform.cornerRadius,
+    );
     ctx.clip();
   }
 
-  await renderItemContent(ctx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
+  await renderItemContent(
+    ctx,
+    frameResolvedItem,
+    frameResolvedTransform,
+    frame,
+    rctx,
+    sourceFrameOffset,
+    renderSpan,
+  );
 
   ctx.restore();
 }
@@ -284,7 +375,7 @@ async function renderItemContent(
       renderTextItem(ctx, effectiveItem as TextItem, transform, rctx);
       break;
     case 'shape':
-      renderShape(ctx, effectiveItem as ShapeItem, transform, {
+      renderShape(ctx, effectiveItem as ShapeItem, resolveItemTransform(transform), {
         width: rctx.canvasSettings.width,
         height: rctx.canvasSettings.height,
       });
@@ -307,6 +398,7 @@ async function renderItemWithCornerPin(
   rctx: ItemRenderContext,
   sourceFrameOffset: number,
   renderSpan?: RenderTimelineSpan,
+  preCornerPinMasks: EffectSourceMask[] = [],
 ): Promise<void> {
   const itemW = Math.ceil(transform.width);
   const itemH = Math.ceil(transform.height);
@@ -328,8 +420,36 @@ async function renderItemWithCornerPin(
     canvasSettings: { width: itemW, height: itemH, fps: rctx.canvasSettings.fps },
   };
 
-  // Render content to temp canvas
-  await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset, renderSpan);
+  if (preCornerPinMasks.length > 0) {
+    const maskedSourceCanvas = new OffscreenCanvas(rctx.canvasSettings.width, rctx.canvasSettings.height);
+    const maskedSourceCtx = maskedSourceCanvas.getContext('2d');
+    if (!maskedSourceCtx) return;
+
+    await renderItemContent(maskedSourceCtx, item, transform, frame, rctx, sourceFrameOffset, renderSpan);
+
+    const maskedCanvas = new OffscreenCanvas(rctx.canvasSettings.width, rctx.canvasSettings.height);
+    const maskedCtx = maskedCanvas.getContext('2d');
+    if (!maskedCtx) return;
+
+    applyMasks(maskedCtx, maskedSourceCanvas, preCornerPinMasks, rctx.canvasSettings);
+
+    const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
+    const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
+    tempCtx.drawImage(
+      maskedCanvas,
+      left,
+      top,
+      itemW,
+      itemH,
+      0,
+      0,
+      itemW,
+      itemH,
+    );
+  } else {
+    // Render content to temp canvas
+    await renderItemContent(tempCtx, item, tempTransform, frame, tempRctx, sourceFrameOffset, renderSpan);
+  }
 
   // Apply corner radius clipping on temp canvas if needed
   if (transform.cornerRadius > 0) {
@@ -345,20 +465,55 @@ async function renderItemWithCornerPin(
   const left = rctx.canvasSettings.width / 2 + transform.x - transform.width / 2;
   const top = rctx.canvasSettings.height / 2 + transform.y - transform.height / 2;
   const needsFlattenedOpacity = transform.opacity !== 1;
+  const cornerPinTargetRect = resolveCornerPinTargetRect(
+    itemW,
+    itemH,
+    preCornerPinMasks.length > 0
+      ? undefined
+      : item.type === 'video' || item.type === 'image'
+        ? {
+          sourceWidth: item.sourceWidth,
+          sourceHeight: item.sourceHeight,
+          crop: item.crop,
+        }
+        : undefined,
+  );
+  const pinSourceWidth = Math.max(1, Math.round(cornerPinTargetRect.width));
+  const pinSourceHeight = Math.max(1, Math.round(cornerPinTargetRect.height));
+  const resolvedCornerPin = resolveCornerPinForSize(item.cornerPin, pinSourceWidth, pinSourceHeight);
+  if (!resolvedCornerPin) return;
+  const pinCanvas = (
+    pinSourceWidth === itemW
+    && pinSourceHeight === itemH
+    && Math.abs(cornerPinTargetRect.x) < 0.01
+    && Math.abs(cornerPinTargetRect.y) < 0.01
+  )
+    ? tempCanvas
+    : new OffscreenCanvas(pinSourceWidth, pinSourceHeight);
+
+  if (pinCanvas !== tempCanvas) {
+    const pinCtx = pinCanvas.getContext('2d');
+    if (!pinCtx) return;
+    pinCtx.clearRect(0, 0, pinSourceWidth, pinSourceHeight);
+    pinCtx.drawImage(
+      tempCanvas,
+      cornerPinTargetRect.x,
+      cornerPinTargetRect.y,
+      cornerPinTargetRect.width,
+      cornerPinTargetRect.height,
+      0,
+      0,
+      pinSourceWidth,
+      pinSourceHeight,
+    );
+  }
 
   ctx.save();
   if (needsFlattenedOpacity) {
     ctx.globalAlpha = transform.opacity;
   }
 
-  // Apply rotation around item center
-  const centerX = rctx.canvasSettings.width / 2 + transform.x;
-  const centerY = rctx.canvasSettings.height / 2 + transform.y;
-  if (transform.rotation !== 0) {
-    ctx.translate(centerX, centerY);
-    ctx.rotate((transform.rotation * Math.PI) / 180);
-    ctx.translate(-centerX, -centerY);
-  }
+  applyItemTransformToContext(ctx, item, transform, rctx.canvasSettings);
 
   try {
     if (needsFlattenedOpacity) {
@@ -371,19 +526,27 @@ async function renderItemWithCornerPin(
         flatCtx.clearRect(0, 0, flatCanvas.width, flatCanvas.height);
         drawCornerPinImage(
           flatCtx,
-          tempCanvas,
-          itemW,
-          itemH,
-          left,
-          top,
-          item.cornerPin!,
+          pinCanvas,
+          pinSourceWidth,
+          pinSourceHeight,
+          left + cornerPinTargetRect.x,
+          top + cornerPinTargetRect.y,
+          resolvedCornerPin,
         );
         ctx.drawImage(flatCanvas, 0, 0);
       } finally {
         rctx.canvasPool.release(flatCanvas);
       }
     } else {
-      drawCornerPinImage(ctx, tempCanvas, itemW, itemH, left, top, item.cornerPin!);
+      drawCornerPinImage(
+        ctx,
+        pinCanvas,
+        pinSourceWidth,
+        pinSourceHeight,
+        left + cornerPinTargetRect.x,
+        top + cornerPinTargetRect.y,
+        resolvedCornerPin,
+      );
     }
   } finally {
     ctx.restore();
@@ -1028,12 +1191,14 @@ function renderTextItem(
   const fontStyle = item.fontStyle ?? 'normal';
   const fontWeightName = item.fontWeight ?? 'normal';
   const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? 400;
-  const underline = item.underline ?? false;
   const lineHeight = item.lineHeight ?? 1.2;
-  const letterSpacing = item.letterSpacing ?? 0;
   const textAlign = item.textAlign ?? 'center';
   const verticalAlign = item.verticalAlign ?? 'middle';
-  const padding = 16;
+  const padding = Math.max(0, item.textPadding ?? 16);
+  const backgroundRadius = Math.max(
+    0,
+    Math.min(item.backgroundRadius ?? 0, transform.width / 2, transform.height / 2),
+  );
 
   const itemLeft = canvasSettings.width / 2 + transform.x - transform.width / 2;
   const itemTop = canvasSettings.height / 2 + transform.y - transform.height / 2;
@@ -1047,27 +1212,56 @@ function renderTextItem(
     ctx.clip();
   }
 
-  ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
-  ctx.fillStyle = item.color ?? '#ffffff';
+  if (item.backgroundColor) {
+    ctx.fillStyle = item.backgroundColor;
+    if (backgroundRadius > 0) {
+      ctx.beginPath();
+      ctx.roundRect(itemLeft, itemTop, transform.width, transform.height, backgroundRadius);
+      ctx.fill();
+    } else {
+      ctx.fillRect(itemLeft, itemTop, transform.width, transform.height);
+    }
+  }
 
-  const availableWidth = transform.width - padding * 2;
-  const lineHeightPx = fontSize * lineHeight;
+  const availableWidth = Math.max(1, transform.width - padding * 2);
+  const spans = getTextItemSpans(item);
+  const renderedLines = spans.flatMap((span) => {
+    const spanFontSize = span.fontSize ?? fontSize;
+    const spanFontFamily = span.fontFamily ?? fontFamily;
+    const spanFontStyle = span.fontStyle ?? fontStyle;
+    const spanFontWeightName = span.fontWeight ?? fontWeightName;
+    const spanFontWeight = FONT_WEIGHT_MAP[spanFontWeightName] ?? fontWeight;
+    const spanLetterSpacing = span.letterSpacing ?? item.letterSpacing ?? 0;
+    const spanUnderline = span.underline ?? item.underline ?? false;
+    const spanColor = span.color ?? item.color ?? '#ffffff';
+    const spanLineHeightPx = spanFontSize * lineHeight;
 
-  const metrics = ctx.measureText('Hg');
-  const ascent = metrics.fontBoundingBoxAscent ?? fontSize * 0.8;
-  const descent = metrics.fontBoundingBoxDescent ?? fontSize * 0.2;
-  const fontHeight = ascent + descent;
+    ctx.font = `${spanFontStyle} ${spanFontWeight} ${spanFontSize}px "${spanFontFamily}", sans-serif`;
+    const metrics = ctx.measureText('Hg');
+    const ascent = metrics.fontBoundingBoxAscent ?? spanFontSize * 0.8;
+    const descent = metrics.fontBoundingBoxDescent ?? spanFontSize * 0.2;
+    const fontHeight = ascent + descent;
+    const halfLeading = (spanLineHeightPx - fontHeight) / 2;
+    const baselineOffset = halfLeading + ascent;
+    const lines = wrapText(ctx, span.text ?? '', availableWidth, spanLetterSpacing, textMeasureCache);
 
-  const halfLeading = (lineHeightPx - fontHeight) / 2;
+    return lines.map((line) => ({
+      text: line,
+      fontSize: spanFontSize,
+      fontFamily: spanFontFamily,
+      fontStyle: spanFontStyle,
+      fontWeight: spanFontWeight,
+      letterSpacing: spanLetterSpacing,
+      underline: spanUnderline,
+      color: spanColor,
+      lineHeightPx: spanLineHeightPx,
+      baselineOffset,
+    }));
+  });
 
   ctx.textBaseline = 'alphabetic';
 
-  const baselineOffset = halfLeading + ascent;
-
-  const text = item.text ?? '';
-  const lines = wrapText(ctx, text, availableWidth, letterSpacing, textMeasureCache);
-
-  const totalTextHeight = lines.length * lineHeightPx;
+  const totalTextHeight = renderedLines.reduce((sum, line) => sum + line.lineHeightPx, 0);
   const availableHeight = transform.height - padding * 2;
 
   let textBlockTop: number;
@@ -1091,9 +1285,9 @@ function renderTextItem(
     ctx.shadowOffsetY = item.textShadow.offsetY;
   }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? '';
-    const lineY = textBlockTop + i * lineHeightPx + baselineOffset;
+  let currentTop = textBlockTop;
+  for (const renderedLine of renderedLines) {
+    const lineY = currentTop + renderedLine.baselineOffset;
 
     let lineX: number;
     switch (textAlign) {
@@ -1112,27 +1306,32 @@ function renderTextItem(
         break;
     }
 
+    ctx.font = `${renderedLine.fontStyle} ${renderedLine.fontWeight} ${renderedLine.fontSize}px "${renderedLine.fontFamily}", sans-serif`;
+    ctx.fillStyle = renderedLine.color;
+
     if (item.stroke && item.stroke.width > 0) {
       ctx.strokeStyle = item.stroke.color;
       ctx.lineWidth = item.stroke.width * 2;
       ctx.lineJoin = 'round';
-      drawTextWithLetterSpacing(ctx, line, lineX, lineY, letterSpacing, true, textMeasureCache);
+      drawTextWithLetterSpacing(ctx, renderedLine.text, lineX, lineY, renderedLine.letterSpacing, true, textMeasureCache);
     }
 
-    drawTextWithLetterSpacing(ctx, line, lineX, lineY, letterSpacing, false, textMeasureCache);
+    drawTextWithLetterSpacing(ctx, renderedLine.text, lineX, lineY, renderedLine.letterSpacing, false, textMeasureCache);
 
-    if (underline) {
+    if (renderedLine.underline) {
       drawUnderline(
         ctx,
-        line,
+        renderedLine.text,
         lineX,
         lineY,
         textAlign,
-        letterSpacing,
-        fontSize,
+        renderedLine.letterSpacing,
+        renderedLine.fontSize,
         textMeasureCache,
       );
     }
+
+    currentTop += renderedLine.lineHeightPx;
   }
 
   ctx.restore();
@@ -1390,7 +1589,8 @@ async function renderCompositionItem(
     // Resolve all active masks up front so each item can be masked only by
     // shapes on higher tracks.
     const activeSubMasks: Array<{
-      path: Path2D;
+      path?: Path2D;
+      bitmapMask?: OffscreenCanvas;
       inverted: boolean;
       feather: number;
       maskType: 'clip' | 'alpha';
@@ -1409,40 +1609,13 @@ async function renderCompositionItem(
 
         const subItemKeyframes = subData.keyframesMap.get(subItem.id);
         const subItemTransform = getAnimatedTransform(subItem, subItemKeyframes, localFrame, subCanvasSettings);
-        const maskType = subItem.maskType ?? 'clip';
-        const feather = maskType === 'alpha' ? (subItem.maskFeather ?? 0) : 0;
         const effectiveMaskItem = (
           rctx.renderMode === 'preview'
             ? applyPreviewPathVerticesToShape(subItem, rctx.getPreviewPathVerticesOverride)
             : subItem
         );
-        let svgPath = getShapePath(
-          effectiveMaskItem,
-          {
-            x: subItemTransform.x,
-            y: subItemTransform.y,
-            width: subItemTransform.width,
-            height: subItemTransform.height,
-            rotation: 0,
-            opacity: subItemTransform.opacity,
-          },
-          {
-            canvasWidth: subCanvasSettings.width,
-            canvasHeight: subCanvasSettings.height,
-          }
-        );
-
-        if (subItemTransform.rotation !== 0) {
-          const centerX = subCanvasSettings.width / 2 + subItemTransform.x;
-          const centerY = subCanvasSettings.height / 2 + subItemTransform.y;
-          svgPath = rotatePath(svgPath, subItemTransform.rotation, centerX, centerY);
-        }
-
         activeSubMasks.push({
-          path: svgPathToPath2D(svgPath),
-          inverted: effectiveMaskItem.maskInvert ?? false,
-          feather,
-          maskType,
+          ...buildPreparedMask(effectiveMaskItem, subItemTransform, subMaskSettings),
           trackOrder: track.order,
         });
       }
@@ -1509,8 +1682,21 @@ async function renderCompositionItem(
             maskedItemCanvas.width = item.compositionWidth;
             maskedItemCanvas.height = item.compositionHeight;
             maskedItemCtx.clearRect(0, 0, maskedItemCanvas.width, maskedItemCanvas.height);
-            await renderItem(maskedItemCtx, subItem, subItemTransform, localFrame, subRctx);
-            applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
+            await renderItem(
+              maskedItemCtx,
+              subItem,
+              subItemTransform,
+              localFrame,
+              subRctx,
+              0,
+              undefined,
+              applicableMasks,
+            );
+            if (hasCornerPin(subItem.cornerPin)) {
+              subContentCtx.drawImage(maskedItemCanvas, 0, 0);
+            } else {
+              applyMasks(subContentCtx, maskedItemCanvas, applicableMasks, subMaskSettings);
+            }
           } finally {
             rctx.canvasPool.release(maskedItemCanvas);
           }
@@ -1520,12 +1706,21 @@ async function renderCompositionItem(
           itemCanvas.height = item.compositionHeight;
           itemCtx.clearRect(0, 0, itemCanvas.width, itemCanvas.height);
           try {
-            await renderItem(itemCtx, subItem, subItemTransform, localFrame, subRctx);
+            await renderItem(
+              itemCtx,
+              subItem,
+              subItemTransform,
+              localFrame,
+              subRctx,
+              0,
+              undefined,
+              applicableMasks,
+            );
             const { source, poolCanvases } = await renderEffectsFromMaskedSource(
               rctx.canvasPool,
               itemCanvas,
               combinedEffects,
-              applicableMasks,
+              hasCornerPin(subItem.cornerPin) ? [] : applicableMasks,
               localFrame,
               subMaskSettings,
               rctx.gpuPipeline,
@@ -1606,8 +1801,8 @@ export async function renderTransitionToCanvas(
   const prevTransitionFlag = rctx.isRenderingTransition;
   rctx.isRenderingTransition = true;
   await Promise.all([
-    renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0, leftParticipant.renderSpan),
-    renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0, rightParticipant.renderSpan),
+    renderItem(leftCtx, leftParticipant.item, leftParticipant.transform, frame, rctx, 0, leftParticipant.renderSpan, trackMasks),
+    renderItem(rightCtx, rightParticipant.item, rightParticipant.transform, frame, rctx, 0, rightParticipant.renderSpan, trackMasks),
   ]);
   rctx.isRenderingTransition = prevTransitionFlag;
 
@@ -1633,7 +1828,7 @@ export async function renderTransitionToCanvas(
         canvasPool,
         leftCanvas,
         leftCombinedEffects,
-        trackMasks,
+        hasCornerPin(leftParticipant.item.cornerPin) ? [] : trackMasks,
         frame,
         canvasSettings,
         rctx.gpuPipeline,
@@ -1644,7 +1839,7 @@ export async function renderTransitionToCanvas(
         canvasPool,
         rightCanvas,
         rightCombinedEffects,
-        trackMasks,
+        hasCornerPin(rightParticipant.item.cornerPin) ? [] : trackMasks,
         frame,
         canvasSettings,
         rctx.gpuPipeline,
@@ -1679,7 +1874,7 @@ export async function renderTransitionToCanvas(
 
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(
   clip: TItem,
-  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
+  activeTransition: Pick<ActiveTransition, 'transitionStart' | 'transitionEnd'>,
   frame: number,
   trackOrder: number,
   rctx: ItemRenderContext,
@@ -1710,6 +1905,8 @@ export function resolveTransitionParticipantRenderState<TItem extends TimelineIt
       } as TItem;
     }
   }
+
+  effectiveClip = applyAnimatedCropToItem(effectiveClip, frame, rctx, renderSpan);
 
   const itemEffects = (
     rctx.renderMode === 'preview'

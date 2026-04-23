@@ -41,9 +41,14 @@ export function useEditOverlayPanelPrewarm(
         }
 
         const targetTime = Math.max(0, panel.sourceTime ?? 0);
+        const panelKey = `${index}:${item.id}:${item.mediaId}`;
+        const fps = Math.max(1, Math.round(item.sourceFps ?? 60));
+        const duration = item.sourceDuration && Number.isFinite(item.sourceDuration)
+          ? Math.max(targetTime + CACHE_TIME_QUANTUM, item.sourceDuration / fps)
+          : targetTime + 1;
         const proxyUrl = resolveProxyUrl(item.mediaId);
         if (proxyUrl) {
-          return { src: proxyUrl, targetTime };
+          return { src: proxyUrl, targetTime, panelKey, fps, duration };
         }
 
         const mediaUrl = await resolveMediaUrl(item.mediaId).catch(() => null);
@@ -54,11 +59,9 @@ export function useEditOverlayPanelPrewarm(
         return {
           src: mediaUrl,
           targetTime,
-          panelKey: `${index}:${item.id}:${item.mediaId ?? 'none'}`,
-          fps: Math.max(1, Math.round(item.sourceFps ?? 60)),
-          duration: item.sourceDuration && Number.isFinite(item.sourceDuration)
-            ? Math.max(targetTime + CACHE_TIME_QUANTUM, item.sourceDuration / Math.max(1, Math.round(item.sourceFps ?? 60)))
-            : targetTime + 1,
+          panelKey,
+          fps,
+          duration,
         };
       }));
 

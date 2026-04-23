@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TimelineItem } from '@/types/timeline';
 import {
+  buildAttachedCaptionBoundsPreviewUpdates,
   expandItemIdsWithAttachedCaptions,
   buildLinkedMovePreviewUpdates,
   canLinkSelection,
@@ -111,6 +112,49 @@ describe('linked items', () => {
     ];
 
     expect(getLinkedAndAttachedItemIds(items, 'audio-1')).toEqual(['video-1', 'audio-1', 'caption-1']);
+  });
+
+  it('builds live trim preview updates for attached captions clipped by new bounds', () => {
+    const items = [
+      makeItem({ id: 'video-1', type: 'video', from: 10, durationInFrames: 40 }),
+      makeItem({
+        id: 'caption-before',
+        type: 'text',
+        text: 'Before',
+        color: '#fff',
+        from: 10,
+        durationInFrames: 4,
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+      }),
+      makeItem({
+        id: 'caption-overlap',
+        type: 'text',
+        text: 'Overlap',
+        color: '#fff',
+        from: 12,
+        durationInFrames: 8,
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+      }),
+      makeItem({
+        id: 'caption-inside',
+        type: 'text',
+        text: 'Inside',
+        color: '#fff',
+        from: 24,
+        durationInFrames: 8,
+        textRole: 'caption',
+        captionSource: { type: 'transcript', clipId: 'video-1', mediaId: 'media-1' },
+      }),
+    ];
+
+    expect(buildAttachedCaptionBoundsPreviewUpdates(items, [
+      { id: 'video-1', from: 16, durationInFrames: 34 },
+    ])).toEqual([
+      { id: 'caption-before', hidden: true },
+      { id: 'caption-overlap', from: 16, durationInFrames: 4 },
+    ]);
   });
 
   it('dedupes linked groups down to one split anchor', () => {

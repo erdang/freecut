@@ -58,8 +58,9 @@ function makeTextItem(overrides: Partial<TextItem> = {}): TextItem {
     trackId: 'caption-track',
     from: 0,
     durationInFrames: 60,
+    label: 'Caption',
     text: 'Caption',
-    style: {},
+    color: '#ffffff',
     textRole: 'caption',
     ...overrides,
   };

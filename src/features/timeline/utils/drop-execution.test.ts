@@ -7,26 +7,34 @@ import {
   resolveDroppedMediaEntriesFromPayload,
 } from './drop-execution';
 
-function createMedia(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
+type TestMediaOverrides = Partial<MediaMetadata> & {
+  originalDuration?: number;
+  size?: number;
+  modifiedAt?: number;
+  file?: File | null;
+  thumbnailBlob?: Blob;
+  waveformData?: unknown;
+  frameRate?: number;
+};
+
+function createMedia(overrides: TestMediaOverrides = {}): MediaMetadata {
   return {
     id: overrides.id ?? 'media-1',
+    storageType: overrides.storageType ?? 'handle',
     fileName: overrides.fileName ?? 'clip.mp4',
+    fileSize: overrides.fileSize ?? overrides.size ?? 1024,
     mimeType: overrides.mimeType ?? 'video/mp4',
     duration: overrides.duration ?? 3,
-    originalDuration: overrides.originalDuration ?? overrides.duration ?? 3,
     width: overrides.width ?? 1920,
     height: overrides.height ?? 1080,
-    size: overrides.size ?? 1024,
-    createdAt: overrides.createdAt ?? Date.now(),
-    modifiedAt: overrides.modifiedAt ?? Date.now(),
-    file: overrides.file ?? null,
-    // Fields below are optional on real objects, but keep them explicit in tests.
-    thumbnailBlob: overrides.thumbnailBlob,
-    waveformData: overrides.waveformData,
-    codec: overrides.codec,
+    fps: overrides.fps ?? overrides.frameRate ?? 30,
+    codec: overrides.codec ?? 'h264',
+    bitrate: overrides.bitrate ?? 1,
     audioCodec: overrides.audioCodec,
-    frameRate: overrides.frameRate,
-  } as MediaMetadata;
+    tags: overrides.tags ?? [],
+    createdAt: overrides.createdAt ?? Date.now(),
+    updatedAt: overrides.updatedAt ?? overrides.modifiedAt ?? Date.now(),
+  };
 }
 
 describe('drop-execution', () => {

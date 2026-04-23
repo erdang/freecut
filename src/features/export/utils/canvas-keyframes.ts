@@ -7,8 +7,9 @@
 
 import type { TimelineItem } from '@/types/timeline';
 import type { ItemKeyframes } from '@/types/keyframe';
-import type { ResolvedTransform } from '@/types/transform';
+import type { CropSettings, ResolvedTransform } from '@/types/transform';
 import { resolveItemTransformAtFrame } from '@/features/export/deps/composition-runtime';
+import { resolveAnimatedCrop } from '@/features/export/deps/keyframes';
 import { applyRenderTimelineSpan, type RenderTimelineSpan } from './render-span';
 
 function clamp01(value: number): number {
@@ -105,6 +106,20 @@ interface CanvasRenderSettings {
   fps: number;
 }
 
+function getCropSourceDimensions(
+  item: TimelineItem,
+  canvas: Pick<CanvasRenderSettings, 'width' | 'height'>,
+): { width: number; height: number } | null {
+  if (item.type === 'video' || item.type === 'image') {
+    return {
+      width: Math.max(1, item.sourceWidth ?? item.transform?.width ?? canvas.width),
+      height: Math.max(1, item.sourceHeight ?? item.transform?.height ?? canvas.height),
+    };
+  }
+
+  return null;
+}
+
 /**
  * Get the animated transform for an item at a specific frame.
  *
@@ -141,6 +156,27 @@ export function getAnimatedTransform(
     ...resolved,
     opacity: resolved.opacity * fadeOpacity,
   };
+}
+
+export function getAnimatedCrop(
+  item: TimelineItem,
+  keyframes: ItemKeyframes | undefined,
+  frame: number,
+  canvas: Pick<CanvasRenderSettings, 'width' | 'height'>,
+  renderSpan?: RenderTimelineSpan,
+): CropSettings | undefined {
+  const dimensions = getCropSourceDimensions(item, canvas);
+  if (!dimensions) {
+    return item.crop;
+  }
+
+  const resolvedItem = applyRenderTimelineSpan(item, renderSpan);
+  return resolveAnimatedCrop(
+    resolvedItem.crop,
+    keyframes,
+    frame - resolvedItem.from,
+    dimensions,
+  );
 }
 
 /**

@@ -747,7 +747,7 @@ class FilmstripCacheService {
     if (duration <= 0) return false;
 
     const totalFrames = Math.ceil(duration * FRAME_RATE);
-    const normalizedPriorityRange = this.normalizePriorityRange(priorityRange, totalFrames);
+    const normalizedPriorityRange = this.normalizePriorityRange(priorityRange ?? undefined, totalFrames);
     return this.needsRefinementForTarget(
       cached.frames,
       totalFrames,

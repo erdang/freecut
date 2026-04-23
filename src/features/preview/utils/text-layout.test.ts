@@ -32,6 +32,8 @@ const baseTransform: ResolvedTransform = {
   y: 0,
   width: 200,
   height: 80,
+  anchorX: 100,
+  anchorY: 40,
   rotation: 0,
   opacity: 1,
   cornerRadius: 0,
@@ -98,5 +100,47 @@ describe('expandTextTransformForPreview', () => {
     );
 
     expect(expanded.height).toBeGreaterThan(48);
+  });
+
+  it('accounts for previewed text padding when growing bounds', () => {
+    const expanded = expandTextTransformForPreview(
+      baseItem,
+      {
+        ...baseTransform,
+        height: 64,
+      },
+      {
+        textPadding: 48,
+      }
+    );
+
+    expect(expanded.height).toBeGreaterThan(64);
+  });
+
+  it('expands height for stacked text spans with their own sizes', () => {
+    const expanded = expandTextTransformForPreview(
+      {
+        ...baseItem,
+        text: 'Headline\nSubtitle',
+        textSpans: [
+          {
+            text: 'Headline',
+            fontSize: 56,
+            fontWeight: 'bold',
+          },
+          {
+            text: 'Subtitle',
+            fontSize: 28,
+            color: '#cbd5e1',
+          },
+        ],
+      },
+      {
+        ...baseTransform,
+        height: 70,
+      }
+    );
+
+    expect(expanded.height).toBeGreaterThan(70);
   });
 });

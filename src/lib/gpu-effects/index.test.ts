@@ -36,10 +36,10 @@ describe('GPU effect registry', () => {
       1,
     ]);
 
-    expect(effect!.params.angle.visibleWhen?.(defaults)).toBe(false);
-    expect(effect!.params.angle.visibleWhen?.({ ...defaults, mode: 'linear' })).toBe(true);
-    expect(effect!.params.scale.visibleWhen?.(defaults)).toBe(false);
-    expect(effect!.params.scale.visibleWhen?.({ ...defaults, mode: 'radial' })).toBe(true);
+    expect(effect!.params.angle!.visibleWhen?.(defaults)).toBe(false);
+    expect(effect!.params.angle!.visibleWhen?.({ ...defaults, mode: 'linear' })).toBe(true);
+    expect(effect!.params.scale!.visibleWhen?.(defaults)).toBe(false);
+    expect(effect!.params.scale!.visibleWhen?.({ ...defaults, mode: 'radial' })).toBe(true);
   });
 
   it('registers the ascii effect with shader-friendly defaults', () => {
@@ -91,9 +91,9 @@ describe('GPU effect registry', () => {
       1,
     ])));
 
-    expect(effect!.params.textColor.visibleWhen?.(defaults)).toBe(false);
-    expect(effect!.params.textColor.visibleWhen?.({ ...defaults, matchSourceColor: false })).toBe(true);
-    expect(effect!.params.colorSaturation.visibleWhen?.(defaults)).toBe(true);
-    expect(effect!.params.colorSaturation.visibleWhen?.({ ...defaults, matchSourceColor: false })).toBe(false);
+    expect(effect!.params.textColor!.visibleWhen?.(defaults)).toBe(false);
+    expect(effect!.params.textColor!.visibleWhen?.({ ...defaults, matchSourceColor: false })).toBe(true);
+    expect(effect!.params.colorSaturation!.visibleWhen?.(defaults)).toBe(true);
+    expect(effect!.params.colorSaturation!.visibleWhen?.({ ...defaults, matchSourceColor: false })).toBe(false);
   });
 });

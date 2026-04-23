@@ -6,13 +6,14 @@
  */
 
 import { z } from 'zod';
+import { TEXT_STYLE_PRESET_IDS } from '@/shared/typography/text-style-preset-ids';
 import { SNAPSHOT_VERSION } from '../types/snapshot';
 
 // ============================================================================
 // Keyframe Schemas
 // ============================================================================
 
-const animatablePropertySchema = z.enum(['x', 'y', 'width', 'height', 'rotation', 'opacity', 'cornerRadius']);
+const animatablePropertySchema = z.string().min(1);
 
 const easingTypeSchema = z.enum([
   'linear',
@@ -89,6 +90,7 @@ const directionSchema = z.enum(['up', 'down', 'left', 'right']);
 // Text-specific schemas
 const fontWeightSchema = z.enum(['normal', 'medium', 'semibold', 'bold']);
 const fontStyleSchema = z.enum(['normal', 'italic']);
+const textStylePresetIdSchema = z.enum(TEXT_STYLE_PRESET_IDS);
 const textAlignSchema = z.enum(['left', 'center', 'right']);
 const verticalAlignSchema = z.enum(['top', 'middle', 'bottom']);
 
@@ -102,6 +104,34 @@ const textShadowSchema = z.object({
 const textStrokeSchema = z.object({
   width: z.number(),
   color: z.string(),
+});
+
+const textSpanSchema = z.object({
+  text: z.string(),
+  fontSize: z.number().optional(),
+  fontFamily: z.string().optional(),
+  fontWeight: fontWeightSchema.optional(),
+  fontStyle: fontStyleSchema.optional(),
+  underline: z.boolean().optional(),
+  color: z.string().optional(),
+  letterSpacing: z.number().optional(),
+});
+
+const textSingleLayoutDraftSchema = z.object({
+  text: z.string(),
+  fontSize: z.number().optional(),
+  fontFamily: z.string().optional(),
+  fontWeight: fontWeightSchema.optional(),
+  fontStyle: fontStyleSchema.optional(),
+  underline: z.boolean().optional(),
+  color: z.string().optional(),
+  letterSpacing: z.number().optional(),
+});
+
+const textLayoutDraftsSchema = z.object({
+  single: textSingleLayoutDraftSchema.optional(),
+  twoSpans: z.array(textSpanSchema).optional(),
+  threeSpans: z.array(textSpanSchema).optional(),
 });
 
 const captionSourceSchema = z.object({
@@ -261,7 +291,11 @@ const transformSchema = z.object({
   y: z.number().optional(),
   width: z.number().optional(),
   height: z.number().optional(),
+  anchorX: z.number().optional(),
+  anchorY: z.number().optional(),
   rotation: z.number().optional(),
+  flipHorizontal: z.boolean().optional(),
+  flipVertical: z.boolean().optional(),
   opacity: z.number().min(0).max(1).optional(),
   cornerRadius: z.number().min(0).optional(),
   aspectRatioLocked: z.boolean().optional(),
@@ -280,6 +314,8 @@ const cornerPinSchema = z.object({
   topRight: z.tuple([z.number(), z.number()]),
   bottomRight: z.tuple([z.number(), z.number()]),
   bottomLeft: z.tuple([z.number(), z.number()]),
+  referenceWidth: z.number().positive().optional(),
+  referenceHeight: z.number().positive().optional(),
 });
 
 const timelineItemSchema = z.object({
@@ -306,6 +342,8 @@ const timelineItemSchema = z.object({
   trimEnd: z.number().optional(),
   // Text fields
   text: z.string().optional(),
+  textSpans: z.array(textSpanSchema).optional(),
+  textLayoutDrafts: textLayoutDraftsSchema.optional(),
   textRole: z.literal('caption').optional(),
   captionSource: captionSourceSchema.optional(),
   fontSize: z.number().optional(),
@@ -314,11 +352,15 @@ const timelineItemSchema = z.object({
   fontStyle: fontStyleSchema.optional(),
   underline: z.boolean().optional(),
   color: z.string().optional(),
+  textStylePresetId: textStylePresetIdSchema.optional(),
+  textStyleScale: z.number().positive().optional(),
   backgroundColor: z.string().optional(),
+  backgroundRadius: z.number().min(0).optional(),
   textAlign: textAlignSchema.optional(),
   verticalAlign: verticalAlignSchema.optional(),
   lineHeight: z.number().optional(),
   letterSpacing: z.number().optional(),
+  textPadding: z.number().min(0).optional(),
   textShadow: textShadowSchema.optional(),
   stroke: textStrokeSchema.optional(),
   // Shape fields

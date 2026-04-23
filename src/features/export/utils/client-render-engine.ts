@@ -32,7 +32,7 @@ import { resolveMediaUrl } from '@/features/export/deps/media-library';
 import { VideoSourcePool } from '@/features/export/deps/player-contract';
 
 // Import subsystems
-import { getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
+import { getAnimatedCrop, getAnimatedTransform, buildKeyframesMap } from './canvas-keyframes';
 import {
   renderEffectsFromMaskedSource,
   getAdjustmentLayerEffects,
@@ -62,10 +62,12 @@ import { useCompositionsStore, type SubComposition } from '@/features/export/dep
 import { doesMaskAffectTrack } from '@/shared/utils/mask-scope';
 import type { FrameInvalidationRequest } from '@/shared/utils/frame-invalidation';
 import { collectReachableCompositionIdsFromItems, collectReachableCompositionIdsFromTracks } from '@/features/export/deps/timeline';
+import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes';
 
 // Item renderer
 import {
   createFrameCompositionSceneCache,
+  hasCornerPin,
   type PreviewPathVerticesOverride,
   resolveCompositionRenderPlan,
   collectFrameVideoCandidates,
@@ -1282,13 +1284,21 @@ export async function createCompositionRenderer(
         }
 
         // Get effects (preview override → item effects + adjustment layer effects)
-        const itemEffects = (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined) ?? effectiveItem.effects;
+        const baseItemEffects =
+          (renderMode === 'preview' ? getPreviewEffectsOverride?.(item.id) : undefined)
+          ?? effectiveItem.effects;
+        const itemEffects = resolveAnimatedColorEffects(
+          baseItemEffects,
+          getCurrentKeyframes(effectiveItem.id),
+          frame - effectiveItem.from,
+        );
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
           frame,
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
           renderMode === 'preview' ? getLiveItemSnapshot : undefined,
+          getCurrentKeyframes,
         );
         const combinedEffects = combineEffects(itemEffects, adjEffects);
         const applicableMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
@@ -1309,7 +1319,10 @@ export async function createCompositionRenderer(
           effectiveItem,
           transform,
           frame,
-          itemRenderContext
+          itemRenderContext,
+          0,
+          undefined,
+          applicableMasks,
         );
 
         // Apply effects (per-item — GPU effects applied here for both preview and export)
@@ -1325,7 +1338,7 @@ export async function createCompositionRenderer(
             canvasPool,
             itemCanvas,
             combinedEffects,
-            applicableMasks,
+            hasCornerPin(effectiveItem.cornerPin) ? [] : applicableMasks,
             frame,
             maskSettings,
             itemRenderContext.gpuPipeline,
@@ -1394,10 +1407,11 @@ export async function createCompositionRenderer(
 
         // Corner pin warps the shape, exposing content below
         if (item.cornerPin) return false;
-        if (hasMediaCrop(item.crop)) return false;
 
         // Get animated transform at current frame
         const itemKeyframes = getCurrentKeyframes(item.id);
+        const animatedCrop = getAnimatedCrop(item, itemKeyframes, frame, canvasSettings);
+        if (hasMediaCrop(animatedCrop)) return false;
         const transform = getAnimatedTransform(item, itemKeyframes, frame, canvasSettings);
 
         // Check opacity (must be 1.0)
@@ -1422,13 +1436,18 @@ export async function createCompositionRenderer(
         if (itemRight < canvas.width - tolerance || itemBottom < canvas.height - tolerance) return false;
 
         // Check for effects that might add transparency
-        const itemEffects = item.effects ?? [];
+        const itemEffects = resolveAnimatedColorEffects(
+          item.effects ?? [],
+          getCurrentKeyframes(item.id),
+          frame - item.from,
+        ) ?? [];
         const adjEffects = getAdjustmentLayerEffects(
           trackOrder,
           adjustmentLayers,
           frame,
           renderMode === 'preview' ? getPreviewEffectsOverride : undefined,
           renderMode === 'preview' ? getLiveItemSnapshot : undefined,
+          getCurrentKeyframes,
         );
         const allEffects = [...itemEffects, ...adjEffects];
 
@@ -1532,8 +1551,12 @@ export async function createCompositionRenderer(
         const applyTrackScopedMasks = (
           result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null,
           trackOrder: number,
+          skipMasks: boolean,
         ): { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null => {
           if (!result) return null;
+          if (skipMasks) {
+            return result;
+          }
 
           const applicableMasks = activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, trackOrder));
           if (applicableMasks.length === 0) {
@@ -1602,7 +1625,14 @@ export async function createCompositionRenderer(
 
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!;
-            const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
+            const result = applyTrackScopedMasks(
+              results[i] ?? null,
+              task.trackOrder,
+              task.type === 'item'
+                ? hasCornerPin(getCurrentItem(task.item).cornerPin)
+                : hasCornerPin(getCurrentItem(task.transition.leftClip).cornerPin)
+                  || hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
+            );
             if (!result) continue;
             compositedResults.push({ task, result });
 
@@ -1661,7 +1691,14 @@ export async function createCompositionRenderer(
           // Canvas2D compositing fallback
           for (let i = 0; i < results.length; i++) {
             const task = renderTasks[i]!;
-            const result = applyTrackScopedMasks(results[i] ?? null, task.trackOrder);
+            const result = applyTrackScopedMasks(
+              results[i] ?? null,
+              task.trackOrder,
+              task.type === 'item'
+                ? hasCornerPin(getCurrentItem(task.item).cornerPin)
+                : hasCornerPin(getCurrentItem(task.transition.leftClip).cornerPin)
+                  || hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
+            );
             if (!result) continue;
 
             const blendMode = task.type === 'item'

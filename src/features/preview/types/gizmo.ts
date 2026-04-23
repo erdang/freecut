@@ -28,7 +28,11 @@ export interface Transform {
   y: number;
   width: number;
   height: number;
+  anchorX?: number;
+  anchorY?: number;
   rotation: number;
+  flipHorizontal?: boolean;
+  flipVertical?: boolean;
   opacity: number;
   /** Corner radius for rounded corners (optional, preserved during transform) */
   cornerRadius?: number;

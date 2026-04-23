@@ -290,11 +290,11 @@ export const Timeline = memo(function Timeline({ duration }: TimelineProps) {
   const handleTimelineAreaMouseDown = useCallback((event: React.MouseEvent) => {
     if (event.button !== 1) return;
     if (!hasTrackSections) return;
-    // Only start a section-divider drag when the middle-click actually lands
-    // on the divider itself — otherwise middle-clicks on clips / gizmos /
-    // buttons inside the timeline row would hijack into an unwanted drag.
-    if (!(event.target instanceof Element)) return;
-    if (!event.target.closest('[data-track-section-divider]')) return;
+    // Intentional: middle-click anywhere in the timeline area drags the A/V
+    // section divider — headers, ruler, clip rows, everywhere. coderabbitai
+    // flagged this as "hijacking clips/gizmos" in PR #202 review and we
+    // narrowed it to divider-only; that was wrong — MMB is reserved for this
+    // gesture across the whole timeline. Do not re-narrow.
     handleSectionDividerMouseDown(event);
   }, [handleSectionDividerMouseDown, hasTrackSections]);
 

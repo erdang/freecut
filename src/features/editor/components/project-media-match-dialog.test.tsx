@@ -89,7 +89,7 @@ vi.mock('@/features/editor/deps/projects', () => ({
     Number.isInteger(fps) ? `${fps}` : fps.toFixed(3).replace(/0+$/, '').replace(/\.$/, ''),
   resolveAutoMatchProjectFps: (sourceFps: number) => {
     const candidates = [24, 25, 30, 50, 60];
-    let closest = candidates[0];
+    let closest: number = candidates[0] ?? 30;
     let smallestDelta = Math.abs(sourceFps - closest);
 
     for (const candidate of candidates.slice(1)) {

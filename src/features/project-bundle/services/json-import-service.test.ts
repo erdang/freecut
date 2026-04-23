@@ -125,4 +125,61 @@ describe('validateSnapshotData', () => {
       }),
     );
   });
+
+  it('accepts snapshots that use any shipped text preset id', async () => {
+    const result = await validateSnapshotData({
+      version: '1.0',
+      exportedAt: '2026-03-30T11:29:25.781Z',
+      editorVersion: '1.0.0',
+      project: {
+        id: 'preset-project',
+        name: 'Preset Project',
+        description: '',
+        createdAt: 0,
+        updatedAt: 0,
+        duration: 0,
+        metadata: {
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          backgroundColor: '#000000',
+        },
+        timeline: {
+          tracks: [
+            {
+              id: 'track-video',
+              name: 'V1',
+              kind: 'video',
+              height: 100,
+              locked: false,
+              visible: true,
+              muted: false,
+              solo: false,
+              volume: 0,
+              order: 0,
+            },
+          ],
+          items: [
+            {
+              id: 'item-text',
+              type: 'text',
+              trackId: 'track-video',
+              from: 0,
+              durationInFrames: 30,
+              label: 'Poster',
+              text: 'Tonight',
+              color: '#ffffff',
+              textStylePresetId: 'poster',
+            },
+          ],
+          zoomLevel: 1,
+          scrollPosition: 0,
+        },
+      },
+      mediaReferences: [],
+    });
+
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
 });
