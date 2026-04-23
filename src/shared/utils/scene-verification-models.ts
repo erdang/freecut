@@ -28,7 +28,7 @@ export const SCENE_VERIFICATION_MODEL_CACHE_DESCRIPTIONS: Record<
 export const SCENE_VERIFICATION_MODEL_OPTIONS = SCENE_VERIFICATION_MODEL_IDS.map((value) => ({
   value,
   label: SCENE_VERIFICATION_MODEL_LABELS[value],
-})) as const satisfies ReadonlyArray<{
+})) satisfies ReadonlyArray<{
   value: SceneVerificationModelId;
   label: string;
 }>;

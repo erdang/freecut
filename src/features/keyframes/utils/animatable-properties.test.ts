@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TimelineItem } from '@/types/timeline';
 import { getAnimatablePropertiesForItem } from './animatable-properties';
 
-function createItem(type: TimelineItem['type']): TimelineItem {
+function createItem<TType extends TimelineItem['type']>(type: TType): Extract<TimelineItem, { type: TType }> {
   return {
     id: `${type}-1`,
     type,
@@ -10,7 +10,7 @@ function createItem(type: TimelineItem['type']): TimelineItem {
     from: 0,
     durationInFrames: 60,
     label: `${type} item`,
-  };
+  } as Extract<TimelineItem, { type: TType }>;
 }
 
 describe('getAnimatablePropertiesForItem', () => {

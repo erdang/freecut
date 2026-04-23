@@ -99,6 +99,7 @@ describe('shouldPreferPlayerForStyledTextScrub', () => {
             durationInFrames: 90,
             label: 'Caption',
             text: 'Hello world',
+            color: '#fff',
             textRole: 'caption',
             captionSource: {
               type: 'transcript',

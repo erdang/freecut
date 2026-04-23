@@ -813,7 +813,8 @@ function getSpanStyle(span?: TextSpan): Omit<TextSpan, 'text'> {
     return {};
   }
 
-  const { text: _text, ...style } = span;
+  const style: Partial<TextSpan> = { ...span };
+  delete style.text;
   return style;
 }
 

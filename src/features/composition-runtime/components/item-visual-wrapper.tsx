@@ -134,7 +134,7 @@ function renderRasterizedMaskLayer(
       resolvedPin,
     );
   } else {
-    let svgPath = getShapePath(
+    const svgPath = getShapePath(
       shape,
       {
         x: resolvedTransform.x,

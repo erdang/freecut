@@ -68,7 +68,12 @@ export function TransformGizmo({
     if (item.type === 'text' && itemPreview?.properties) {
       baseTransform = expandTextTransformForPreview(
         item,
-        baseTransform,
+        {
+          ...baseTransform,
+          anchorX: baseTransform.anchorX ?? baseTransform.width / 2,
+          anchorY: baseTransform.anchorY ?? baseTransform.height / 2,
+          cornerRadius: baseTransform.cornerRadius ?? 0,
+        },
         itemPreview?.properties
       );
     }

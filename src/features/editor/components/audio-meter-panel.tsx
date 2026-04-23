@@ -45,11 +45,27 @@ import { AudioEqPanelContent } from './properties-sidebar/clip-panel/audio-eq-pa
 import { type AudioEqPatch } from './properties-sidebar/clip-panel/audio-eq-curve-editor';
 import { getSparseAudioEqSettings } from '@/shared/utils/audio-eq';
 import { type AudioEqSettings } from '@/types/audio';
+import { clearMixerLiveGainLayer, setMixerLiveGainLayer } from '@/shared/state/mixer-live-gain';
 
 type PanelMode = 'meter' | 'mixer';
 type EqPanelTarget =
   | { kind: 'track'; trackId: string }
   | { kind: 'bus' };
+type EqPanelDescriptor =
+  | {
+      title: string;
+      targetLabel: string;
+      trackId: string;
+      trackEq: AudioEqSettings | undefined;
+      eqEnabled: boolean;
+    }
+  | {
+      title: string;
+      targetLabel: string;
+      busEq: AudioEqSettings | undefined;
+      eqEnabled: boolean;
+    };
+const MUTE_SOLO_LIVE_GAIN_LAYER_ID = 'track-mute-solo';
 
 function toWaveformSnapshot(
   waveform: { peaks: Float32Array; sampleRate: number; channels?: number; stereo?: boolean } | null | undefined,
@@ -471,7 +487,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     });
   }, [combinedTracks, mixerFloating, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
 
-  const eqPanelDescriptor = useMemo(() => {
+  const eqPanelDescriptor = useMemo<EqPanelDescriptor | null>(() => {
     if (!eqPanelTarget) return null;
 
     if (eqPanelTarget.kind === 'track') {
@@ -680,16 +696,24 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       }))
       .filter((track) => isAudioMixerTrack(track, currentTimelineItems));
     if (audioTracks.length === 0) {
+      clearMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID);
       return;
     }
     const anySoloed = audioTracks.some((t) => t.solo);
+    const liveGainEntries: Array<{ itemId: string; gain: number }> = [];
 
     for (const t of audioTracks) {
       const shouldMute = t.muted || (anySoloed && !t.solo);
       const gain = shouldMute ? 0 : 1;
       for (const itemId of getTrackItemIds(t.id)) {
-        usePlaybackStore.getState().setLiveItemGain(itemId, gain);
+        liveGainEntries.push({ itemId, gain });
       }
+    }
+
+    if (liveGainEntries.length > 0) {
+      setMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID, liveGainEntries);
+    } else {
+      clearMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID);
     }
   }, [getTrackItemIds]);
 

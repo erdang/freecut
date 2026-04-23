@@ -38,6 +38,7 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions';
+import type { ResolvedTransform } from '@/types/transform';
 import { applyMasks, buildPreparedMask, type MaskCanvasSettings } from './canvas-masks';
 import { renderShape } from './canvas-shapes';
 import type { ScrubbingCache } from '@/features/export/deps/preview';
@@ -93,11 +94,19 @@ export interface ItemTransform {
   y: number;
   width: number;
   height: number;
-  anchorX: number;
-  anchorY: number;
+  anchorX?: number;
+  anchorY?: number;
   rotation: number;
   opacity: number;
   cornerRadius: number;
+}
+
+function resolveItemTransform(transform: ItemTransform): ResolvedTransform {
+  return {
+    ...transform,
+    anchorX: transform.anchorX ?? transform.width / 2,
+    anchorY: transform.anchorY ?? transform.height / 2,
+  };
 }
 
 function applyItemTransformToContext(
@@ -108,8 +117,8 @@ function applyItemTransformToContext(
 ): void {
   const left = canvasSettings.width / 2 + transform.x - transform.width / 2;
   const top = canvasSettings.height / 2 + transform.y - transform.height / 2;
-  const centerX = left + transform.anchorX;
-  const centerY = top + transform.anchorY;
+  const centerX = left + (transform.anchorX ?? transform.width / 2);
+  const centerY = top + (transform.anchorY ?? transform.height / 2);
   const flipScaleX = item.transform?.flipHorizontal ? -1 : 1;
   const flipScaleY = item.transform?.flipVertical ? -1 : 1;
   const hasFlip = flipScaleX !== 1 || flipScaleY !== 1;
@@ -280,9 +289,10 @@ export async function renderItem(
     ? resolveAnimatedTextItem(item, itemKeyframes, frame - item.from, rctx.canvasSettings)
     : item;
   const frameResolvedItem = applyAnimatedCropToItem(animatedTextItem, frame, rctx, renderSpan);
+  const resolvedTransform = resolveItemTransform(transform);
   const frameResolvedTransform = frameResolvedItem.type === 'text'
-    ? expandTextTransformToFitContent(frameResolvedItem, transform)
-    : transform;
+    ? expandTextTransformToFitContent(frameResolvedItem, resolvedTransform)
+    : resolvedTransform;
 
   // Corner pin: render to temp canvas, then warp onto main canvas
   if (hasCornerPin(frameResolvedItem.cornerPin)) {
@@ -365,7 +375,7 @@ async function renderItemContent(
       renderTextItem(ctx, effectiveItem as TextItem, transform, rctx);
       break;
     case 'shape':
-      renderShape(ctx, effectiveItem as ShapeItem, transform, {
+      renderShape(ctx, effectiveItem as ShapeItem, resolveItemTransform(transform), {
         width: rctx.canvasSettings.width,
         height: rctx.canvasSettings.height,
       });
@@ -1864,7 +1874,7 @@ export async function renderTransitionToCanvas(
 
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(
   clip: TItem,
-  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
+  activeTransition: Pick<ActiveTransition, 'transitionStart' | 'transitionEnd'>,
   frame: number,
   trackOrder: number,
   rctx: ItemRenderContext,

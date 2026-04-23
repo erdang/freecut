@@ -304,7 +304,8 @@ describe('composition-actions split wrappers', () => {
         trackId: 'track-v1',
         from: 0,
         durationInFrames: 60,
-        shapeType: 'rect',
+        label: 'Mask',
+        shapeType: 'rectangle',
         fillColor: '#ffffff',
         isMask: true,
       },
@@ -553,8 +554,10 @@ describe('composition-actions split wrappers', () => {
         transitions: [],
         keyframes: [{
           itemId: 'nested-comp-a-video',
-          property: 'opacity',
-          keyframes: [{ time: 0, value: 1 }],
+          properties: [{
+            property: 'opacity',
+            keyframes: [{ id: 'kf-1', frame: 0, value: 1, easing: 'linear' }],
+          }],
         }],
         fps: 30,
         width: 1920,

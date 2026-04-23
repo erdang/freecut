@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ShapeItem, TimelineTrack } from '@/types/timeline';
 
 const mocks = vi.hoisted(() => ({
   getShapePathMock: vi.fn(
@@ -108,7 +109,7 @@ beforeAll(() => {
 
 describe('canvas mask animation', () => {
   const canvas: MaskCanvasSettings = { width: 1920, height: 1080, fps: 30 };
-  const track = {
+  const track: TimelineTrack = {
     id: 'track-1',
     name: 'Masks',
     height: 60,
@@ -132,6 +133,7 @@ describe('canvas mask animation', () => {
       },
     ],
   };
+  const baseMask = track.items[0] as ShapeItem;
 
   beforeEach(() => {
     mocks.getShapePathMock.mockClear();
@@ -155,12 +157,12 @@ describe('canvas mask animation', () => {
     expect((frame12Masks[0]!.path as { value?: string }).value).toContain('12');
     expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
       1,
-      [{ mask: track.items[0], trackOrder: 0 }],
+      [{ mask: baseMask, trackOrder: 0 }],
       expect.objectContaining({ frame: 10 })
     );
     expect(mocks.resolveActiveShapeMasksAtFrameMock).toHaveBeenNthCalledWith(
       2,
-      [{ mask: track.items[0], trackOrder: 0 }],
+      [{ mask: baseMask, trackOrder: 0 }],
       expect.objectContaining({ frame: 12 })
     );
   });
@@ -185,7 +187,7 @@ describe('canvas mask animation', () => {
       ...track,
       items: [
         {
-          ...track.items[0],
+          ...baseMask,
           id: 'mask-path',
           shapeType: 'path' as const,
           pathVertices: [
@@ -236,7 +238,7 @@ describe('canvas mask animation', () => {
   it('rasterizes corner-pinned shape masks into bitmap masks', () => {
     const preparedMask = buildPreparedMask(
       {
-        ...track.items[0],
+        ...baseMask,
         cornerPin: {
           topLeft: [0, 0],
           topRight: [20, 10],
@@ -251,6 +253,8 @@ describe('canvas mask animation', () => {
         y: 18,
         width: 140,
         height: 120,
+        anchorX: 70,
+        anchorY: 60,
         rotation: 12,
         opacity: 1,
         cornerRadius: 0,

@@ -86,6 +86,7 @@ describe('createTimelineTemplateItem', () => {
       text: 'TOP STORY\nHeadline\nSubhead',
       fontFamily: 'Inter Tight',
     });
+    if (item.type !== 'text') throw new Error('Expected text item');
     expect(item.textSpans).toHaveLength(3);
     expect(item.textSpans?.[0]).toMatchObject({
       text: 'TOP STORY',
@@ -111,6 +112,7 @@ describe('createTimelineTemplateItem', () => {
       },
     });
 
+    if (speaker.type !== 'text') throw new Error('Expected text item');
     expect(speaker.textSpans).toHaveLength(2);
     expect(speaker).toMatchObject({
       label: 'Speaker',
@@ -135,6 +137,7 @@ describe('createTimelineTemplateItem', () => {
       },
     });
 
+    if (launch.type !== 'text') throw new Error('Expected text item');
     expect(launch.textSpans).toHaveLength(3);
     expect(launch).toMatchObject({
       label: 'Launch',

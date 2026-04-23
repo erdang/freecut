@@ -163,12 +163,12 @@ function averageAndNormalize(vectors: Float32Array[]): Float32Array {
   const dim = vectors[0]!.length;
   const out = new Float32Array(dim);
   for (const v of vectors) {
-    for (let i = 0; i < dim; i += 1) out[i] += v[i]!;
+    for (let i = 0; i < dim; i += 1) out[i] = (out[i] ?? 0) + (v[i] ?? 0);
   }
   let sum = 0;
   for (let i = 0; i < dim; i += 1) sum += out[i]! * out[i]!;
   const norm = Math.sqrt(sum) || 1;
-  for (let i = 0; i < dim; i += 1) out[i] /= norm;
+  for (let i = 0; i < dim; i += 1) out[i] = (out[i] ?? 0) / norm;
   return out;
 }
 

@@ -238,7 +238,7 @@ function extractLooseSubjects(raw: string): string[] | undefined {
   const match = raw.match(/(?:["']?subjects["']?)\s*:\s*\[([\s\S]*?)\]/i);
   if (!match) return undefined;
 
-  const entries = Array.from(match[1].matchAll(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^,\]]+/g))
+  const entries = Array.from((match[1] ?? '').matchAll(/"(?:\\.|[^"])*"|'(?:\\.|[^'])*'|[^,\]]+/g))
     .map((entry) => decodeLooseValue(entry[0]))
     .filter((entry): entry is string => typeof entry === 'string' && entry.length > 0);
 

@@ -1,5 +1,5 @@
 import type { ReactNode, MouseEvent } from 'react';
-import React, { createContext, cloneElement, isValidElement, useContext } from 'react';
+import { createContext, cloneElement, isValidElement, useContext } from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { MediaMetadata, MediaTranscript } from '@/types/storage';
@@ -40,9 +40,10 @@ vi.mock('@/components/ui/popover', () => {
     }) => {
       const { open, onOpenChange } = useContext(PopoverContext);
       if (asChild && isValidElement(children)) {
-        return cloneElement(children, {
+        const child = children as React.ReactElement<{ onClick?: (event: MouseEvent<HTMLButtonElement>) => void }>;
+        return cloneElement(child, {
           onClick: (event: MouseEvent<HTMLButtonElement>) => {
-            children.props.onClick?.(event);
+            child.props.onClick?.(event);
             onOpenChange(!open);
           },
         });

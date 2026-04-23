@@ -180,7 +180,7 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     const transcript: MediaTranscript = {
       id: 'media-1',
       mediaId: 'media-1',
-      model: 'tiny',
+      model: 'whisper-tiny',
       language: 'auto',
       quantization: 'q8',
       text: 'Hello there',
@@ -202,13 +202,13 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     });
     expect(setTracks).toHaveBeenCalledTimes(1);
 
-    const updatedTracks = setTracks.mock.calls[0][0] as TimelineTrack[];
+    const updatedTracks = setTracks.mock.calls[0]![0] as TimelineTrack[];
     const captionTrack = updatedTracks.find((track) => !initialTracks.some((existing) => existing.id === track.id));
     expect(captionTrack).toBeDefined();
     expect(captionTrack?.order).toBe(0.5);
 
     expect(addItems).toHaveBeenCalledTimes(1);
-    const insertedItems = addItems.mock.calls[0][0] as TimelineItem[];
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[];
     expect(insertedItems).toHaveLength(1);
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id);
     expect(removeItems).not.toHaveBeenCalled();
@@ -266,7 +266,7 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     const transcript: MediaTranscript = {
       id: 'media-1',
       mediaId: 'media-1',
-      model: 'tiny',
+      model: 'whisper-tiny',
       language: 'auto',
       quantization: 'q8',
       text: 'Hello there',
@@ -287,13 +287,13 @@ describe('mediaTranscriptionService.insertTranscriptAsCaptions', () => {
     });
     expect(setTracks).toHaveBeenCalledTimes(1);
 
-    const updatedTracks = setTracks.mock.calls[0][0] as TimelineTrack[];
+    const updatedTracks = setTracks.mock.calls[0]![0] as TimelineTrack[];
     const captionTrack = updatedTracks.find((track) => !initialTracks.some((existing) => existing.id === track.id));
     expect(captionTrack).toBeDefined();
     expect(captionTrack?.kind).toBe('video');
 
     expect(addItems).toHaveBeenCalledTimes(1);
-    const insertedItems = addItems.mock.calls[0][0] as TimelineItem[];
+    const insertedItems = addItems.mock.calls[0]![0] as TimelineItem[];
     expect(insertedItems[0]?.trackId).toBe(captionTrack?.id);
     expect(insertedItems[0]?.trackId).not.toBe('track-audio');
     expect(removeItems).toHaveBeenCalledWith(['caption-old']);

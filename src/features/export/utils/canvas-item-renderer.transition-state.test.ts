@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ItemEffect } from '@/types/effects';
 import type { ItemKeyframes } from '@/types/keyframe';
-import type { VideoItem } from '@/types/timeline';
+import type { TimelineItem, VideoItem } from '@/types/timeline';
 import type { ActiveTransition } from './canvas-transitions';
 import type { ItemRenderContext } from './canvas-item-renderer';
 import { resolveTransitionParticipantRenderState } from './canvas-item-renderer';
@@ -100,7 +100,7 @@ describe('resolveTransitionParticipantRenderState', () => {
       canvasPool: {} as ItemRenderContext['canvasPool'],
       textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
       renderMode: 'preview',
-      getCurrentItemSnapshot: () => currentItem,
+      getCurrentItemSnapshot: <TItem extends TimelineItem>() => currentItem as TItem,
       getCurrentKeyframes: () => undefined,
       getPreviewTransformOverride: (itemId) => (
         itemId === baseItem.id

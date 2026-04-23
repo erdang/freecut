@@ -7,6 +7,7 @@ import { MaskEditorOverlay } from './mask-editor-overlay';
 import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
 import type { CoordinateParams, Transform } from '../types/gizmo';
+import type { ShapeItem } from '@/types/timeline';
 
 const PROJECT_SIZE = { width: 200, height: 120 } as const;
 const PLAYER_SIZE = { width: 200, height: 120 } as const;
@@ -95,7 +96,9 @@ function resetStores() {
 
 describe('MaskEditorOverlay shape pen flow', () => {
   beforeAll(() => {
-    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => {
+    (vi.spyOn(HTMLCanvasElement.prototype, 'getContext') as unknown as {
+      mockImplementation: (implementation: () => CanvasRenderingContext2D) => void;
+    }).mockImplementation(() => {
       mockCanvasContext = {
         scale: vi.fn(),
         clearRect: vi.fn(),
@@ -171,7 +174,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
     const items = useItemsStore.getState().items;
     expect(items).toHaveLength(1);
 
-    const shape = items[0];
+    const shape = items[0] as ShapeItem;
     expect(shape?.type).toBe('shape');
     expect(shape?.shapeType).toBe('path');
     expect(shape?.label).toBe('Path');
@@ -440,7 +443,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
 
     const tracks = useItemsStore.getState().tracks;
     const newTrack = tracks.find((track) => track.id !== 'track-v1' && track.id !== 'track-a1');
-    const shape = useItemsStore.getState().items.find((item) => item.id !== 'busy-video-track');
+    const shape = useItemsStore.getState().items.find((item) => item.id !== 'busy-video-track') as ShapeItem | undefined;
 
     expect(newTrack).toBeDefined();
     expect(newTrack?.kind).toBe('video');
@@ -592,7 +595,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
       expect(useMaskEditorStore.getState().isEditing).toBe(false);
     });
 
-    const shape = useItemsStore.getState().items[0];
+    const shape = useItemsStore.getState().items[0] as ShapeItem;
     expect(shape?.type).toBe('shape');
     expect(shape?.shapeType).toBe('path');
     expect(shape?.pathVertices?.[0]?.inHandle[0]).not.toBeCloseTo(0);
@@ -673,7 +676,7 @@ describe('MaskEditorOverlay shape pen flow', () => {
       expect(useMaskEditorStore.getState().isEditing).toBe(false);
     });
 
-    const shape = useItemsStore.getState().items[0];
+    const shape = useItemsStore.getState().items[0] as ShapeItem;
     expect(shape?.type).toBe('shape');
     expect(shape?.shapeType).toBe('path');
     expect(shape?.isMask).toBe(false);
@@ -943,7 +946,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     fireEvent.doubleClick(canvas!, { clientX: 150, clientY: 60 });
 
-    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
     expect(updatedItem?.pathVertices).toHaveLength(5);
     expect(updatedItem?.pathVertices?.[2]?.position).toEqual([1, 0.5]);
   });
@@ -1020,7 +1023,7 @@ describe('MaskEditorOverlay edit mode', () => {
     });
 
     await waitFor(() => {
-      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
       expect(updatedItem?.pathVertices).toBeTruthy();
       expect(
         updatedItem?.pathVertices?.every((vertex) =>
@@ -1055,7 +1058,7 @@ describe('MaskEditorOverlay edit mode', () => {
     });
 
     await waitFor(() => {
-      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
       const convertedVertex = updatedItem?.pathVertices?.[1];
       expect(convertedVertex).toBeTruthy();
       expect(Math.hypot(
@@ -1114,7 +1117,7 @@ describe('MaskEditorOverlay edit mode', () => {
     });
 
     await waitFor(() => {
-      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
       expect(updatedItem?.pathVertices?.[1]?.inHandle).toEqual([0, 0]);
       expect(updatedItem?.pathVertices?.[1]?.outHandle).toEqual([0, 0]);
     });
@@ -1160,7 +1163,7 @@ describe('MaskEditorOverlay edit mode', () => {
 
     fireEvent.pointerUp(canvas!, { clientX: 120, clientY: 75, pointerId: 1 });
 
-    const movedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    const movedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
     expect(movedItem?.transform?.x).toBeCloseTo(20);
     expect(movedItem?.transform?.y).toBeCloseTo(15);
     expect(movedItem?.pathVertices).toEqual([
@@ -1250,7 +1253,7 @@ describe('MaskEditorOverlay edit mode', () => {
     fireEvent.pointerMove(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
     fireEvent.pointerUp(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
 
-    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
     expect(updatedItem?.transform?.x).toBeCloseTo(10);
     expect(updatedItem?.transform?.y).toBeCloseTo(5);
     expect(updatedItem?.transform?.width).toBeCloseTo(100);
@@ -1370,7 +1373,7 @@ describe('MaskEditorOverlay edit mode', () => {
     fireEvent.pointerMove(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
     fireEvent.pointerUp(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
 
-    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
     expect(updatedItem?.transform?.x).toBeCloseTo(10);
     expect(updatedItem?.transform?.y).toBeCloseTo(5);
     expect(updatedItem?.transform?.width).toBeCloseTo(100);
@@ -1499,7 +1502,7 @@ describe('MaskEditorOverlay edit mode', () => {
     fireEvent.pointerMove(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
     fireEvent.pointerUp(canvas!, { clientX: 82, clientY: 38, pointerId: 1 });
 
-    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+    const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
 
     // The edit should fall through to base transform since keyframe add is blocked
     expect(updatedItem?.transform?.x).not.toBeCloseTo(10);
@@ -1571,7 +1574,7 @@ describe('MaskEditorOverlay edit mode', () => {
     fireEvent.keyDown(window, { key: 'Delete' });
 
     await waitFor(() => {
-      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1');
+      const updatedItem = useItemsStore.getState().items.find((item) => item.id === 'path-1') as ShapeItem | undefined;
       expect(updatedItem).toBeDefined();
       expect(updatedItem?.pathVertices).toHaveLength(3);
       expect(updatedItem?.pathVertices?.[0]?.position).toEqual([0, 0]);

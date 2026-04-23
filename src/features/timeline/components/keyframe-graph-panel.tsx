@@ -168,7 +168,9 @@ function getBaseKeyframeValue(
   }
 
   const resolved = resolveTransform(item, canvas, getSourceDimensions(item));
-  return resolved[property];
+  return property in resolved
+    ? resolved[property as keyof typeof resolved]
+    : 0;
 }
 
 function buildEasingConfig(

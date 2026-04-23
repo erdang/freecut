@@ -148,7 +148,7 @@ describe('local-model-cache', () => {
     }));
     expect(summaries).toContainEqual(expect.objectContaining({
       id: 'musicgen-small',
-      label: MUSICGEN_MODEL_OPTIONS[0].label,
+      label: MUSICGEN_MODEL_OPTIONS[0]!.label,
       cacheName: TRANSFORMERS_CACHE_NAME,
       exists: false,
       downloaded: false,

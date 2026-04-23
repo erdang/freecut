@@ -59,7 +59,7 @@ async function loadModel(): Promise<void> {
     // Default 280 is more than needed; 140 halves the image tokens while keeping
     // enough visual detail to distinguish different scenes.
     if (loadedProcessor.image_processor) {
-      loadedProcessor.image_processor.max_soft_tokens = 140;
+      (loadedProcessor.image_processor as { max_soft_tokens?: number }).max_soft_tokens = 140;
     }
 
     const loadedModel = await Gemma4ForConditionalGeneration.from_pretrained(MODEL_ID, {

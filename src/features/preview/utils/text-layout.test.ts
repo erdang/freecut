@@ -32,6 +32,8 @@ const baseTransform: ResolvedTransform = {
   y: 0,
   width: 200,
   height: 80,
+  anchorX: 100,
+  anchorY: 40,
   rotation: 0,
   opacity: 1,
   cornerRadius: 0,
