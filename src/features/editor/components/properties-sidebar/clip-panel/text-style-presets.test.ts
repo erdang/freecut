@@ -17,12 +17,17 @@ describe('text style presets', () => {
   it('exposes the expected preset list', () => {
     expect(TEXT_STYLE_PRESETS.map((preset) => preset.id)).toEqual([
       'clean-title',
+      'poster',
+      'outline-pill',
       'lower-third',
+      'speaker-card',
       'cinematic',
       'quote',
       'neon',
       'headline-stack',
+      'breaking-update',
       'event-card',
+      'launch-stack',
       'badge',
     ]);
   });
@@ -66,6 +71,18 @@ describe('text style presets', () => {
       backgroundColor: '#111827',
       backgroundRadius: 999,
       letterSpacing: 2,
+    });
+  });
+
+  it('exposes layout metadata for browsing templates by span count', () => {
+    expect(TEXT_STYLE_PRESETS.find((preset) => preset.id === 'poster')).toMatchObject({
+      layout: 'single',
+    });
+    expect(TEXT_STYLE_PRESETS.find((preset) => preset.id === 'speaker-card')).toMatchObject({
+      layout: 'two',
+    });
+    expect(TEXT_STYLE_PRESETS.find((preset) => preset.id === 'launch-stack')).toMatchObject({
+      layout: 'three',
     });
   });
 

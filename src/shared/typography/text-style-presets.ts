@@ -4,21 +4,31 @@ import { buildTextItemLabelFromText } from '@/shared/utils/text-item-spans';
 
 export type TextStylePresetId =
   | 'clean-title'
+  | 'poster'
+  | 'outline-pill'
   | 'lower-third'
+  | 'speaker-card'
   | 'cinematic'
   | 'quote'
   | 'neon'
   | 'headline-stack'
+  | 'breaking-update'
   | 'event-card'
+  | 'launch-stack'
   | 'badge';
 
 export type TextStylePresetPreviewKind =
   | 'clean'
+  | 'poster'
+  | 'outline-pill'
   | 'lower-third'
+  | 'speaker'
   | 'cinematic'
   | 'quote'
   | 'neon'
   | 'stacked'
+  | 'breaking'
+  | 'launch'
   | 'event'
   | 'badge';
 
@@ -112,6 +122,66 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
       stroke: undefined,
     },
   },
+  poster: {
+    id: 'poster',
+    label: 'Poster',
+    previewKind: 'poster',
+    layout: 'single',
+    sample: { title: 'Tonight' },
+    style: {
+      fontFamily: 'Anton',
+      fontWeight: 'normal',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'display', multiplier: 0.98 },
+      color: '#fef3c7',
+      backgroundColor: undefined,
+      backgroundRadius: 'none',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 0.88,
+      letterSpacing: 'tight',
+      textPadding: 'sm',
+      textShadow: {
+        token: 'xl',
+        color: '#7f1d1d',
+      },
+      stroke: {
+        width: 2,
+        color: '#991b1b',
+      },
+    },
+  },
+  'outline-pill': {
+    id: 'outline-pill',
+    label: 'Outline',
+    previewKind: 'outline-pill',
+    layout: 'single',
+    sample: { title: 'Featured' },
+    style: {
+      fontFamily: 'Inter',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'badge', multiplier: 0.96 },
+      color: '#e2e8f0',
+      backgroundColor: '#0f172a',
+      backgroundRadius: 'pill',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 1,
+      letterSpacing: 'badge',
+      textPadding: 'badge',
+      textShadow: {
+        token: 'sm',
+        color: '#020617',
+      },
+      stroke: {
+        width: 1,
+        color: '#38bdf8',
+      },
+    },
+  },
   'lower-third': {
     id: 'lower-third',
     label: 'Lower Third',
@@ -135,6 +205,33 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
       textShadow: {
         token: 'sm',
         color: '#030712',
+      },
+      stroke: undefined,
+    },
+  },
+  'speaker-card': {
+    id: 'speaker-card',
+    label: 'Speaker',
+    previewKind: 'speaker',
+    layout: 'two',
+    sample: { title: 'Alex Morgan', subtitle: 'Product Designer' },
+    style: {
+      fontFamily: 'Inter Tight',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'title', multiplier: 0.61 },
+      color: '#f8fafc',
+      backgroundColor: '#1e293b',
+      backgroundRadius: 'lg',
+      textAlign: 'left',
+      verticalAlign: 'middle',
+      lineHeight: 1,
+      letterSpacing: 'tight',
+      textPadding: 'xl',
+      textShadow: {
+        token: 'md',
+        color: '#020617',
       },
       stroke: undefined,
     },
@@ -253,6 +350,33 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
       stroke: undefined,
     },
   },
+  'breaking-update': {
+    id: 'breaking-update',
+    label: 'Breaking',
+    previewKind: 'breaking',
+    layout: 'three',
+    sample: { eyebrow: 'BREAKING', title: 'Major Update', subtitle: 'Developing now' },
+    style: {
+      fontFamily: 'Inter Tight',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'title', multiplier: 0.92 },
+      color: '#f8fafc',
+      backgroundColor: '#111827',
+      backgroundRadius: 'md',
+      textAlign: 'left',
+      verticalAlign: 'middle',
+      lineHeight: 0.94,
+      letterSpacing: 'tight',
+      textPadding: 'lg',
+      textShadow: {
+        token: 'lg',
+        color: '#020617',
+      },
+      stroke: undefined,
+    },
+  },
   'event-card': {
     id: 'event-card',
     label: 'Event',
@@ -278,6 +402,36 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
         color: '#020617',
       },
       stroke: undefined,
+    },
+  },
+  'launch-stack': {
+    id: 'launch-stack',
+    label: 'Launch',
+    previewKind: 'launch',
+    layout: 'three',
+    sample: { eyebrow: 'NOW LIVE', title: 'New Collection', subtitle: 'Shop the drop' },
+    style: {
+      fontFamily: 'Space Grotesk',
+      fontWeight: 'bold',
+      fontStyle: 'normal',
+      underline: false,
+      size: { token: 'title', multiplier: 0.88 },
+      color: '#f8fafc',
+      backgroundColor: '#0f172a',
+      backgroundRadius: 'lg',
+      textAlign: 'center',
+      verticalAlign: 'middle',
+      lineHeight: 0.96,
+      letterSpacing: 'tight',
+      textPadding: 'xl',
+      textShadow: {
+        token: 'glow',
+        color: '#60a5fa',
+      },
+      stroke: {
+        width: 1,
+        color: '#1d4ed8',
+      },
     },
   },
   badge: {
@@ -470,6 +624,27 @@ export function buildTextStylePresetTemplate(
   const baseFontSize = styles.fontSize ?? 60;
 
   switch (presetId) {
+    case 'speaker-card': {
+      const spans: TextSpan[] = [
+        {
+          text: preset.sample.title,
+          fontWeight: 'bold',
+        },
+        {
+          text: preset.sample.subtitle ?? 'Product Designer',
+          fontSize: Math.max(20, Math.round(baseFontSize * 0.44)),
+          fontWeight: 'medium',
+          color: '#cbd5e1',
+        },
+      ];
+
+      return {
+        ...styles,
+        label: preset.label,
+        text: buildTemplateTextFromSpans(spans),
+        textSpans: spans,
+      };
+    }
     case 'lower-third': {
       const spans: TextSpan[] = [
         {
@@ -514,6 +689,33 @@ export function buildTextStylePresetTemplate(
         textSpans: spans,
       };
     }
+    case 'breaking-update': {
+      const spans: TextSpan[] = [
+        {
+          text: preset.sample.eyebrow ?? 'BREAKING',
+          fontSize: Math.max(16, Math.round(baseFontSize * 0.28)),
+          fontWeight: 'bold',
+          color: '#fca5a5',
+          letterSpacing: 2,
+        },
+        {
+          text: preset.sample.title,
+        },
+        {
+          text: preset.sample.subtitle ?? 'Developing now',
+          fontSize: Math.max(20, Math.round(baseFontSize * 0.38)),
+          fontWeight: 'semibold',
+          color: '#fde68a',
+        },
+      ];
+
+      return {
+        ...styles,
+        label: preset.label,
+        text: buildTemplateTextFromSpans(spans),
+        textSpans: spans,
+      };
+    }
     case 'headline-stack': {
       const spans: TextSpan[] = [
         {
@@ -531,6 +733,33 @@ export function buildTextStylePresetTemplate(
           fontSize: Math.max(20, Math.round(baseFontSize * 0.42)),
           fontWeight: 'medium',
           color: '#cbd5e1',
+        },
+      ];
+
+      return {
+        ...styles,
+        label: preset.label,
+        text: buildTemplateTextFromSpans(spans),
+        textSpans: spans,
+      };
+    }
+    case 'launch-stack': {
+      const spans: TextSpan[] = [
+        {
+          text: preset.sample.eyebrow ?? 'NOW LIVE',
+          fontSize: Math.max(16, Math.round(baseFontSize * 0.26)),
+          fontWeight: 'bold',
+          color: '#67e8f9',
+          letterSpacing: 2,
+        },
+        {
+          text: preset.sample.title,
+        },
+        {
+          text: preset.sample.subtitle ?? 'Shop the drop',
+          fontSize: Math.max(20, Math.round(baseFontSize * 0.4)),
+          fontWeight: 'medium',
+          color: '#bfdbfe',
         },
       ];
 

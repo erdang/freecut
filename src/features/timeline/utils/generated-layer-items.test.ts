@@ -93,6 +93,56 @@ describe('createTimelineTemplateItem', () => {
     });
   });
 
+  it('creates two-span and three-span templates for newer title presets', () => {
+    const speaker = createTimelineTemplateItem({
+      template: {
+        type: 'timeline-template',
+        itemType: 'text',
+        label: 'Speaker',
+        textStylePresetId: 'speaker-card',
+      },
+      placement: {
+        trackId: 'track-1',
+        from: 30,
+        durationInFrames: 120,
+        canvasWidth: 1920,
+        canvasHeight: 1080,
+        fps: 30,
+      },
+    });
+
+    expect(speaker.textSpans).toHaveLength(2);
+    expect(speaker).toMatchObject({
+      label: 'Speaker',
+      text: 'Alex Morgan\nProduct Designer',
+      backgroundColor: '#1e293b',
+    });
+
+    const launch = createTimelineTemplateItem({
+      template: {
+        type: 'timeline-template',
+        itemType: 'text',
+        label: 'Launch',
+        textStylePresetId: 'launch-stack',
+      },
+      placement: {
+        trackId: 'track-1',
+        from: 40,
+        durationInFrames: 120,
+        canvasWidth: 1920,
+        canvasHeight: 1080,
+        fps: 30,
+      },
+    });
+
+    expect(launch.textSpans).toHaveLength(3);
+    expect(launch).toMatchObject({
+      label: 'Launch',
+      text: 'NOW LIVE\nNew Collection\nShop the drop',
+      fontFamily: 'Space Grotesk',
+    });
+  });
+
   it('creates an adjustment item with carried effects', () => {
     const item = createTimelineTemplateItem({
       template: {
