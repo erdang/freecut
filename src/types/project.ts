@@ -2,6 +2,7 @@ import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
 import type { AudioEqSettings } from './audio';
 import type { Transition } from './transition';
 import type { CropSettings } from './transform';
+import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids';
 
 export interface Project {
   id: string;
@@ -92,7 +93,7 @@ export interface ProjectTimeline {
     fontStyle?: 'normal' | 'italic';
     underline?: boolean;
     color?: string;
-    textStylePresetId?: 'clean-title' | 'lower-third' | 'cinematic' | 'quote' | 'neon' | 'headline-stack' | 'event-card' | 'badge';
+    textStylePresetId?: TextStylePresetId;
     textStyleScale?: number;
     textSpans?: Array<{
       text: string;

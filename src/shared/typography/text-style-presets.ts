@@ -1,21 +1,9 @@
 import type { TextItem, TextSpan } from '@/types/timeline';
 import type { CanvasSettings } from '@/types/transform';
 import { buildTextItemLabelFromText } from '@/shared/utils/text-item-spans';
+import { TEXT_STYLE_PRESET_IDS, type TextStylePresetId } from './text-style-preset-ids';
 
-export type TextStylePresetId =
-  | 'clean-title'
-  | 'poster'
-  | 'outline-pill'
-  | 'lower-third'
-  | 'speaker-card'
-  | 'cinematic'
-  | 'quote'
-  | 'neon'
-  | 'headline-stack'
-  | 'breaking-update'
-  | 'event-card'
-  | 'launch-stack'
-  | 'badge';
+export { TEXT_STYLE_PRESET_IDS, type TextStylePresetId };
 
 export type TextStylePresetPreviewKind =
   | 'clean'

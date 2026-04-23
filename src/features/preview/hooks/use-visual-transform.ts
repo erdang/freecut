@@ -27,7 +27,7 @@ function applyTextExpansion(
   transform: ResolvedTransform,
   previewProperties?: Parameters<typeof expandTextTransformForPreview>[2],
 ): ResolvedTransform {
-  if (item.type !== 'text' || !previewProperties) return transform;
+  if (item.type !== 'text') return transform;
   return expandTextTransformForPreview(item, transform, previewProperties);
 }
 

@@ -2,6 +2,7 @@ import type { CropSettings, TransformProperties } from './transform';
 import type { ItemEffect } from './effects';
 import type { BlendMode } from './blend-modes';
 import type { AudioEqSettings } from './audio';
+import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids';
 
 export interface TimelineItemCornerPin {
   topLeft: [number, number];
@@ -162,7 +163,7 @@ export type TextItem = BaseTimelineItem & {
   text: string;
   textSpans?: TextSpan[];
   textLayoutDrafts?: TextLayoutDrafts;
-  textStylePresetId?: 'clean-title' | 'lower-third' | 'cinematic' | 'quote' | 'neon' | 'headline-stack' | 'event-card' | 'badge';
+  textStylePresetId?: TextStylePresetId;
   textStyleScale?: number;
   textRole?: 'caption';
   captionSource?: GeneratedCaptionSource;

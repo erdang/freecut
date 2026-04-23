@@ -15,6 +15,7 @@ import { useItemVisualState } from './hooks/use-item-visual-state';
 import {
   renderSvgMaskPathsToDataUrl,
 } from '../utils/clip-mask-raster';
+import { getRasterizedMaskLayerSettingsList } from '../utils/mask-preview';
 import type { MaskInfo } from './item';
 import type { CropSettings } from '@/types/transform';
 import { ContainedMediaLayout } from './contained-media-layout';
@@ -29,6 +30,184 @@ interface ItemVisualWrapperProps {
     crop?: CropSettings;
   };
   children: React.ReactNode;
+}
+
+function createRasterMaskCanvas(
+  width: number,
+  height: number,
+): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const ctx = canvas.getContext('2d');
+
+  if (!ctx) {
+    return null;
+  }
+
+  return { canvas, ctx };
+}
+
+function renderRasterizedMaskLayer(
+  mask: MaskInfo,
+  canvasWidth: number,
+  canvasHeight: number,
+): HTMLCanvasElement | null {
+  const rasterCanvas = createRasterMaskCanvas(canvasWidth, canvasHeight);
+  if (!rasterCanvas) {
+    return null;
+  }
+
+  const { canvas, ctx } = rasterCanvas;
+  const { shape, transform } = mask;
+  const resolvedTransform = {
+    x: transform.x ?? 0,
+    y: transform.y ?? 0,
+    width: Math.max(1, transform.width ?? canvasWidth),
+    height: Math.max(1, transform.height ?? canvasHeight),
+    rotation: transform.rotation ?? 0,
+    opacity: transform.opacity ?? 1,
+  };
+  const localWidth = Math.max(1, Math.round(resolvedTransform.width));
+  const localHeight = Math.max(1, Math.round(resolvedTransform.height));
+  const left = canvasWidth / 2 + resolvedTransform.x - resolvedTransform.width / 2;
+  const top = canvasHeight / 2 + resolvedTransform.y - resolvedTransform.height / 2;
+  const centerX = left + resolvedTransform.width / 2;
+  const centerY = top + resolvedTransform.height / 2;
+  const resolvedPin = resolveCornerPinForSize(
+    shape.cornerPin,
+    resolvedTransform.width,
+    resolvedTransform.height,
+  );
+
+  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.save();
+
+  if (resolvedTransform.rotation !== 0) {
+    ctx.translate(centerX, centerY);
+    ctx.rotate((resolvedTransform.rotation * Math.PI) / 180);
+    ctx.translate(-centerX, -centerY);
+  }
+
+  if (resolvedPin && hasCornerPin(resolvedPin)) {
+    const localCanvas = createRasterMaskCanvas(localWidth, localHeight);
+    if (!localCanvas) {
+      ctx.restore();
+      return null;
+    }
+
+    const localPath = getShapePath(
+      shape,
+      {
+        x: 0,
+        y: 0,
+        width: localWidth,
+        height: localHeight,
+        rotation: 0,
+        opacity: 1,
+      },
+      {
+        canvasWidth: localWidth,
+        canvasHeight: localHeight,
+      },
+    );
+
+    localCanvas.ctx.fillStyle = '#ffffff';
+    localCanvas.ctx.fill(new Path2D(localPath));
+    if ((shape.strokeWidth ?? 0) > 0) {
+      localCanvas.ctx.strokeStyle = '#ffffff';
+      localCanvas.ctx.lineWidth = shape.strokeWidth ?? 0;
+      localCanvas.ctx.stroke(new Path2D(localPath));
+    }
+
+    drawCornerPinImage(
+      ctx as unknown as OffscreenCanvasRenderingContext2D,
+      localCanvas.canvas,
+      localWidth,
+      localHeight,
+      left,
+      top,
+      resolvedPin,
+    );
+  } else {
+    let svgPath = getShapePath(
+      shape,
+      {
+        x: resolvedTransform.x,
+        y: resolvedTransform.y,
+        width: resolvedTransform.width,
+        height: resolvedTransform.height,
+        rotation: 0,
+        opacity: resolvedTransform.opacity,
+      },
+      {
+        canvasWidth,
+        canvasHeight,
+      },
+    );
+
+    if (resolvedTransform.rotation !== 0) {
+      svgPath = rotatePath(svgPath, resolvedTransform.rotation, centerX, centerY);
+    }
+
+    const path2d = new Path2D(svgPath);
+    ctx.fillStyle = '#ffffff';
+    ctx.fill(path2d);
+    if ((shape.strokeWidth ?? 0) > 0) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = shape.strokeWidth ?? 0;
+      ctx.stroke(path2d);
+    }
+  }
+
+  ctx.restore();
+  return canvas;
+}
+
+function applyRasterizedMaskLayerSettings(
+  maskCanvas: HTMLCanvasElement,
+  canvasWidth: number,
+  canvasHeight: number,
+  settings: {
+    invert: boolean;
+    feather: number;
+  },
+): HTMLCanvasElement {
+  if (!settings.invert && settings.feather <= 0) {
+    return maskCanvas;
+  }
+
+  const processedMask = createRasterMaskCanvas(canvasWidth, canvasHeight);
+  if (!processedMask) {
+    return maskCanvas;
+  }
+
+  if (settings.invert) {
+    processedMask.ctx.fillStyle = '#ffffff';
+    processedMask.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    processedMask.ctx.globalCompositeOperation = 'destination-out';
+    processedMask.ctx.drawImage(maskCanvas, 0, 0);
+    processedMask.ctx.globalCompositeOperation = 'source-over';
+  } else {
+    processedMask.ctx.drawImage(maskCanvas, 0, 0);
+  }
+
+  if (settings.feather <= 0) {
+    return processedMask.canvas;
+  }
+
+  const blurredMask = createRasterMaskCanvas(canvasWidth, canvasHeight);
+  if (!blurredMask) {
+    return processedMask.canvas;
+  }
+
+  blurredMask.ctx.filter = `blur(${settings.feather}px)`;
+  blurredMask.ctx.drawImage(processedMask.canvas, 0, 0);
+  return blurredMask.canvas;
 }
 
 /**
@@ -87,138 +266,43 @@ export const ItemVisualWrapper: React.FC<ItemVisualWrapperProps> = ({
 
     const width = Math.max(1, Math.round(canvasWidth));
     const height = Math.max(1, Math.round(canvasHeight));
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) {
+    const combinedMask = createRasterMaskCanvas(width, height);
+    if (!combinedMask) {
       return null;
     }
 
-    const firstMask = masks[0]!;
-    const maskType = firstMask.shape.maskType ?? 'clip';
-    const feather = maskType === 'alpha' ? (firstMask.shape.maskFeather ?? 0) : 0;
-    const invert = firstMask.shape.maskInvert ?? false;
+    const maskLayerSettings = getRasterizedMaskLayerSettingsList(
+      masks.map(({ shape }) => shape),
+    );
+    combinedMask.ctx.clearRect(0, 0, width, height);
+    combinedMask.ctx.fillStyle = '#ffffff';
+    combinedMask.ctx.fillRect(0, 0, width, height);
 
-    ctx.clearRect(0, 0, width, height);
-    if (invert) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, width, height);
-      ctx.globalCompositeOperation = 'destination-out';
-    } else {
-      ctx.globalCompositeOperation = 'source-over';
-    }
-
-    for (const mask of masks) {
-      const { shape, transform } = mask;
-      const localWidth = Math.max(1, Math.round(transform.width));
-      const localHeight = Math.max(1, Math.round(transform.height));
-      const left = width / 2 + transform.x - transform.width / 2;
-      const top = height / 2 + transform.y - transform.height / 2;
-      const centerX = left + transform.width / 2;
-      const centerY = top + transform.height / 2;
-      const resolvedPin = resolveCornerPinForSize(shape.cornerPin, transform.width, transform.height);
-
-      ctx.save();
-      if ((transform.rotation ?? 0) !== 0) {
-        ctx.translate(centerX, centerY);
-        ctx.rotate(((transform.rotation ?? 0) * Math.PI) / 180);
-        ctx.translate(-centerX, -centerY);
+    let appliedMaskCount = 0;
+    for (const [index, mask] of masks.entries()) {
+      const maskLayer = renderRasterizedMaskLayer(mask, width, height);
+      if (!maskLayer) {
+        continue;
       }
 
-      if (resolvedPin && hasCornerPin(resolvedPin)) {
-        const localCanvas = document.createElement('canvas');
-        localCanvas.width = localWidth;
-        localCanvas.height = localHeight;
-        const localCtx = localCanvas.getContext('2d');
-        if (!localCtx) {
-          ctx.restore();
-          continue;
-        }
+      const processedLayer = applyRasterizedMaskLayerSettings(
+        maskLayer,
+        width,
+        height,
+        maskLayerSettings[index] ?? { invert: false, feather: 0 },
+      );
 
-        const localPath = getShapePath(
-          shape,
-          {
-            x: 0,
-            y: 0,
-            width: localWidth,
-            height: localHeight,
-            rotation: 0,
-            opacity: 1,
-          },
-          {
-            canvasWidth: localWidth,
-            canvasHeight: localHeight,
-          },
-        );
-
-        localCtx.fillStyle = '#ffffff';
-        localCtx.fill(new Path2D(localPath));
-        if ((shape.strokeWidth ?? 0) > 0) {
-          localCtx.strokeStyle = '#ffffff';
-          localCtx.lineWidth = shape.strokeWidth ?? 0;
-          localCtx.stroke(new Path2D(localPath));
-        }
-
-        drawCornerPinImage(
-          ctx as unknown as OffscreenCanvasRenderingContext2D,
-          localCanvas,
-          localWidth,
-          localHeight,
-          left,
-          top,
-          resolvedPin,
-        );
-      } else {
-        let svgPath = getShapePath(
-          shape,
-          {
-            x: transform.x,
-            y: transform.y,
-            width: transform.width,
-            height: transform.height,
-            rotation: 0,
-            opacity: transform.opacity ?? 1,
-          },
-          {
-            canvasWidth: width,
-            canvasHeight: height,
-          },
-        );
-
-        if ((transform.rotation ?? 0) !== 0) {
-          svgPath = rotatePath(svgPath, transform.rotation ?? 0, centerX, centerY);
-        }
-
-        const path2d = new Path2D(svgPath);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill(path2d);
-        if ((shape.strokeWidth ?? 0) > 0) {
-          ctx.strokeStyle = '#ffffff';
-          ctx.lineWidth = shape.strokeWidth ?? 0;
-          ctx.stroke(path2d);
-        }
-      }
-
-      ctx.restore();
+      combinedMask.ctx.globalCompositeOperation = 'destination-in';
+      combinedMask.ctx.drawImage(processedLayer, 0, 0);
+      combinedMask.ctx.globalCompositeOperation = 'source-over';
+      appliedMaskCount += 1;
     }
 
-    ctx.globalCompositeOperation = 'source-over';
-
-    if (feather > 0) {
-      const blurredCanvas = document.createElement('canvas');
-      blurredCanvas.width = width;
-      blurredCanvas.height = height;
-      const blurredCtx = blurredCanvas.getContext('2d');
-      if (!blurredCtx) {
-        return canvas.toDataURL('image/png');
-      }
-      blurredCtx.filter = `blur(${feather}px)`;
-      blurredCtx.drawImage(canvas, 0, 0);
-      return blurredCanvas.toDataURL('image/png');
+    if (appliedMaskCount === 0) {
+      return null;
     }
 
-    return canvas.toDataURL('image/png');
+    return combinedMask.canvas.toDataURL('image/png');
   }, [canvasHeight, canvasWidth, hasCornerPinnedMask, masks]);
 
   const maskStyle = useMemo((): React.CSSProperties => {

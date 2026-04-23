@@ -6,6 +6,7 @@
  */
 
 import { z } from 'zod';
+import { TEXT_STYLE_PRESET_IDS } from '@/shared/typography/text-style-preset-ids';
 import { SNAPSHOT_VERSION } from '../types/snapshot';
 
 // ============================================================================
@@ -89,16 +90,7 @@ const directionSchema = z.enum(['up', 'down', 'left', 'right']);
 // Text-specific schemas
 const fontWeightSchema = z.enum(['normal', 'medium', 'semibold', 'bold']);
 const fontStyleSchema = z.enum(['normal', 'italic']);
-const textStylePresetIdSchema = z.enum([
-  'clean-title',
-  'lower-third',
-  'cinematic',
-  'quote',
-  'neon',
-  'headline-stack',
-  'event-card',
-  'badge',
-]);
+const textStylePresetIdSchema = z.enum(TEXT_STYLE_PRESET_IDS);
 const textAlignSchema = z.enum(['left', 'center', 'right']);
 const verticalAlignSchema = z.enum(['top', 'middle', 'bottom']);
 
