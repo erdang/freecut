@@ -562,6 +562,31 @@ export function TextSection({
     [activeEditorSpans, setSpanPreview]
   );
 
+  const handleSpanLetterSpacingChange = useCallback(
+    (index: number, value: number) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        letterSpacing: value,
+      };
+      updateTextItemsFromSpans(nextSpans);
+      finalizePreviewChange();
+    },
+    [activeEditorSpans, finalizePreviewChange, updateTextItemsFromSpans]
+  );
+
+  const handleSpanLetterSpacingLiveChange = useCallback(
+    (index: number, value: number) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      nextSpans[index] = {
+        ...(nextSpans[index] ?? { text: '' }),
+        letterSpacing: value,
+      };
+      setSpanPreview(nextSpans);
+    },
+    [activeEditorSpans, setSpanPreview]
+  );
+
   const handleSpanFontFamilyChange = useCallback(
     (index: number, value: string) => {
       const nextSpans = cloneTextSpans(activeEditorSpans);
@@ -623,6 +648,19 @@ export function TextSection({
       updateTextItemsFromSpans(nextSpans);
     },
     [activeEditorSpans, updateTextItemsFromSpans]
+  );
+
+  const handleSpanUnderlineToggle = useCallback(
+    (index: number) => {
+      const nextSpans = cloneTextSpans(activeEditorSpans);
+      const current = nextSpans[index];
+      nextSpans[index] = {
+        ...(current ?? { text: '' }),
+        underline: !(current?.underline ?? firstTextItem?.underline ?? false),
+      };
+      updateTextItemsFromSpans(nextSpans);
+    },
+    [activeEditorSpans, firstTextItem?.underline, updateTextItemsFromSpans]
   );
 
   // Live preview for fontSize (during drag)
@@ -1098,6 +1136,21 @@ export function TextSection({
                   3 Spans
                 </Button>
               </div>
+              <Select
+                value={sharedValues.textStylePresetId}
+                onValueChange={(value) => handleApplyTextStylePreset(value as TextStylePresetId)}
+              >
+                <SelectTrigger className="h-7 text-xs w-full">
+                  <SelectValue placeholder={sharedValues.textStylePresetId === undefined ? 'Mixed / None' : 'Select preset'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEXT_STYLE_PRESETS.map((preset) => (
+                    <SelectItem key={preset.id} value={preset.id} className="text-xs">
+                      {preset.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {firstTextItem?.textSpans?.length ? (
                 <div className="space-y-2">
                   {activeEditorSpans.map((span, index) => (
@@ -1132,6 +1185,7 @@ export function TextSection({
                       </div>
                       <div className="mt-2 grid grid-cols-2 gap-2">
                         <NumberInput
+                          label="Size"
                           value={span.fontSize ?? firstTextItem.fontSize ?? 60}
                           onChange={(value) => handleSpanFontSizeChange(index, value)}
                           onLiveChange={(value) => handleSpanFontSizeLiveChange(index, value)}
@@ -1157,6 +1211,19 @@ export function TextSection({
                           </SelectContent>
                         </Select>
                       </div>
+                      <div className="mt-2">
+                        <NumberInput
+                          label="Spacing"
+                          value={span.letterSpacing ?? firstTextItem.letterSpacing ?? 0}
+                          onChange={(value) => handleSpanLetterSpacingChange(index, value)}
+                          onLiveChange={(value) => handleSpanLetterSpacingLiveChange(index, value)}
+                          min={-20}
+                          max={100}
+                          step={1}
+                          unit="px"
+                          className="min-w-0"
+                        />
+                      </div>
                       <div className="mt-2 flex items-center gap-2">
                         <div className="flex-1 min-w-0">
                           <ColorPicker
@@ -1176,8 +1243,17 @@ export function TextSection({
                                 <Italic className="w-3.5 h-3.5" />
                               </Button>
                             ) : (
-                              <div className="w-7 h-7 flex-shrink-0" />
+                              null
                             )}
+                            <Button
+                              variant={(span.underline ?? firstTextItem.underline ?? false) ? 'secondary' : 'ghost'}
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => handleSpanUnderlineToggle(index)}
+                              title={`Underline ${config.label.toLowerCase()}`}
+                            >
+                              <Underline className="w-3.5 h-3.5" />
+                            </Button>
                       </div>
                           </>
                         );
@@ -1197,24 +1273,6 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Preset">
-            <Select
-              value={sharedValues.textStylePresetId}
-              onValueChange={(value) => handleApplyTextStylePreset(value as TextStylePresetId)}
-            >
-              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder={sharedValues.textStylePresetId === undefined ? 'Mixed / None' : 'Select preset'} />
-              </SelectTrigger>
-              <SelectContent>
-                {TEXT_STYLE_PRESETS.map((preset) => (
-                  <SelectItem key={preset.id} value={preset.id} className="text-xs">
-                    {preset.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </PropertyRow>
-
           {sharedValues.textStylePresetId && (
             <PropertyRow label="Scale">
               <div className="flex items-center gap-1 min-w-0 w-full">
@@ -1222,7 +1280,7 @@ export function TextSection({
                   value={sharedValues.textStyleScale}
                   onChange={handleTextStyleScaleChange}
                   min={0.5}
-                  max={3}
+                  max={6}
                   step={0.05}
                   unit="x"
                   formatValue={(value) => `${value.toFixed(2)}x`}
@@ -1270,64 +1328,66 @@ export function TextSection({
             </PropertyRow>
           )}
 
-          {/* Font Weight */}
-          <PropertyRow label="Weight">
-            <Select
-              value={sharedValues.fontWeight}
-              onValueChange={handleFontWeightChange}
-            >
-              <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-                <SelectValue placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'} />
-              </SelectTrigger>
-              <SelectContent>
-                {supportedFontWeightOptions.map((weight) => (
-                  <SelectItem key={weight.value} value={weight.value} className="text-xs">
-                    {weight.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </PropertyRow>
+          {!hasStructuredSpanEditor && (
+            <PropertyRow label="Weight">
+              <Select
+                value={sharedValues.fontWeight}
+                onValueChange={handleFontWeightChange}
+              >
+                <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                  <SelectValue placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {supportedFontWeightOptions.map((weight) => (
+                    <SelectItem key={weight.value} value={weight.value} className="text-xs">
+                      {weight.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </PropertyRow>
+          )}
 
-          {/* Font Style */}
-          <PropertyRow label="Style">
-            <div className="flex gap-1">
-              <Button
-                variant={isBoldActive ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleBoldToggle}
-                title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
-                aria-label="Bold"
-                aria-pressed={isBoldActive}
-                disabled={!canUseBold}
-              >
-                <Bold className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant={isItalicActive ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleItalicToggle}
-                title="Italic"
-                aria-label="Italic"
-                aria-pressed={isItalicActive}
-              >
-                <Italic className="w-3.5 h-3.5" />
-              </Button>
-              <Button
-                variant={isUnderlineActive ? 'secondary' : 'ghost'}
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleUnderlineToggle}
-                title="Underline"
-                aria-label="Underline"
-                aria-pressed={isUnderlineActive}
-              >
-                <Underline className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-          </PropertyRow>
+          {!hasStructuredSpanEditor && (
+            <PropertyRow label="Style">
+              <div className="flex gap-1">
+                <Button
+                  variant={isBoldActive ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={handleBoldToggle}
+                  title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
+                  aria-label="Bold"
+                  aria-pressed={isBoldActive}
+                  disabled={!canUseBold}
+                >
+                  <Bold className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant={isItalicActive ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={handleItalicToggle}
+                  title="Italic"
+                  aria-label="Italic"
+                  aria-pressed={isItalicActive}
+                >
+                  <Italic className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant={isUnderlineActive ? 'secondary' : 'ghost'}
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={handleUnderlineToggle}
+                  title="Underline"
+                  aria-label="Underline"
+                  aria-pressed={isUnderlineActive}
+                >
+                  <Underline className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </PropertyRow>
+          )}
 
           {/* Text Align */}
           <PropertyRow label="Align">
@@ -1390,15 +1450,16 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          {/* Text Color */}
-          <ColorPicker
-            label="Color"
-            color={sharedValues.color ?? '#ffffff'}
-            onChange={handleColorChange}
-            onLiveChange={handleColorLiveChange}
-            onReset={() => handleColorChange('#ffffff')}
-            defaultColor="#ffffff"
-          />
+          {!hasStructuredSpanEditor && (
+            <ColorPicker
+              label="Color"
+              color={sharedValues.color ?? '#ffffff'}
+              onChange={handleColorChange}
+              onLiveChange={handleColorLiveChange}
+              onReset={() => handleColorChange('#ffffff')}
+              defaultColor="#ffffff"
+            />
+          )}
 
           <PropertyRow label="Background">
             <div className="flex flex-1 min-w-0 gap-1">
@@ -1422,19 +1483,20 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          {/* Letter Spacing */}
-          <PropertyRow label="Spacing">
-            <NumberInput
-              value={sharedValues.letterSpacing}
-              onChange={handleLetterSpacingChange}
-              onLiveChange={handleLetterSpacingLiveChange}
-              min={-20}
-              max={100}
-              step={1}
-              unit="px"
-              className="flex-1 min-w-0"
-            />
-          </PropertyRow>
+          {!hasStructuredSpanEditor && (
+            <PropertyRow label="Spacing">
+              <NumberInput
+                value={sharedValues.letterSpacing}
+                onChange={handleLetterSpacingChange}
+                onLiveChange={handleLetterSpacingLiveChange}
+                min={-20}
+                max={100}
+                step={1}
+                unit="px"
+                className="flex-1 min-w-0"
+              />
+            </PropertyRow>
+          )}
 
           {/* Line Height */}
           <PropertyRow label="Line H.">
