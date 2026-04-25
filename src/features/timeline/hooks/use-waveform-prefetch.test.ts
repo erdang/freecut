@@ -10,8 +10,13 @@ import { useWaveformPrefetch } from './use-waveform-prefetch'
 import { _resetPreviewWorkBudgetForTest } from './preview-work-budget'
 import { waveformCache } from '../services/waveform-cache'
 import { useItemsStore } from '../stores/items-store'
+import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store'
+import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store'
+import { useSlideEditPreviewStore } from '../stores/slide-edit-preview-store'
+import { useSlipEditPreviewStore } from '../stores/slip-edit-preview-store'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 import { useTimelineViewportStore } from '../stores/timeline-viewport-store'
+import { useTrackPushPreviewStore } from '../stores/track-push-preview-store'
 import { _resetZoomStoreForTest } from '../stores/zoom-store'
 
 function makeVideoItem(id: string, from: number, duration: number): VideoItem {
@@ -95,6 +100,11 @@ describe('waveform prefetch filtering', () => {
     })
     _resetZoomStoreForTest()
     useSelectionStore.getState().setDragState(null)
+    useRollingEditPreviewStore.getState().clearPreview()
+    useRippleEditPreviewStore.getState().clearPreview()
+    useSlipEditPreviewStore.getState().clearPreview()
+    useSlideEditPreviewStore.getState().clearPreview()
+    useTrackPushPreviewStore.getState().clearPreview()
     useItemsStore.getState().setItems([])
     useItemsStore.getState().setTracks([])
     useTimelineViewportStore.getState().setViewport({

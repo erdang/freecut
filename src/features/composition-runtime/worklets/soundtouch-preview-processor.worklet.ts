@@ -1,4 +1,4 @@
-import { TimeStretchFilter, TimeStretchProcessor } from '@/lib/audio/time-stretch'
+import { TimeStretchFilter, TimeStretchProcessor } from '@/infrastructure/audio/time-stretch'
 import {
   SOUND_TOUCH_PREVIEW_PROCESSOR_NAME,
   type SoundTouchPreviewProcessorMessage,

@@ -1448,7 +1448,7 @@ async function applySpeedAndPitch(
   })
 
   try {
-    const timeStretch = await import('@/lib/audio/time-stretch')
+    const timeStretch = await import('@/infrastructure/audio/time-stretch')
     const st = new timeStretch.TimeStretchProcessor()
 
     st.tempo = speed
