@@ -145,7 +145,7 @@ export function useTransitionResize(transition: Transition) {
       document.body.style.cursor = 'ew-resize';
       document.body.style.userSelect = 'none';
     },
-    [transition.id, transition.durationInFrames, transition.leftClipId, transition.rightClipId]
+    [transition.durationInFrames]
   );
 
   // Add/remove global listeners with capture to intercept events first

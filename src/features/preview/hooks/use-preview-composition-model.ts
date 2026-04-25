@@ -116,6 +116,7 @@ export function usePreviewCompositionModel({
     fastScrubInputProps,
     fastScrubPreviewItems,
   } = useMemo(() => {
+    void proxyReadyCount;
     return buildPreviewCompositionData({
       combinedTracks,
       fps,

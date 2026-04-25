@@ -18,16 +18,9 @@ export function useEditOverlayPanelPrewarm(
 ): void {
   const blobUrlVersion = useBlobUrlVersion();
   const previousAnchorFrameByPanelRef = useRef(new Map<string, number | null>());
-  const panelSignature = panels.map((panel) => {
-    const item = panel.item;
-    if (!item || item.type !== 'video') {
-      return 'none';
-    }
-    return `${item.id}:${item.mediaId ?? 'none'}:${Math.max(0, panel.sourceTime ?? 0).toFixed(6)}`;
-  }).join('|');
   const prewarmTargets = useMemo(
     () => panels.map((panel) => ({ item: panel.item, sourceTime: panel.sourceTime })),
-    [panelSignature],
+    [panels],
   );
 
   useEffect(() => {

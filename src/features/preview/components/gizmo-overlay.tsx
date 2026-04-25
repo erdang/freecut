@@ -220,6 +220,8 @@ export function GizmoOverlay({
   // Sorted by track order: items on top tracks (lower order) come LAST for proper stacking/click priority
   // Uses frozenFrameRef to avoid re-renders during playback - only updates when paused
   const visibleItems = useMemo(() => {
+    void frameUpdateKey;
+    void isPlaying;
     // Read the frozen frame (updated via effect when paused)
     const frame = frozenFrameRef.current;
 

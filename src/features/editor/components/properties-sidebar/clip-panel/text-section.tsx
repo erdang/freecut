@@ -460,7 +460,7 @@ export function TextSection({
         });
       });
     },
-    [activeEditorSpans, firstTextItem, firstTextItem?.text, sharedValues?.text, textItems, updateItem]
+    [activeEditorSpans, firstTextItem, sharedValues?.text, textItems, updateItem]
   );
 
   // Handlers

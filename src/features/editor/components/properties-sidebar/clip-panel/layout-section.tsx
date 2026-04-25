@@ -353,7 +353,6 @@ export const LayoutSection = memo(function LayoutSection({
     },
     [
       itemIds,
-      onTransformChange,
       clearPreview,
       aspectLocked,
       height,
@@ -413,7 +412,6 @@ export const LayoutSection = memo(function LayoutSection({
     },
     [
       itemIds,
-      onTransformChange,
       clearPreview,
       aspectLocked,
       width,

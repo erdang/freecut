@@ -259,7 +259,6 @@ export function useRankedScenes(): RankedScenesResult {
     queryImageEmbedding,
     queryTextState,
     queryImageState,
-    colorQuery.paletteOnly,
-    reference,
-  ]);
+      reference,
+    ]);
 }

@@ -168,7 +168,7 @@ const HiddenShadowVideoBridge = React.memo(({ item }: { item: StableVideoSequenc
 
   const audioEqStages = useMemo(
     () => appendResolvedAudioEqSources(undefined, item.trackAudioEq, getAudioEqSettings(item)),
-    [item.trackAudioEq, item],
+    [item],
   );
 
   if (!item.src) {
@@ -340,7 +340,7 @@ const GroupRenderer: React.FC<{
       _poolClipId: `group-${group.originKey}`,
       _sharedTransitionSync: activeTransitionClipIds.has(activeItem.id),
     };
-  }, [activeItem, activeTransitionClipIds, group.minFrom]);
+  }, [activeItem, activeTransitionClipIds, group.minFrom, group.originKey]);
 
   // CRITICAL: Also memoize the RENDERED OUTPUT.
   // This prevents calling renderItem (which creates new React elements) every frame.

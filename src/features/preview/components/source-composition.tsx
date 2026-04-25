@@ -73,6 +73,7 @@ function useSourceMonitorVideoSrc(mediaId: string | undefined, src: string): str
   ));
 
   return useMemo(() => {
+    void proxyStatus;
     if (!src) return '';
     if (useProxy && mediaId) {
       return resolveProxyUrl(mediaId) || src;

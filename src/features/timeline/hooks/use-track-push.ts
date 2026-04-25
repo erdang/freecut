@@ -102,7 +102,7 @@ export function useTrackPush(item: TimelineItem, timelineDuration: number, track
       prevSnapTargetRef.current = snapTarget ? { frame: snapTarget.frame, type: snapTarget.type } : null;
       setActiveSnapTarget(snapTarget);
     }
-  }, [pixelsToTime, fps, trackLocked, findSnapForFrame, setActiveSnapTarget, item.id, item.from]);
+  }, [pixelsToTime, fps, trackLocked, findSnapForFrame, setActiveSnapTarget, item.from]);
 
   const handleMouseUp = useCallback(() => {
     if (!stateRef.current.isActive) return;
