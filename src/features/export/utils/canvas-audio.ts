@@ -1416,8 +1416,8 @@ function applyClipFadeSpans(
 }
 
 /**
- * Apply speed change to audio with pitch preservation using SoundTouch algorithm.
- * Processes all channels together through a single SoundTouch instance so that
+ * Apply speed change to audio with pitch preservation using the local time-stretch processor.
+ * Processes all channels together through a single processor instance so that
  * WSOLA overlap windows are consistent across channels (prevents phase drift
  * between L/R that causes a hollow sound).
  *
@@ -1432,15 +1432,15 @@ async function applySpeedAndPitch(
   pitchShiftSemitones: number,
   sampleRate: number,
 ): Promise<Float32Array[]> {
-  const requiresSoundTouch =
+  const requiresTimeStretch =
     Math.abs(speed - 1) > 0.0001 || isAudioPitchShiftActive(pitchShiftSemitones)
-  if (!requiresSoundTouch) return channels
+  if (!requiresTimeStretch) return channels
   if (channels.length === 0 || channels[0]!.length === 0) return channels
 
   const numChannels = channels.length
   const samplesPerChannel = channels[0]!.length
 
-  log.debug('Applying speed/pitch change (SoundTouch)', {
+  log.debug('Applying speed/pitch change with time-stretch processor', {
     speed,
     pitchShiftSemitones,
     sampleRate,
@@ -1448,15 +1448,15 @@ async function applySpeedAndPitch(
   })
 
   try {
-    const soundtouch = await import('soundtouchjs')
-    const st = new soundtouch.SoundTouch()
+    const timeStretch = await import('@/lib/audio/time-stretch')
+    const st = new timeStretch.TimeStretchProcessor()
 
     st.tempo = speed
     st.pitch = getAudioPitchRatioFromSemitones(pitchShiftSemitones)
     st.rate = 1.0
 
-    // SoundTouch processes interleaved stereo. Interleave all channels
-    // (for mono, duplicate to stereo so SoundTouch gets valid input).
+    // The processor consumes interleaved stereo. Interleave all channels
+    // (for mono, duplicate to stereo so it gets valid input).
     const stereoInput = new Float32Array(samplesPerChannel * 2)
     const left = channels[0]!
     const right = numChannels >= 2 ? channels[1]! : left
@@ -1479,7 +1479,7 @@ async function applySpeedAndPitch(
       },
     }
 
-    const filter = new soundtouch.SimpleFilter(source, st)
+    const filter = new timeStretch.TimeStretchFilter(source, st)
 
     const expectedOutputLength = Math.floor(samplesPerChannel / speed)
     const stereoOutput = new Float32Array(expectedOutputLength * 2)
@@ -1522,7 +1522,7 @@ async function applySpeedAndPitch(
       outputChannels.push(outLeft)
     }
 
-    log.debug('SoundTouch time stretch complete', {
+    log.debug('Time-stretch processing complete', {
       inputLength: samplesPerChannel,
       outputLength: actualOutputLength,
       expectedLength: expectedOutputLength,
@@ -1532,14 +1532,14 @@ async function applySpeedAndPitch(
 
     return outputChannels
   } catch (error) {
-    log.warn('SoundTouch failed, falling back to simple resampling', {
+    log.warn('Time-stretch processing failed, falling back to simple resampling', {
       error,
       speed,
       pitchShiftSemitones,
     })
 
     if (isAudioPitchShiftActive(pitchShiftSemitones)) {
-      log.warn('Independent export pitch shift was skipped because SoundTouch failed to load')
+      log.warn('Independent export pitch shift was skipped because time-stretch processing failed')
     }
 
     // Fallback: simple resampling per-channel (speed only, pitch shift omitted)
@@ -1767,7 +1767,7 @@ export async function processAudio(
       // Note: decoded audio is already trimmed to the range we requested.
 
       // Apply speed across ALL channels at once to maintain phase coherence
-      // between L/R (SoundTouch WSOLA finds shared overlap windows).
+      // between L/R (the WSOLA pipeline finds shared overlap windows).
       let processedChannels = decoded.samples
       if (
         Math.abs(segment.speed - 1) > 0.0001 ||

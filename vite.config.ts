@@ -141,9 +141,6 @@ export default defineConfig({
             return 'media-processing'
           }
           // Audio/video processing helpers
-          if (id.includes('/node_modules/soundtouchjs/')) {
-            return 'audio-processing'
-          }
           if (id.includes('/node_modules/gifuct-js/')) {
             return 'gif-processing'
           }

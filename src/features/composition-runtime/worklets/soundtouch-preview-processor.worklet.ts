@@ -1,4 +1,4 @@
-import { SimpleFilter, SoundTouch } from 'soundtouchjs'
+import { TimeStretchFilter, TimeStretchProcessor } from '@/lib/audio/time-stretch'
 import {
   SOUND_TOUCH_PREVIEW_PROCESSOR_NAME,
   type SoundTouchPreviewProcessorMessage,
@@ -22,12 +22,12 @@ declare function registerProcessor(
 
 class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
   private readonly source = new QueuedStereoBufferSource()
-  private readonly soundTouch = new SoundTouch()
-  private readonly filter = new SimpleFilter(
+  private readonly processor = new TimeStretchProcessor()
+  private readonly filter = new TimeStretchFilter(
     this.source as {
       extract: (target: Float32Array, numFrames: number, sourcePosition?: number) => number
     },
-    this.soundTouch,
+    this.processor,
   )
   private scratch = new Float32Array(256)
   private playing = false
@@ -43,9 +43,9 @@ class SoundTouchPreviewProcessor extends AudioWorkletProcessor {
   }
 
   private applySettings(): void {
-    this.soundTouch.tempo = Math.max(0.01, this.tempo)
-    this.soundTouch.pitch = Math.max(0.01, this.pitch)
-    this.soundTouch.rate = 1
+    this.processor.tempo = Math.max(0.01, this.tempo)
+    this.processor.pitch = Math.max(0.01, this.pitch)
+    this.processor.rate = 1
   }
 
   private handleMessage(message: SoundTouchPreviewProcessorMessage): void {
