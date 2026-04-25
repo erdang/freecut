@@ -1,8 +1,5 @@
-import { z } from 'zod';
-import {
-  DEFAULT_PROJECT_FPS_OPTIONS,
-  isAllowedProjectFps,
-} from './project-fps';
+import { z } from 'zod'
+import { DEFAULT_PROJECT_FPS_OPTIONS, isAllowedProjectFps } from './project-fps'
 
 /**
  * Validation schema for project creation/update form
@@ -47,24 +44,24 @@ export const projectFormSchema = z.object({
     .string()
     .regex(/^#[0-9A-Fa-f]{6}$/, 'Must be a valid hex color (e.g., #000000)')
     .optional(),
-});
+})
 
 /**
  * Type inferred from the schema
  */
-export type ProjectFormData = z.infer<typeof projectFormSchema>;
+export type ProjectFormData = z.infer<typeof projectFormSchema>
 
 /**
  * Project template interface for preset configurations
  */
 export interface ProjectTemplate {
-  id: string;
-  platform: string;
-  name: string;
-  namePrefix: string;
-  width: number;
-  height: number;
-  fps: number;
+  id: string
+  platform: string
+  name: string
+  namePrefix: string
+  width: number
+  height: number
+  fps: number
 }
 
 /**
@@ -126,7 +123,7 @@ export const PROJECT_TEMPLATES: readonly ProjectTemplate[] = [
     height: 627,
     fps: 30,
   },
-] as const;
+] as const
 
 /**
  * Common resolution presets
@@ -147,14 +144,12 @@ export const RESOLUTION_PRESETS = [
   { label: '1080×1350 (Instagram Portrait)', value: '1080x1350', width: 1080, height: 1350 },
   // Ultrawide (21:9)
   { label: '2560×1080 (Ultrawide)', value: '2560x1080', width: 2560, height: 1080 },
-] as const;
+] as const
 
 /**
  * Common FPS presets
  */
-export const FPS_PRESETS = [
-  ...DEFAULT_PROJECT_FPS_OPTIONS,
-];
+export const FPS_PRESETS = [...DEFAULT_PROJECT_FPS_OPTIONS]
 
 /**
  * Default form values
@@ -165,29 +160,29 @@ export const DEFAULT_PROJECT_VALUES: ProjectFormData = {
   width: 1920,
   height: 1080,
   fps: 30,
-};
+}
 
 /**
  * Get resolution aspect ratio
  */
 export function getAspectRatio(width: number, height: number): string {
-  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
-  const divisor = gcd(width, height);
+  const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+  const divisor = gcd(width, height)
 
-  const ratioWidth = width / divisor;
-  const ratioHeight = height / divisor;
+  const ratioWidth = width / divisor
+  const ratioHeight = height / divisor
 
   // Common aspect ratios
-  if (ratioWidth === 16 && ratioHeight === 9) return '16:9';
-  if (ratioWidth === 9 && ratioHeight === 16) return '9:16';
-  if (ratioWidth === 4 && ratioHeight === 3) return '4:3';
-  if (ratioWidth === 3 && ratioHeight === 4) return '3:4';
-  if (ratioWidth === 21 && ratioHeight === 9) return '21:9';
-  if (ratioWidth === 1 && ratioHeight === 1) return '1:1';
-  if (ratioWidth === 2 && ratioHeight === 3) return '2:3';
-  if (ratioWidth === 3 && ratioHeight === 2) return '3:2';
-  if (ratioWidth === 4 && ratioHeight === 5) return '4:5';
-  if (ratioWidth === 5 && ratioHeight === 4) return '5:4';
+  if (ratioWidth === 16 && ratioHeight === 9) return '16:9'
+  if (ratioWidth === 9 && ratioHeight === 16) return '9:16'
+  if (ratioWidth === 4 && ratioHeight === 3) return '4:3'
+  if (ratioWidth === 3 && ratioHeight === 4) return '3:4'
+  if (ratioWidth === 21 && ratioHeight === 9) return '21:9'
+  if (ratioWidth === 1 && ratioHeight === 1) return '1:1'
+  if (ratioWidth === 2 && ratioHeight === 3) return '2:3'
+  if (ratioWidth === 3 && ratioHeight === 2) return '3:2'
+  if (ratioWidth === 4 && ratioHeight === 5) return '4:5'
+  if (ratioWidth === 5 && ratioHeight === 4) return '5:4'
 
-  return `${ratioWidth}:${ratioHeight}`;
+  return `${ratioWidth}:${ratioHeight}`
 }

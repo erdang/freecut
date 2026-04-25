@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const flip: GpuTransitionDefinition = {
   id: 'flip',
@@ -57,6 +57,6 @@ fn flipFragment(input: VertexOutput) -> @location(0) vec4f {
   return select(texColor, black, oob);
 }`,
   packUniforms: (progress, width, height, direction) => {
-    return new Float32Array([progress, width, height, direction]);
+    return new Float32Array([progress, width, height, direction])
   },
-};
+}

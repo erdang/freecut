@@ -8,7 +8,7 @@ declare module 'soundtouchjs' {
    * Source interface for SimpleFilter
    */
   interface FilterSource {
-    extract(target: Float32Array, numFrames: number): number;
+    extract(target: Float32Array, numFrames: number): number
   }
 
   /**
@@ -19,12 +19,12 @@ declare module 'soundtouchjs' {
     constructor(
       audioContext: AudioContext | OfflineAudioContext,
       audioBuffer: AudioBuffer,
-      bufferSize?: number
-    );
-    tempo: number;
-    pitch: number;
-    connect(destination: AudioNode): void;
-    disconnect(): void;
+      bufferSize?: number,
+    )
+    tempo: number
+    pitch: number
+    connect(destination: AudioNode): void
+    disconnect(): void
   }
 
   /**
@@ -33,20 +33,20 @@ declare module 'soundtouchjs' {
    */
   export class SoundTouch {
     /** Tempo change rate (1.0 = normal, 2.0 = double speed) */
-    tempo: number;
+    tempo: number
     /** Pitch change rate (1.0 = normal, 2.0 = octave up) */
-    pitch: number;
+    pitch: number
     /** Playback rate - affects both tempo and pitch */
-    rate: number;
+    rate: number
 
     /** Input samples to process (interleaved stereo) */
-    putSamples(samples: Float32Array, numSamples: number): void;
+    putSamples(samples: Float32Array, numSamples: number): void
     /** Receive processed samples */
-    receiveSamples(output: Float32Array, numSamples: number): number;
+    receiveSamples(output: Float32Array, numSamples: number): number
     /** Flush remaining samples */
-    flush(): void;
+    flush(): void
     /** Clear all buffers */
-    clear(): void;
+    clear(): void
   }
 
   /**
@@ -54,10 +54,10 @@ declare module 'soundtouchjs' {
    * The source should provide interleaved stereo samples.
    */
   export class SimpleFilter {
-    constructor(source: FilterSource, soundTouch: SoundTouch);
-    sourcePosition: number;
+    constructor(source: FilterSource, soundTouch: SoundTouch)
+    sourcePosition: number
     /** Extract processed samples (interleaved stereo) */
-    extract(target: Float32Array, numFrames: number): number;
+    extract(target: Float32Array, numFrames: number): number
   }
 
   /**
@@ -65,6 +65,6 @@ declare module 'soundtouchjs' {
    */
   export function getWebAudioNode(
     audioContext: AudioContext,
-    filter: SimpleFilter
-  ): ScriptProcessorNode;
+    filter: SimpleFilter,
+  ): ScriptProcessorNode
 }

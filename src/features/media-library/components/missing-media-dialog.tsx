@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
-import { createLogger } from '@/shared/logging/logger';
+import { useState, useMemo, useEffect, useCallback } from 'react'
+import { createLogger } from '@/shared/logging/logger'
 
-const logger = createLogger('MissingMediaDialog');
+const logger = createLogger('MissingMediaDialog')
 
 import {
   Dialog,
@@ -10,189 +10,188 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import {
-  Link2Off,
-  RefreshCw,
-  FolderOpen,
-  X,
-  AlertTriangle,
-  Search,
-  Folder,
-} from 'lucide-react';
-import { useMediaLibraryStore } from '../stores/media-library-store';
-import { useProjectStore } from '@/features/media-library/deps/projects';
-import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker';
-import { getProjectBrokenMediaInfo } from '@/features/media-library/utils/broken-media';
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Link2Off, RefreshCw, FolderOpen, X, AlertTriangle, Search, Folder } from 'lucide-react'
+import { useMediaLibraryStore } from '../stores/media-library-store'
+import { useProjectStore } from '@/features/media-library/deps/projects'
+import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
+import { getProjectBrokenMediaInfo } from '@/features/media-library/utils/broken-media'
 
 export function MissingMediaDialog() {
-  const showDialog = useMediaLibraryStore((s) => s.showMissingMediaDialog);
-  const closeDialog = useMediaLibraryStore((s) => s.closeMissingMediaDialog);
-  const brokenMediaInfo = useMediaLibraryStore((s) => s.brokenMediaInfo);
-  const mediaById = useMediaLibraryStore((s) => s.mediaById);
-  const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
-  const relinkMediaBatch = useMediaLibraryStore((s) => s.relinkMediaBatch);
-  const markMediaHealthy = useMediaLibraryStore((s) => s.markMediaHealthy);
+  const showDialog = useMediaLibraryStore((s) => s.showMissingMediaDialog)
+  const closeDialog = useMediaLibraryStore((s) => s.closeMissingMediaDialog)
+  const brokenMediaInfo = useMediaLibraryStore((s) => s.brokenMediaInfo)
+  const mediaById = useMediaLibraryStore((s) => s.mediaById)
+  const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia)
+  const relinkMediaBatch = useMediaLibraryStore((s) => s.relinkMediaBatch)
+  const markMediaHealthy = useMediaLibraryStore((s) => s.markMediaHealthy)
 
   // Project folder for smart relinking
-  const currentProject = useProjectStore((s) => s.currentProject);
-  const projectRootFolderHandle = currentProject?.rootFolderHandle;
-  const projectRootFolderName = currentProject?.rootFolderName;
+  const currentProject = useProjectStore((s) => s.currentProject)
+  const projectRootFolderHandle = currentProject?.rootFolderHandle
+  const projectRootFolderName = currentProject?.rootFolderName
 
-  const [relinking, setRelinking] = useState<string | null>(null);
-  const [locatingFolder, setLocatingFolder] = useState(false);
-  const [scanningProjectFolder, setScanningProjectFolder] = useState(false);
-  const [relinkedIds, setRelinkedIds] = useState<Set<string>>(new Set());
-  const [autoScanned, setAutoScanned] = useState(false);
+  const [relinking, setRelinking] = useState<string | null>(null)
+  const [locatingFolder, setLocatingFolder] = useState(false)
+  const [scanningProjectFolder, setScanningProjectFolder] = useState(false)
+  const [relinkedIds, setRelinkedIds] = useState<Set<string>>(new Set())
+  const [autoScanned, setAutoScanned] = useState(false)
 
   const brokenItems = useMemo(
     () =>
       getProjectBrokenMediaInfo(brokenMediaInfo, mediaById).filter(
-        (item) => !relinkedIds.has(item.mediaId)
+        (item) => !relinkedIds.has(item.mediaId),
       ),
-    [brokenMediaInfo, mediaById, relinkedIds]
-  );
+    [brokenMediaInfo, mediaById, relinkedIds],
+  )
 
-  const permissionDenied = brokenItems.filter(
-    (b) => b.errorType === 'permission_denied'
-  );
-  const fileMissing = brokenItems.filter((b) => b.errorType === 'file_missing');
+  const permissionDenied = brokenItems.filter((b) => b.errorType === 'permission_denied')
+  const fileMissing = brokenItems.filter((b) => b.errorType === 'file_missing')
 
   // Helper to scan a directory for matching files
-  const scanDirectoryForMatches = useCallback(async (
-    dirHandle: FileSystemDirectoryHandle,
-    itemsToMatch: typeof brokenItems
-  ): Promise<Array<{ mediaId: string; handle: FileSystemFileHandle }>> => {
-    const foundRelinks: Array<{
-      mediaId: string;
-      handle: FileSystemFileHandle;
-    }> = [];
+  const scanDirectoryForMatches = useCallback(
+    async (
+      dirHandle: FileSystemDirectoryHandle,
+      itemsToMatch: typeof brokenItems,
+    ): Promise<Array<{ mediaId: string; handle: FileSystemFileHandle }>> => {
+      const foundRelinks: Array<{
+        mediaId: string
+        handle: FileSystemFileHandle
+      }> = []
 
-    // Scan directory for matching filenames
-    for await (const entry of dirHandle.values()) {
-      if (entry.kind === 'file') {
-        const matchingBroken = itemsToMatch.find(
-          (b) => b.fileName.toLowerCase() === entry.name.toLowerCase()
-        );
-        if (matchingBroken) {
-          foundRelinks.push({
-            mediaId: matchingBroken.mediaId,
-            handle: entry as FileSystemFileHandle,
-          });
+      // Scan directory for matching filenames
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file') {
+          const matchingBroken = itemsToMatch.find(
+            (b) => b.fileName.toLowerCase() === entry.name.toLowerCase(),
+          )
+          if (matchingBroken) {
+            foundRelinks.push({
+              mediaId: matchingBroken.mediaId,
+              handle: entry as FileSystemFileHandle,
+            })
+          }
         }
       }
-    }
 
-    return foundRelinks;
-  }, []);
+      return foundRelinks
+    },
+    [],
+  )
 
   // Auto-scan project folder when dialog opens
   const handleScanProjectFolder = useCallback(async () => {
-    if (!projectRootFolderHandle || brokenItems.length === 0) return;
+    if (!projectRootFolderHandle || brokenItems.length === 0) return
 
-    setScanningProjectFolder(true);
+    setScanningProjectFolder(true)
     try {
       // Request permission if needed
-      const permission = await projectRootFolderHandle.queryPermission({ mode: 'read' });
+      const permission = await projectRootFolderHandle.queryPermission({ mode: 'read' })
       if (permission !== 'granted') {
-        const newPermission = await projectRootFolderHandle.requestPermission({ mode: 'read' });
+        const newPermission = await projectRootFolderHandle.requestPermission({ mode: 'read' })
         if (newPermission !== 'granted') {
-          logger.warn('Permission denied for project folder');
-          return;
+          logger.warn('Permission denied for project folder')
+          return
         }
       }
 
-      const foundRelinks = await scanDirectoryForMatches(projectRootFolderHandle, brokenItems);
+      const foundRelinks = await scanDirectoryForMatches(projectRootFolderHandle, brokenItems)
 
       if (foundRelinks.length > 0) {
-        const { success } = await relinkMediaBatch(foundRelinks);
-        setRelinkedIds((prev) => new Set([...prev, ...success]));
-        logger.info(`Auto-relinked ${success.length} files from project folder`);
+        const { success } = await relinkMediaBatch(foundRelinks)
+        setRelinkedIds((prev) => new Set([...prev, ...success]))
+        logger.info(`Auto-relinked ${success.length} files from project folder`)
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        logger.error('Project folder scan failed:', error);
+        logger.error('Project folder scan failed:', error)
       }
     } finally {
-      setScanningProjectFolder(false);
+      setScanningProjectFolder(false)
     }
-  }, [projectRootFolderHandle, brokenItems, relinkMediaBatch, scanDirectoryForMatches]);
+  }, [projectRootFolderHandle, brokenItems, relinkMediaBatch, scanDirectoryForMatches])
 
   // Auto-scan project folder when dialog opens (only once per dialog open)
   useEffect(() => {
     if (showDialog && projectRootFolderHandle && brokenItems.length > 0 && !autoScanned) {
-      setAutoScanned(true);
-      handleScanProjectFolder();
+      setAutoScanned(true)
+      handleScanProjectFolder()
     }
-  }, [showDialog, projectRootFolderHandle, brokenItems.length, autoScanned, handleScanProjectFolder]);
+  }, [
+    showDialog,
+    projectRootFolderHandle,
+    brokenItems.length,
+    autoScanned,
+    handleScanProjectFolder,
+  ])
 
   // Reset auto-scan flag when dialog closes
   useEffect(() => {
     if (!showDialog) {
-      setAutoScanned(false);
+      setAutoScanned(false)
     }
-  }, [showDialog]);
+  }, [showDialog])
 
   const handleRelinkSingle = async (mediaId: string) => {
-    setRelinking(mediaId);
+    setRelinking(mediaId)
     try {
-      const handles = await showMediaFilePicker({ multiple: false });
+      const handles = await showMediaFilePicker({ multiple: false })
 
-      const handle = handles[0];
-      if (!handle) return;
+      const handle = handles[0]
+      if (!handle) return
 
-      const success = await relinkMedia(mediaId, handle);
+      const success = await relinkMedia(mediaId, handle)
       if (success) {
-        setRelinkedIds((prev) => new Set([...prev, mediaId]));
+        setRelinkedIds((prev) => new Set([...prev, mediaId]))
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        logger.error('Relink failed:', error);
+        logger.error('Relink failed:', error)
       }
     } finally {
-      setRelinking(null);
+      setRelinking(null)
     }
-  };
+  }
 
   const handleLocateFolder = async () => {
-    setLocatingFolder(true);
+    setLocatingFolder(true)
     try {
       const dirHandle = await window.showDirectoryPicker({
         mode: 'read',
-      });
+      })
 
-      const foundRelinks = await scanDirectoryForMatches(dirHandle, brokenItems);
+      const foundRelinks = await scanDirectoryForMatches(dirHandle, brokenItems)
 
       if (foundRelinks.length > 0) {
-        const { success } = await relinkMediaBatch(foundRelinks);
-        setRelinkedIds((prev) => new Set([...prev, ...success]));
+        const { success } = await relinkMediaBatch(foundRelinks)
+        setRelinkedIds((prev) => new Set([...prev, ...success]))
       }
     } catch (error) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        logger.error('Folder scan failed:', error);
+        logger.error('Folder scan failed:', error)
       }
     } finally {
-      setLocatingFolder(false);
+      setLocatingFolder(false)
     }
-  };
+  }
 
   const handleDismissAll = () => {
     // Mark all broken media as healthy (dismiss without relinking)
-    brokenItems.forEach((item) => markMediaHealthy(item.mediaId));
-    setRelinkedIds(new Set());
-    closeDialog();
-  };
+    brokenItems.forEach((item) => markMediaHealthy(item.mediaId))
+    setRelinkedIds(new Set())
+    closeDialog()
+  }
 
   const handleClose = () => {
-    setRelinkedIds(new Set());
-    closeDialog();
-  };
+    setRelinkedIds(new Set())
+    closeDialog()
+  }
 
   // Auto-close if no more broken items
   if (showDialog && brokenItems.length === 0) {
-    handleClose();
-    return null;
+    handleClose()
+    return null
   }
 
   return (
@@ -255,7 +254,9 @@ export function MissingMediaDialog() {
             ) : (
               <FolderOpen className="w-4 h-4 mr-2" />
             )}
-            {projectRootFolderHandle ? 'Browse Another Folder...' : 'Locate Folder (auto-match by filename)'}
+            {projectRootFolderHandle
+              ? 'Browse Another Folder...'
+              : 'Locate Folder (auto-match by filename)'}
           </Button>
 
           {/* List of broken media */}
@@ -309,11 +310,7 @@ export function MissingMediaDialog() {
         </div>
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          <Button
-            variant="ghost"
-            onClick={handleDismissAll}
-            className="text-muted-foreground"
-          >
+          <Button variant="ghost" onClick={handleDismissAll} className="text-muted-foreground">
             Work Offline
           </Button>
           <Button variant="outline" onClick={handleClose}>
@@ -322,5 +319,5 @@ export function MissingMediaDialog() {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

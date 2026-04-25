@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const fade: GpuTransitionDefinition = {
   id: 'fade',
@@ -31,6 +31,6 @@ fn fadeFragment(input: VertexOutput) -> @location(0) vec4f {
   return mix(left, right, t);
 }`,
   packUniforms: (progress, width, height) => {
-    return new Float32Array([progress, width, height, 0]);
+    return new Float32Array([progress, width, height, 0])
   },
-};
+}

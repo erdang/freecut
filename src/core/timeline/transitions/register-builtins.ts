@@ -5,7 +5,7 @@
  * Called once at module load time.
  */
 
-import { transitionRegistry } from './registry';
+import { transitionRegistry } from './registry'
 import {
   registerBasicTransitions,
   registerWipeTransitions,
@@ -13,18 +13,18 @@ import {
   registerFlipTransitions,
   registerMaskTransitions,
   registerGpuTransitions,
-} from './renderers';
+} from './renderers'
 
-let registered = false;
+let registered = false
 
 export function registerBuiltinTransitions(): void {
-  if (registered) return;
-  registered = true;
+  if (registered) return
+  registered = true
 
-  registerBasicTransitions(transitionRegistry);
-  registerWipeTransitions(transitionRegistry);
-  registerSlideTransitions(transitionRegistry);
-  registerFlipTransitions(transitionRegistry);
-  registerMaskTransitions(transitionRegistry);
-  registerGpuTransitions(transitionRegistry);
+  registerBasicTransitions(transitionRegistry)
+  registerWipeTransitions(transitionRegistry)
+  registerSlideTransitions(transitionRegistry)
+  registerFlipTransitions(transitionRegistry)
+  registerMaskTransitions(transitionRegistry)
+  registerGpuTransitions(transitionRegistry)
 }

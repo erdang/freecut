@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react';
-import { Columns2 } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback, memo, useMemo } from 'react'
+import { Columns2 } from 'lucide-react'
 import {
   VideoPreview,
   PlaybackControls,
@@ -10,33 +10,32 @@ import {
   InlineSourcePreview,
   InlineCompositionPreview,
   ColorScopesMonitor,
-} from '@/features/editor/deps/preview';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useProjectStore } from '@/features/editor/deps/projects';
-import { useSettingsStore } from '@/features/editor/deps/settings';
-import { useMaskEditorStore, useItemsStore } from '@/features/editor/deps/preview';
-import { useEditorStore } from '@/app/state/editor';
-import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout';
-import { InteractionLockRegion } from './interaction-lock-region';
-import { Button } from '@/components/ui/button';
-import { ErrorBoundary } from '@/components/error-boundary';
+} from '@/features/editor/deps/preview'
+import { useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { useProjectStore } from '@/features/editor/deps/projects'
+import { useSettingsStore } from '@/features/editor/deps/settings'
+import { useMaskEditorStore, useItemsStore } from '@/features/editor/deps/preview'
+import { useEditorStore } from '@/app/state/editor'
+import { EDITOR_LAYOUT_CSS_VALUES, getEditorLayout } from '@/app/editor-layout'
+import { InteractionLockRegion } from './interaction-lock-region'
+import { Button } from '@/components/ui/button'
+import { ErrorBoundary } from '@/components/error-boundary'
 
 interface PreviewAreaProps {
   project: {
-    width: number;
-    height: number;
-    fps: number;
-  };
+    width: number
+    height: number
+    fps: number
+  }
 }
 
-const DEFAULT_EMPTY_TIMELINE_SECONDS = 10;
-const PREVIEW_RESIZE_MIN_UPDATE_MS = 33;
-const SPLIT_DRAG_MIN_UPDATE_MS = 33;
-const PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT = 50;
-const PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT = 32;
-const PREVIEW_SIDE_PANEL_MIN_PERCENT = 22;
-const PREVIEW_SIDE_PANEL_MAX_PERCENT = 55;
-
+const DEFAULT_EMPTY_TIMELINE_SECONDS = 10
+const PREVIEW_RESIZE_MIN_UPDATE_MS = 33
+const SPLIT_DRAG_MIN_UPDATE_MS = 33
+const PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT = 50
+const PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT = 32
+const PREVIEW_SIDE_PANEL_MIN_PERCENT = 22
+const PREVIEW_SIDE_PANEL_MAX_PERCENT = 55
 
 function PreviewSplitHandle({
   onMouseDown,
@@ -45,11 +44,11 @@ function PreviewSplitHandle({
   resetLabel,
   resetTooltip,
 }: {
-  onMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
-  onReset: () => void;
-  showReset: boolean;
-  resetLabel: string;
-  resetTooltip: string;
+  onMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
+  onReset: () => void
+  showReset: boolean
+  resetLabel: string
+  resetTooltip: string
 }) {
   return (
     <div
@@ -68,7 +67,7 @@ function PreviewSplitHandle({
         </button>
       )}
     </div>
-  );
+  )
 }
 
 const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
@@ -77,21 +76,23 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
   suspendOverlay,
 }: {
   project: {
-    width: number;
-    height: number;
-    fps: number;
-    backgroundColor?: string;
-  };
+    width: number
+    height: number
+    fps: number
+    backgroundColor?: string
+  }
   containerSize: {
-    width: number;
-    height: number;
-  };
-  suspendOverlay: boolean;
+    width: number
+    height: number
+  }
+  suspendOverlay: boolean
 }) {
-  const mediaSkimPreviewMediaId = useEditorStore((s) => s.mediaSkimPreviewMediaId);
-  const mediaSkimPreviewFrame = useEditorStore((s) => s.mediaSkimPreviewFrame);
-  const compoundClipSkimPreviewCompositionId = useEditorStore((s) => s.compoundClipSkimPreviewCompositionId);
-  const compoundClipSkimPreviewFrame = useEditorStore((s) => s.compoundClipSkimPreviewFrame);
+  const mediaSkimPreviewMediaId = useEditorStore((s) => s.mediaSkimPreviewMediaId)
+  const mediaSkimPreviewFrame = useEditorStore((s) => s.mediaSkimPreviewFrame)
+  const compoundClipSkimPreviewCompositionId = useEditorStore(
+    (s) => s.compoundClipSkimPreviewCompositionId,
+  )
+  const compoundClipSkimPreviewFrame = useEditorStore((s) => s.compoundClipSkimPreviewFrame)
   const skimPreviewOverlay = compoundClipSkimPreviewCompositionId ? (
     <InlineCompositionPreview
       compositionId={compoundClipSkimPreviewCompositionId}
@@ -104,7 +105,7 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
       seekFrame={mediaSkimPreviewFrame}
       containerSize={containerSize}
     />
-  ) : null;
+  ) : null
 
   return (
     <ErrorBoundary level="component">
@@ -121,8 +122,8 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
         )}
       </div>
     </ErrorBoundary>
-  );
-});
+  )
+})
 
 /**
  * Preview Area Component
@@ -136,323 +137,344 @@ const ProgramPreviewSurface = memo(function ProgramPreviewSurface({
  * Uses granular Zustand selectors in child components
  */
 export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaProps) {
-  const previewContainerRef = useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
-  const editorDensity = useSettingsStore((s) => s.editorDensity);
-  const editorLayout = getEditorLayout(editorDensity);
-  const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing);
-  const isPenModeActive = useMaskEditorStore((s) => s.penMode);
-  const isShapePenModeActive = useMaskEditorStore((s) => s.shapePenMode);
-  const editingItemId = useMaskEditorStore((s) => s.editingItemId);
-  const selectedVertexIndices = useMaskEditorStore((s) => s.selectedVertexIndices);
-  const selectedVertexIndex = useMaskEditorStore((s) => s.selectedVertexIndex);
-  const penVertexCount = useMaskEditorStore((s) => s.penVertices.length);
-  const previewVertexCount = useMaskEditorStore((s) => s.previewVertices?.length ?? 0);
-  const requestFinishPenMode = useMaskEditorStore((s) => s.requestFinishPenMode);
-  const requestCancelPenMode = useMaskEditorStore((s) => s.requestCancelPenMode);
-  const requestConvertSelectedVertex = useMaskEditorStore((s) => s.requestConvertSelectedVertex);
-  const stopMaskEditing = useMaskEditorStore((s) => s.stopEditing);
+  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 })
+  const editorDensity = useSettingsStore((s) => s.editorDensity)
+  const editorLayout = getEditorLayout(editorDensity)
+  const isMaskEditingActive = useMaskEditorStore((s) => s.isEditing)
+  const isPenModeActive = useMaskEditorStore((s) => s.penMode)
+  const isShapePenModeActive = useMaskEditorStore((s) => s.shapePenMode)
+  const editingItemId = useMaskEditorStore((s) => s.editingItemId)
+  const selectedVertexIndices = useMaskEditorStore((s) => s.selectedVertexIndices)
+  const selectedVertexIndex = useMaskEditorStore((s) => s.selectedVertexIndex)
+  const penVertexCount = useMaskEditorStore((s) => s.penVertices.length)
+  const previewVertexCount = useMaskEditorStore((s) => s.previewVertices?.length ?? 0)
+  const requestFinishPenMode = useMaskEditorStore((s) => s.requestFinishPenMode)
+  const requestCancelPenMode = useMaskEditorStore((s) => s.requestCancelPenMode)
+  const requestConvertSelectedVertex = useMaskEditorStore((s) => s.requestConvertSelectedVertex)
+  const stopMaskEditing = useMaskEditorStore((s) => s.stopEditing)
   const editVertexCount = useItemsStore(
-    useCallback((s) => {
-      if (!editingItemId) return 0;
-      const item = s.items.find((candidate) => candidate.id === editingItemId);
-      return item?.type === 'shape' && item.shapeType === 'path'
-        ? item.pathVertices?.length ?? 0
-        : 0;
-    }, [editingItemId])
-  );
+    useCallback(
+      (s) => {
+        if (!editingItemId) return 0
+        const item = s.items.find((candidate) => candidate.id === editingItemId)
+        return item?.type === 'shape' && item.shapeType === 'path'
+          ? (item.pathVertices?.length ?? 0)
+          : 0
+      },
+      [editingItemId],
+    ),
+  )
 
   // Read current project from store for live updates (e.g., dimension swaps)
   // Use granular selectors to avoid re-renders when unrelated properties change
-  const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width);
-  const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height);
-  const projectFps = useProjectStore((s) => s.currentProject?.metadata.fps);
-  const projectBgColor = useProjectStore((s) => s.currentProject?.metadata.backgroundColor);
+  const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width)
+  const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height)
+  const projectFps = useProjectStore((s) => s.currentProject?.metadata.fps)
+  const projectBgColor = useProjectStore((s) => s.currentProject?.metadata.backgroundColor)
 
-  const width = projectWidth ?? project.width;
-  const height = projectHeight ?? project.height;
-  const fps = projectFps ?? project.fps;
-  const backgroundColor = projectBgColor ?? '#000000';
+  const width = projectWidth ?? project.width
+  const height = projectHeight ?? project.height
+  const fps = projectFps ?? project.fps
+  const backgroundColor = projectBgColor ?? '#000000'
 
   // Derive timeline end frame directly from store state to avoid recreating selector functions.
   const timelineEndFrame = useTimelineStore((s) => {
-    if (s.items.length === 0) return null;
-    let maxFrame = 0;
+    if (s.items.length === 0) return null
+    let maxFrame = 0
     for (const item of s.items) {
-      const itemEnd = item.from + item.durationInFrames;
+      const itemEnd = item.from + item.durationInFrames
       if (itemEnd > maxFrame) {
-        maxFrame = itemEnd;
+        maxFrame = itemEnd
       }
     }
-    return maxFrame;
-  });
+    return maxFrame
+  })
 
-  const totalFrames = timelineEndFrame ?? fps * DEFAULT_EMPTY_TIMELINE_SECONDS;
-  const isPathEditModeActive = isMaskEditingActive && !isPenModeActive;
-  const canFinishPenPath = isShapePenModeActive && penVertexCount >= 3;
-  const selectedVertexCount = selectedVertexIndices.length;
-  const hasSelectedVertex = selectedVertexCount > 0;
-  const remainingPenPoints = Math.max(0, 3 - penVertexCount);
-  const displayedEditVertexCount = previewVertexCount || editVertexCount;
+  const totalFrames = timelineEndFrame ?? fps * DEFAULT_EMPTY_TIMELINE_SECONDS
+  const isPathEditModeActive = isMaskEditingActive && !isPenModeActive
+  const canFinishPenPath = isShapePenModeActive && penVertexCount >= 3
+  const selectedVertexCount = selectedVertexIndices.length
+  const hasSelectedVertex = selectedVertexCount > 0
+  const remainingPenPoints = Math.max(0, 3 - penVertexCount)
+  const displayedEditVertexCount = previewVertexCount || editVertexCount
   const penModeHint = canFinishPenPath
     ? 'Close the path from here, or click the first node.'
     : penVertexCount === 0
       ? 'Click in the preview to place your first point.'
-      : `Add ${remainingPenPoints} more ${remainingPenPoints === 1 ? 'point' : 'points'} to finish.`;
-  const editModeHint = displayedEditVertexCount > 0
-    ? 'Drag points, handles, or the path body to adjust the shape.'
-    : 'Drag inside the path to move it.';
-  const selectedVertexHint = selectedVertexCount === 0
-    ? 'Select a point to enable corner and bezier conversion.'
-    : selectedVertexCount === 1 && selectedVertexIndex !== null
-      ? `Point ${selectedVertexIndex + 1} selected for knot conversion.`
-      : `${selectedVertexCount} points selected for knot conversion.`;
+      : `Add ${remainingPenPoints} more ${remainingPenPoints === 1 ? 'point' : 'points'} to finish.`
+  const editModeHint =
+    displayedEditVertexCount > 0
+      ? 'Drag points, handles, or the path body to adjust the shape.'
+      : 'Drag inside the path to move it.'
+  const selectedVertexHint =
+    selectedVertexCount === 0
+      ? 'Select a point to enable corner and bezier conversion.'
+      : selectedVertexCount === 1 && selectedVertexIndex !== null
+        ? `Point ${selectedVertexIndex + 1} selected for knot conversion.`
+        : `${selectedVertexCount} points selected for knot conversion.`
 
   // Measure preview container size for zoom calculations
   useEffect(() => {
-    const element = previewContainerRef.current;
-    if (!element) return;
-    let rafId: number | null = null;
-    let lastUpdateTs = 0;
+    const element = previewContainerRef.current
+    if (!element) return
+    let rafId: number | null = null
+    let lastUpdateTs = 0
 
     const updateSize = () => {
-      const rect = element.getBoundingClientRect();
-      const nextWidth = Math.max(0, Math.floor(rect.width - editorLayout.previewPadding));
-      const nextHeight = Math.max(0, Math.floor(rect.height - editorLayout.previewPadding));
+      const rect = element.getBoundingClientRect()
+      const nextWidth = Math.max(0, Math.floor(rect.width - editorLayout.previewPadding))
+      const nextHeight = Math.max(0, Math.floor(rect.height - editorLayout.previewPadding))
 
       // Bail out when dimensions are unchanged to avoid redundant re-renders.
       setContainerSize((prev) => {
         if (prev.width === nextWidth && prev.height === nextHeight) {
-          return prev;
+          return prev
         }
-        return { width: nextWidth, height: nextHeight };
-      });
-    };
+        return { width: nextWidth, height: nextHeight }
+      })
+    }
 
     const scheduleUpdate = () => {
-      if (rafId !== null) return;
+      if (rafId !== null) return
       rafId = requestAnimationFrame(() => {
-        const now = performance.now();
+        const now = performance.now()
         if (now - lastUpdateTs < PREVIEW_RESIZE_MIN_UPDATE_MS) {
           rafId = requestAnimationFrame(() => {
-            rafId = null;
-            lastUpdateTs = performance.now();
-            updateSize();
-          });
-          return;
+            rafId = null
+            lastUpdateTs = performance.now()
+            updateSize()
+          })
+          return
         }
-        rafId = null;
-        lastUpdateTs = now;
-        updateSize();
-      });
-    };
+        rafId = null
+        lastUpdateTs = now
+        updateSize()
+      })
+    }
 
-    updateSize();
+    updateSize()
 
-    const resizeObserver = new ResizeObserver(scheduleUpdate);
-    resizeObserver.observe(element);
+    const resizeObserver = new ResizeObserver(scheduleUpdate)
+    resizeObserver.observe(element)
 
     return () => {
-      resizeObserver.disconnect();
+      resizeObserver.disconnect()
       if (rafId !== null) {
-        cancelAnimationFrame(rafId);
+        cancelAnimationFrame(rafId)
       }
-    };
-  }, [editorLayout.previewPadding]);
+    }
+  }, [editorLayout.previewPadding])
 
   const liveProject = useMemo(
     () => ({ width, height, fps, backgroundColor }),
-    [width, height, fps, backgroundColor]
-  );
+    [width, height, fps, backgroundColor],
+  )
 
-  const sourcePreviewMediaId = useEditorStore((s) => s.sourcePreviewMediaId);
-  const colorScopesOpen = useEditorStore((s) => s.colorScopesOpen);
+  const sourcePreviewMediaId = useEditorStore((s) => s.sourcePreviewMediaId)
+  const colorScopesOpen = useEditorStore((s) => s.colorScopesOpen)
 
-  const [sourceSplitPercent, setSourceSplitPercent] = useState(PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT);
-  const [scopesSplitPercent, setScopesSplitPercent] = useState(PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT);
-  const [isPanelDragging, setIsPanelDragging] = useState(false);
+  const [sourceSplitPercent, setSourceSplitPercent] = useState(PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT)
+  const [scopesSplitPercent, setScopesSplitPercent] = useState(PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT)
+  const [isPanelDragging, setIsPanelDragging] = useState(false)
 
-  const splitContainerRef = useRef<HTMLDivElement>(null);
-  const isDraggingSourceSplitRef = useRef(false);
-  const pendingSourceSplitPercentRef = useRef<number | null>(null);
-  const sourceSplitDragRafRef = useRef<number | null>(null);
-  const lastSourceSplitDragUpdateTsRef = useRef(0);
-  const sourceSplitDragCleanupRef = useRef<(() => void) | null>(null);
-  const isDraggingScopesSplitRef = useRef(false);
-  const pendingScopesSplitPercentRef = useRef<number | null>(null);
-  const scopesSplitDragRafRef = useRef<number | null>(null);
-  const lastScopesSplitDragUpdateTsRef = useRef(0);
-  const scopesSplitDragCleanupRef = useRef<(() => void) | null>(null);
+  const splitContainerRef = useRef<HTMLDivElement>(null)
+  const isDraggingSourceSplitRef = useRef(false)
+  const pendingSourceSplitPercentRef = useRef<number | null>(null)
+  const sourceSplitDragRafRef = useRef<number | null>(null)
+  const lastSourceSplitDragUpdateTsRef = useRef(0)
+  const sourceSplitDragCleanupRef = useRef<(() => void) | null>(null)
+  const isDraggingScopesSplitRef = useRef(false)
+  const pendingScopesSplitPercentRef = useRef<number | null>(null)
+  const scopesSplitDragRafRef = useRef<number | null>(null)
+  const lastScopesSplitDragUpdateTsRef = useRef(0)
+  const scopesSplitDragCleanupRef = useRef<(() => void) | null>(null)
 
   const handleCloseSourceMonitor = useCallback(() => {
-    useEditorStore.getState().setSourcePreviewMediaId(null);
-  }, []);
+    useEditorStore.getState().setSourcePreviewMediaId(null)
+  }, [])
 
   const handleCloseColorScopes = useCallback(() => {
-    useEditorStore.getState().setColorScopesOpen(false);
-  }, []);
+    useEditorStore.getState().setColorScopesOpen(false)
+  }, [])
 
   // Scopes get their absolute percentage (clamped independently)
   const displayedScopesSplitPercent = colorScopesOpen
-    ? Math.max(PREVIEW_SIDE_PANEL_MIN_PERCENT, Math.min(PREVIEW_SIDE_PANEL_MAX_PERCENT, scopesSplitPercent))
-    : 0;
+    ? Math.max(
+        PREVIEW_SIDE_PANEL_MIN_PERCENT,
+        Math.min(PREVIEW_SIDE_PANEL_MAX_PERCENT, scopesSplitPercent),
+      )
+    : 0
 
   // sourceSplitPercent is a ratio (0-100) of the source+program space.
   // Both panels shrink proportionally when scopes open.
-  const availableForSourceProgram = 100 - displayedScopesSplitPercent;
-  const proportionalSource = (sourceSplitPercent / 100) * availableForSourceProgram;
+  const availableForSourceProgram = 100 - displayedScopesSplitPercent
+  const proportionalSource = (sourceSplitPercent / 100) * availableForSourceProgram
   const displayedSourceSplitPercent = sourcePreviewMediaId
     ? Math.max(
         PREVIEW_SIDE_PANEL_MIN_PERCENT,
         Math.min(availableForSourceProgram - PREVIEW_SIDE_PANEL_MIN_PERCENT, proportionalSource),
       )
-    : 0;
+    : 0
 
-  const sourceResetPercent = PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT;
-  const scopesResetPercent = PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT;
-
+  const sourceResetPercent = PREVIEW_SOURCE_SPLIT_DEFAULT_PERCENT
+  const scopesResetPercent = PREVIEW_SCOPES_SPLIT_DEFAULT_PERCENT
 
   const handleResetSourceSplit = useCallback(() => {
-    setSourceSplitPercent(sourceResetPercent);
-  }, [sourceResetPercent]);
+    setSourceSplitPercent(sourceResetPercent)
+  }, [sourceResetPercent])
 
   const handleResetScopesSplit = useCallback(() => {
-    setScopesSplitPercent(scopesResetPercent);
-  }, [scopesResetPercent]);
+    setScopesSplitPercent(scopesResetPercent)
+  }, [scopesResetPercent])
 
-  const handleSourceSplitDragStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    isDraggingSourceSplitRef.current = true;
-    setIsPanelDragging(true);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+  const handleSourceSplitDragStart = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      isDraggingSourceSplitRef.current = true
+      setIsPanelDragging(true)
+      document.body.style.cursor = 'col-resize'
+      document.body.style.userSelect = 'none'
 
-    const handleMouseMove = (mouseEvent: MouseEvent) => {
-      if (!isDraggingSourceSplitRef.current || !splitContainerRef.current) return;
-      const rect = splitContainerRef.current.getBoundingClientRect();
-      const absPercent = ((mouseEvent.clientX - rect.left) / rect.width) * 100;
-      // Convert absolute position to ratio of source+program space
-      const available = 100 - (colorScopesOpen ? displayedScopesSplitPercent : 0);
-      pendingSourceSplitPercentRef.current =
-        available > 0 ? Math.max(0, Math.min(100, (absPercent / available) * 100)) : 50;
+      const handleMouseMove = (mouseEvent: MouseEvent) => {
+        if (!isDraggingSourceSplitRef.current || !splitContainerRef.current) return
+        const rect = splitContainerRef.current.getBoundingClientRect()
+        const absPercent = ((mouseEvent.clientX - rect.left) / rect.width) * 100
+        // Convert absolute position to ratio of source+program space
+        const available = 100 - (colorScopesOpen ? displayedScopesSplitPercent : 0)
+        pendingSourceSplitPercentRef.current =
+          available > 0 ? Math.max(0, Math.min(100, (absPercent / available) * 100)) : 50
 
-      if (sourceSplitDragRafRef.current !== null) return;
-      sourceSplitDragRafRef.current = requestAnimationFrame(() => {
-        sourceSplitDragRafRef.current = null;
-        const now = performance.now();
-        if (now - lastSourceSplitDragUpdateTsRef.current < SPLIT_DRAG_MIN_UPDATE_MS) {
-          return;
-        }
-        lastSourceSplitDragUpdateTsRef.current = now;
-        const pendingPercent = pendingSourceSplitPercentRef.current;
+        if (sourceSplitDragRafRef.current !== null) return
+        sourceSplitDragRafRef.current = requestAnimationFrame(() => {
+          sourceSplitDragRafRef.current = null
+          const now = performance.now()
+          if (now - lastSourceSplitDragUpdateTsRef.current < SPLIT_DRAG_MIN_UPDATE_MS) {
+            return
+          }
+          lastSourceSplitDragUpdateTsRef.current = now
+          const pendingPercent = pendingSourceSplitPercentRef.current
+          if (pendingPercent !== null) {
+            setSourceSplitPercent(pendingPercent)
+          }
+        })
+      }
+
+      const cleanup = () => {
+        const pendingPercent = pendingSourceSplitPercentRef.current
         if (pendingPercent !== null) {
-          setSourceSplitPercent(pendingPercent);
+          setSourceSplitPercent(pendingPercent)
         }
-      });
-    };
-
-    const cleanup = () => {
-      const pendingPercent = pendingSourceSplitPercentRef.current;
-      if (pendingPercent !== null) {
-        setSourceSplitPercent(pendingPercent);
+        if (sourceSplitDragRafRef.current !== null) {
+          cancelAnimationFrame(sourceSplitDragRafRef.current)
+          sourceSplitDragRafRef.current = null
+        }
+        isDraggingSourceSplitRef.current = false
+        pendingSourceSplitPercentRef.current = null
+        setIsPanelDragging(false)
+        document.body.style.cursor = ''
+        document.body.style.userSelect = ''
+        document.removeEventListener('mousemove', handleMouseMove)
+        document.removeEventListener('mouseup', handleMouseUp)
+        sourceSplitDragCleanupRef.current = null
       }
-      if (sourceSplitDragRafRef.current !== null) {
-        cancelAnimationFrame(sourceSplitDragRafRef.current);
-        sourceSplitDragRafRef.current = null;
+
+      const handleMouseUp = () => {
+        cleanup()
       }
-      isDraggingSourceSplitRef.current = false;
-      pendingSourceSplitPercentRef.current = null;
-      setIsPanelDragging(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      sourceSplitDragCleanupRef.current = null;
-    };
 
-    const handleMouseUp = () => {
-      cleanup();
-    };
-
-    sourceSplitDragCleanupRef.current = cleanup;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [colorScopesOpen, displayedScopesSplitPercent]);
+      sourceSplitDragCleanupRef.current = cleanup
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+    },
+    [colorScopesOpen, displayedScopesSplitPercent],
+  )
 
   const handleScopesSplitDragStart = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    isDraggingScopesSplitRef.current = true;
-    setIsPanelDragging(true);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
+    event.preventDefault()
+    isDraggingScopesSplitRef.current = true
+    setIsPanelDragging(true)
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
 
     const handleMouseMove = (mouseEvent: MouseEvent) => {
-      if (!isDraggingScopesSplitRef.current || !splitContainerRef.current) return;
-      const rect = splitContainerRef.current.getBoundingClientRect();
-      pendingScopesSplitPercentRef.current = ((rect.right - mouseEvent.clientX) / rect.width) * 100;
+      if (!isDraggingScopesSplitRef.current || !splitContainerRef.current) return
+      const rect = splitContainerRef.current.getBoundingClientRect()
+      pendingScopesSplitPercentRef.current = ((rect.right - mouseEvent.clientX) / rect.width) * 100
 
-      if (scopesSplitDragRafRef.current !== null) return;
+      if (scopesSplitDragRafRef.current !== null) return
       scopesSplitDragRafRef.current = requestAnimationFrame(() => {
-        scopesSplitDragRafRef.current = null;
-        const now = performance.now();
+        scopesSplitDragRafRef.current = null
+        const now = performance.now()
         if (now - lastScopesSplitDragUpdateTsRef.current < SPLIT_DRAG_MIN_UPDATE_MS) {
-          return;
+          return
         }
-        lastScopesSplitDragUpdateTsRef.current = now;
-        const pendingPercent = pendingScopesSplitPercentRef.current;
+        lastScopesSplitDragUpdateTsRef.current = now
+        const pendingPercent = pendingScopesSplitPercentRef.current
         if (pendingPercent !== null) {
           setScopesSplitPercent(
-            Math.max(PREVIEW_SIDE_PANEL_MIN_PERCENT, Math.min(PREVIEW_SIDE_PANEL_MAX_PERCENT, pendingPercent))
-          );
+            Math.max(
+              PREVIEW_SIDE_PANEL_MIN_PERCENT,
+              Math.min(PREVIEW_SIDE_PANEL_MAX_PERCENT, pendingPercent),
+            ),
+          )
         }
-      });
-    };
+      })
+    }
 
     const cleanup = () => {
-      const pendingPercent = pendingScopesSplitPercentRef.current;
+      const pendingPercent = pendingScopesSplitPercentRef.current
       if (pendingPercent !== null) {
         setScopesSplitPercent(
-          Math.max(PREVIEW_SIDE_PANEL_MIN_PERCENT, Math.min(PREVIEW_SIDE_PANEL_MAX_PERCENT, pendingPercent))
-        );
+          Math.max(
+            PREVIEW_SIDE_PANEL_MIN_PERCENT,
+            Math.min(PREVIEW_SIDE_PANEL_MAX_PERCENT, pendingPercent),
+          ),
+        )
       }
       if (scopesSplitDragRafRef.current !== null) {
-        cancelAnimationFrame(scopesSplitDragRafRef.current);
-        scopesSplitDragRafRef.current = null;
+        cancelAnimationFrame(scopesSplitDragRafRef.current)
+        scopesSplitDragRafRef.current = null
       }
-      isDraggingScopesSplitRef.current = false;
-      pendingScopesSplitPercentRef.current = null;
-      setIsPanelDragging(false);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      scopesSplitDragCleanupRef.current = null;
-    };
+      isDraggingScopesSplitRef.current = false
+      pendingScopesSplitPercentRef.current = null
+      setIsPanelDragging(false)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      scopesSplitDragCleanupRef.current = null
+    }
 
     const handleMouseUp = () => {
-      cleanup();
-    };
+      cleanup()
+    }
 
-    scopesSplitDragCleanupRef.current = cleanup;
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, []);
+    scopesSplitDragCleanupRef.current = cleanup
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }, [])
 
   useEffect(() => {
     return () => {
-      sourceSplitDragCleanupRef.current?.();
-      scopesSplitDragCleanupRef.current?.();
-    };
-  }, []);
+      sourceSplitDragCleanupRef.current?.()
+      scopesSplitDragCleanupRef.current?.()
+    }
+  }, [])
 
-  const hasSidePanels = !!sourcePreviewMediaId || colorScopesOpen;
+  const hasSidePanels = !!sourcePreviewMediaId || colorScopesOpen
   const programPanelPercent = Math.max(
     0,
-    100 - displayedSourceSplitPercent - displayedScopesSplitPercent
-  );
+    100 - displayedSourceSplitPercent - displayedScopesSplitPercent,
+  )
 
   return (
-    <div ref={splitContainerRef} className="flex-1 flex min-h-0 min-w-0 relative" role="region" aria-label="Preview area">
+    <div
+      ref={splitContainerRef}
+      className="flex-1 flex min-h-0 min-w-0 relative"
+      role="region"
+      aria-label="Preview area"
+    >
       {sourcePreviewMediaId && (
         <>
           <InteractionLockRegion
@@ -481,12 +503,12 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         </>
       )}
 
-        <div
-          className={`flex flex-col min-w-0 min-h-0 ${hasSidePanels ? '' : 'flex-1'}`}
-          style={hasSidePanels ? { width: `${programPanelPercent}%` } : undefined}
-          role="region"
-          aria-label="Program monitor"
-        >
+      <div
+        className={`flex flex-col min-w-0 min-h-0 ${hasSidePanels ? '' : 'flex-1'}`}
+        style={hasSidePanels ? { width: `${programPanelPercent}%` } : undefined}
+        role="region"
+        aria-label="Program monitor"
+      >
         {hasSidePanels && (
           <div
             className="border-b border-border flex items-center px-3 flex-shrink-0"
@@ -497,7 +519,11 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         )}
 
         <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          <div ref={previewContainerRef} className="flex-1 min-h-0 relative overflow-hidden" aria-label="Preview canvas region">
+          <div
+            ref={previewContainerRef}
+            className="flex-1 min-h-0 relative overflow-hidden"
+            aria-label="Preview canvas region"
+          >
             <ProgramPreviewSurface
               project={liveProject}
               containerSize={containerSize}
@@ -665,5 +691,5 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         </>
       )}
     </div>
-  );
-});
+  )
+})

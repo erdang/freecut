@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const dissolve: GpuTransitionDefinition = {
   id: 'dissolve',
@@ -47,11 +47,8 @@ fn dissolveFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(min(color.rgb + edgeGlow, vec3f(1.0)), color.a);
 }`,
   packUniforms: (progress, width, height, _direction, properties) => {
-    const edgeSoftness = (properties?.edgeSoftness as number) ?? 3.0;
-    const noiseScale = (properties?.noiseScale as number) ?? 8.0;
-    return new Float32Array([
-      progress, width, height, edgeSoftness,
-      noiseScale, 0, 0, 0,
-    ]);
+    const edgeSoftness = (properties?.edgeSoftness as number) ?? 3.0
+    const noiseScale = (properties?.noiseScale as number) ?? 8.0
+    return new Float32Array([progress, width, height, edgeSoftness, noiseScale, 0, 0, 0])
   },
-};
+}

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Database, Trash2 } from 'lucide-react';
-import { toast } from 'sonner';
-import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Database, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,8 +12,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { createLogger } from '@/shared/logging/logger';
+} from '@/components/ui/alert-dialog'
+import { createLogger } from '@/shared/logging/logger'
 import {
   deleteLegacyIDB,
   getMigrationStatus,
@@ -21,12 +21,12 @@ import {
   migrateFromLegacyIDB,
   type MigrationProgress,
   type MigrationReport,
-} from '@/infrastructure/storage/legacy-idb';
+} from '@/infrastructure/storage/legacy-idb'
 
-const logger = createLogger('LegacyMigrationBanner');
+const logger = createLogger('LegacyMigrationBanner')
 
 interface Props {
-  onMigrated?: () => Promise<void> | void;
+  onMigrated?: () => Promise<void> | void
 }
 
 type State =
@@ -35,7 +35,7 @@ type State =
   | { kind: 'prompt' }
   | { kind: 'running'; progress: MigrationProgress | null }
   | { kind: 'done'; report: MigrationReport }
-  | { kind: 'dismissed' };
+  | { kind: 'dismissed' }
 
 /**
  * Clamp to [0, 100] for the progress bar. A `total` of 0 (no work) maps to
@@ -43,45 +43,45 @@ type State =
  * step runs against an empty legacy DB.
  */
 function computePercent(progress: MigrationProgress | null): number {
-  if (!progress) return 0;
-  if (progress.total === 0) return 100;
-  const pct = (progress.processed / progress.total) * 100;
-  return Math.max(0, Math.min(100, pct));
+  if (!progress) return 0
+  if (progress.total === 0) return 100
+  const pct = (progress.processed / progress.total) * 100
+  return Math.max(0, Math.min(100, pct))
 }
 
 export function LegacyMigrationBanner({ onMigrated }: Props) {
-  const [state, setState] = useState<State>({ kind: 'checking' });
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [state, setState] = useState<State>({ kind: 'checking' })
+  const [confirmDelete, setConfirmDelete] = useState(false)
   // The progress callback fires rapidly (once per write). We keep a ref
   // so React batches updates via a single setState per tick without
   // stale-closure hazards.
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
+    let cancelled = false
+    ;(async () => {
       try {
-        const status = await getMigrationStatus();
+        const status = await getMigrationStatus()
         if (status.migrated) {
-          if (!cancelled) setState({ kind: 'idle' });
-          return;
+          if (!cancelled) setState({ kind: 'idle' })
+          return
         }
-        const has = await hasLegacyData();
-        if (cancelled) return;
-        setState({ kind: has ? 'prompt' : 'idle' });
+        const has = await hasLegacyData()
+        if (cancelled) return
+        setState({ kind: has ? 'prompt' : 'idle' })
       } catch (error) {
-        logger.warn('detect legacy data failed', error);
-        if (!cancelled) setState({ kind: 'idle' });
+        logger.warn('detect legacy data failed', error)
+        if (!cancelled) setState({ kind: 'idle' })
       }
-    })();
+    })()
     return () => {
-      cancelled = true;
-    };
-  }, []);
+      cancelled = true
+    }
+  }, [])
 
   const handleMigrate = useCallback(async () => {
-    setState({ kind: 'running', progress: null });
+    setState({ kind: 'running', progress: null })
     try {
       const report = await migrateFromLegacyIDB({
         onProgress: (progress) => {
@@ -89,52 +89,48 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
           // user has navigated away (component unmounts) the state setter
           // is a no-op; the ref guard avoids a needless state flip if a
           // late progress event arrives after the run resolved.
-          if (stateRef.current.kind !== 'running') return;
-          setState({ kind: 'running', progress });
+          if (stateRef.current.kind !== 'running') return
+          setState({ kind: 'running', progress })
         },
-      });
-      setState({ kind: 'done', report });
-      toast.success(
-        `Migrated ${report.projects} project(s) and ${report.media} media item(s)`,
-      );
-      await onMigrated?.();
+      })
+      setState({ kind: 'done', report })
+      toast.success(`Migrated ${report.projects} project(s) and ${report.media} media item(s)`)
+      await onMigrated?.()
     } catch (error) {
-      logger.error('Migration failed', error);
+      logger.error('Migration failed', error)
       toast.error('Migration failed', {
         description: error instanceof Error ? error.message : 'Unknown error',
-      });
-      setState({ kind: 'prompt' });
+      })
+      setState({ kind: 'prompt' })
     }
-  }, [onMigrated]);
+  }, [onMigrated])
 
   const handleDeleteLegacy = useCallback(async () => {
     try {
-      await deleteLegacyIDB();
-      toast.success('Legacy browser storage cleared');
-      setState({ kind: 'dismissed' });
+      await deleteLegacyIDB()
+      toast.success('Legacy browser storage cleared')
+      setState({ kind: 'dismissed' })
     } catch (error) {
-      logger.error('Failed to delete legacy IDB', error);
+      logger.error('Failed to delete legacy IDB', error)
       toast.error('Failed to clear legacy storage', {
         description: error instanceof Error ? error.message : 'Unknown error',
-      });
+      })
     } finally {
-      setConfirmDelete(false);
+      setConfirmDelete(false)
     }
-  }, []);
+  }, [])
 
   if (state.kind === 'checking' || state.kind === 'idle' || state.kind === 'dismissed') {
-    return null;
+    return null
   }
 
   if (state.kind === 'running') {
-    const { progress } = state;
-    const percent = computePercent(progress);
+    const { progress } = state
+    const percent = computePercent(progress)
     // Show label from progress if available; fall back to a generic line
     // during the brief gap before the first tick arrives.
-    const label = progress?.phaseLabel ?? 'Preparing migration…';
-    const countsLine = progress
-      ? `${progress.processed} of ${progress.total}`
-      : null;
+    const label = progress?.phaseLabel ?? 'Preparing migration…'
+    const countsLine = progress ? `${progress.processed} of ${progress.total}` : null
 
     return (
       <div
@@ -147,8 +143,7 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
           <div className="flex-1 min-w-0">
             <div className="font-medium truncate">{label}</div>
             <div className="text-muted-foreground text-xs mt-0.5">
-              This can take a moment for large libraries. Please don't close
-              this tab.
+              This can take a moment for large libraries. Please don't close this tab.
             </div>
           </div>
           <div className="text-xs font-mono tabular-nums text-muted-foreground shrink-0">
@@ -164,16 +159,14 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
           aria-valuemax={100}
         />
         {countsLine && (
-          <div className="text-xs text-muted-foreground font-mono tabular-nums">
-            {countsLine}
-          </div>
+          <div className="text-xs text-muted-foreground font-mono tabular-nums">{countsLine}</div>
         )}
       </div>
-    );
+    )
   }
 
   if (state.kind === 'done') {
-    const { report } = state;
+    const { report } = state
     return (
       <>
         <div className="panel-bg border border-border rounded-lg p-4 text-sm space-y-2">
@@ -182,7 +175,8 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
             <div className="flex-1">
               <div className="font-medium">Migration complete</div>
               <div className="text-muted-foreground text-xs mt-1">
-                {report.projects} project(s), {report.media} media, {report.thumbnails} thumbnail(s), {report.transcripts} transcript(s)
+                {report.projects} project(s), {report.media} media, {report.thumbnails}{' '}
+                thumbnail(s), {report.transcripts} transcript(s)
                 {report.errors.length > 0 && ` · ${report.errors.length} error(s) logged`}
               </div>
             </div>
@@ -205,10 +199,10 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
             <AlertDialogHeader>
               <AlertDialogTitle>Delete legacy browser storage?</AlertDialogTitle>
               <AlertDialogDescription>
-                This permanently deletes the old IndexedDB database
-                (<span className="font-mono">video-editor-db</span>) from this browser.
-                Your workspace folder is unaffected. Only do this after you've
-                verified the migration succeeded.
+                This permanently deletes the old IndexedDB database (
+                <span className="font-mono">video-editor-db</span>) from this browser. Your
+                workspace folder is unaffected. Only do this after you've verified the migration
+                succeeded.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -220,7 +214,7 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
           </AlertDialogContent>
         </AlertDialog>
       </>
-    );
+    )
   }
 
   // prompt
@@ -243,5 +237,5 @@ export function LegacyMigrationBanner({ onMigrated }: Props) {
         </Button>
       </div>
     </div>
-  );
+  )
 }
