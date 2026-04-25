@@ -236,7 +236,6 @@ export function useGraphInteraction({
 }: UseGraphInteractionOptions): UseGraphInteractionReturn {
   const [dragState, setDragState] = useState<GraphDragState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [isPendingDrag, setIsPendingDrag] = useState(false);
   const [previewValues, setPreviewValues] = useState<Record<string, { frame: number; value: number }> | null>(null);
   const [draggingHandle, setDraggingHandle] = useState<{ keyframeId: string; type: 'in' | 'out' } | null>(null);
   const [previewBezierConfigs, setPreviewBezierConfigs] = useState<Record<string, BezierControlPoints> | null>(null);
@@ -635,7 +634,6 @@ export function useGraphInteraction({
         duplicateOnCommit: !!onDuplicateKeyframes && event.altKey,
       };
 
-      setIsPendingDrag(true);
       setDragState({
         type: 'keyframe',
         keyframeId: point.keyframe.id,
@@ -648,7 +646,7 @@ export function useGraphInteraction({
         initialValue: point.keyframe.value,
       });
     },
-    [disabled, points, selectedKeyframeIds]
+    [disabled, onDuplicateKeyframes, points, selectedKeyframeIds]
   );
 
   // Handle keyframe click (selection only - called when drag threshold not met)
@@ -1038,10 +1036,11 @@ export function useGraphInteraction({
         setPreviewBezierConfigs(nextPreview);
       }
     },
-    [disabled, dragState, isDragging, viewport, padding, maxFrame, clampMinValue, clampMaxValue, graphDimensions, snapEnabled, snapFrameTargets, snapValueTargets, snapThresholds, snapToTargets, clampToAvoidBlockedRanges, constrainFrameDelta]
+    [disabled, dragState, isDragging, viewport, padding, maxFrame, snapEnabled, snapFrameTargets, snapValueTargets, snapThresholds, snapToTargets, clampToAvoidBlockedRanges, constrainFrameDelta]
   );
 
   // Handle pointer up (SVG level)
+  const dragStateType = dragState?.type;
   const handlePointerUp = useCallback(
     (event: React.PointerEvent) => {
       // Release pointer capture
@@ -1056,7 +1055,7 @@ export function useGraphInteraction({
       // If we never exceeded threshold, treat as click (selection only)
       // Selection was already handled in pointerDown, no additional action needed
 
-      if (dragState?.type === 'keyframe' && dragStartRef.current && previewValuesRef.current) {
+      if (dragStateType === 'keyframe' && dragStartRef.current && previewValuesRef.current) {
         if (dragStartRef.current.duplicateOnCommit) {
           const entries = Array.from(dragStartRef.current.initialKeyframeStates.entries())
             .flatMap(([keyframeId, initialState]) => {
@@ -1097,7 +1096,7 @@ export function useGraphInteraction({
       }
 
       // Commit bezier handle preview on pointer up
-      if (dragState?.type === 'bezier-handle' && bezierDragStartRef.current && previewBezierConfigsRef.current) {
+      if (dragStateType === 'bezier-handle' && bezierDragStartRef.current && previewBezierConfigsRef.current) {
         const { handle, startPoint, adjacent } = bezierDragStartRef.current;
         const previews = previewBezierConfigsRef.current;
 
@@ -1148,13 +1147,12 @@ export function useGraphInteraction({
       svgRef.current = null;
       setDragState(null);
       setIsDragging(false);
-      setIsPendingDrag(false);
       setPreviewValues(null);
       setPreviewBezierConfigs(null);
       setDraggingHandle(null);
       setConstraintAxis(null);
     },
-    [isPendingDrag, isDragging]
+    [dragStateType]
   );
 
   // Handle wheel (zoom) - disabled during dragging

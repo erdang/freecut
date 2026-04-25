@@ -262,13 +262,15 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
   const resultUrlRef = useRef<string | null>(null);
   const sessionIdRef = useRef(0);
+  const insertedRef = useRef(inserted);
+  insertedRef.current = inserted;
 
   // Reset state when dialog opens
   useEffect(() => {
     if (isOpen) {
       sessionIdRef.current++;
       // Revoke previous result URL if not inserted
-      if (resultUrlRef.current && !inserted) {
+      if (resultUrlRef.current && !insertedRef.current) {
         URL.revokeObjectURL(resultUrlRef.current);
         resultUrlRef.current = null;
       }

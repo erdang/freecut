@@ -351,7 +351,7 @@ function StrictDecodedVideoFrame({
     };
 
     void run();
-  }, [blobUrl]);
+  }, [blobUrl, item.id, prewarmFps]);
 
   const queueDirectionalPrewarm = useCallback((targetTime: number) => {
     const extractor = extractorRef.current;

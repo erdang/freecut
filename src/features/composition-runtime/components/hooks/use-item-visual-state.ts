@@ -93,8 +93,14 @@ export function useItemVisualState(
   // Get local frame from Sequence context (0-based within this Sequence)
   const sequenceContext = useSequenceContext();
   const frame = sequenceContext?.localFrame ?? 0;
-  const logicalCanvas: CanvasSettings = { width: projectWidth, height: projectHeight, fps };
-  const renderCanvas: CanvasSettings = { width: renderWidth, height: renderHeight, fps };
+  const logicalCanvas = useMemo<CanvasSettings>(
+    () => ({ width: projectWidth, height: projectHeight, fps }),
+    [projectWidth, projectHeight, fps]
+  );
+  const renderCanvas = useMemo<CanvasSettings>(
+    () => ({ width: renderWidth, height: renderHeight, fps }),
+    [renderWidth, renderHeight, fps]
+  );
 
   // Calculate frame relative to item start for keyframe interpolation.
   // When items share a Sequence (e.g., split clips via StableVideoSequence),
