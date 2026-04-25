@@ -53,7 +53,10 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
 
   // Get effects from first selected item (for display)
   // Multi-select shows first item's effects
-  const effects: ItemEffect[] = visualItems[0]?.effects ?? [];
+  const effects = useMemo<ItemEffect[]>(
+    () => visualItems[0]?.effects ?? [],
+    [visualItems],
+  );
   const displayItem = visualItems[0] ?? null;
   const itemKeyframes = useKeyframesStore(
     useShallow(
@@ -231,7 +234,16 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       });
       queueMicrotask(() => clearPreview());
     },
-    [clearPreview, currentFrame, effects, getMappedEffectEntry, keyframesByItemId, updateEffect, visualItems]
+    [
+      applyAutoKeyframeOperations,
+      clearPreview,
+      currentFrame,
+      effects,
+      getMappedEffectEntry,
+      keyframesByItemId,
+      updateEffect,
+      visualItems,
+    ]
   );
 
   // Batch update multiple GPU effect params atomically
@@ -308,7 +320,16 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       });
       queueMicrotask(() => clearPreview());
     },
-    [clearPreview, currentFrame, effects, getMappedEffectEntry, keyframesByItemId, updateEffect, visualItems]
+    [
+      applyAutoKeyframeOperations,
+      clearPreview,
+      currentFrame,
+      effects,
+      getMappedEffectEntry,
+      keyframesByItemId,
+      updateEffect,
+      visualItems,
+    ]
   );
 
   // Live preview for GPU effect parameter

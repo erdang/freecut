@@ -2592,8 +2592,7 @@ export const DopesheetEditor = memo(function DopesheetEditor({
       zoomAroundFrame,
       panFrames,
       effectiveTimelineWidth,
-      viewport.endFrame,
-      viewport.startFrame,
+      frameRange,
     ]
   );
 

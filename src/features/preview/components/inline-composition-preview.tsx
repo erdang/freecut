@@ -96,6 +96,8 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
     Math.max(1, composition?.durationInFrames ?? 1) - 1,
     Math.max(0, seekFrame ?? 0),
   );
+  const clampedSeekFrameRef = useRef(clampedSeekFrame);
+  clampedSeekFrameRef.current = clampedSeekFrame;
 
   const playerSize = useMemo(() => {
     const aspectRatio = compositionWidth / compositionHeight;
@@ -175,7 +177,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
           void renderer.warmGpuPipeline();
         }
 
-        await renderer.preload({ priorityFrame: clampedSeekFrame });
+        await renderer.preload({ priorityFrame: clampedSeekFrameRef.current });
         if (cancelled) return;
 
         setRendererReady(true);

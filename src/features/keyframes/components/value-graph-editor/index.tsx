@@ -30,6 +30,8 @@ import { KeyframeSvgMarquee } from '../keyframe-marquee';
 import type { BlockedFrameRange } from '../../utils/transition-region';
 import { getCombinedGraphValueRange } from './value-range-utils';
 
+const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399'];
+
 interface ValueGraphEditorProps {
   /** Shared time viewport when split mode needs synchronized frame zoom/pan */
   frameViewport?: { startFrame: number; endFrame: number };
@@ -375,9 +377,6 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
     return createPointsForProperty(displayProperty);
   }, [createPointsForProperty, displayProperty]);
 
-  // Overlay curve colors (muted, distinct)
-  const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399'];
-
   // Generate overlay points for additional properties (visual-only curves)
   const overlayPointSets = useMemo((): Array<{ property: AnimatableProperty; points: GraphKeyframePoint[]; color: string }> => {
     if (!overlayProperties || overlayProperties.length === 0) return [];
@@ -391,7 +390,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
         return { property: prop, points, color: OVERLAY_COLORS[index % OVERLAY_COLORS.length]! };
       })
       .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
-  }, [OVERLAY_COLORS, createPointsForProperty, displayProperty, overlayProperties]);
+  }, [createPointsForProperty, displayProperty, overlayProperties]);
   const interactivePoints = useMemo(
     () => [...points, ...overlayPointSets.flatMap((overlaySet) => overlaySet.points)],
     [overlayPointSets, points]
@@ -662,7 +661,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       setFrameInputValue(String(selectedKeyframe.frame));
       setValueInputValue(formatValue(selectedKeyframe.value));
     }
-  }, [selectedKeyframe?.id, selectedKeyframe?.frame, selectedKeyframe?.value, formatValue]);
+  }, [formatValue, selectedKeyframe]);
 
   // Commit frame value
   const commitFrameValue = useCallback(() => {

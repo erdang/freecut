@@ -200,6 +200,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     displayedFrame,
   }), [currentFrame, displayedFrame, isPlaying, previewFrame]);
   const combinedTracks = useMemo(() => {
+    void trackSnapshotVersion;
     return tracks
       .filter((track) => !track.isGroup)
       .map((track) => ({
@@ -259,6 +260,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
   const playbackGain = isPlaying && !muted ? effectiveMasterGain * monitorVolume : 0;
 
   const preloadSources = useMemo(() => {
+    void liveOverrideVersion;
     return resolveCompiledAudioMeterSources({
       graph: compiledGraph,
       frame: effectiveFrame,
@@ -288,7 +290,11 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     return [...new Set(preloadSources.map((source) => source.mediaId))].sort();
   }, [preloadSources]);
   const activeMediaIdsKey = activeMediaIds.join('|');
-  const stableActiveMediaIds = useMemo(() => activeMediaIds, [activeMediaIdsKey]);
+  const stableActiveMediaIdsRef = useRef<{ key: string; ids: string[] }>({ key: '', ids: [] });
+  if (stableActiveMediaIdsRef.current.key !== activeMediaIdsKey) {
+    stableActiveMediaIdsRef.current = { key: activeMediaIdsKey, ids: activeMediaIds };
+  }
+  const stableActiveMediaIds = stableActiveMediaIdsRef.current.ids;
 
   useEffect(() => {
     if (stableActiveMediaIds.length === 0) {
@@ -443,12 +449,13 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
 
   useEffect(() => {
     applyMeterVisuals(0, 0, 0, 0);
+    const meterAnimation = meterAnimationRef.current;
     return () => {
       if (animationFrameRef.current !== null) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = null;
       }
-      const anim = meterAnimationRef.current;
+      const anim = meterAnimation;
       anim.left.displayPercent = 0; anim.left.peakPercent = 0; anim.left.peakHoldSeconds = 0;
       anim.right.displayPercent = 0; anim.right.peakPercent = 0; anim.right.peakHoldSeconds = 0;
       anim.lastTimestamp = 0;

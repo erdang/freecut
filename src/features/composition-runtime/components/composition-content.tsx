@@ -35,6 +35,9 @@ import { getLinkedVideoIdsWithAudio, hasLinkedAudioCompanion } from '@/shared/ut
 import { resolveProxyUrl } from '@/features/composition-runtime/deps/media-library';
 
 const EMPTY_AUDIO_EQ_STAGES: ResolvedAudioEqSettings[] = [];
+type TrackRenderState = ReturnType<typeof resolveTrackRenderState>;
+const EMPTY_VISIBLE_TRACKS_BY_ORDER_DESC: TrackRenderState['visibleTracksByOrderDesc'] = [];
+const EMPTY_VISIBLE_TRACKS: TrackRenderState['visibleTracks'] = [];
 
 type CompositionWrapperItem = CompositionItemType | (AudioItem & { compositionId: string });
 
@@ -187,6 +190,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
 
   // Resolve media URLs for sub-comp items so they can render in preview
   const resolvedItems = useMemo(() => {
+    void blobUrlVersion;
     if (!subComp) return [];
     return subComp.items
       .map((subItem) => resolveSubCompItem(subItem, nestedMediaResolutionMode))
@@ -299,7 +303,8 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     () => subComp ? resolveTrackRenderState(subComp.tracks) : null,
     [subComp]
   );
-  const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? [];
+  const sortedTracks = trackRenderState?.visibleTracksByOrderDesc ?? EMPTY_VISIBLE_TRACKS_BY_ORDER_DESC;
+  const visibleTracks = trackRenderState?.visibleTracks ?? EMPTY_VISIBLE_TRACKS;
   const maxTrackOrder = useMemo(
     () => sortedTracks.reduce((max, track) => Math.max(max, track.order ?? 0), 0),
     [sortedTracks]
@@ -396,7 +401,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     }
     const canvas = { width: subComp.width, height: subComp.height, fps: subComp.fps };
     const keyframesById = new Map((subComp.keyframes ?? []).map((kf) => [kf.itemId, kf]));
-    const activeMasks = (trackRenderState?.visibleTracks ?? []).flatMap((track) => (
+    const activeMasks = visibleTracks.flatMap((track) => (
       resolvedItems
         .filter((subItem): subItem is ShapeItem => (
           subItem.trackId === track.id
@@ -420,7 +425,7 @@ export const CompositionContent = React.memo<CompositionContentProps>(({ item, p
     const stableMaskInfos = reuseStableMaskInfos(previousMaskInfosRef.current, nextMaskInfos);
     previousMaskInfosRef.current = stableMaskInfos;
     return stableMaskInfos;
-  }, [resolvedItems, trackRenderState?.visibleTracks, subComp?.width, subComp?.height, subComp?.fps, subComp?.keyframes, subCompFrame]);
+  }, [resolvedItems, subComp, subCompFrame, visibleTracks]);
 
   const renderVideoItem = useCallback((videoItem: StableVideoSequenceItem) => (
     <AbsoluteFill

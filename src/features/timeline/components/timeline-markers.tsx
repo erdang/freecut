@@ -386,6 +386,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
   // Track viewport and scroll
   const scrollLeftRef = useRef(0);
   const rafIdRef = useRef<number | null>(null);
+  const syncRulerScrollRef = useRef<(() => void) | null>(null);
 
   // Unified scrubbing refs (scroll + playhead in same RAF frame)
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -413,7 +414,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
         if (rafIdRef.current === null) {
           rafIdRef.current = requestAnimationFrame(() => {
             rafIdRef.current = null;
-            syncRulerScroll();
+            syncRulerScrollRef.current?.();
           });
         }
       }
@@ -615,6 +616,7 @@ export const TimelineMarkers = memo(function TimelineMarkers({ duration, width }
       syncLabels(labelsContainer, labelPoolRef.current, sl, vw, qPPS, fpsRef.current);
     }
   }, []);
+  syncRulerScrollRef.current = syncRulerScroll;
 
   // Trigger sync on config changes (zoom, fps, width, height).
   // Labels update in-place (position + text) — no clear needed.

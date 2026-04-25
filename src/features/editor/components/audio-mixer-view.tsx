@@ -266,7 +266,7 @@ const ChannelFader = memo(function ChannelFader({
     // and bus meters update in real-time during drag.
     setLiveTrackVolumeOverride(trackId, db);
     onMeterPreviewChange?.(db);
-  }, [dbReadoutRef, itemIds, onMeterPreviewChange, trackId, volumeDb]);
+  }, [dbReadoutRef, itemIds, onMeterPreviewChange, trackId]);
 
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -280,7 +280,7 @@ const ChannelFader = memo(function ChannelFader({
       const adjustedPercent = Math.max(0, Math.min(100, percent + dragOffsetPercentRef.current));
       applyDragValue(Math.round(faderPercentToDb(adjustedPercent) * 10) / 10);
     },
-    [applyDragValue, dragOffsetPercentFromPointerEvent, percentFromPointerEvent],
+    [applyDragValue, dragOffsetPercentFromPointerEvent, itemIds, percentFromPointerEvent],
   );
 
   const handlePointerMove = useCallback(
