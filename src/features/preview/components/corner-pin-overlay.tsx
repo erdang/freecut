@@ -359,7 +359,7 @@ export const CornerPinOverlay = memo(function CornerPinOverlay({
         });
       });
     },
-    [],
+    [cornerPinTargetRect],
   );
 
   // Resize canvas to match player size (with padding), then redraw

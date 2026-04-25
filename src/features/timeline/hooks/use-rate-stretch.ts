@@ -258,7 +258,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
   // Get fresh item from store to ensure we have latest values after previous operations
   const getItemFromStore = useCallback(() => {
     return useTimelineStore.getState().items.find((i) => i.id === item.id) ?? item;
-  }, [item.id]);
+  }, [item]);
 
   // Use snap calculator - pass item.id to exclude self from magnetic snaps
   // Only use magnetic snap targets (item edges), not grid lines
@@ -617,7 +617,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
         constraintLabel: null,
       });
     },
-    [trackLocked, getItemFromStore, item.id, setActiveSnapTarget, setDragState]
+    [trackLocked, getItemFromStore, item.id, fps, setActiveSnapTarget, setDragState]
   );
 
   // Calculate visual feedback during stretch
@@ -665,7 +665,7 @@ export function useRateStretch(item: TimelineItem, timelineDuration: number, tra
       duration: newDuration,
       speed: previewSpeed,
     };
-  }, [stretchState]);
+  }, [stretchState, fps]);
 
   return {
     isStretching: stretchState.isStretching,

@@ -149,8 +149,8 @@ export const TiledCanvas = memo(function TiledCanvas({
 
   // Cleanup on unmount
   useEffect(() => {
+    const canvasPool = canvasPoolRef.current;
     return () => {
-      const canvasPool = canvasPoolRef.current;
       for (const canvas of canvasPool.values()) {
         canvas.remove();
       }

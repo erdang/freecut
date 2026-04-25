@@ -177,17 +177,16 @@ export function useDragVisualState({
   }, [dragParticipation, ghostRef, isDragging, item.id, transformRef]);
 
   useEffect(() => {
-    if (wasDraggingRef.current && !isDragging && transformRef.current) {
-      transformRef.current.style.transition = 'none';
+    const transform = transformRef.current;
+    if (wasDraggingRef.current && !isDragging && transform) {
+      transform.style.transition = 'none';
       requestAnimationFrame(() => {
-        if (transformRef.current) {
-          transformRef.current.style.transition = '';
-        }
+        transform.style.transition = '';
       });
     }
 
     wasDraggingRef.current = isDragging;
-  }, [isDragging]);
+  }, [isDragging, transformRef]);
 
   useEffect(() => {
     return () => {

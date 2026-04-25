@@ -234,7 +234,7 @@ export const FloatingPanel = memo(function FloatingPanel({
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [minHeight, minWidth]);
+  }, [autoHeight, autoWidth, minHeight, minWidth]);
 
   const handleTitlePointerDown = useCallback((e: React.PointerEvent) => {
     e.preventDefault();

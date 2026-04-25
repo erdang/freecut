@@ -115,7 +115,7 @@ export function TransformGizmo({
 
   const transformOrigin = useMemo(() => {
     return getScreenTransformOrigin(currentTransform, coordParams);
-  }, [coordParams, currentTransform.anchorX, currentTransform.anchorY, currentTransform.height, currentTransform.width]);
+  }, [coordParams, currentTransform]);
 
   // Helper to convert screen position to canvas position
   const toCanvasPoint = useCallback(
@@ -218,7 +218,7 @@ export function TransformGizmo({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [item.id, currentTransform, toCanvasPoint, startScale, updateInteraction, endInteraction, clearInteraction, onTransformStart, onTransformEnd, transformChanged, strokeWidth]
+    [item.id, item.type, item.transform?.aspectRatioLocked, currentTransform, toCanvasPoint, startScale, updateInteraction, endInteraction, clearInteraction, onTransformStart, onTransformEnd, transformChanged, strokeWidth]
   );
 
   const handleRotateStart = useCallback(

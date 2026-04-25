@@ -331,7 +331,7 @@ export function GroupGizmo({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, setPreviewTransforms, setSnapLines, onItemClick, findItemAtPoint]
+    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, setPreviewTransforms, setSnapLines, onItemClick, findItemAtPoint, scale]
   );
 
   // Start scale interaction
@@ -428,7 +428,7 @@ export function GroupGizmo({
       window.addEventListener('mousemove', handleMouseMove);
       window.addEventListener('mouseup', handleMouseUp);
     },
-    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, groupRotation, setPreviewTransforms, setSnapLines]
+    [items, itemTransforms, projectSize, toCanvasPoint, onTransformStart, onTransformEnd, transformsChanged, groupRotation, setPreviewTransforms, setSnapLines, scale]
   );
 
   // Start rotate interaction

@@ -171,7 +171,7 @@ export const ClipWaveform = memo(function ClipWaveform({
     return () => {
       mounted = false;
     };
-  }, [mediaId, isVisible, blobUrlVersion]);
+  }, [mediaId, isVisible, blobUrlVersion, hasStartedLoadingRef, setBlobUrl]);
 
   // Use waveform hook - enabled once we have blobUrl (independent of visibility after that)
   const { peaks, duration, sampleRate, stereo, maxPeak, loadedSamples, isLoading, error } = useWaveform({

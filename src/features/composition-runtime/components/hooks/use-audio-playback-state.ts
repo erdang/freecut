@@ -124,8 +124,7 @@ export function useAudioPlaybackState({
       audioPitchCents,
       audioPitchSemitones,
       audioPitchShiftSemitones,
-      preview?.audioPitchCents,
-      preview?.audioPitchSemitones,
+      preview,
     ],
   );
 

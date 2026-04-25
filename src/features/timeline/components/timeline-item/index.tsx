@@ -1527,7 +1527,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   } = useTimelineItemDropHandlers({
     item,
     trackLocked,
-    draggedTransition,
     addEffects,
   });
 

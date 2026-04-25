@@ -450,7 +450,7 @@ export const ClipFilmstrip = memo(function ClipFilmstrip({
     return () => {
       mounted = false;
     };
-  }, [mediaId, isVisible, proxyBlobUrl, blobUrlVersion, setBlobUrl]);
+  }, [mediaId, isVisible, proxyBlobUrl, blobUrlVersion, hasStartedLoadingRef, setBlobUrl]);
 
   // Use filmstrip hook
   const { frames, isLoading, isComplete, error } = useFilmstrip({

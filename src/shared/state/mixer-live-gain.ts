@@ -6,7 +6,7 @@
  * On fader release, overrides are cleared and the committed store value takes over.
  */
 
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 
 const DEFAULT_LAYER_ID = 'default';
 const overridesByLayerId = new Map<string, Map<string, number>>();
@@ -176,15 +176,19 @@ function getMixerLiveGainProduct(itemIds: readonly string[]): number {
 
 export function useMixerLiveGainProduct(itemIds: readonly string[]): number {
   const itemIdsKey = itemIds.join('\u0000');
+  const stableItemIds = useMemo(
+    () => (itemIdsKey.length > 0 ? itemIdsKey.split('\u0000') : []),
+    [itemIdsKey],
+  );
   const subscribeToItems = useCallback((callback: () => void) => {
-    const unsubscribers = itemIds.map((itemId) => subscribe(itemId, callback));
+    const unsubscribers = stableItemIds.map((itemId) => subscribe(itemId, callback));
     return () => {
       for (const unsubscribe of unsubscribers) {
         unsubscribe();
       }
     };
-  }, [itemIdsKey]);
-  const getSnapshot = useCallback(() => getMixerLiveGainProduct(itemIds), [itemIdsKey]);
+  }, [stableItemIds]);
+  const getSnapshot = useCallback(() => getMixerLiveGainProduct(stableItemIds), [stableItemIds]);
   return useSyncExternalStore(subscribeToItems, getSnapshot, getSnapshot);
 }
 

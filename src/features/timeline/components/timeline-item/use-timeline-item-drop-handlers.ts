@@ -26,7 +26,6 @@ type AddEffects = ReturnType<typeof useTimelineStore.getState>['addEffects'];
 interface UseTimelineItemDropHandlersParams {
   item: TimelineItemType;
   trackLocked: boolean;
-  draggedTransition: DraggedTransitionDescriptor | null;
   addEffects: AddEffects;
 }
 
@@ -59,7 +58,6 @@ function readDraggedTransitionDescriptor(event: React.DragEvent): DraggedTransit
 export function useTimelineItemDropHandlers({
   item,
   trackLocked,
-  draggedTransition,
   addEffects,
 }: UseTimelineItemDropHandlersParams) {
   const handleTransitionCutDragOver = useCallback((edge: 'left' | 'right') => (e: React.DragEvent<HTMLDivElement>) => {
@@ -116,7 +114,7 @@ export function useTimelineItemDropHandlers({
       durationInFrames: target.suggestedDurationInFrames,
       alignment: target.alignment,
     });
-  }, [draggedTransition, item.id, trackLocked]);
+  }, [item.id, trackLocked]);
 
   const handleTransitionCutDragLeave = useCallback(() => {
     const dragState = useTransitionDragStore.getState();

@@ -130,7 +130,7 @@ export const ImageFilmstrip = memo(function ImageFilmstrip({
       .then((url) => { if (mounted && url) setBlobUrl(url); })
       .catch((error) => logger.error('Failed to load media blob URL:', error));
     return () => { mounted = false; };
-  }, [mediaId, isVisible, blobUrlVersion, setBlobUrl]);
+  }, [mediaId, isVisible, blobUrlVersion, hasStartedLoadingRef, setBlobUrl]);
 
   const { frames, durations, totalDuration } = useGifFrames({
     mediaId,

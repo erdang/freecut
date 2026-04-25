@@ -29,7 +29,7 @@ export function SelectableItem({
   const [isHovered, setIsHovered] = useState(false);
   const transformOrigin = useMemo(() => {
     return getScreenTransformOrigin(transform, coordParams);
-  }, [coordParams, transform.anchorX, transform.anchorY, transform.height, transform.width]);
+  }, [coordParams, transform]);
 
   // Convert to screen bounds for positioning, expanding for stroke width on shapes
   const screenBounds = useMemo(() => {

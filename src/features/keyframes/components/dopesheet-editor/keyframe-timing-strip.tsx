@@ -285,7 +285,15 @@ export function KeyframeTimingStrip({
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
     };
-  }, [metrics.contentFrameMax, metrics.usableTrackWidth, onSlideChange, onSlideEnd, onSlideStart]);
+  }, [
+    metrics.contentFrameMax,
+    metrics.usableTrackWidth,
+    onSelectionChange,
+    onSlideChange,
+    onSlideEnd,
+    onSlideStart,
+    updateMarqueeSelection,
+  ]);
 
   return (
     <div className="h-4 border-t border-border/60 bg-background/90 px-2 py-0.5">
