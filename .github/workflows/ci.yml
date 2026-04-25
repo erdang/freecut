@@ -36,13 +36,13 @@ jobs:
         run: vp run check:deps-wrapper-health
 
       - name: Generate feature-edge report
-        run: vp run report:feature-edges:json --silent > feature-edges-report.json
+        run: node scripts/report-feature-edges.mjs --json > feature-edges-report.json
 
       - name: Generate deps-wrapper health report
-        run: vp run report:deps-wrapper-health:json --silent > deps-wrapper-health-report.json
+        run: node scripts/check-deps-wrapper-health.mjs --json > deps-wrapper-health-report.json
 
       - name: Check feature-edge budgets
-        run: vp run check:edge-budgets -- --input feature-edges-report.json
+        run: node scripts/check-feature-edge-budgets.mjs --input feature-edges-report.json
 
       - name: Upload feature-edge report
         uses: actions/upload-artifact@v4

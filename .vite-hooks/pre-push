@@ -20,8 +20,8 @@ vp run check:deps-wrapper-health --silent
 echo "  [5/6] check:edge-budgets"
 EDGE_REPORT=$(mktemp)
 trap 'rm -f "$EDGE_REPORT"' EXIT
-vp run report:feature-edges:json --silent > "$EDGE_REPORT"
-vp run check:edge-budgets --silent -- --input "$EDGE_REPORT"
+node scripts/report-feature-edges.mjs --json > "$EDGE_REPORT"
+node scripts/check-feature-edge-budgets.mjs --input "$EDGE_REPORT"
 
 echo "  [6/6] check"
 vp run check --silent
