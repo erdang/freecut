@@ -1,24 +1,30 @@
-import { memo } from 'react';
-import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { ItemEffect, GpuEffect } from '@/types/effects';
-import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects';
-import { KeyframeToggle } from '@/features/effects/deps/keyframes-contract';
-import type { AnimatableProperty } from '@/types/keyframe';
-import { ColorPicker, PropertyRow, SliderInput } from '@/shared/ui/property-controls';
+import { memo } from 'react'
+import { Eye, EyeOff, Trash2, RotateCcw } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import type { ItemEffect, GpuEffect } from '@/types/effects'
+import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects'
+import { KeyframeToggle } from '@/features/effects/deps/keyframes-contract'
+import type { AnimatableProperty } from '@/types/keyframe'
+import { ColorPicker, PropertyRow, SliderInput } from '@/shared/ui/property-controls'
 
 interface GpuEffectPanelProps {
-  itemIds: string[];
-  effect: ItemEffect;
-  gpuEffect: GpuEffect;
-  definition: GpuEffectDefinition;
-  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null;
-  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
-  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void;
-  onReset: (effectId: string) => void;
-  onToggle: (effectId: string) => void;
-  onRemove: (effectId: string) => void;
+  itemIds: string[]
+  effect: ItemEffect
+  gpuEffect: GpuEffect
+  definition: GpuEffectDefinition
+  getKeyframeProperty: (effectId: string, paramKey: string) => AnimatableProperty | null
+  onParamChange: (effectId: string, paramKey: string, value: number | boolean | string) => void
+  onParamLiveChange: (effectId: string, paramKey: string, value: number | boolean | string) => void
+  onReset: (effectId: string) => void
+  onToggle: (effectId: string) => void
+  onRemove: (effectId: string) => void
 }
 
 /**
@@ -32,12 +38,12 @@ function ActionButtons({
   onToggle,
   onRemove,
 }: {
-  effectId: string;
-  enabled: boolean;
-  isDefault: boolean;
-  onReset: (id: string) => void;
-  onToggle: (id: string) => void;
-  onRemove: (id: string) => void;
+  effectId: string
+  enabled: boolean
+  isDefault: boolean
+  onReset: (id: string) => void
+  onToggle: (id: string) => void
+  onRemove: (id: string) => void
 }) {
   return (
     <>
@@ -74,7 +80,7 @@ function ActionButtons({
         <Trash2 className="w-3 h-3" />
       </Button>
     </>
-  );
+  )
 }
 
 export const GpuEffectPanel = memo(function GpuEffectPanel({
@@ -89,16 +95,14 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
   onToggle,
   onRemove,
 }: GpuEffectPanelProps) {
-  const paramEntries = Object.entries(definition.params);
-  const isDefault = paramEntries.every(
-    ([key, param]) => gpuEffect.params[key] === param.default
-  );
+  const paramEntries = Object.entries(definition.params)
+  const isDefault = paramEntries.every(([key, param]) => gpuEffect.params[key] === param.default)
 
   // Single number param: compact single-row layout matching CSS filter panels
   if (paramEntries.length === 1 && paramEntries[0]![1].type === 'number') {
-    const [key, param] = paramEntries[0]!;
-    const currentValue = (gpuEffect.params[key] ?? param.default) as number;
-    const keyframeProperty = getKeyframeProperty(effect.id, key);
+    const [key, param] = paramEntries[0]!
+    const currentValue = (gpuEffect.params[key] ?? param.default) as number
+    const keyframeProperty = getKeyframeProperty(effect.id, key)
     return (
       <PropertyRow label={definition.name}>
         <div className="flex items-center gap-1 min-w-0 w-full">
@@ -130,7 +134,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
           />
         </div>
       </PropertyRow>
-    );
+    )
   }
 
   // Zero params: header-only row with action buttons
@@ -148,7 +152,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
           />
         </div>
       </PropertyRow>
-    );
+    )
   }
 
   // Multi-param: header row with buttons, then one row per param
@@ -168,13 +172,13 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
       </PropertyRow>
 
       {paramEntries.map(([key, param]) => {
-        const currentValue = gpuEffect.params[key] ?? param.default;
-        const paramVisible = param.visibleWhen?.(gpuEffect.params) ?? true;
-        if (!paramVisible) return null;
-        const paramEnabled = effect.enabled;
+        const currentValue = gpuEffect.params[key] ?? param.default
+        const paramVisible = param.visibleWhen?.(gpuEffect.params) ?? true
+        if (!paramVisible) return null
+        const paramEnabled = effect.enabled
 
         if (param.type === 'number') {
-          const keyframeProperty = getKeyframeProperty(effect.id, key);
+          const keyframeProperty = getKeyframeProperty(effect.id, key)
           return (
             <PropertyRow
               key={key}
@@ -200,7 +204,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 />
               ) : null}
             </PropertyRow>
-          );
+          )
         }
 
         if (param.type === 'boolean') {
@@ -220,7 +224,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 {currentValue ? 'On' : 'Off'}
               </Button>
             </PropertyRow>
-          );
+          )
         }
 
         if (param.type === 'select' && param.options) {
@@ -247,7 +251,7 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 </SelectContent>
               </Select>
             </PropertyRow>
-          );
+          )
         }
 
         if (param.type === 'color') {
@@ -264,11 +268,11 @@ export const GpuEffectPanel = memo(function GpuEffectPanel({
                 disabled={!paramEnabled}
               />
             </PropertyRow>
-          );
+          )
         }
 
-        return null;
+        return null
       })}
     </div>
-  );
-});
+  )
+})

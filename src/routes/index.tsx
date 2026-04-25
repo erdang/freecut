@@ -1,30 +1,33 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { Layers, ArrowRight, Play, FolderOpen, Download, Star, ExternalLink } from 'lucide-react';
-import { FreeCutLogo } from '@/components/brand/freecut-logo';
-import { Button } from '@/components/ui/button';
+import { createFileRoute, Link } from '@tanstack/react-router'
+import { Layers, ArrowRight, Play, FolderOpen, Download, Star, ExternalLink } from 'lucide-react'
+import { FreeCutLogo } from '@/components/brand/freecut-logo'
+import { Button } from '@/components/ui/button'
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from '@/components/ui/accordion';
+} from '@/components/ui/accordion'
 
 export const Route = createFileRoute('/')({
   component: LandingPage,
-});
+})
 
 const faqItems = [
   {
     question: 'Is FreeCut really free?',
-    answer: 'Yes, FreeCut is completely free and open source under the MIT license. There are no hidden fees, subscriptions, or watermarks.',
+    answer:
+      'Yes, FreeCut is completely free and open source under the MIT license. There are no hidden fees, subscriptions, or watermarks.',
   },
   {
     question: 'Do I need to install anything?',
-    answer: 'No installation required. FreeCut runs entirely in your browser. Just open the website and start editing.',
+    answer:
+      'No installation required. FreeCut runs entirely in your browser. Just open the website and start editing.',
   },
   {
     question: 'Where are my videos stored?',
-    answer: 'Your videos and projects are stored locally in your browser or referenced to your local files using modern storage APIs.',
+    answer:
+      'Your videos and projects are stored locally in your browser or referenced to your local files using modern storage APIs.',
   },
   {
     id: 'browser-support',
@@ -32,13 +35,13 @@ const faqItems = [
     answer: (
       <>
         <p className="mb-3">
-          FreeCut currently works best in Chrome or Edge 113+. It relies on
-          modern browser APIs like WebGPU, WebCodecs, OPFS, and File System
-          Access, so the full workflow is currently Chromium-first.
+          FreeCut currently works best in Chrome or Edge 113+. It relies on modern browser APIs like
+          WebGPU, WebCodecs, OPFS, and File System Access, so the full workflow is currently
+          Chromium-first.
         </p>
         <p>
-          <strong>Brave users:</strong> The File System Access API is disabled by
-          default. To enable it, navigate to{' '}
+          <strong>Brave users:</strong> The File System Access API is disabled by default. To enable
+          it, navigate to{' '}
           <code className="rounded bg-muted px-1 py-0.5 text-xs">
             brave://flags/#file-system-access-api
           </code>
@@ -49,11 +52,13 @@ const faqItems = [
   },
   {
     question: 'What export formats are supported?',
-    answer: 'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV (PCM). The current export UI exposes H.264, H.265, VP8, VP9, and AV1 with low, medium, high, and ultra quality presets.',
+    answer:
+      'Video: MP4, MOV, WebM, MKV. Audio: MP3, AAC, WAV (PCM). The current export UI exposes H.264, H.265, VP8, VP9, and AV1 with low, medium, high, and ultra quality presets.',
   },
   {
     question: 'Future Improvements',
-    answer: 'The current focus is beta hardening: align product docs with shipped behavior, tighten accessibility and test coverage, and make defaults like FPS, snap, preview quality, and export settings flow through the real editor.',
+    answer:
+      'The current focus is beta hardening: align product docs with shipped behavior, tighten accessibility and test coverage, and make defaults like FPS, snap, preview quality, and export settings flow through the real editor.',
   },
   {
     question: 'Special shoutout',
@@ -61,10 +66,16 @@ const faqItems = [
       <>
         <p className="mb-3">
           A huge thank you to{' '}
-          <a href="https://mediabunny.dev/" target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80">
+          <a
+            href="https://mediabunny.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-primary underline hover:text-primary/80"
+          >
             Mediabunny
           </a>{' '}
-          for making browser-based video encoding easy. This project wouldn't exist without their amazing work!
+          for making browser-based video encoding easy. This project wouldn't exist without their
+          amazing work!
         </p>
         <p className="mb-2 font-medium text-foreground">Built with:</p>
         <ul className="list-disc pl-5 space-y-1">
@@ -76,7 +87,7 @@ const faqItems = [
       </>
     ),
   },
-];
+]
 
 const showcaseItems = [
   {
@@ -115,7 +126,7 @@ const showcaseItems = [
     className: '',
     aspectClass: 'aspect-video',
   },
-];
+]
 
 function LandingPage() {
   return (
@@ -136,17 +147,16 @@ function LandingPage() {
           </div>
 
           <h1 className="mb-4 max-w-2xl text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-            Edit videos.{' '}
-            <span className="text-primary">In your browser.</span>
+            Edit videos. <span className="text-primary">In your browser.</span>
           </h1>
 
           <p className="mb-6 max-w-lg text-lg text-muted-foreground sm:text-xl">
-            Professional video editing, zero installation.
-            Create stunning content in your browser.
+            Professional video editing, zero installation. Create stunning content in your browser.
           </p>
 
           <p className="mb-6 max-w-lg text-sm text-amber-600 dark:text-amber-500">
-            ⚠️ DISCLAIMER: This is very much in beta and might be buggy. I hope you still enjoy the experience.  
+            ⚠️ DISCLAIMER: This is very much in beta and might be buggy. I hope you still enjoy the
+            experience.
           </p>
 
           <div className="flex flex-col items-center gap-4 sm:flex-row">
@@ -239,9 +249,7 @@ function LandingPage() {
       <section className="border-t border-border px-6 py-20">
         <div className="mx-auto max-w-4xl">
           <div className="mb-10 text-center">
-            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-              See it in Action
-            </h2>
+            <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">See it in Action</h2>
             <p className="mx-auto max-w-2xl text-muted-foreground">
               Watch a quick demo of FreeCut's editing capabilities.
             </p>
@@ -281,20 +289,14 @@ function LandingPage() {
             <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
               Frequently Asked Questions
             </h2>
-            <p className="text-muted-foreground">
-              Everything you need to know about FreeCut.
-            </p>
+            <p className="text-muted-foreground">Everything you need to know about FreeCut.</p>
           </div>
 
           <Accordion type="single" collapsible className="w-full">
             {faqItems.map((item, index) => (
               <AccordionItem key={index} value={`item-${index}`} id={item.id}>
-                <AccordionTrigger className="text-left">
-                  {item.question}
-                </AccordionTrigger>
-                <AccordionContent className="text-muted-foreground">
-                  {item.answer}
-                </AccordionContent>
+                <AccordionTrigger className="text-left">{item.question}</AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">{item.answer}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
@@ -304,9 +306,7 @@ function LandingPage() {
       {/* CTA Footer Section */}
       <section className="border-t border-border px-6 py-20">
         <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-          <h2 className="mb-4 text-2xl font-bold sm:text-3xl">
-            Ready to start editing?
-          </h2>
+          <h2 className="mb-4 text-2xl font-bold sm:text-3xl">Ready to start editing?</h2>
           <p className="mb-8 text-muted-foreground">
             Jump in and create your first project in seconds.
           </p>
@@ -339,5 +339,5 @@ function LandingPage() {
         </div>
       </footer>
     </div>
-  );
+  )
 }

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Button } from '@/components/ui/button'
 import {
   Dialog,
   DialogContent,
@@ -7,93 +7,101 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
-import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
-import { useProjectStore } from '@/features/editor/deps/projects';
-import { useTimelineSettingsStore, useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { toast } from 'sonner';
-import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog';
+} from '@/components/ui/dialog'
+import { useMediaLibraryStore } from '@/features/editor/deps/media-library'
+import { useProjectStore } from '@/features/editor/deps/projects'
+import { useTimelineSettingsStore, useTimelineStore } from '@/features/editor/deps/timeline-store'
+import { toast } from 'sonner'
+import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog'
 import {
   getProjectMediaMatchSuggestion,
   isProjectMatchableVideo,
-} from '../utils/project-media-match';
-import { commitProjectMetadataChange } from '../utils/project-metadata-history';
+} from '../utils/project-media-match'
+import { commitProjectMetadataChange } from '../utils/project-metadata-history'
 
 interface ProjectMediaMatchDialogProps {
-  projectId: string;
+  projectId: string
 }
 
 export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogProps) {
-  const mediaItems = useMediaLibraryStore((state) => state.mediaItems);
-  const mediaLoading = useMediaLibraryStore((state) => state.isLoading);
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const updateProject = useProjectStore((state) => state.updateProject);
-  const markDirty = useTimelineStore((state) => state.markDirty);
-  const setFps = useTimelineSettingsStore((state) => state.setFps);
-  const open = useProjectMediaMatchDialogStore((state) => state.isOpen);
-  const pendingProjectId = useProjectMediaMatchDialogStore((state) => state.projectId);
-  const pendingCandidate = useProjectMediaMatchDialogStore((state) => state.candidate);
-  const resolveProjectMediaMatch = useProjectMediaMatchDialogStore((state) => state.resolveProjectMediaMatch);
-  const requestProjectMediaMatch = useProjectMediaMatchDialogStore((state) => state.requestProjectMediaMatch);
-  const markProjectMediaMatchHandled = useProjectMediaMatchDialogStore((state) => state.markProjectMediaMatchHandled);
-  const hasHandledProjectMediaMatch = useProjectMediaMatchDialogStore((state) => state.hasHandledProjectMediaMatch);
+  const mediaItems = useMediaLibraryStore((state) => state.mediaItems)
+  const mediaLoading = useMediaLibraryStore((state) => state.isLoading)
+  const currentProject = useProjectStore((state) => state.currentProject)
+  const updateProject = useProjectStore((state) => state.updateProject)
+  const markDirty = useTimelineStore((state) => state.markDirty)
+  const setFps = useTimelineSettingsStore((state) => state.setFps)
+  const open = useProjectMediaMatchDialogStore((state) => state.isOpen)
+  const pendingProjectId = useProjectMediaMatchDialogStore((state) => state.projectId)
+  const pendingCandidate = useProjectMediaMatchDialogStore((state) => state.candidate)
+  const resolveProjectMediaMatch = useProjectMediaMatchDialogStore(
+    (state) => state.resolveProjectMediaMatch,
+  )
+  const requestProjectMediaMatch = useProjectMediaMatchDialogStore(
+    (state) => state.requestProjectMediaMatch,
+  )
+  const markProjectMediaMatchHandled = useProjectMediaMatchDialogStore(
+    (state) => state.markProjectMediaMatchHandled,
+  )
+  const hasHandledProjectMediaMatch = useProjectMediaMatchDialogStore(
+    (state) => state.hasHandledProjectMediaMatch,
+  )
 
-  const [isApplying, setIsApplying] = useState(false);
-  const initializedRef = useRef(false);
-  const seenVideoIdsRef = useRef<Set<string>>(new Set());
-  const awaitingAutoPromptRef = useRef(false);
+  const [isApplying, setIsApplying] = useState(false)
+  const initializedRef = useRef(false)
+  const seenVideoIdsRef = useRef<Set<string>>(new Set())
+  const awaitingAutoPromptRef = useRef(false)
 
   useEffect(() => {
-    initializedRef.current = false;
-    awaitingAutoPromptRef.current = false;
-    seenVideoIdsRef.current = new Set();
-    setIsApplying(false);
-  }, [projectId]);
+    initializedRef.current = false
+    awaitingAutoPromptRef.current = false
+    seenVideoIdsRef.current = new Set()
+    setIsApplying(false)
+  }, [projectId])
 
   useEffect(() => {
     if (mediaLoading || !currentProject) {
-      return;
+      return
     }
 
-    const videoItems = mediaItems.filter(isProjectMatchableVideo);
+    const videoItems = mediaItems.filter(isProjectMatchableVideo)
 
     if (!initializedRef.current) {
-      initializedRef.current = true;
-      seenVideoIdsRef.current = new Set(videoItems.map((item) => item.id));
+      initializedRef.current = true
+      seenVideoIdsRef.current = new Set(videoItems.map((item) => item.id))
       if (videoItems.length > 0) {
-        markProjectMediaMatchHandled(projectId);
+        markProjectMediaMatchHandled(projectId)
       }
-      return;
+      return
     }
 
-    const newVideos = videoItems.filter((item) => !seenVideoIdsRef.current.has(item.id));
+    const newVideos = videoItems.filter((item) => !seenVideoIdsRef.current.has(item.id))
 
     for (const item of videoItems) {
-      seenVideoIdsRef.current.add(item.id);
+      seenVideoIdsRef.current.add(item.id)
     }
 
     if (awaitingAutoPromptRef.current || hasHandledProjectMediaMatch(projectId)) {
-      return;
+      return
     }
 
     if (newVideos.length === 0) {
-      return;
+      return
     }
 
-    const firstVideo = [...newVideos].sort((left, right) => left.createdAt - right.createdAt)[0];
+    const firstVideo = [...newVideos].sort((left, right) => left.createdAt - right.createdAt)[0]
     if (!firstVideo) {
-      return;
+      return
     }
 
-    awaitingAutoPromptRef.current = true;
+    awaitingAutoPromptRef.current = true
     void requestProjectMediaMatch(projectId, {
       fileName: firstVideo.fileName,
       width: firstVideo.width,
       height: firstVideo.height,
       fps: firstVideo.fps,
     }).finally(() => {
-      awaitingAutoPromptRef.current = false;
-    });
+      awaitingAutoPromptRef.current = false
+    })
   }, [
     currentProject,
     hasHandledProjectMediaMatch,
@@ -102,23 +110,29 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
     mediaLoading,
     projectId,
     requestProjectMediaMatch,
-  ]);
+  ])
 
   const suggestion = useMemo(() => {
     if (!currentProject || !pendingCandidate || pendingProjectId !== projectId) {
-      return null;
+      return null
     }
 
-    return getProjectMediaMatchSuggestion(currentProject.metadata, pendingCandidate);
-  }, [currentProject, pendingCandidate, pendingProjectId, projectId]);
+    return getProjectMediaMatchSuggestion(currentProject.metadata, pendingCandidate)
+  }, [currentProject, pendingCandidate, pendingProjectId, projectId])
 
   useEffect(() => {
-    if (!open || !currentProject || !pendingCandidate || pendingProjectId !== projectId || !suggestion) {
-      return;
+    if (
+      !open ||
+      !currentProject ||
+      !pendingCandidate ||
+      pendingProjectId !== projectId ||
+      !suggestion
+    ) {
+      return
     }
 
     if (!suggestion.hasChanges) {
-      resolveProjectMediaMatch('keep-current');
+      resolveProjectMediaMatch('keep-current')
     }
   }, [
     currentProject,
@@ -128,86 +142,94 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
     projectId,
     resolveProjectMediaMatch,
     suggestion,
-  ]);
+  ])
 
   const handleKeepCurrent = useCallback(() => {
     if (isApplying) {
-      return;
+      return
     }
 
-    resolveProjectMediaMatch('keep-current');
-  }, [isApplying, resolveProjectMediaMatch]);
+    resolveProjectMediaMatch('keep-current')
+  }, [isApplying, resolveProjectMediaMatch])
 
-  const applyMatch = useCallback(async (
-    choice: 'match-both' | 'fps-only' | 'size-only',
-    options: { matchSize: boolean; matchFps: boolean }
-  ) => {
-    if (!currentProject || !pendingCandidate || !suggestion) {
-      resolveProjectMediaMatch('keep-current');
-      return;
-    }
+  const applyMatch = useCallback(
+    async (
+      choice: 'match-both' | 'fps-only' | 'size-only',
+      options: { matchSize: boolean; matchFps: boolean },
+    ) => {
+      if (!currentProject || !pendingCandidate || !suggestion) {
+        resolveProjectMediaMatch('keep-current')
+        return
+      }
 
-    const updates: {
-      width?: number;
-      height?: number;
-      fps?: number;
-    } = {};
+      const updates: {
+        width?: number
+        height?: number
+        fps?: number
+      } = {}
 
-    if (options.matchSize && suggestion.sizeDiffers) {
-      updates.width = suggestion.width;
-      updates.height = suggestion.height;
-    }
+      if (options.matchSize && suggestion.sizeDiffers) {
+        updates.width = suggestion.width
+        updates.height = suggestion.height
+      }
 
-    if (options.matchFps && suggestion.fpsDiffers) {
-      updates.fps = suggestion.fps;
-    }
+      if (options.matchFps && suggestion.fpsDiffers) {
+        updates.fps = suggestion.fps
+      }
 
-    if (Object.keys(updates).length === 0) {
-      resolveProjectMediaMatch('keep-current');
-      return;
-    }
+      if (Object.keys(updates).length === 0) {
+        resolveProjectMediaMatch('keep-current')
+        return
+      }
 
-    setIsApplying(true);
+      setIsApplying(true)
 
-    try {
-      await commitProjectMetadataChange({
-        project: currentProject,
-        updates,
-        command: {
-          type: 'UPDATE_PROJECT_METADATA',
-          payload: {
-            fields: Object.keys(updates),
-            operation: choice,
+      try {
+        await commitProjectMetadataChange({
+          project: currentProject,
+          updates,
+          command: {
+            type: 'UPDATE_PROJECT_METADATA',
+            payload: {
+              fields: Object.keys(updates),
+              operation: choice,
+            },
           },
-        },
-        updateProject,
-        markDirty,
-        onApplied: (updatedProject) => {
-          if (updates.fps !== undefined) {
-            setFps(updatedProject.metadata.fps);
-          }
-        },
-      });
-      resolveProjectMediaMatch(choice);
-    } catch (error) {
-      toast.error('Failed to update project settings', {
-        description: error instanceof Error ? error.message : 'Please try again.',
-      });
-    } finally {
-      setIsApplying(false);
-    }
-  }, [
-    currentProject,
-    markDirty,
-    pendingCandidate,
-    resolveProjectMediaMatch,
-    setFps,
-    suggestion,
-    updateProject,
-  ]);
+          updateProject,
+          markDirty,
+          onApplied: (updatedProject) => {
+            if (updates.fps !== undefined) {
+              setFps(updatedProject.metadata.fps)
+            }
+          },
+        })
+        resolveProjectMediaMatch(choice)
+      } catch (error) {
+        toast.error('Failed to update project settings', {
+          description: error instanceof Error ? error.message : 'Please try again.',
+        })
+      } finally {
+        setIsApplying(false)
+      }
+    },
+    [
+      currentProject,
+      markDirty,
+      pendingCandidate,
+      resolveProjectMediaMatch,
+      setFps,
+      suggestion,
+      updateProject,
+    ],
+  )
 
   return (
-    <Dialog open={Boolean(open && pendingProjectId === projectId && suggestion?.hasChanges)} onOpenChange={(nextOpen) => { if (!nextOpen) handleKeepCurrent(); }}>
+    <Dialog
+      open={Boolean(open && pendingProjectId === projectId && suggestion?.hasChanges)}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) handleKeepCurrent()
+      }}
+    >
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle>Match Project To First Video?</DialogTitle>
@@ -233,19 +255,15 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
                   {suggestion.width}x{suggestion.height}
                 </div>
                 <div className="text-muted-foreground">Frame rate</div>
-                <div className="text-muted-foreground">
-                  {currentProject.metadata.fps} fps
-                </div>
-                <div className="text-muted-foreground">
-                  {suggestion.sourceFpsLabel} fps
-                </div>
+                <div className="text-muted-foreground">{currentProject.metadata.fps} fps</div>
+                <div className="text-muted-foreground">{suggestion.sourceFpsLabel} fps</div>
               </div>
             </div>
 
             {suggestion.fpsWasRounded && (
               <p className="text-xs text-muted-foreground">
-                FreeCut matches imported video to the closest supported project frame rate.
-                This clip would use {suggestion.matchedFpsLabel} fps.
+                FreeCut matches imported video to the closest supported project frame rate. This
+                clip would use {suggestion.matchedFpsLabel} fps.
               </p>
             )}
           </div>
@@ -300,5 +318,5 @@ export function ProjectMediaMatchDialog({ projectId }: ProjectMediaMatchDialogPr
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

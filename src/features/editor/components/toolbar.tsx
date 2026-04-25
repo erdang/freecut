@@ -1,5 +1,5 @@
-import { memo, useEffect, useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import { memo, useEffect, useState } from 'react'
+import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
   Bug,
@@ -12,40 +12,40 @@ import {
   Settings,
   Sparkles,
   Video,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
+} from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Separator } from '@/components/ui/separator';
-import { LocalInferenceStatusPill } from './local-inference-status-pill';
-import { ProjectDebugPanel } from './project-debug-panel';
-import { SettingsDialog } from './settings-dialog';
-import { ShortcutsDialog } from './shortcuts-dialog';
-import { UnsavedChangesDialog } from './unsaved-changes-dialog';
-import { WhatsNewDialog } from './whats-new-dialog';
-import { hasUnseenChangelog } from './whats-new-seen';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
-import { cn } from '@/shared/ui/cn';
-import { useDebugStore } from '@/features/editor/stores/debug-store';
+} from '@/components/ui/dropdown-menu'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Separator } from '@/components/ui/separator'
+import { LocalInferenceStatusPill } from './local-inference-status-pill'
+import { ProjectDebugPanel } from './project-debug-panel'
+import { SettingsDialog } from './settings-dialog'
+import { ShortcutsDialog } from './shortcuts-dialog'
+import { UnsavedChangesDialog } from './unsaved-changes-dialog'
+import { WhatsNewDialog } from './whats-new-dialog'
+import { hasUnseenChangelog } from './whats-new-seen'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { cn } from '@/shared/ui/cn'
+import { useDebugStore } from '@/features/editor/stores/debug-store'
 
 interface ToolbarProps {
-  projectId: string;
+  projectId: string
   project: {
-    id: string;
-    name: string;
-    width: number;
-    height: number;
-    fps: number;
-  };
-  isDirty?: boolean;
-  onSave?: () => Promise<void>;
-  onExport?: () => void;
-  onExportBundle?: () => void;
+    id: string
+    name: string
+    width: number
+    height: number
+    fps: number
+  }
+  isDirty?: boolean
+  onSave?: () => Promise<void>
+  onExport?: () => void
+  onExportBundle?: () => void
 }
 
 export const Toolbar = memo(function Toolbar({
@@ -56,35 +56,35 @@ export const Toolbar = memo(function Toolbar({
   onExport,
   onExportBundle,
 }: ToolbarProps) {
-  const navigate = useNavigate();
-  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false);
-  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false);
-  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
-  const [showWhatsNewDialog, setShowWhatsNewDialog] = useState(false);
-  const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false);
+  const navigate = useNavigate()
+  const [showUnsavedDialog, setShowUnsavedDialog] = useState(false)
+  const [showShortcutsDialog, setShowShortcutsDialog] = useState(false)
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false)
+  const [showWhatsNewDialog, setShowWhatsNewDialog] = useState(false)
+  const [hasUnseenWhatsNew, setHasUnseenWhatsNew] = useState(false)
 
   useEffect(() => {
-    setHasUnseenWhatsNew(hasUnseenChangelog());
-  }, []);
+    setHasUnseenWhatsNew(hasUnseenChangelog())
+  }, [])
 
   const openWhatsNew = () => {
-    setHasUnseenWhatsNew(false);
-    setShowWhatsNewDialog(true);
-  };
+    setHasUnseenWhatsNew(false)
+    setShowWhatsNewDialog(true)
+  }
 
   const handleBackClick = () => {
     if (isDirty) {
-      setShowUnsavedDialog(true);
+      setShowUnsavedDialog(true)
     } else {
-      navigate({ to: '/projects' });
+      navigate({ to: '/projects' })
     }
-  };
+  }
 
   const handleSave = async () => {
     if (onSave) {
-      await onSave();
+      await onSave()
     }
-  };
+  }
 
   return (
     <div
@@ -129,20 +129,11 @@ export const Toolbar = memo(function Toolbar({
 
       <LocalInferenceStatusPill />
 
-      <ShortcutsDialog
-        open={showShortcutsDialog}
-        onOpenChange={setShowShortcutsDialog}
-      />
+      <ShortcutsDialog open={showShortcutsDialog} onOpenChange={setShowShortcutsDialog} />
 
-      <SettingsDialog
-        open={showSettingsDialog}
-        onOpenChange={setShowSettingsDialog}
-      />
+      <SettingsDialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog} />
 
-      <WhatsNewDialog
-        open={showWhatsNewDialog}
-        onOpenChange={setShowWhatsNewDialog}
-      />
+      <WhatsNewDialog open={showWhatsNewDialog} onOpenChange={setShowWhatsNewDialog} />
 
       <div className="flex items-center gap-1.5">
         {import.meta.env.DEV && import.meta.env.VITE_SHOW_DEBUG_PANEL !== 'false' && (
@@ -187,12 +178,7 @@ export const Toolbar = memo(function Toolbar({
         >
           <Keyboard className="h-4 w-4" />
         </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          asChild
-        >
+        <Button variant="outline" size="icon" className="h-7 w-7" asChild>
           <a
             href="https://github.com/walterlow/freecut"
             target="_blank"
@@ -241,12 +227,12 @@ export const Toolbar = memo(function Toolbar({
         </DropdownMenu>
       </div>
     </div>
-  );
-});
+  )
+})
 
 function DebugPopover({ projectId }: { projectId: string }) {
-  const debugPanelOpen = useDebugStore((s) => s.debugPanelOpen);
-  const setDebugPanelOpen = useDebugStore((s) => s.setDebugPanelOpen);
+  const debugPanelOpen = useDebugStore((s) => s.debugPanelOpen)
+  const setDebugPanelOpen = useDebugStore((s) => s.setDebugPanelOpen)
 
   return (
     <Popover open={debugPanelOpen} onOpenChange={setDebugPanelOpen}>
@@ -254,7 +240,10 @@ function DebugPopover({ projectId }: { projectId: string }) {
         <Button
           variant="outline"
           size="icon"
-          className={cn('h-7 w-7', debugPanelOpen && 'bg-amber-500/20 border-amber-500/50 text-amber-400')}
+          className={cn(
+            'h-7 w-7',
+            debugPanelOpen && 'bg-amber-500/20 border-amber-500/50 text-amber-400',
+          )}
           data-tooltip={debugPanelOpen ? undefined : 'Debug Panel'}
           data-tooltip-side="bottom"
           aria-label="Debug panel"
@@ -270,5 +259,5 @@ function DebugPopover({ projectId }: { projectId: string }) {
         <ProjectDebugPanel projectId={projectId} />
       </PopoverContent>
     </Popover>
-  );
+  )
 }

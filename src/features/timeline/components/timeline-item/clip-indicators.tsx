@@ -1,25 +1,25 @@
-import { memo } from 'react';
-import { Link2Off, Diamond } from 'lucide-react';
-import { cn } from '@/shared/ui/cn';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
+import { memo } from 'react'
+import { Link2Off, Diamond } from 'lucide-react'
+import { cn } from '@/shared/ui/cn'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
-  hasKeyframes: boolean;
+  hasKeyframes: boolean
   /** Current playback speed (1 = normal) */
-  currentSpeed: number;
+  currentSpeed: number
   /** Whether the item is currently being rate stretched */
-  isStretching: boolean;
+  isStretching: boolean
   /** Visual feedback during stretch (speed preview) */
-  stretchFeedback: { speed: number } | null;
+  stretchFeedback: { speed: number } | null
   /** Whether the item's media is broken/missing */
-  isBroken: boolean;
+  isBroken: boolean
   /** Whether the item has a mediaId */
-  hasMediaId: boolean;
+  hasMediaId: boolean
   /** Whether the item is a shape configured as a mask */
-  isMask: boolean;
+  isMask: boolean
   /** Whether the item is a shape */
-  isShape: boolean;
+  isShape: boolean
 }
 
 /**
@@ -39,7 +39,7 @@ export const ClipIndicators = memo(function ClipIndicators({
   isMask,
   isShape,
 }: ClipIndicatorsProps) {
-  const showSpeedBadge = Math.abs(currentSpeed - 1) > 0.005 && !isStretching;
+  const showSpeedBadge = Math.abs(currentSpeed - 1) > 0.005 && !isStretching
 
   return (
     <>
@@ -86,8 +86,8 @@ export const ClipIndicators = memo(function ClipIndicators({
       {/* Preview speed overlay during stretch */}
       <div
         className={cn(
-          "absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10 transition-opacity duration-75",
-          isStretching && stretchFeedback ? "opacity-100" : "opacity-0"
+          'absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none z-10 transition-opacity duration-75',
+          isStretching && stretchFeedback ? 'opacity-100' : 'opacity-0',
         )}
       >
         <span className="text-white font-mono text-sm font-bold">
@@ -95,5 +95,5 @@ export const ClipIndicators = memo(function ClipIndicators({
         </span>
       </div>
     </>
-  );
-});
+  )
+})

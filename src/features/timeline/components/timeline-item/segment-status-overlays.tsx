@@ -1,9 +1,12 @@
-import { memo } from 'react';
-import { cn } from '@/shared/ui/cn';
-import type { TimelineItemOverlay, TimelineItemOverlayTone } from '../../stores/timeline-item-overlay-store';
+import { memo } from 'react'
+import { cn } from '@/shared/ui/cn'
+import type {
+  TimelineItemOverlay,
+  TimelineItemOverlayTone,
+} from '../../stores/timeline-item-overlay-store'
 
 interface SegmentStatusOverlaysProps {
-  overlays: readonly TimelineItemOverlay[];
+  overlays: readonly TimelineItemOverlay[]
 }
 
 const TONE_CLASSES: Record<TimelineItemOverlayTone, string> = {
@@ -12,17 +15,17 @@ const TONE_CLASSES: Record<TimelineItemOverlayTone, string> = {
   success: 'bg-emerald-600/85 text-white ring-emerald-100/20',
   warning: 'bg-amber-500/90 text-black ring-amber-50/30',
   error: 'bg-destructive/90 text-destructive-foreground ring-destructive-foreground/20',
-};
+}
 
 function formatOverlayProgress(progress: number): string {
-  return `${Math.max(0, Math.min(100, Math.round(progress)))}%`;
+  return `${Math.max(0, Math.min(100, Math.round(progress)))}%`
 }
 
 export const SegmentStatusOverlays = memo(function SegmentStatusOverlays({
   overlays,
 }: SegmentStatusOverlaysProps) {
   if (overlays.length === 0) {
-    return null;
+    return null
   }
 
   return (
@@ -35,9 +38,11 @@ export const SegmentStatusOverlays = memo(function SegmentStatusOverlays({
               'flex max-w-full items-center gap-2 rounded-md px-2 py-1 text-[10px] font-medium shadow-lg ring-1 backdrop-blur-sm',
               TONE_CLASSES[overlay.tone ?? 'neutral'],
             )}
-            title={overlay.progress === undefined
-              ? overlay.label
-              : `${overlay.label} ${formatOverlayProgress(overlay.progress)}`}
+            title={
+              overlay.progress === undefined
+                ? overlay.label
+                : `${overlay.label} ${formatOverlayProgress(overlay.progress)}`
+            }
           >
             <span className="truncate">{overlay.label}</span>
             {overlay.progress !== undefined && (
@@ -49,5 +54,5 @@ export const SegmentStatusOverlays = memo(function SegmentStatusOverlays({
         ))}
       </div>
     </div>
-  );
-});
+  )
+})

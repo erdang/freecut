@@ -188,4 +188,4 @@ fn applyBlendMode(base: vec3f, layer: vec3f, mode: u32) -> vec3f {
     default:  { return blendNormal(base, layer); }
   }
 }
-`;
+`

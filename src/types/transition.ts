@@ -6,7 +6,7 @@
  * cut. Legacy overlap-based transitions may still exist in old projects.
  */
 
-export type TransitionType = 'crossfade';
+export type TransitionType = 'crossfade'
 
 /**
  * Categories for organizing transitions in the UI
@@ -19,7 +19,7 @@ export type TransitionCategory =
   | 'mask'
   | 'light'
   | 'chromatic'
-  | 'custom';
+  | 'custom'
 
 /**
  * Built-in presentation IDs.
@@ -38,44 +38,50 @@ export type BuiltinTransitionPresentation =
   | 'lightLeak'
   | 'pixelate'
   | 'chromatic'
-  | 'radialBlur';
+  | 'radialBlur'
 
 /**
  * Visual presentation styles for transitions.
  * Widened to `string` so the registry can accept custom IDs.
  * All BuiltinTransitionPresentation values are valid.
  */
-export type TransitionPresentation = BuiltinTransitionPresentation | (string & {});
+export type TransitionPresentation = BuiltinTransitionPresentation | (string & {})
 
 /**
  * Wipe direction options
  */
-export type WipeDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bottom';
+export type WipeDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bottom'
 
 /**
  * Slide direction options
  */
-export type SlideDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bottom';
+export type SlideDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bottom'
 
 /**
  * Flip direction options
  */
-export type FlipDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bottom';
+export type FlipDirection = 'from-left' | 'from-right' | 'from-top' | 'from-bottom'
 
 /**
  * Timing function for transitions.
  * Extended with standard CSS easing names.
  */
-export type TransitionTiming = 'linear' | 'spring' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'cubic-bezier';
+export type TransitionTiming =
+  | 'linear'
+  | 'spring'
+  | 'ease-in'
+  | 'ease-out'
+  | 'ease-in-out'
+  | 'cubic-bezier'
 
 /**
  * Bezier control points for cubic-bezier timing
  */
 export interface BezierPoints {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
+  x1: number
+  y1: number
+  x2: number
+  y2: number
 }
 
 /**
@@ -85,40 +91,40 @@ export interface BezierPoints {
  */
 export interface Transition {
   /** Unique identifier */
-  id: string;
+  id: string
   /** Type of transition (for UI display) */
-  type: TransitionType;
+  type: TransitionType
   /** Visual presentation style (registry key) */
-  presentation: TransitionPresentation;
+  presentation: TransitionPresentation
   /** Timing function */
-  timing: TransitionTiming;
+  timing: TransitionTiming
   /** ID of the clip ending */
-  leftClipId: string;
+  leftClipId: string
   /** ID of the clip starting */
-  rightClipId: string;
+  rightClipId: string
   /** Track where both clips reside */
-  trackId: string;
+  trackId: string
   /** Duration of the transition in frames */
-  durationInFrames: number;
+  durationInFrames: number
   /** Direction for wipe/slide/flip transitions */
-  direction?: WipeDirection | SlideDirection | FlipDirection;
+  direction?: WipeDirection | SlideDirection | FlipDirection
   /**
    * Alignment of the transition relative to the cut point.
    * 0 = transition plays entirely in the right (incoming) clip
    * 0.5 = centered on cut point (default, backward compatible)
    * 1 = transition plays entirely in the left (outgoing) clip
    */
-  alignment?: number;
+  alignment?: number
   /** Bezier control points when timing is 'cubic-bezier' */
-  bezierPoints?: BezierPoints;
+  bezierPoints?: BezierPoints
   /** Reference to a preset configuration */
-  presetId?: string;
+  presetId?: string
   /** Custom properties for extensibility */
-  properties?: Record<string, unknown>;
+  properties?: Record<string, unknown>
   /** Timestamp when transition was created */
-  createdAt?: number;
+  createdAt?: number
   /** Timestamp of last modification */
-  lastModifiedAt?: number;
+  lastModifiedAt?: number
 }
 
 /**
@@ -131,22 +137,22 @@ export type TransitionBreakageReason =
   | 'cross_track'
   | 'invalid_duration'
   | 'invalid_type'
-  | 'insufficient_handle';
+  | 'insufficient_handle'
 
 /**
  * Information about a broken transition for user notification
  */
 export interface TransitionBreakage {
   /** ID of the broken transition */
-  transitionId: string;
+  transitionId: string
   /** The transition that was broken */
-  transition: Transition;
+  transition: Transition
   /** Why the transition became invalid */
-  reason: TransitionBreakageReason;
+  reason: TransitionBreakageReason
   /** Human-readable message for notifications */
-  message: string;
+  message: string
   /** IDs of clips that caused the break */
-  affectedClipIds: string[];
+  affectedClipIds: string[]
 }
 
 /**
@@ -154,11 +160,11 @@ export interface TransitionBreakage {
  */
 export interface TransitionRepairResult {
   /** Transitions that are still valid (unmodified) */
-  valid: Transition[];
+  valid: Transition[]
   /** Transitions that were repaired (modified) */
-  repaired: Array<{ original: Transition; repaired: Transition; action: string }>;
+  repaired: Array<{ original: Transition; repaired: Transition; action: string }>
   /** Transitions that could not be repaired */
-  broken: TransitionBreakage[];
+  broken: TransitionBreakage[]
 }
 
 /**
@@ -166,23 +172,23 @@ export interface TransitionRepairResult {
  */
 export interface ClipTransitionIndex {
   /** Transition where this clip is on the left (outgoing) */
-  outgoing?: Transition;
+  outgoing?: Transition
   /** Transition where this clip is on the right (incoming) */
-  incoming?: Transition;
+  incoming?: Transition
 }
 
 /**
  * Configuration for transition types
  */
 interface TransitionConfig {
-  label: string;
-  description: string;
+  label: string
+  description: string
   /** Default duration in frames */
-  defaultDuration: number;
+  defaultDuration: number
   /** Minimum duration in frames */
-  minDuration: number;
+  minDuration: number
   /** Maximum duration in frames */
-  maxDuration: number;
+  maxDuration: number
 }
 
 /**
@@ -196,7 +202,7 @@ export const TRANSITION_CONFIGS: Record<TransitionType, TransitionConfig> = {
     minDuration: 30, // 1 second at 30fps
     maxDuration: 90, // 3 seconds at 30fps
   },
-};
+}
 
 /**
  * Registry-based definition for a transition effect.
@@ -204,43 +210,42 @@ export const TRANSITION_CONFIGS: Record<TransitionType, TransitionConfig> = {
  */
 export interface TransitionDefinition {
   /** Unique identifier (matches the presentation key) */
-  id: string;
+  id: string
   /** Display label */
-  label: string;
+  label: string
   /** Short description */
-  description: string;
+  description: string
   /** Category for UI grouping */
-  category: TransitionCategory;
+  category: TransitionCategory
   /** Icon name from lucide-react */
-  icon: string;
+  icon: string
   /** Whether this transition supports directional variants */
-  hasDirection: boolean;
+  hasDirection: boolean
   /** Available directions if hasDirection is true */
-  directions?: Array<WipeDirection | SlideDirection | FlipDirection>;
+  directions?: Array<WipeDirection | SlideDirection | FlipDirection>
   /** Supported timing functions */
-  supportedTimings: TransitionTiming[];
+  supportedTimings: TransitionTiming[]
   /** Default duration in frames */
-  defaultDuration: number;
+  defaultDuration: number
   /** Minimum duration in frames */
-  minDuration: number;
+  minDuration: number
   /** Maximum duration in frames */
-  maxDuration: number;
+  maxDuration: number
   /** Whether this transition benefits from WebGL acceleration */
-  requiresWebGL?: boolean;
+  requiresWebGL?: boolean
 }
-
 
 /**
  * Configuration for each presentation type.
  * Used by the transitions panel UI.
  */
 export interface PresentationConfig {
-  id: TransitionPresentation;
-  label: string;
-  description: string;
-  icon: string; // Icon name from lucide-react
-  category: TransitionCategory;
-  direction?: WipeDirection | SlideDirection | FlipDirection;
+  id: TransitionPresentation
+  label: string
+  description: string
+  icon: string // Icon name from lucide-react
+  category: TransitionCategory
+  direction?: WipeDirection | SlideDirection | FlipDirection
 }
 
 /**
@@ -252,10 +257,10 @@ export interface PresentationConfig {
  * Result of checking if a transition can be added
  */
 export interface CanAddTransitionResult {
-  canAdd: boolean;
-  reason?: string;
+  canAdd: boolean
+  reason?: string
   /** Available handle frames on left clip's end */
-  leftHandle?: number;
+  leftHandle?: number
   /** Available handle frames on right clip's start */
-  rightHandle?: number;
+  rightHandle?: number
 }

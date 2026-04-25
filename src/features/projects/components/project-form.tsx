@@ -1,27 +1,33 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Link } from '@tanstack/react-router';
+import { useState, useEffect, useMemo } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
+import { Link } from '@tanstack/react-router'
 import {
   projectFormSchema,
   type ProjectFormData,
   type ProjectTemplate,
   DEFAULT_PROJECT_VALUES,
   PROJECT_TEMPLATES,
-} from '../utils/validation';
-import { getProjectFpsOptions } from '../utils/project-fps';
-import { ProjectTemplatePicker } from './project-template-picker';
+} from '../utils/validation'
+import { getProjectFpsOptions } from '../utils/project-fps'
+import { ProjectTemplatePicker } from './project-template-picker'
 
 interface ProjectFormProps {
-  onSubmit: (data: ProjectFormData) => Promise<void> | void;
-  onCancel?: () => void;
-  defaultValues?: Partial<ProjectFormData>;
-  isEditing?: boolean;
-  isSubmitting?: boolean;
-  hideHeader?: boolean;
+  onSubmit: (data: ProjectFormData) => Promise<void> | void
+  onCancel?: () => void
+  defaultValues?: Partial<ProjectFormData>
+  isEditing?: boolean
+  isSubmitting?: boolean
+  hideHeader?: boolean
 }
 
 export function ProjectForm({
@@ -37,8 +43,8 @@ export function ProjectForm({
       ...DEFAULT_PROJECT_VALUES,
       ...defaultValues,
     }),
-    [defaultValues]
-  );
+    [defaultValues],
+  )
 
   const {
     register,
@@ -51,44 +57,38 @@ export function ProjectForm({
     resolver: zodResolver(projectFormSchema),
     defaultValues: resolvedDefaultValues,
     mode: 'onChange',
-  });
+  })
 
   const matchTemplateId = (width: number, height: number) =>
-    PROJECT_TEMPLATES.find((t) => t.width === width && t.height === height)?.id ?? 'custom';
+    PROJECT_TEMPLATES.find((t) => t.width === width && t.height === height)?.id ?? 'custom'
 
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(() =>
-    matchTemplateId(
-      resolvedDefaultValues.width,
-      resolvedDefaultValues.height
-    )
-  );
+    matchTemplateId(resolvedDefaultValues.width, resolvedDefaultValues.height),
+  )
 
   useEffect(() => {
-    reset(resolvedDefaultValues);
-  }, [reset, resolvedDefaultValues]);
+    reset(resolvedDefaultValues)
+  }, [reset, resolvedDefaultValues])
 
   useEffect(() => {
     setSelectedTemplateId(
-      matchTemplateId(
-        resolvedDefaultValues.width,
-        resolvedDefaultValues.height
-      )
-    );
-  }, [resolvedDefaultValues.height, resolvedDefaultValues.width]);
+      matchTemplateId(resolvedDefaultValues.width, resolvedDefaultValues.height),
+    )
+  }, [resolvedDefaultValues.height, resolvedDefaultValues.width])
 
-  const fps = watch('fps');
-  const fpsOptions = useMemo(() => getProjectFpsOptions(fps), [fps]);
+  const fps = watch('fps')
+  const fpsOptions = useMemo(() => getProjectFpsOptions(fps), [fps])
 
   const handleSelectTemplate = (template: ProjectTemplate) => {
-    setSelectedTemplateId(template.id);
-    setValue('width', template.width, { shouldValidate: true });
-    setValue('height', template.height, { shouldValidate: true });
-    setValue('fps', template.fps, { shouldValidate: true });
-  };
+    setSelectedTemplateId(template.id)
+    setValue('width', template.width, { shouldValidate: true })
+    setValue('height', template.height, { shouldValidate: true })
+    setValue('fps', template.fps, { shouldValidate: true })
+  }
 
   const handleCustomSelect = () => {
-    setSelectedTemplateId('custom');
-  };
+    setSelectedTemplateId('custom')
+  }
 
   return (
     <div className="bg-background">
@@ -100,9 +100,7 @@ export function ProjectForm({
               {isEditing ? 'Edit Project' : 'Create New Project'}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {isEditing
-                ? 'Update your project settings'
-                : 'Set up your video editing workspace'}
+              {isEditing ? 'Update your project settings' : 'Set up your video editing workspace'}
             </p>
           </div>
         </div>
@@ -113,7 +111,9 @@ export function ProjectForm({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,420px)_1fr] gap-6 items-start">
             {/* Project Details */}
-            <div className={`panel-bg border border-border rounded-lg p-6 ${hideHeader ? '' : 'lg:sticky lg:top-6'}`}>
+            <div
+              className={`panel-bg border border-border rounded-lg p-6 ${hideHeader ? '' : 'lg:sticky lg:top-6'}`}
+            >
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-8 w-1 bg-primary rounded-full" />
                 <h2 className="text-lg font-medium text-foreground">Project Details</h2>
@@ -164,7 +164,9 @@ export function ProjectForm({
                   </label>
                   <Select
                     value={fps.toString()}
-                    onValueChange={(value) => setValue('fps', Number(value), { shouldValidate: true })}
+                    onValueChange={(value) =>
+                      setValue('fps', Number(value), { shouldValidate: true })
+                    }
                   >
                     <SelectTrigger id="fps">
                       <SelectValue />
@@ -192,7 +194,9 @@ export function ProjectForm({
               </div>
 
               <ProjectTemplatePicker
-                selectedTemplateId={selectedTemplateId === 'custom' ? undefined : selectedTemplateId}
+                selectedTemplateId={
+                  selectedTemplateId === 'custom' ? undefined : selectedTemplateId
+                }
                 onSelectTemplate={handleSelectTemplate}
                 onSelectCustom={handleCustomSelect}
                 isCustomSelected={selectedTemplateId === 'custom'}
@@ -200,7 +204,12 @@ export function ProjectForm({
               {selectedTemplateId === 'custom' && (
                 <div className="mt-5 flex items-center gap-3">
                   <div className="flex-1">
-                    <label htmlFor="width" className="block text-xs font-medium text-muted-foreground mb-1">Width (px)</label>
+                    <label
+                      htmlFor="width"
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
+                      Width (px)
+                    </label>
                     <input
                       id="width"
                       type="number"
@@ -209,11 +218,18 @@ export function ProjectForm({
                       placeholder="1920"
                       min={320}
                     />
-                    {errors.width && <p className="mt-1 text-xs text-destructive">{errors.width.message}</p>}
+                    {errors.width && (
+                      <p className="mt-1 text-xs text-destructive">{errors.width.message}</p>
+                    )}
                   </div>
                   <span className="text-muted-foreground mt-4">×</span>
                   <div className="flex-1">
-                    <label htmlFor="height" className="block text-xs font-medium text-muted-foreground mb-1">Height (px)</label>
+                    <label
+                      htmlFor="height"
+                      className="block text-xs font-medium text-muted-foreground mb-1"
+                    >
+                      Height (px)
+                    </label>
                     <input
                       id="height"
                       type="number"
@@ -222,7 +238,9 @@ export function ProjectForm({
                       placeholder="1080"
                       min={240}
                     />
-                    {errors.height && <p className="mt-1 text-xs text-destructive">{errors.height.message}</p>}
+                    {errors.height && (
+                      <p className="mt-1 text-xs text-destructive">{errors.height.message}</p>
+                    )}
                   </div>
                 </div>
               )}
@@ -234,7 +252,13 @@ export function ProjectForm({
           {/* Actions */}
           <div className="flex gap-3 justify-end">
             {onCancel ? (
-              <Button type="button" variant="outline" size="lg" disabled={isSubmitting} onClick={onCancel}>
+              <Button
+                type="button"
+                variant="outline"
+                size="lg"
+                disabled={isSubmitting}
+                onClick={onCancel}
+              >
                 Cancel
               </Button>
             ) : (
@@ -244,12 +268,17 @@ export function ProjectForm({
                 </Button>
               </Link>
             )}
-            <Button type="submit" size="lg" className="min-w-[160px]" disabled={!isValid || isSubmitting}>
+            <Button
+              type="submit"
+              size="lg"
+              className="min-w-[160px]"
+              disabled={!isValid || isSubmitting}
+            >
               {isSubmitting ? 'Saving...' : isEditing ? 'Update Project' : 'Create Project'}
             </Button>
           </div>
         </form>
       </div>
     </div>
-  );
+  )
 }

@@ -1,12 +1,9 @@
-import { memo } from 'react';
-import {
-  PREVIEW_PERF_PANEL_QUERY_KEY,
-  type PreviewPerfSnapshot,
-} from '../utils/preview-constants';
+import { memo } from 'react'
+import { PREVIEW_PERF_PANEL_QUERY_KEY, type PreviewPerfSnapshot } from '../utils/preview-constants'
 
 interface PreviewPerfPanelProps {
-  snapshot: PreviewPerfSnapshot;
-  latestRenderSourceSwitch: PreviewPerfSnapshot['renderSourceHistory'][number] | null;
+  snapshot: PreviewPerfSnapshot
+  latestRenderSourceSwitch: PreviewPerfSnapshot['renderSourceHistory'][number] | null
 }
 
 function formatRenderSource(source: string) {
@@ -14,24 +11,25 @@ function formatRenderSource(source: string) {
     ? 'Overlay'
     : source === 'playback_transition_overlay'
       ? 'Transition'
-      : 'Player';
+      : 'Player'
 }
 
 export const PreviewPerfPanel = memo(function PreviewPerfPanel({
   snapshot,
   latestRenderSourceSwitch,
 }: PreviewPerfPanelProps) {
-  const srcLabel = formatRenderSource(snapshot.renderSource);
-  const srcColor = snapshot.renderSource === 'player' ? '#4ade80' : '#60a5fa';
-  const seekOk = snapshot.seekLatencyAvgMs < 50;
-  const qualOk = snapshot.effectivePreviewQuality >= snapshot.userPreviewQuality;
-  const frameOk = snapshot.frameTimeEmaMs <= snapshot.frameTimeBudgetMs * 1.2;
-  const transitionActive = snapshot.transitionSessionActive;
-  const transitionMode = snapshot.transitionSessionMode === 'none'
-    ? null
-    : snapshot.transitionSessionMode === 'dom'
-      ? 'DOM'
-      : 'Canvas';
+  const srcLabel = formatRenderSource(snapshot.renderSource)
+  const srcColor = snapshot.renderSource === 'player' ? '#4ade80' : '#60a5fa'
+  const seekOk = snapshot.seekLatencyAvgMs < 50
+  const qualOk = snapshot.effectivePreviewQuality >= snapshot.userPreviewQuality
+  const frameOk = snapshot.frameTimeEmaMs <= snapshot.frameTimeBudgetMs * 1.2
+  const transitionActive = snapshot.transitionSessionActive
+  const transitionMode =
+    snapshot.transitionSessionMode === 'none'
+      ? null
+      : snapshot.transitionSessionMode === 'dom'
+        ? 'DOM'
+        : 'Canvas'
 
   return (
     <div
@@ -47,7 +45,9 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
         )}
         {latestRenderSourceSwitch && (
           <span style={{ color: '#a1a1aa' }}>
-            {' '}{formatRenderSource(latestRenderSourceSwitch.from)}{'\u2192'}
+            {' '}
+            {formatRenderSource(latestRenderSourceSwitch.from)}
+            {'\u2192'}
             {formatRenderSource(latestRenderSourceSwitch.to)} @{latestRenderSourceSwitch.atFrame}
           </span>
         )}
@@ -62,7 +62,8 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
         )}
         {snapshot.scrubDroppedFrames > 0 && (
           <span style={{ color: '#fbbf24' }}>
-            {' '}Scrub {snapshot.scrubDroppedFrames}/{snapshot.scrubUpdates} dropped
+            {' '}
+            Scrub {snapshot.scrubDroppedFrames}/{snapshot.scrubUpdates} dropped
           </span>
         )}
       </div>
@@ -70,23 +71,25 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
       <div>
         <span style={{ color: qualOk ? '#a1a1aa' : '#fbbf24' }}>
           Quality {snapshot.effectivePreviewQuality}x
-          {snapshot.effectivePreviewQuality < snapshot.userPreviewQuality
-            && ` (cap ${snapshot.adaptiveQualityCap}x)`}
-        </span>
-        {' '}
+          {snapshot.effectivePreviewQuality < snapshot.userPreviewQuality &&
+            ` (cap ${snapshot.adaptiveQualityCap}x)`}
+        </span>{' '}
         <span style={{ color: frameOk ? '#a1a1aa' : '#f87171' }}>
           {snapshot.frameTimeEmaMs.toFixed(0)}/{snapshot.frameTimeBudgetMs.toFixed(0)}ms
         </span>
         {(snapshot.adaptiveQualityDowngrades > 0 || snapshot.adaptiveQualityRecovers > 0) && (
           <span style={{ color: '#a1a1aa' }}>
-            {' '}{'\u2193'}{snapshot.adaptiveQualityDowngrades} {'\u2191'}{snapshot.adaptiveQualityRecovers}
+            {' '}
+            {'\u2193'}
+            {snapshot.adaptiveQualityDowngrades} {'\u2191'}
+            {snapshot.adaptiveQualityRecovers}
           </span>
         )}
       </div>
 
       <div style={{ color: '#a1a1aa' }}>
-        Pool {snapshot.sourceWarmKeep}/{snapshot.sourceWarmTarget}
-        {' '}({snapshot.sourcePoolSources}src {snapshot.sourcePoolElements}el)
+        Pool {snapshot.sourceWarmKeep}/{snapshot.sourceWarmTarget} ({snapshot.sourcePoolSources}src{' '}
+        {snapshot.sourcePoolElements}el)
         {snapshot.sourceWarmEvictions > 0 && (
           <span style={{ color: '#fbbf24' }}> {snapshot.sourceWarmEvictions} evict</span>
         )}
@@ -94,12 +97,13 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
 
       {(snapshot.preseekRequests > 0 || snapshot.preseekCachedBitmaps > 0) && (
         <div style={{ color: '#a1a1aa' }}>
-          Preseek {snapshot.preseekCacheHits + snapshot.preseekInflightReuses}/{snapshot.preseekRequests} hit
-          {' '}post {snapshot.preseekWorkerSuccesses}/{snapshot.preseekWorkerPosts}
-          {' '}cache {snapshot.preseekCachedBitmaps}
+          Preseek {snapshot.preseekCacheHits + snapshot.preseekInflightReuses}/
+          {snapshot.preseekRequests} hit post {snapshot.preseekWorkerSuccesses}/
+          {snapshot.preseekWorkerPosts} cache {snapshot.preseekCachedBitmaps}
           {snapshot.preseekWaitMatches > 0 && (
             <span>
-              {' '}wait {snapshot.preseekWaitResolved}/{snapshot.preseekWaitMatches}
+              {' '}
+              wait {snapshot.preseekWaitResolved}/{snapshot.preseekWaitMatches}
             </span>
           )}
           {snapshot.preseekWorkerFailures > 0 && (
@@ -113,8 +117,8 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
 
       {(snapshot.unresolvedQueue > 0 || snapshot.pendingResolves > 0) && (
         <div style={{ color: '#fbbf24' }}>
-          Resolving {snapshot.pendingResolves} pending, {snapshot.unresolvedQueue} queued
-          {' '}({snapshot.resolveAvgMs.toFixed(0)}ms avg)
+          Resolving {snapshot.pendingResolves} pending, {snapshot.unresolvedQueue} queued (
+          {snapshot.resolveAvgMs.toFixed(0)}ms avg)
         </div>
       )}
 
@@ -127,22 +131,25 @@ export const PreviewPerfPanel = memo(function PreviewPerfPanel({
             </span>
             {transitionActive && (
               <span style={{ color: '#a1a1aa' }}>
-                {' '}{snapshot.transitionSessionStartFrame}{'\u2192'}{snapshot.transitionSessionEndFrame}
-                {' '}buf:{snapshot.transitionBufferedFrames}
+                {' '}
+                {snapshot.transitionSessionStartFrame}
+                {'\u2192'}
+                {snapshot.transitionSessionEndFrame} buf:{snapshot.transitionBufferedFrames}
               </span>
             )}
           </div>
           {snapshot.transitionLastPrepareMs > 0 && (
             <div style={{ color: snapshot.transitionLastEntryMisses > 0 ? '#f87171' : '#a1a1aa' }}>
               Prep {snapshot.transitionLastPrepareMs.toFixed(0)}ms
-              {snapshot.transitionLastReadyLeadMs > 0
-                && ` lead ${snapshot.transitionLastReadyLeadMs.toFixed(0)}ms`}
-              {snapshot.transitionLastEntryMisses > 0 && ` ${snapshot.transitionLastEntryMisses} miss`}
+              {snapshot.transitionLastReadyLeadMs > 0 &&
+                ` lead ${snapshot.transitionLastReadyLeadMs.toFixed(0)}ms`}
+              {snapshot.transitionLastEntryMisses > 0 &&
+                ` ${snapshot.transitionLastEntryMisses} miss`}
               <span style={{ color: '#a1a1aa' }}> #{snapshot.transitionSessionCount}</span>
             </div>
           )}
         </div>
       )}
     </div>
-  );
-});
+  )
+})

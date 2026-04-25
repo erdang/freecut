@@ -1,4 +1,4 @@
-﻿import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/button'
 import {
   AlignStartHorizontal,
   AlignCenterHorizontal,
@@ -8,8 +8,8 @@ import {
   AlignEndVertical,
   AlignHorizontalDistributeCenter,
   AlignVerticalDistributeCenter,
-} from 'lucide-react';
-import { cn } from '@/shared/ui/cn';
+} from 'lucide-react'
+import { cn } from '@/shared/ui/cn'
 
 export type AlignmentType =
   | 'left'
@@ -19,38 +19,38 @@ export type AlignmentType =
   | 'center-v'
   | 'bottom'
   | 'distribute-h'
-  | 'distribute-v';
+  | 'distribute-v'
 
 interface AlignmentButtonsProps {
-  onAlign: (alignment: AlignmentType) => void;
-  disabled?: boolean;
-  className?: string;
+  onAlign: (alignment: AlignmentType) => void
+  disabled?: boolean
+  className?: string
 }
 
 const horizontalAlignments: Array<{
-  type: AlignmentType;
-  icon: typeof AlignStartVertical;
-  label: string;
+  type: AlignmentType
+  icon: typeof AlignStartVertical
+  label: string
 }> = [
   { type: 'left', icon: AlignStartVertical, label: 'Align Left' },
   { type: 'center-h', icon: AlignCenterVertical, label: 'Center Horizontally' },
   { type: 'right', icon: AlignEndVertical, label: 'Align Right' },
-];
+]
 
 const verticalAlignments: Array<{
-  type: AlignmentType;
-  icon: typeof AlignStartHorizontal;
-  label: string;
+  type: AlignmentType
+  icon: typeof AlignStartHorizontal
+  label: string
 }> = [
   { type: 'top', icon: AlignStartHorizontal, label: 'Align Top' },
   { type: 'center-v', icon: AlignCenterHorizontal, label: 'Center Vertically' },
   { type: 'bottom', icon: AlignEndHorizontal, label: 'Align Bottom' },
-];
+]
 
 const distributionAlignments: Array<{
-  type: AlignmentType;
-  icon: typeof AlignHorizontalDistributeCenter;
-  label: string;
+  type: AlignmentType
+  icon: typeof AlignHorizontalDistributeCenter
+  label: string
 }> = [
   {
     type: 'distribute-h',
@@ -62,17 +62,13 @@ const distributionAlignments: Array<{
     icon: AlignVerticalDistributeCenter,
     label: 'Distribute Vertically',
   },
-];
+]
 
 /**
  * Horizontal and vertical alignment button groups.
  * Used to align selected clips to canvas edges or center.
  */
-export function AlignmentButtons({
-  onAlign,
-  disabled = false,
-  className,
-}: AlignmentButtonsProps) {
+export function AlignmentButtons({ onAlign, disabled = false, className }: AlignmentButtonsProps) {
   return (
     <div className={cn('flex items-center gap-3', className)}>
       {/* Horizontal alignment */}
@@ -129,5 +125,5 @@ export function AlignmentButtons({
         ))}
       </div>
     </div>
-  );
+  )
 }
