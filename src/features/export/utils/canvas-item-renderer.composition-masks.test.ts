@@ -1,36 +1,44 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { CompositionItem, ShapeItem } from '@/types/timeline';
-import type { ItemRenderContext, ItemTransform, SubCompRenderData } from './canvas-item-renderer';
+import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
+import type { CompositionItem, ShapeItem } from '@/types/timeline'
+import type { ItemRenderContext, ItemTransform, SubCompRenderData } from './canvas-item-renderer'
 
 const mockFns = vi.hoisted(() => ({
   applyMasksMock: vi.fn(),
+  buildPreparedMaskMock: vi.fn((mask: ShapeItem) => ({
+    path: {} as Path2D,
+    inverted: mask.maskInvert ?? false,
+    feather: mask.maskType === 'alpha' ? (mask.maskFeather ?? 0) : 0,
+    maskType: mask.maskType ?? 'clip',
+    trackOrder: 0,
+  })),
   svgPathToPath2DMock: vi.fn(() => ({}) as unknown as Path2D),
   renderShapeMock: vi.fn(),
   getShapePathMock: vi.fn(() => 'M 0 0 L 10 0 L 10 10 Z'),
   rotatePathMock: vi.fn((path: string) => path),
-}));
+}))
 
 vi.mock('./canvas-masks', () => ({
   applyMasks: mockFns.applyMasksMock,
+  buildPreparedMask: mockFns.buildPreparedMaskMock,
   svgPathToPath2D: mockFns.svgPathToPath2DMock,
-}));
+}))
 
 vi.mock('./canvas-shapes', () => ({
   renderShape: mockFns.renderShapeMock,
-}));
+}))
 
 vi.mock('@/features/export/deps/composition-runtime', async () => {
   const actual = await vi.importActual<typeof import('@/features/export/deps/composition-runtime')>(
-    '@/features/export/deps/composition-runtime'
-  );
+    '@/features/export/deps/composition-runtime',
+  )
   return {
     ...actual,
     getShapePath: mockFns.getShapePathMock,
     rotatePath: mockFns.rotatePathMock,
-  };
-});
+  }
+})
 
-import { renderItem } from './canvas-item-renderer';
+import { renderItem } from './canvas-item-renderer'
 
 function createMockCtx(): OffscreenCanvasRenderingContext2D {
   return {
@@ -44,17 +52,18 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     translate: vi.fn(),
     rotate: vi.fn(),
     globalAlpha: 1,
-  } as unknown as OffscreenCanvasRenderingContext2D;
+  } as unknown as OffscreenCanvasRenderingContext2D
 }
 
 describe('canvas-item-renderer composition masks', () => {
   beforeEach(() => {
-    mockFns.applyMasksMock.mockReset();
-    mockFns.svgPathToPath2DMock.mockClear();
-    mockFns.renderShapeMock.mockReset();
-    mockFns.getShapePathMock.mockClear();
-    mockFns.rotatePathMock.mockClear();
-  });
+    mockFns.applyMasksMock.mockReset()
+    mockFns.buildPreparedMaskMock.mockClear()
+    mockFns.svgPathToPath2DMock.mockClear()
+    mockFns.renderShapeMock.mockReset()
+    mockFns.getShapePathMock.mockClear()
+    mockFns.rotatePathMock.mockClear()
+  })
 
   it('applies active sub-comp masks only to lower tracks and does not render mask shapes as regular content', async () => {
     const subMaskItem: ShapeItem = {
@@ -69,7 +78,7 @@ describe('canvas-item-renderer composition masks', () => {
       isMask: true,
       maskType: 'clip',
       transform: { x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
-    };
+    }
 
     const subContentItem: ShapeItem = {
       id: 'sub-content',
@@ -81,7 +90,7 @@ describe('canvas-item-renderer composition masks', () => {
       shapeType: 'rectangle',
       fillColor: '#ff0000',
       transform: { x: 0, y: 0, width: 200, height: 200, rotation: 0, opacity: 1 },
-    };
+    }
 
     const compositionItem: CompositionItem = {
       id: 'comp-item',
@@ -93,7 +102,7 @@ describe('canvas-item-renderer composition masks', () => {
       label: 'Composition',
       compositionWidth: 640,
       compositionHeight: 360,
-    };
+    }
 
     const subData: SubCompRenderData = {
       fps: 30,
@@ -111,26 +120,26 @@ describe('canvas-item-renderer composition masks', () => {
         },
       ],
       keyframesMap: new Map(),
-    };
+    }
 
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas;
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas;
-    const maskedItemCanvas = { width: 640, height: 360 } as OffscreenCanvas;
-    const subCtx = createMockCtx();
-    const subContentCtx = createMockCtx();
-    const maskedItemCtx = createMockCtx();
-    const rootCtx = createMockCtx();
+    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
+    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
+    const maskedItemCanvas = { width: 640, height: 360 } as OffscreenCanvas
+    const subCtx = createMockCtx()
+    const subContentCtx = createMockCtx()
+    const maskedItemCtx = createMockCtx()
+    const rootCtx = createMockCtx()
 
     const acquireQueue = [
       { canvas: subCanvas, ctx: subCtx },
       { canvas: subContentCanvas, ctx: subContentCtx },
       { canvas: maskedItemCanvas, ctx: maskedItemCtx },
-    ];
+    ]
 
     const canvasPool = {
       acquire: vi.fn(() => acquireQueue.shift()),
       release: vi.fn(),
-    };
+    }
 
     const rctx: ItemRenderContext = {
       fps: 30,
@@ -148,7 +157,7 @@ describe('canvas-item-renderer composition masks', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    };
+    }
 
     const transform: ItemTransform = {
       x: 0,
@@ -158,25 +167,25 @@ describe('canvas-item-renderer composition masks', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(rootCtx, compositionItem, transform, 0, rctx);
+    await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 
-    expect(mockFns.renderShapeMock).toHaveBeenCalledTimes(1);
-    expect(mockFns.applyMasksMock).toHaveBeenCalledTimes(1);
+    expect(mockFns.renderShapeMock).toHaveBeenCalledTimes(1)
+    expect(mockFns.applyMasksMock).toHaveBeenCalledTimes(1)
 
     const masksArg = mockFns.applyMasksMock.mock.calls[0]?.[2] as Array<{
-      maskType: 'clip' | 'alpha';
-      inverted: boolean;
-      feather: number;
-    }>;
-    expect(masksArg).toHaveLength(1);
+      maskType: 'clip' | 'alpha'
+      inverted: boolean
+      feather: number
+    }>
+    expect(masksArg).toHaveLength(1)
     expect(masksArg[0]).toMatchObject({
       maskType: 'clip',
       inverted: false,
       feather: 0,
-    });
-  });
+    })
+  })
 
   it('does not apply a sub-comp mask to content above the mask track', async () => {
     const subMaskItem: ShapeItem = {
@@ -191,7 +200,7 @@ describe('canvas-item-renderer composition masks', () => {
       isMask: true,
       maskType: 'clip',
       transform: { x: 0, y: 0, width: 100, height: 100, rotation: 0, opacity: 1 },
-    };
+    }
 
     const subContentItem: ShapeItem = {
       id: 'sub-content',
@@ -203,7 +212,7 @@ describe('canvas-item-renderer composition masks', () => {
       shapeType: 'rectangle',
       fillColor: '#ff0000',
       transform: { x: 0, y: 0, width: 200, height: 200, rotation: 0, opacity: 1 },
-    };
+    }
 
     const compositionItem: CompositionItem = {
       id: 'comp-item',
@@ -215,7 +224,7 @@ describe('canvas-item-renderer composition masks', () => {
       label: 'Composition',
       compositionWidth: 640,
       compositionHeight: 360,
-    };
+    }
 
     const subData: SubCompRenderData = {
       fps: 30,
@@ -233,23 +242,23 @@ describe('canvas-item-renderer composition masks', () => {
         },
       ],
       keyframesMap: new Map(),
-    };
+    }
 
-    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas;
-    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas;
-    const subCtx = createMockCtx();
-    const subContentCtx = createMockCtx();
-    const rootCtx = createMockCtx();
+    const subCanvas = { width: 640, height: 360 } as OffscreenCanvas
+    const subContentCanvas = { width: 640, height: 360 } as OffscreenCanvas
+    const subCtx = createMockCtx()
+    const subContentCtx = createMockCtx()
+    const rootCtx = createMockCtx()
 
     const acquireQueue = [
       { canvas: subCanvas, ctx: subCtx },
       { canvas: subContentCanvas, ctx: subContentCtx },
-    ];
+    ]
 
     const canvasPool = {
       acquire: vi.fn(() => acquireQueue.shift()),
       release: vi.fn(),
-    };
+    }
 
     const rctx: ItemRenderContext = {
       fps: 30,
@@ -267,7 +276,7 @@ describe('canvas-item-renderer composition masks', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map([[compositionItem.compositionId, subData]]),
-    };
+    }
 
     const transform: ItemTransform = {
       x: 0,
@@ -277,11 +286,11 @@ describe('canvas-item-renderer composition masks', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(rootCtx, compositionItem, transform, 0, rctx);
+    await renderItem(rootCtx, compositionItem, transform, 0, rctx)
 
-    expect(mockFns.renderShapeMock).toHaveBeenCalledTimes(1);
-    expect(mockFns.applyMasksMock).not.toHaveBeenCalled();
-  });
-});
+    expect(mockFns.renderShapeMock).toHaveBeenCalledTimes(1)
+    expect(mockFns.applyMasksMock).not.toHaveBeenCalled()
+  })
+})

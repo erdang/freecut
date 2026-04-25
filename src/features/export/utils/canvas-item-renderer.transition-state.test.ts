@@ -1,10 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import type { ItemEffect } from '@/types/effects';
-import type { ItemKeyframes } from '@/types/keyframe';
-import type { TimelineItem, VideoItem } from '@/types/timeline';
-import type { ActiveTransition } from './canvas-transitions';
-import type { ItemRenderContext } from './canvas-item-renderer';
-import { resolveTransitionParticipantRenderState } from './canvas-item-renderer';
+import { describe, expect, it } from 'vite-plus/test'
+import type { ItemEffect } from '@/types/effects'
+import type { ItemKeyframes } from '@/types/keyframe'
+import type { TimelineItem, VideoItem } from '@/types/timeline'
+import type { ActiveTransition } from './canvas-transitions'
+import type { ItemRenderContext } from './canvas-item-renderer'
+import { resolveTransitionParticipantRenderState } from './canvas-item-renderer'
 
 function createActiveTransition(overrides?: Partial<ActiveTransition>): ActiveTransition {
   return {
@@ -44,7 +44,7 @@ function createActiveTransition(overrides?: Partial<ActiveTransition>): ActiveTr
     rightPortion: 10,
     cutPoint: 60,
     ...overrides,
-  } as ActiveTransition;
+  } as ActiveTransition
 }
 
 describe('resolveTransitionParticipantRenderState', () => {
@@ -65,14 +65,14 @@ describe('resolveTransitionParticipantRenderState', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
-    const liveCrop = { left: 0.2 };
+    }
+    const liveCrop = { left: 0.2 }
     const liveCornerPin = {
       topLeft: [0, 0] as [number, number],
       topRight: [10, 0] as [number, number],
       bottomRight: [10, 10] as [number, number],
       bottomLeft: [0, 10] as [number, number],
-    };
+    }
     const previewEffect: ItemEffect = {
       id: 'fx-1',
       enabled: true,
@@ -81,7 +81,7 @@ describe('resolveTransitionParticipantRenderState', () => {
         gpuEffectType: 'gpu-brightness',
         params: { amount: 0.2 },
       },
-    };
+    }
     const currentItem: VideoItem = {
       ...baseItem,
       crop: liveCrop,
@@ -93,7 +93,7 @@ describe('resolveTransitionParticipantRenderState', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1920, height: 1080, fps: 30 },
@@ -102,17 +102,10 @@ describe('resolveTransitionParticipantRenderState', () => {
       renderMode: 'preview',
       getCurrentItemSnapshot: <TItem extends TimelineItem>() => currentItem as TItem,
       getCurrentKeyframes: () => undefined,
-      getPreviewTransformOverride: (itemId) => (
-        itemId === baseItem.id
-          ? { x: 45, width: 480, cornerRadius: 12 }
-          : undefined
-      ),
-      getPreviewCornerPinOverride: (itemId) => (
-        itemId === baseItem.id ? liveCornerPin : undefined
-      ),
-      getPreviewEffectsOverride: (itemId) => (
-        itemId === baseItem.id ? [previewEffect] : undefined
-      ),
+      getPreviewTransformOverride: (itemId) =>
+        itemId === baseItem.id ? { x: 45, width: 480, cornerRadius: 12 } : undefined,
+      getPreviewCornerPinOverride: (itemId) => (itemId === baseItem.id ? liveCornerPin : undefined),
+      getPreviewEffectsOverride: (itemId) => (itemId === baseItem.id ? [previewEffect] : undefined),
       videoExtractors: new Map(),
       videoElements: new Map(),
       useMediabunny: new Set(),
@@ -123,7 +116,7 @@ describe('resolveTransitionParticipantRenderState', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const activeTransition = createActiveTransition({
       leftClip: baseItem,
       rightClip: {
@@ -131,9 +124,9 @@ describe('resolveTransitionParticipantRenderState', () => {
         id: 'video-2',
         from: 60,
       },
-    });
+    })
 
-    const result = resolveTransitionParticipantRenderState(baseItem, activeTransition, 12, 4, rctx);
+    const result = resolveTransitionParticipantRenderState(baseItem, activeTransition, 12, 4, rctx)
 
     expect(result.item.crop).toEqual({
       left: 0.2,
@@ -141,20 +134,20 @@ describe('resolveTransitionParticipantRenderState', () => {
       top: 0,
       bottom: 0,
       softness: 0,
-    });
-    expect(result.item.cornerPin).toEqual(liveCornerPin);
-    expect(result.transform.x).toBe(45);
-    expect(result.transform.y).toBe(30);
-    expect(result.transform.width).toBe(480);
-    expect(result.transform.height).toBe(150);
-    expect(result.transform.cornerRadius).toBe(12);
-    expect(result.effects).toEqual([previewEffect]);
+    })
+    expect(result.item.cornerPin).toEqual(liveCornerPin)
+    expect(result.transform.x).toBe(45)
+    expect(result.transform.y).toBe(30)
+    expect(result.transform.width).toBe(480)
+    expect(result.transform.height).toBe(150)
+    expect(result.transform.cornerRadius).toBe(12)
+    expect(result.effects).toEqual([previewEffect])
     expect(result.renderSpan).toEqual({
       from: 0,
       durationInFrames: 90,
       sourceStart: 0,
-    });
-  });
+    })
+  })
 
   it('extends the incoming clip to the transition start so preroll frames stay visible', () => {
     const incomingClip: VideoItem = {
@@ -174,8 +167,8 @@ describe('resolveTransitionParticipantRenderState', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
-    const activeTransition = createActiveTransition({ rightClip: incomingClip });
+    }
+    const activeTransition = createActiveTransition({ rightClip: incomingClip })
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1920, height: 1080, fps: 30 },
@@ -192,20 +185,26 @@ describe('resolveTransitionParticipantRenderState', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
 
-    const result = resolveTransitionParticipantRenderState(incomingClip, activeTransition, 50, 4, rctx);
+    const result = resolveTransitionParticipantRenderState(
+      incomingClip,
+      activeTransition,
+      50,
+      4,
+      rctx,
+    )
 
-    expect(result.item.from).toBe(60);
-    expect(result.item.durationInFrames).toBe(40);
-    expect(result.item.sourceStart).toBe(30);
+    expect(result.item.from).toBe(60)
+    expect(result.item.durationInFrames).toBe(40)
+    expect(result.item.sourceStart).toBe(30)
     expect(result.renderSpan).toEqual({
       from: 50,
       durationInFrames: 50,
       sourceStart: 20,
-    });
-    expect(result.transform.opacity).toBe(1);
-  });
+    })
+    expect(result.transform.opacity).toBe(1)
+  })
 
   it('resolves animated crop for transition participants during export rendering', () => {
     const clip: VideoItem = {
@@ -226,7 +225,7 @@ describe('resolveTransitionParticipantRenderState', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
     const keyframes: ItemKeyframes = {
       itemId: clip.id,
       properties: [
@@ -238,8 +237,8 @@ describe('resolveTransitionParticipantRenderState', () => {
           ],
         },
       ],
-    };
-    const activeTransition = createActiveTransition({ leftClip: clip });
+    }
+    const activeTransition = createActiveTransition({ leftClip: clip })
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1920, height: 1080, fps: 30 },
@@ -257,12 +256,12 @@ describe('resolveTransitionParticipantRenderState', () => {
       keyframesMap: new Map([[clip.id, keyframes]]),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
 
-    const result = resolveTransitionParticipantRenderState(clip, activeTransition, 5, 4, rctx);
+    const result = resolveTransitionParticipantRenderState(clip, activeTransition, 5, 4, rctx)
 
-    expect(result.item.crop?.left).toBeCloseTo(0.05, 5);
-  });
+    expect(result.item.crop?.left).toBeCloseTo(0.05, 5)
+  })
 
   it('extends the outgoing clip past its visible end for transition postroll', () => {
     const outgoingClip: VideoItem = {
@@ -281,8 +280,8 @@ describe('resolveTransitionParticipantRenderState', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
-    const activeTransition = createActiveTransition({ leftClip: outgoingClip });
+    }
+    const activeTransition = createActiveTransition({ leftClip: outgoingClip })
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1920, height: 1080, fps: 30 },
@@ -299,19 +298,25 @@ describe('resolveTransitionParticipantRenderState', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
 
-    const result = resolveTransitionParticipantRenderState(outgoingClip, activeTransition, 65, 4, rctx);
+    const result = resolveTransitionParticipantRenderState(
+      outgoingClip,
+      activeTransition,
+      65,
+      4,
+      rctx,
+    )
 
-    expect(result.item.from).toBe(0);
-    expect(result.item.durationInFrames).toBe(60);
+    expect(result.item.from).toBe(0)
+    expect(result.item.durationInFrames).toBe(60)
     expect(result.renderSpan).toEqual({
       from: 0,
       durationInFrames: 70,
       sourceStart: 0,
-    });
-    expect(result.transform.opacity).toBe(1);
-  });
+    })
+    expect(result.transform.opacity).toBe(1)
+  })
 
   it('clamps transition preroll to the available source head handle', () => {
     const incomingClip: VideoItem = {
@@ -331,8 +336,8 @@ describe('resolveTransitionParticipantRenderState', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
-    const activeTransition = createActiveTransition({ rightClip: incomingClip });
+    }
+    const activeTransition = createActiveTransition({ rightClip: incomingClip })
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1920, height: 1080, fps: 30 },
@@ -349,17 +354,23 @@ describe('resolveTransitionParticipantRenderState', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
 
-    const result = resolveTransitionParticipantRenderState(incomingClip, activeTransition, 50, 4, rctx);
+    const result = resolveTransitionParticipantRenderState(
+      incomingClip,
+      activeTransition,
+      50,
+      4,
+      rctx,
+    )
 
-    expect(result.item.from).toBe(60);
-    expect(result.item.durationInFrames).toBe(40);
-    expect(result.item.sourceStart).toBe(6);
+    expect(result.item.from).toBe(60)
+    expect(result.item.durationInFrames).toBe(40)
+    expect(result.item.sourceStart).toBe(6)
     expect(result.renderSpan).toEqual({
       from: 50,
       durationInFrames: 50,
       sourceStart: 0,
-    });
-  });
-});
+    })
+  })
+})

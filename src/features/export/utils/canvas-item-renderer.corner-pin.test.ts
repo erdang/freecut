@@ -1,27 +1,27 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ShapeItem } from '@/types/timeline';
-import type { ItemRenderContext, ItemTransform } from './canvas-item-renderer';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vite-plus/test'
+import type { ShapeItem } from '@/types/timeline'
+import type { ItemRenderContext, ItemTransform } from './canvas-item-renderer'
 
 const mockFns = vi.hoisted(() => ({
   drawCornerPinImageMock: vi.fn(),
   renderShapeMock: vi.fn(),
-}));
+}))
 
 vi.mock('./canvas-shapes', () => ({
   renderShape: mockFns.renderShapeMock,
-}));
+}))
 
 vi.mock('@/features/export/deps/composition-runtime', async () => {
   const actual = await vi.importActual<typeof import('@/features/export/deps/composition-runtime')>(
-    '@/features/export/deps/composition-runtime'
-  );
+    '@/features/export/deps/composition-runtime',
+  )
   return {
     ...actual,
     drawCornerPinImage: mockFns.drawCornerPinImageMock,
-  };
-});
+  }
+})
 
-import { renderItem } from './canvas-item-renderer';
+import { renderItem } from './canvas-item-renderer'
 
 function createMockCtx(): OffscreenCanvasRenderingContext2D {
   return {
@@ -38,34 +38,34 @@ function createMockCtx(): OffscreenCanvasRenderingContext2D {
     clearRect: vi.fn(),
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
-  } as unknown as OffscreenCanvasRenderingContext2D;
+  } as unknown as OffscreenCanvasRenderingContext2D
 }
 
 describe('canvas-item-renderer corner pin export path', () => {
   beforeAll(() => {
     class MockOffscreenCanvas {
-      width: number;
-      height: number;
-      private readonly ctx: OffscreenCanvasRenderingContext2D;
+      width: number
+      height: number
+      private readonly ctx: OffscreenCanvasRenderingContext2D
 
       constructor(width: number, height: number) {
-        this.width = width;
-        this.height = height;
-        this.ctx = createMockCtx();
+        this.width = width
+        this.height = height
+        this.ctx = createMockCtx()
       }
 
       getContext(type: string): OffscreenCanvasRenderingContext2D | null {
-        return type === '2d' ? this.ctx : null;
+        return type === '2d' ? this.ctx : null
       }
     }
 
-    vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas);
-  });
+    vi.stubGlobal('OffscreenCanvas', MockOffscreenCanvas)
+  })
 
   beforeEach(() => {
-    mockFns.drawCornerPinImageMock.mockReset();
-    mockFns.renderShapeMock.mockReset();
-  });
+    mockFns.drawCornerPinImageMock.mockReset()
+    mockFns.renderShapeMock.mockReset()
+  })
 
   it('uses the default corner pin mesh when opacity is fully opaque', async () => {
     const item: ShapeItem = {
@@ -91,9 +91,9 @@ describe('canvas-item-renderer corner pin export path', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
-    const ctx = createMockCtx();
+    const ctx = createMockCtx()
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
@@ -110,7 +110,7 @@ describe('canvas-item-renderer corner pin export path', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const transform: ItemTransform = {
       x: 0,
       y: 0,
@@ -121,13 +121,13 @@ describe('canvas-item-renderer corner pin export path', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(ctx, item, transform, 0, rctx);
+    await renderItem(ctx, item, transform, 0, rctx)
 
-    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
-    expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.length).toBe(7);
-  });
+    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1)
+    expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.length).toBe(7)
+  })
 
   it('flattens faded corner pin output before applying opacity', async () => {
     const item: ShapeItem = {
@@ -153,15 +153,15 @@ describe('canvas-item-renderer corner pin export path', () => {
         rotation: 0,
         opacity: 1,
       },
-    };
+    }
 
-    const ctx = createMockCtx();
-    const flattenedCanvas = new OffscreenCanvas(1280, 720);
-    const flattenedCtx = createMockCtx();
+    const ctx = createMockCtx()
+    const flattenedCanvas = new OffscreenCanvas(1280, 720)
+    const flattenedCtx = createMockCtx()
     const canvasPool = {
       acquire: vi.fn(() => ({ canvas: flattenedCanvas, ctx: flattenedCtx })),
       release: vi.fn(),
-    };
+    }
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
@@ -178,7 +178,7 @@ describe('canvas-item-renderer corner pin export path', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const transform: ItemTransform = {
       x: 0,
       y: 0,
@@ -189,17 +189,17 @@ describe('canvas-item-renderer corner pin export path', () => {
       rotation: 0,
       opacity: 0.35,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(ctx, item, transform, 0, rctx);
+    await renderItem(ctx, item, transform, 0, rctx)
 
-    expect(canvasPool.acquire).toHaveBeenCalledTimes(1);
-    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
-    expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.[0]).toBe(flattenedCtx);
-    expect(ctx.globalAlpha).toBe(0.35);
-    expect(ctx.drawImage).toHaveBeenCalledWith(flattenedCanvas, 0, 0);
-    expect(canvasPool.release).toHaveBeenCalledWith(flattenedCanvas);
-  });
+    expect(canvasPool.acquire).toHaveBeenCalledTimes(1)
+    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1)
+    expect(mockFns.drawCornerPinImageMock.mock.calls[0]?.[0]).toBe(flattenedCtx)
+    expect(ctx.globalAlpha).toBe(0.35)
+    expect(ctx.drawImage).toHaveBeenCalledWith(flattenedCanvas, 0, 0)
+    expect(canvasPool.release).toHaveBeenCalledWith(flattenedCanvas)
+  })
 
   it('applies flip transforms before drawing corner-pinned content', async () => {
     const item: ShapeItem = {
@@ -226,9 +226,9 @@ describe('canvas-item-renderer corner pin export path', () => {
         flipHorizontal: true,
         opacity: 1,
       },
-    };
+    }
 
-    const ctx = createMockCtx();
+    const ctx = createMockCtx()
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
@@ -245,7 +245,7 @@ describe('canvas-item-renderer corner pin export path', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const transform: ItemTransform = {
       x: 0,
       y: 0,
@@ -256,14 +256,14 @@ describe('canvas-item-renderer corner pin export path', () => {
       rotation: 0,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(ctx, item, transform, 0, rctx);
+    await renderItem(ctx, item, transform, 0, rctx)
 
-    expect(ctx.translate).toHaveBeenCalled();
-    expect(ctx.scale).toHaveBeenCalledWith(-1, 1);
-    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1);
-  });
+    expect(ctx.translate).toHaveBeenCalled()
+    expect(ctx.scale).toHaveBeenCalledWith(-1, 1)
+    expect(mockFns.drawCornerPinImageMock).toHaveBeenCalledTimes(1)
+  })
 
   it('rotates around the configured anchor point', async () => {
     const item: ShapeItem = {
@@ -291,9 +291,9 @@ describe('canvas-item-renderer corner pin export path', () => {
         rotation: 45,
         opacity: 1,
       },
-    };
+    }
 
-    const ctx = createMockCtx();
+    const ctx = createMockCtx()
     const rctx: ItemRenderContext = {
       fps: 30,
       canvasSettings: { width: 1280, height: 720, fps: 30 },
@@ -310,7 +310,7 @@ describe('canvas-item-renderer corner pin export path', () => {
       keyframesMap: new Map(),
       adjustmentLayers: [],
       subCompRenderData: new Map(),
-    };
+    }
     const transform: ItemTransform = {
       x: 40,
       y: 20,
@@ -321,12 +321,12 @@ describe('canvas-item-renderer corner pin export path', () => {
       rotation: 45,
       opacity: 1,
       cornerRadius: 0,
-    };
+    }
 
-    await renderItem(ctx, item, transform, 0, rctx);
+    await renderItem(ctx, item, transform, 0, rctx)
 
-    expect(ctx.translate).toHaveBeenNthCalledWith(1, 550, 320);
-    expect(ctx.rotate).toHaveBeenCalledWith((45 * Math.PI) / 180);
-    expect(ctx.translate).toHaveBeenNthCalledWith(2, -550, -320);
-  });
-});
+    expect(ctx.translate).toHaveBeenNthCalledWith(1, 550, 320)
+    expect(ctx.rotate).toHaveBeenCalledWith((45 * Math.PI) / 180)
+    expect(ctx.translate).toHaveBeenNthCalledWith(2, -550, -320)
+  })
+})
