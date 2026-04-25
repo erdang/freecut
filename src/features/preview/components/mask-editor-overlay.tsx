@@ -306,30 +306,28 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
   // Drawing
   // ============================================================
 
-  const draw = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = playerSize.width * dpr;
-    canvas.height = playerSize.height * dpr;
-    ctx.scale(dpr, dpr);
-    ctx.clearRect(0, 0, playerSize.width, playerSize.height);
-
-    if (penMode) {
-      drawPenPath(ctx);
-    } else {
-      drawEditPath(ctx);
-      drawSelectionMarquee(ctx);
-    }
-  }, [playerSize, penMode, penVertices, penCursorPos, penDraggingHandle, getVertices, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, selectedVertexIndex, hoveredVertexIndex, hoveredHandle, hoveredSegmentIndex, selectionMarquee]);
-
   /** Draw a single bezier/line segment between two vertices */
   const drawSegment = useCallback((ctx: CanvasRenderingContext2D, curr: MaskVertex, next: MaskVertex) => {
     drawMaskSegment(ctx, curr, next, vertexToScreen, handleToScreen);
   }, [vertexToScreen, handleToScreen]);
+
+  /** Draw a single vertex with its handles */
+  const drawVertexWithHandles = useCallback((ctx: CanvasRenderingContext2D, v: MaskVertex, i: number) => {
+    drawMaskVertexWithHandles({
+      ctx,
+      vertex: v,
+      index: i,
+      vertexRadius: VERTEX_RADIUS,
+      handleRadius: HANDLE_RADIUS,
+      vertexToScreen,
+      handleToScreen,
+      draggingVertexIndex,
+      draggingHandle,
+      selectedVertexIndices,
+      hoveredVertexIndex,
+      hoveredHandle,
+    });
+  }, [vertexToScreen, handleToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, hoveredVertexIndex, hoveredHandle]);
 
   /** Draw closed path with handles (edit mode) */
   const drawEditPath = useCallback((ctx: CanvasRenderingContext2D) => {
@@ -400,7 +398,7 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     for (let i = 0; i < vertices.length; i++) {
       drawVertexWithHandles(ctx, vertices[i]!, i);
     }
-  }, [getVertices, vertexToScreen, handleToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, hoveredVertexIndex, hoveredHandle, hoveredSegmentIndex, drawSegment]);
+  }, [drawSegment, drawVertexWithHandles, getVertices, handleToScreen, hoveredSegmentIndex, vertexToScreen]);
 
   const drawSelectionMarquee = useCallback((ctx: CanvasRenderingContext2D) => {
     drawMaskSelectionMarquee(ctx, selectionMarquee);
@@ -557,23 +555,25 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
     }
   }, [penVertices, penCursorPos, penDraggingHandle, vertexToScreen, handleToScreen, normToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, hoveredVertexIndex, hoveredHandle, drawSegment]);
 
-  /** Draw a single vertex with its handles */
-  const drawVertexWithHandles = useCallback((ctx: CanvasRenderingContext2D, v: MaskVertex, i: number) => {
-    drawMaskVertexWithHandles({
-      ctx,
-      vertex: v,
-      index: i,
-      vertexRadius: VERTEX_RADIUS,
-      handleRadius: HANDLE_RADIUS,
-      vertexToScreen,
-      handleToScreen,
-      draggingVertexIndex,
-      draggingHandle,
-      selectedVertexIndices,
-      hoveredVertexIndex,
-      hoveredHandle,
-    });
-  }, [vertexToScreen, handleToScreen, draggingVertexIndex, draggingHandle, selectedVertexIndices, hoveredVertexIndex, hoveredHandle]);
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = playerSize.width * dpr;
+    canvas.height = playerSize.height * dpr;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, playerSize.width, playerSize.height);
+
+    if (penMode) {
+      drawPenPath(ctx);
+    } else {
+      drawEditPath(ctx);
+      drawSelectionMarquee(ctx);
+    }
+  }, [drawEditPath, drawPenPath, drawSelectionMarquee, penMode, playerSize]);
 
   // Redraw on state changes
   useEffect(() => {
@@ -1504,7 +1504,6 @@ export const MaskEditorOverlay = memo(function MaskEditorOverlay({
       coordParams,
       startVertexDrag,
       startHandleDrag,
-      commitVertices,
       setHover,
       startTranslate,
     ]

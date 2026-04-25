@@ -351,7 +351,7 @@ function StrictDecodedVideoFrame({
     };
 
     void run();
-  }, [blobUrl, item.id, prewarmFps]);
+  }, [blobUrl]);
 
   const queueDirectionalPrewarm = useCallback((targetTime: number) => {
     const extractor = extractorRef.current;
@@ -499,7 +499,7 @@ function StrictDecodedVideoFrame({
     }
 
     return true;
-  }, [blobUrl]);
+  }, [blobUrl, item.id, prewarmFps]);
 
   const pumpLatestFrame = useCallback(() => {
     if (renderInFlightRef.current) return;

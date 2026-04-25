@@ -97,9 +97,13 @@ const NativePreviewVideo: React.FC<{
   const lastFrameRef = useRef<number>(-1);
   const registeredElementRef = useRef<HTMLVideoElement | null>(null);
   const registeredItemIdRef = useRef<string | null>(null);
+  const itemIdRef = useRef(itemId);
+  const forceCssCompositeRef = useRef(forceCssComposite);
   audioVolumeRef.current = audioVolume;
   audioEqStagesRef.current = audioEqStages;
   onErrorRef.current = onError;
+  itemIdRef.current = itemId;
+  forceCssCompositeRef.current = forceCssComposite;
 
   // Clock instance for imperative access in rVFC callback
   const clock = useClock();
@@ -233,13 +237,19 @@ const NativePreviewVideo: React.FC<{
     // The pool may return the same element that was just released by cleanup.
     // If the element is already near the correct position, keep it playing
     // to avoid a decode restart stutter.
+    const initialSafeTrimBefore = safeTrimBeforeRef.current;
+    const initialSourceFps = sourceFpsRef.current;
+    const initialFrame = frameRef.current;
+    const initialPlaybackRate = playbackRateRef.current;
+    const initialFps = fpsRef.current;
+    const initialSequenceFrameOffset = sequenceFrameOffsetRef.current;
     const initialTargetTime = getVideoTargetTimeSeconds(
-      safeTrimBefore,
-      sourceFps,
-      frame,
-      playbackRate,
-      fps,
-      sequenceFrameOffset
+      initialSafeTrimBefore,
+      initialSourceFps,
+      initialFrame,
+      initialPlaybackRate,
+      initialFps,
+      initialSequenceFrameOffset
     );
     const clampedInitial = Math.min(initialTargetTime, (element.duration || Infinity) - 0.1);
     const currentlyPlaying = usePlaybackStore.getState().isPlaying;
@@ -247,14 +257,14 @@ const NativePreviewVideo: React.FC<{
     const isContinuousPlayback = currentlyPlaying && isNearTarget && element.readyState >= 2;
 
     elementRef.current = element;
-    syncRegisteredVideoElement(itemId, element);
+    syncRegisteredVideoElement(itemIdRef.current, element);
     applyVideoElementAudioState(element, audioVolumeRef.current, audioEqStagesRef.current);
 
     if (isContinuousPlayback) {
       // Split boundary during playback: element was just paused by cleanup
       // but is at the right position. Resume immediately to minimize the
       // decode pipeline interruption (pause→play in same synchronous batch).
-      element.playbackRate = playbackRate;
+      element.playbackRate = initialPlaybackRate;
       element.play().catch(() => {});
       needsInitialSyncRef.current = false;
     } else if (currentlyPlaying) {
@@ -262,7 +272,7 @@ const NativePreviewVideo: React.FC<{
       // shadow mount, or resume near a boundary). Seek and play immediately
       // instead of pausing and waiting for the sync effect next frame.
       // This eliminates ~16-50ms of React scheduling + readyState gate delay.
-      element.playbackRate = playbackRate;
+      element.playbackRate = initialPlaybackRate;
       element.currentTime = clampedInitial;
       if (element.readyState >= 2) {
         element.play().catch(() => {});
@@ -329,7 +339,7 @@ const NativePreviewVideo: React.FC<{
       element.style.position = 'absolute';
       element.style.top = '0';
       element.style.left = '0';
-      if (forceCssComposite) {
+      if (forceCssCompositeRef.current) {
         element.style.transform = 'translateZ(0)';
         element.style.backfaceVisibility = 'hidden';
         element.style.willChange = 'transform, opacity';
@@ -347,8 +357,8 @@ const NativePreviewVideo: React.FC<{
     // Seek to initial position (skip for continuous playback - already at position)
     if (!isContinuousPlayback) {
       videoLog.debug(`[${shortId}] initial seek to:`, clampedInitial.toFixed(3),
-        'safeTrimBefore:', safeTrimBefore, 'frame:', frame, 'playbackRate:', playbackRate,
-        'fps:', fps,
+        'safeTrimBefore:', initialSafeTrimBefore, 'frame:', initialFrame, 'playbackRate:', initialPlaybackRate,
+        'fps:', initialFps,
         'videoDuration:', element.duration?.toFixed(3),
         'seekPastEnd:', initialTargetTime > element.duration);
       element.currentTime = clampedInitial;
@@ -689,7 +699,7 @@ const NativePreviewVideo: React.FC<{
         }
       }
     }
-  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset]);
+  }, [frame, fps, isPlaying, playbackRate, safeTrimBefore, sharedTransitionSync, sourceFps, targetTime, sequenceFrameOffset, shortId, sequenceContext?.from]);
 
   // requestVideoFrameCallback-based drift correction.
   // Runs outside React's render cycle — the browser calls us exactly when a

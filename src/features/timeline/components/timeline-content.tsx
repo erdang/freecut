@@ -108,7 +108,11 @@ function revealTrackInScrollContainer(
  */
 function useTrackSectionHasOverflow(
   scrollRef?: React.RefObject<HTMLDivElement | null>,
-  deps: readonly unknown[] = []
+  hasTrackSections?: boolean,
+  paneHeight?: number,
+  trackCount?: number,
+  primaryContentHeight?: number,
+  secondaryContentHeight?: number
 ) {
   const [hasOverflow, setHasOverflow] = useState(false);
 
@@ -136,7 +140,7 @@ function useTrackSectionHasOverflow(
     return () => {
       resizeObserver.disconnect();
     };
-  }, [scrollRef, ...deps]);
+  }, [scrollRef, hasTrackSections, paneHeight, trackCount, primaryContentHeight, secondaryContentHeight]);
 
   return hasOverflow;
 }
@@ -992,7 +996,7 @@ export const TimelineContent = memo(function TimelineContent({
         break;
       }
     }
-  }, [activeTrackId, videoTracks.length, audioTracks.length, tracks.length]);
+  }, [activeTrackId, videoTracks.length, audioTracks.length, tracks.length, videoTracksScrollRef, audioTracksScrollRef, allTracksScrollRef]);
 
   // Marquee selection - create items array for getBoundingRect lookups
   // Use derived selector for item IDs only (doesn't re-render when positions change)
@@ -1219,7 +1223,7 @@ export const TimelineContent = memo(function TimelineContent({
       previewRafRef.current = null;
       setPreviewFrameRef.current(frame, itemId);
     });
-  }, []);
+  }, [buildRazorSnapTargets]);
 
   const handleTimelineMouseLeave = useCallback(() => {
     if (previewRafRef.current !== null) {
@@ -1434,7 +1438,7 @@ export const TimelineContent = memo(function TimelineContent({
         handleZoomToFit,
       });
     }
-  }, []); // Empty deps - only call once on mount
+  }, [handleZoomChange, handleZoomIn, handleZoomOut, handleZoomToFit, onZoomHandlersReady]);
 
   useEffect(() => {
     onMetricsChange?.({
@@ -1618,25 +1622,28 @@ export const TimelineContent = memo(function TimelineContent({
   const singleSectionHeight = videoTracks.length > 0 ? videoPaneHeight : audioPaneHeight;
   const singleSectionZoneHeight = videoTracks.length > 0 ? videoZoneHeight : audioZoneHeight;
   const singleSectionAnchorTrackId = videoTracks.length > 0 ? topZoneAnchorTrackId : bottomZoneAnchorTrackId;
-  const videoSectionHasOverflow = useTrackSectionHasOverflow(videoTracksScrollRef, [
+  const videoSectionHasOverflow = useTrackSectionHasOverflow(
+    videoTracksScrollRef,
     hasTrackSections,
     videoPaneHeight,
     videoTracks.length,
-    videoSectionContentHeight,
-  ]);
-  const audioSectionHasOverflow = useTrackSectionHasOverflow(audioTracksScrollRef, [
+    videoSectionContentHeight
+  );
+  const audioSectionHasOverflow = useTrackSectionHasOverflow(
+    audioTracksScrollRef,
     hasTrackSections,
     audioPaneHeight,
     audioTracks.length,
-    audioSectionContentHeight,
-  ]);
-  const singleSectionHasOverflow = useTrackSectionHasOverflow(allTracksScrollRef, [
+    audioSectionContentHeight
+  );
+  const singleSectionHasOverflow = useTrackSectionHasOverflow(
+    allTracksScrollRef,
     hasTrackSections,
     singleSectionHeight,
     singleSectionTracks.length,
     videoSectionContentHeight,
-    audioSectionContentHeight,
-  ]);
+    audioSectionContentHeight
+  );
   const anyOverflow = hasTrackSections
     ? (videoSectionHasOverflow || audioSectionHasOverflow)
     : singleSectionHasOverflow;

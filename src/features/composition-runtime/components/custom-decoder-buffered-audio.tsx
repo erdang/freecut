@@ -161,6 +161,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioVolumeRef = useRef<number>(audioVolume);
   const startRequestIdRef = useRef<number>(0);
+  const frameRef = useRef<number>(frame);
   const lastObservedFrameRef = useRef<number>(frame);
   const wasBackgroundedRef = useRef<boolean>(false);
   const backgroundResyncGraceUntilRef = useRef<number>(0);
@@ -177,6 +178,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
   const pausedSeekPrefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pausedSeekPrefetchKeyRef = useRef<string | null>(null);
   const queuedSourceRef = useRef<QueuedPreviewSource | null>(null);
+  frameRef.current = frame;
 
   const requestPartialSlice = useCallback((targetTimeSeconds: number, minReadySeconds: number) => {
     const requestId = ++latestSliceRequestIdRef.current;
@@ -276,7 +278,7 @@ export const CustomDecoderBufferedAudio: React.FC<CustomDecoderBufferedAudioProp
         targetTime: getAudioTargetTimeSeconds(
           trimBefore,
           effectiveSourceFps,
-          Math.max(0, frame),
+          Math.max(0, frameRef.current),
           playbackRate,
           fps,
         ),

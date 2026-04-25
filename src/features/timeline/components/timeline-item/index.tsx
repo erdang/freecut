@@ -518,7 +518,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         }
 
         return updatesById;
-      }, [item.id, linkedItemsForSync]),
+      }, [linkedItemsForSync]),
     ),
   );
 
@@ -1096,6 +1096,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     isStretching,
     isTrimming,
     item,
+    slideRange,
     slideLeftNeighborForSlidItem,
     slideRightNeighborForSlidItem,
     slipSlideConstrained,
@@ -1232,7 +1233,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     } else {
       selectItems(targetIds);
     }
-  }, [trackLocked, item.from, item.id]);
+  }, [dragWasActiveRef, trackLocked, item.from, item.id]);
 
   // Double-click: open media in source monitor with clip's source range as I/O
   // For composition items: enter the sub-composition for editing
@@ -1384,7 +1385,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     } else {
       if (hoveredEdgeRef.current !== null) syncHoveredEdge(null);
     }
-  }, [item, syncHoveredEdge, syncSmartBodyIntent, syncSmartTrimIntent, trackLocked]);
+  }, [isAnyDragActiveRef, item, syncHoveredEdge, syncSmartBodyIntent, syncSmartTrimIntent, trackLocked]);
 
   // Cursor class based on state
   const cursorClass = trackLocked
@@ -1462,7 +1463,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
   // Recomputes when item props change OR when adjacent neighbor set changes
   const { leftNeighbor, rightNeighbor, hasJoinableLeft, hasJoinableRight } = useMemo(
-    () => getNeighbors(),
+    () => {
+      void neighborKey;
+      return getNeighbors();
+    },
     [getNeighbors, neighborKey]
   );
 
@@ -1783,7 +1787,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (audioVolumeEditLabelRef.current) {
       audioVolumeEditLabelRef.current.textContent = `Volume ${previewVolumeDb >= 0 ? '+' : ''}${previewVolumeDb.toFixed(1)} dB`;
     }
-  }, []);
+  }, [snapVolumeLineTop]);
   const itemType = item.type;
   const itemVolume = item.volume;
   useEffect(() => {
@@ -1974,7 +1978,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, isVisualFadeItem, item, trackLocked, updateTimelineItem]);
+  }, [activeTool, displayedVideoFadeIn, displayedVideoFadeOut, fps, isAnyDragActiveRef, isVisualFadeItem, item, trackLocked, updateTimelineItem]);
   const handleAudioFadeHandleMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
@@ -2051,7 +2055,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, displayedAudioFadeIn, displayedAudioFadeOut, fps, item, trackLocked, updateTimelineItem]);
+  }, [activeTool, displayedAudioFadeIn, displayedAudioFadeOut, fps, isAnyDragActiveRef, item, trackLocked, updateTimelineItem]);
   const handleAudioFadeCurveDotMouseDown = useCallback((e: React.MouseEvent, handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
       return;
@@ -2162,10 +2166,11 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     displayedAudioFadeInCurve,
     displayedAudioFadeInCurveX,
     displayedAudioFadeOutCurve,
-    displayedAudioFadeOutCurveX,
-    item,
-    trackLocked,
-    updateTimelineItem,
+      displayedAudioFadeOutCurveX,
+      isAnyDragActiveRef,
+      item,
+      trackLocked,
+      updateTimelineItem,
   ]);
   const handleAudioVolumeMouseDown = useCallback((e: React.MouseEvent) => {
     if (item.type !== 'audio' || trackLocked || activeTool !== 'select' || isAnyDragActiveRef.current) {
@@ -2276,7 +2281,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       window.removeEventListener('mousemove', handleWindowMouseMove);
       window.removeEventListener('mouseup', handleWindowMouseUp);
     };
-  }, [activeTool, finalizeAudioVolumeChange, item, trackLocked]);
+  }, [activeTool, applyAudioVolumeVisualPreview, finalizeAudioVolumeChange, isAnyDragActiveRef, item, trackLocked]);
   const handleAudioVolumeDoubleClick = useCallback(() => {
     if (item.type !== 'audio' || trackLocked) {
       return;
@@ -2305,7 +2310,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if ((item.fadeOut ?? 0) > VIDEO_FADE_EPSILON) {
       updateTimelineItem(item.id, { fadeOut: 0 });
     }
-  }, [item, trackLocked, updateTimelineItem]);
+  }, [isVisualFadeItem, item, trackLocked, updateTimelineItem]);
   const handleAudioFadeHandleDoubleClick = useCallback((handle: AudioFadeHandle) => {
     if (item.type !== 'audio' || trackLocked) {
       return;
@@ -2345,7 +2350,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     if (Math.abs(item.audioFadeOutCurve ?? 0) > AUDIO_FADE_EPSILON || Math.abs((item.audioFadeOutCurveX ?? 0.52) - 0.52) > AUDIO_FADE_EPSILON) {
       updateTimelineItem(item.id, { audioFadeOutCurve: 0, audioFadeOutCurveX: 0.52 });
     }
-  }, [isVisualFadeItem, item, trackLocked, updateTimelineItem]);
+  }, [item, trackLocked, updateTimelineItem]);
   const contentVisualPreviewItem = useMemo<TimelineItemType>(() => {
     if (supportsVisualFadeControls(contentPreviewItem) && videoFadeEdit !== null) {
       return {
@@ -2526,7 +2531,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
           destroyTransitionAtHandle: shouldDestroyTransitionAtHandle,
         }
       : undefined);
-  }, [handleTrimStart]);
+  }, [handleTrimStart, item.id]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     const rect = e.currentTarget.getBoundingClientRect();
