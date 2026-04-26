@@ -82,6 +82,7 @@ import {
 import {
   renderItem,
   renderTransitionToCanvas,
+  renderTransitionToGpuTexture,
   type CanvasSettings,
   type WorkerLoadedImage,
   type ItemRenderContext,
@@ -1561,6 +1562,18 @@ export async function createCompositionRenderer(
           hasGpuEffects: hasAnyGpuEffects,
           renderTaskCount: renderTasks.length,
         })
+      const hasNonNormalBlend = renderTasks.some(
+        (t) =>
+          t.type === 'item' &&
+          (() => {
+            const item = getCurrentItem(t.item)
+            return Boolean(item.blendMode && item.blendMode !== 'normal')
+          })(),
+      )
+      const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor()
+      const gpuCompositeOutput = useGpuCompositor
+        ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
+        : null
       if (shouldUseDeferredGpuBatch && itemRenderContext.gpuPipeline) {
         itemRenderContext.gpuPipeline.beginBatch()
       }
@@ -1604,12 +1617,20 @@ export async function createCompositionRenderer(
           ).length
         }
 
+        type RenderedTaskResult = {
+          source?: OffscreenCanvas
+          gpuTexture?: GPUTexture
+          poolCanvases: OffscreenCanvas[]
+        }
+
         const applyTrackScopedMasks = (
-          result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null,
+          result: RenderedTaskResult | null,
           trackOrder: number,
           skipMasks: boolean,
-        ): { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] } | null => {
+        ): RenderedTaskResult | null => {
           if (!result) return null
+          if (result.gpuTexture) return result
+          if (!result.source) return null
           if (skipMasks) {
             return result
           }
@@ -1635,6 +1656,34 @@ export async function createCompositionRenderer(
             if (task.type === 'item') {
               return renderItemWithEffects(task.item, task.trackOrder, true, contentCtx)
             }
+            const transitionMasks = activeMasks.filter((mask) =>
+              doesMaskAffectTrack(mask.trackOrder, task.trackOrder),
+            )
+            if (
+              useGpuCompositor &&
+              gpuTexturePool &&
+              transitionMasks.length === 0 &&
+              itemRenderContext.gpuTransitionPipeline
+            ) {
+              const transitionTexture = gpuTexturePool.acquire(
+                canvasSettings.width,
+                canvasSettings.height,
+              )
+              const renderedToTexture = await renderTransitionToGpuTexture(
+                transitionTexture,
+                task.transition,
+                frame,
+                itemRenderContext,
+                task.trackOrder,
+              )
+              if (renderedToTexture) {
+                return {
+                  gpuTexture: transitionTexture,
+                  poolCanvases: [],
+                } satisfies RenderedTaskResult
+              }
+              gpuTexturePool.release(transitionTexture)
+            }
             // Transitions: render to a dedicated canvas
             const { canvas: trCanvas, ctx: trCtx } = canvasPool.acquire()
             await renderTransitionToCanvas(
@@ -1643,12 +1692,9 @@ export async function createCompositionRenderer(
               frame,
               itemRenderContext,
               task.trackOrder,
-              activeMasks.filter((mask) => doesMaskAffectTrack(mask.trackOrder, task.trackOrder)),
+              transitionMasks,
             )
-            return { source: trCanvas, poolCanvases: [trCanvas] } as {
-              source: OffscreenCanvas
-              poolCanvases: OffscreenCanvas[]
-            }
+            return { source: trCanvas, poolCanvases: [trCanvas] } satisfies RenderedTaskResult
           }),
         )
 
@@ -1658,20 +1704,6 @@ export async function createCompositionRenderer(
         }
 
         // Composite all results in z-order (preserved by renderTasks ordering)
-        // Use GPU compositor for pixel-perfect blend modes when available
-        const hasNonNormalBlend = renderTasks.some(
-          (t) =>
-            t.type === 'item' &&
-            (() => {
-              const item = getCurrentItem(t.item)
-              return Boolean(item.blendMode && item.blendMode !== 'normal')
-            })(),
-        )
-        const useGpuCompositor = hasNonNormalBlend && gpuPipeline && ensureGpuCompositor()
-        const gpuCompositeOutput = useGpuCompositor
-          ? ensureGpuCompositeOutput(canvasSettings.width, canvasSettings.height)
-          : null
-
         if (useGpuCompositor && gpuCompositor && gpuMaskManager && gpuCompositeOutput) {
           // GPU compositing path — pixel-perfect blend modes via WebGPU
           const device = gpuPipeline!.getDevice()
@@ -1681,7 +1713,7 @@ export async function createCompositionRenderer(
           const layerTextures: GPUTexture[] = []
           const compositedResults: Array<{
             task: (typeof renderTasks)[number]
-            result: { source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }
+            result: RenderedTaskResult
           }> = []
 
           for (let i = 0; i < results.length; i++) {
@@ -1701,12 +1733,16 @@ export async function createCompositionRenderer(
               task.type === 'item' ? (getCurrentItem(task.item).blendMode ?? 'normal') : 'normal'
 
             // Upload item canvas to GPU texture (pooled — no per-frame alloc)
-            const tex = gpuTexturePool!.acquire(w, h)
-            device.queue.copyExternalImageToTexture(
-              { source: result.source, flipY: false },
-              { texture: tex },
-              { width: w, height: h },
-            )
+            let tex = result.gpuTexture
+            if (!tex) {
+              if (!result.source) continue
+              tex = gpuTexturePool!.acquire(w, h)
+              device.queue.copyExternalImageToTexture(
+                { source: result.source, flipY: false },
+                { texture: tex },
+                { width: w, height: h },
+              )
+            }
             layerTextures.push(tex)
 
             layers.push({
@@ -1732,6 +1768,7 @@ export async function createCompositionRenderer(
             // isn't available for this frame. This preserves feature parity and
             // avoids dropping content when WebGPU canvas presentation fails.
             for (const { task, result } of compositedResults) {
+              if (!result.source) continue
               const blendMode =
                 task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
               if (blendMode && blendMode !== 'normal') {
@@ -1765,6 +1802,10 @@ export async function createCompositionRenderer(
                     hasCornerPin(getCurrentItem(task.transition.rightClip).cornerPin),
             )
             if (!result) continue
+            if (!result.source) {
+              if (result.gpuTexture) gpuTexturePool?.release(result.gpuTexture)
+              continue
+            }
 
             const blendMode = task.type === 'item' ? getCurrentItem(task.item).blendMode : undefined
             if (blendMode && blendMode !== 'normal') {

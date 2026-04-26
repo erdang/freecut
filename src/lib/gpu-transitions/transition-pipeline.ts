@@ -226,6 +226,77 @@ export class TransitionPipeline {
     return bindGroup
   }
 
+  private uploadInputs(
+    leftCanvas: OffscreenCanvas,
+    rightCanvas: OffscreenCanvas,
+    width: number,
+    height: number,
+  ): boolean {
+    this.ensureTextures(width, height)
+    if (!this.leftTexture || !this.rightTexture) return false
+
+    this.device.queue.copyExternalImageToTexture(
+      { source: leftCanvas, flipY: false },
+      { texture: this.leftTexture, premultipliedAlpha: true },
+      { width, height },
+    )
+    this.device.queue.copyExternalImageToTexture(
+      { source: rightCanvas, flipY: false },
+      { texture: this.rightTexture, premultipliedAlpha: true },
+      { width, height },
+    )
+    return true
+  }
+
+  private renderUploadedInputsToView(
+    transitionId: string,
+    progress: number,
+    width: number,
+    height: number,
+    outputView: GPUTextureView,
+    direction?: string,
+    properties?: Record<string, unknown>,
+  ): boolean {
+    const record = this.pipelines.get(transitionId)
+    const def = getGpuTransition(transitionId)
+    if (!record || !def) return false
+
+    const uniformBuffer = this.writeUniforms(
+      transitionId,
+      def,
+      progress,
+      width,
+      height,
+      direction,
+      properties,
+    )
+    const bindGroup = this.getOrCreateBindGroup(
+      transitionId,
+      record.bindGroupLayout,
+      def,
+      uniformBuffer,
+    )
+    if (!bindGroup) return false
+
+    const commandEncoder = this.device.createCommandEncoder()
+    const pass = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: outputView,
+          loadOp: 'clear',
+          storeOp: 'store',
+        },
+      ],
+    })
+    pass.setPipeline(record.pipeline)
+    pass.setBindGroup(0, bindGroup)
+    pass.draw(6)
+    pass.end()
+
+    this.device.queue.submit([commandEncoder.finish()])
+    return true
+  }
+
   /**
    * Render a GPU transition.
    * Returns an OffscreenCanvas with the composited result, or null on failure.
@@ -243,13 +314,10 @@ export class TransitionPipeline {
     direction?: string,
     properties?: Record<string, unknown>,
   ): OffscreenCanvas | null {
-    const record = this.pipelines.get(transitionId)
-    const def = getGpuTransition(transitionId)
-    if (!record || !def) return null
+    if (!this.pipelines.has(transitionId) || !getGpuTransition(transitionId)) return null
     if (width < 2 || height < 2) return null
 
-    this.ensureTextures(width, height)
-    if (!this.leftTexture || !this.rightTexture) return null
+    if (!this.uploadInputs(leftCanvas, rightCanvas, width, height)) return null
 
     // Ensure output canvas
     if (
@@ -265,56 +333,53 @@ export class TransitionPipeline {
     }
     if (!this.outputCtx) return null
 
-    // Upload left and right canvases to GPU textures.
     // Canvas 2D stores premultiplied alpha — tell the GPU to keep it as-is
-    // so the shader operates on premultiplied data matching the output canvas.
-    this.device.queue.copyExternalImageToTexture(
-      { source: leftCanvas, flipY: false },
-      { texture: this.leftTexture, premultipliedAlpha: true },
-      { width, height },
-    )
-    this.device.queue.copyExternalImageToTexture(
-      { source: rightCanvas, flipY: false },
-      { texture: this.rightTexture, premultipliedAlpha: true },
-      { width, height },
-    )
-
-    const uniformBuffer = this.writeUniforms(
+    const ok = this.renderUploadedInputsToView(
       transitionId,
-      def,
       progress,
       width,
       height,
+      this.outputCtx.getCurrentTexture().createView(),
       direction,
       properties,
     )
-    const bindGroup = this.getOrCreateBindGroup(
-      transitionId,
-      record.bindGroupLayout,
-      def,
-      uniformBuffer,
-    )
-    if (!bindGroup) return null
-
-    // Single-pass render directly to the output canvas
-    const commandEncoder = this.device.createCommandEncoder()
-    const pass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: this.outputCtx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-        },
-      ],
-    })
-    pass.setPipeline(record.pipeline)
-    pass.setBindGroup(0, bindGroup)
-    pass.draw(6)
-    pass.end()
-
-    this.device.queue.submit([commandEncoder.finish()])
+    if (!ok) return null
 
     return this.outputCanvas
+  }
+
+  /**
+   * Render a GPU transition directly into a caller-owned GPU texture.
+   *
+   * This still uploads the participant canvases today, but it keeps the
+   * transition output GPU-native so a downstream GPU compositor can consume it
+   * without drawing through an intermediate canvas and uploading again.
+   */
+  renderToTexture(
+    transitionId: string,
+    leftCanvas: OffscreenCanvas,
+    rightCanvas: OffscreenCanvas,
+    outputTexture: GPUTexture,
+    progress: number,
+    width: number,
+    height: number,
+    direction?: string,
+    properties?: Record<string, unknown>,
+  ): boolean {
+    if (!this.pipelines.has(transitionId) || !getGpuTransition(transitionId)) return false
+    if (width < 2 || height < 2) return false
+    if (outputTexture.width !== width || outputTexture.height !== height) return false
+
+    if (!this.uploadInputs(leftCanvas, rightCanvas, width, height)) return false
+    return this.renderUploadedInputsToView(
+      transitionId,
+      progress,
+      width,
+      height,
+      outputTexture.createView(),
+      direction,
+      properties,
+    )
   }
 
   has(transitionId: string): boolean {

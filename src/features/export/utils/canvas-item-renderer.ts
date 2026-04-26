@@ -38,6 +38,7 @@ import {
   type ActiveTransition,
   type TransitionCanvasSettings,
 } from './canvas-transitions'
+import { transitionRegistry } from '@/core/timeline/transitions/registry'
 import type { ResolvedTransform } from '@/types/transform'
 import { applyMasks, buildPreparedMask, type MaskCanvasSettings } from './canvas-masks'
 import { renderShape } from './canvas-shapes'
@@ -1987,6 +1988,125 @@ export async function renderTransitionToCanvas(
   canvasPool.release(leftCanvas)
   for (const effectCanvas of rightEffectPoolCanvases) canvasPool.release(effectCanvas)
   canvasPool.release(rightCanvas)
+}
+
+/**
+ * Render a transition into a caller-owned GPU texture for downstream GPU
+ * compositing. Falls back by returning false when the transition does not have
+ * a WebGPU renderer or when the GPU transition pipeline is unavailable.
+ */
+export async function renderTransitionToGpuTexture(
+  outputTexture: GPUTexture,
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+): Promise<boolean> {
+  const renderer = transitionRegistry.getRenderer(activeTransition.transition.presentation)
+  const gpuTransitionId = renderer?.gpuTransitionId
+  const pipeline = rctx.gpuTransitionPipeline
+  if (!gpuTransitionId || !pipeline?.has(gpuTransitionId)) return false
+
+  const { canvasPool, canvasSettings } = rctx
+  const { leftClip, rightClip } = activeTransition
+  const leftParticipant = resolveTransitionParticipantRenderState(
+    leftClip,
+    activeTransition,
+    frame,
+    trackOrder,
+    rctx,
+  )
+  const rightParticipant = resolveTransitionParticipantRenderState(
+    rightClip,
+    activeTransition,
+    frame,
+    trackOrder,
+    rctx,
+  )
+
+  const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire()
+  const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire()
+  const poolCanvases = [leftCanvas, rightCanvas]
+
+  const prevTransitionFlag = rctx.isRenderingTransition
+  rctx.isRenderingTransition = true
+  try {
+    await Promise.all([
+      renderItem(
+        leftCtx,
+        leftParticipant.item,
+        leftParticipant.transform,
+        frame,
+        rctx,
+        0,
+        leftParticipant.renderSpan,
+      ),
+      renderItem(
+        rightCtx,
+        rightParticipant.item,
+        rightParticipant.transform,
+        frame,
+        rctx,
+        0,
+        rightParticipant.renderSpan,
+      ),
+    ])
+  } finally {
+    rctx.isRenderingTransition = prevTransitionFlag
+  }
+
+  let leftFinalCanvas: OffscreenCanvas = leftCanvas
+  let rightFinalCanvas: OffscreenCanvas = rightCanvas
+
+  const [leftEffects, rightEffects] = await Promise.all([
+    leftParticipant.effects.length > 0
+      ? renderEffectsFromMaskedSource(
+          canvasPool,
+          leftCanvas,
+          leftParticipant.effects,
+          hasCornerPin(leftParticipant.item.cornerPin) ? [] : [],
+          frame,
+          canvasSettings,
+          rctx.gpuPipeline,
+        )
+      : Promise.resolve(null),
+    rightParticipant.effects.length > 0
+      ? renderEffectsFromMaskedSource(
+          canvasPool,
+          rightCanvas,
+          rightParticipant.effects,
+          hasCornerPin(rightParticipant.item.cornerPin) ? [] : [],
+          frame,
+          canvasSettings,
+          rctx.gpuPipeline,
+        )
+      : Promise.resolve(null),
+  ])
+
+  if (leftEffects) {
+    leftFinalCanvas = leftEffects.source
+    poolCanvases.push(...leftEffects.poolCanvases)
+  }
+  if (rightEffects) {
+    rightFinalCanvas = rightEffects.source
+    poolCanvases.push(...rightEffects.poolCanvases)
+  }
+
+  try {
+    return pipeline.renderToTexture(
+      gpuTransitionId,
+      leftFinalCanvas,
+      rightFinalCanvas,
+      outputTexture,
+      activeTransition.progress,
+      canvasSettings.width,
+      canvasSettings.height,
+      activeTransition.transition.direction as string | undefined,
+      activeTransition.transition.properties,
+    )
+  } finally {
+    for (const canvas of poolCanvases) canvasPool.release(canvas)
+  }
 }
 
 export function resolveTransitionParticipantRenderState<TItem extends TimelineItem>(
