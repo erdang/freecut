@@ -2720,7 +2720,6 @@ function resolveGpuTextParticipantSource(
 
 function isGpuGlyphAtlasTextEligible(item: TextItem): boolean {
   if (item.textShadow) return false
-  if (item.stroke && item.stroke.width > 0) return false
   return true
 }
 
