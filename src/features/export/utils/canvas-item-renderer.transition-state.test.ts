@@ -1103,6 +1103,144 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuPipeline.applyEffectsToTexture).not.toHaveBeenCalled()
   })
 
+  it('renders simple text participants through the GPU glyph atlas before canvas fallback', async () => {
+    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, RENDER_ATTACHMENT: 8, TEXTURE_BINDING: 4 })
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ImageItem
+    const rightClip: TextItem = {
+      id: 'right-text',
+      type: 'text',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 60,
+      label: 'Right title',
+      text: 'Atlas title',
+      color: '#ffffff',
+      fontSize: 48,
+      fontFamily: 'Inter',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 180,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as TextItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip, progress: 0.45 })
+    const textures = Array.from({ length: 4 }, () => ({
+      width: 1920,
+      height: 1080,
+      createView: vi.fn(),
+    })) as unknown as GPUTexture[]
+    const atlasTextTexture = {
+      width: 640,
+      height: 180,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const textCanvas = { width: 640, height: 180 } as OffscreenCanvas
+    const textCtx = createMockCtx()
+    const device = {
+      createTexture: vi.fn(() => atlasTextTexture),
+      queue: {
+        copyExternalImageToTexture: vi.fn(),
+      },
+    }
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(textures[0]).mockReturnValueOnce(textures[1]),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(() => ({ canvas: textCanvas, ctx: textCtx })),
+      release: vi.fn(),
+    }
+    const gpuPipeline = {
+      getDevice: vi.fn(() => device),
+      applyEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTextPipeline = {
+      renderTextToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+      renderTextureToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {
+        measure: vi.fn(
+          (_ctx: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) =>
+            text.length * 10 + Math.max(0, text.length - 1) * letterSpacing,
+        ),
+      } as unknown as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+      gpuShapePipeline: null,
+      gpuTextPipeline: gpuTextPipeline as unknown as ItemRenderContext['gpuTextPipeline'],
+      gpuTextTextureCache: new Map(),
+    }
+
+    await renderTransitionToGpuTexture(outputTexture, activeTransition, 55, rctx, 1, gpuTexturePool)
+
+    expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledWith(
+      atlasTextTexture,
+      expect.objectContaining({
+        outputWidth: 640,
+        outputHeight: 180,
+        item: expect.objectContaining({ text: 'Atlas title' }),
+      }),
+    )
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenCalledWith(
+      atlasTextTexture,
+      textures[1],
+      expect.objectContaining({ sourceWidth: 640, sourceHeight: 180 }),
+    )
+    expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
+  })
+
   it('evicts least-recent GPU text textures by byte budget', async () => {
     vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
     const leftClip: ImageItem = {

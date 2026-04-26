@@ -77,6 +77,7 @@ import type {
   MediaRenderPipeline,
 } from '@/infrastructure/gpu/media'
 import type { ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
+import type { GlyphAtlasTextPipeline } from '@/infrastructure/gpu/text'
 
 const log = createLogger('CanvasItemRenderer')
 
@@ -220,6 +221,9 @@ export interface ItemRenderContext {
 
   // GPU shape renderer (lazily initialized, shares device with gpuPipeline)
   gpuShapePipeline?: ShapeRenderPipeline | null
+
+  // GPU glyph-atlas/SDF text renderer (lazily initialized, shares device with gpuPipeline)
+  gpuTextPipeline?: GlyphAtlasTextPipeline | null
 
   // Cached text glyph/layout textures for GPU transition participants.
   gpuTextTextureCache?: Map<string, GpuTextTextureCacheEntry>
@@ -2600,6 +2604,37 @@ function resolveGpuTextParticipantSource(
   )
   const sourceWidth = Math.max(2, Math.ceil(resolvedTransform.width))
   const sourceHeight = Math.max(2, Math.ceil(resolvedTransform.height))
+  if (rctx.gpuTextPipeline && isGpuGlyphAtlasTextEligible(resolvedTextItem)) {
+    const texture = rctx.gpuPipeline.getDevice().createTexture({
+      size: { width: sourceWidth, height: sourceHeight },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+    })
+    const rendered = rctx.gpuTextPipeline.renderTextToTexture(texture, {
+      outputWidth: sourceWidth,
+      outputHeight: sourceHeight,
+      item: resolvedTextItem,
+      width: sourceWidth,
+      height: sourceHeight,
+    })
+    if (rendered) {
+      logGpuTextTextureCacheEvent('atlas-render', {
+        itemId: participant.item.id,
+        width: sourceWidth,
+        height: sourceHeight,
+      })
+      return {
+        kind: 'text',
+        item: resolvedTextItem,
+        sourceWidth,
+        sourceHeight,
+        texture,
+        close: () => texture.destroy(),
+      }
+    }
+    texture.destroy()
+  }
+
   const cacheKey = getGpuTextTextureCacheKey(resolvedTextItem, sourceWidth, sourceHeight)
   const cached = rctx.gpuTextTextureCache.get(cacheKey)
   if (cached) {
@@ -2683,6 +2718,21 @@ function resolveGpuTextParticipantSource(
   }
 }
 
+function isGpuGlyphAtlasTextEligible(item: TextItem): boolean {
+  const spans = getTextItemSpans(item)
+  if (spans.length !== 1) return false
+  const span = spans[0]
+  if (!span || span.text !== (item.text ?? '')) return false
+  if (item.backgroundColor) return false
+  if (item.textShadow) return false
+  if (item.stroke && item.stroke.width > 0) return false
+  if (item.underline || span.underline) return false
+  if (span.color || span.fontSize || span.fontFamily || span.fontWeight || span.fontStyle) {
+    return false
+  }
+  return true
+}
+
 function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number): string {
   return JSON.stringify({
     width,
@@ -2735,7 +2785,7 @@ function getGpuTextTextureCacheBytes(cache: Map<string, GpuTextTextureCacheEntry
 }
 
 function logGpuTextTextureCacheEvent(
-  event: 'hit' | 'miss' | 'evict',
+  event: 'hit' | 'miss' | 'evict' | 'atlas-render',
   details: Record<string, unknown>,
 ): void {
   if (!shouldLogTransitionGpuDiagnostics()) return
