@@ -58,11 +58,11 @@ describe('ShapeRenderPipeline', () => {
 
     expect(rendered).toBe(true)
     expect(device.createBuffer).toHaveBeenCalledWith({
-      size: 96,
+      size: 352,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
     const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
-    expect(uniformData.length).toBe(24)
+    expect(uniformData.length).toBe(88)
     expect(Array.from(uniformData.slice(0, 3))).toEqual([1920, 1080, 5])
     expect(uniformData[3]).toBeCloseTo(0.8)
     expect(Array.from(uniformData.slice(4, 19))).toEqual([
@@ -110,5 +110,30 @@ describe('ShapeRenderPipeline', () => {
     expect(rendered).toBe(true)
     const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
     expect(uniformData[2]).toBe(6)
+  })
+
+  it('packs straight custom path vertices for GPU polygon rendering', () => {
+    const { outputTexture, pipeline, queue } = createPipelineHarness()
+
+    const rendered = pipeline.renderShapeToTexture(outputTexture, {
+      outputWidth: 1920,
+      outputHeight: 1080,
+      transformRect: { x: 100, y: 100, width: 300, height: 240 },
+      shapeType: 'path',
+      fillColor: [1, 0, 0, 1],
+      pathVertices: [
+        [-150, -120],
+        [150, -120],
+        [0, 120],
+      ],
+    })
+
+    expect(rendered).toBe(true)
+    const uniformData = queue.writeBuffer.mock.calls[0]?.[2] as Float32Array
+    expect(uniformData[2]).toBe(7)
+    expect(uniformData[18]).toBe(3)
+    expect(Array.from(uniformData.slice(24, 36))).toEqual([
+      -150, -120, 0, 0, 150, -120, 0, 0, 0, 120, 0, 0,
+    ])
   })
 })

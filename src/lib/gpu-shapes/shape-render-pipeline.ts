@@ -22,6 +22,7 @@ export interface GpuShapeRenderParams {
   points?: number
   innerRadius?: number
   aspectRatioLocked?: boolean
+  pathVertices?: Array<[number, number]>
 }
 
 const SHAPE_RENDER_SHADER = /* wgsl */ `
@@ -55,6 +56,7 @@ struct ShapeUniforms {
   strokeColor: vec4f,
   shapeParams: vec4f,
   flags: vec4f,
+  pathVertices: array<vec4f, 16>,
 };
 
 @group(0) @binding(0) var<uniform> u: ShapeUniforms;
@@ -113,6 +115,28 @@ fn heartDistance(p: vec2f) -> f32 {
   return implicit * 18.0;
 }
 
+fn pathPolygonDistance(p: vec2f, count: u32) -> f32 {
+  var minDistance = 1.0e6;
+  var inside = false;
+  var previous = u.pathVertices[count - 1u].xy;
+  for (var i = 0u; i < 16u; i = i + 1u) {
+    if (i >= count) {
+      break;
+    }
+    let current = u.pathVertices[i].xy;
+    minDistance = min(minDistance, sdSegment(p, previous, current));
+    let dy = previous.y - current.y;
+    let safeDy = select(select(0.00001, -0.00001, dy < 0.0), dy, abs(dy) > 0.00001);
+    let crosses = ((current.y > p.y) != (previous.y > p.y)) &&
+      (p.x < (previous.x - current.x) * (p.y - current.y) / safeDy + current.x);
+    if (crosses) {
+      inside = !inside;
+    }
+    previous = current;
+  }
+  return select(minDistance, -minDistance, inside);
+}
+
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let pixel = input.uv * u.outputSize;
@@ -144,6 +168,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     let heartBase = min(halfSize.x, halfSize.y);
     let heartHalf = vec2f(heartBase, heartBase / 1.1);
     d = heartDistance(localPx / max(heartHalf, vec2f(0.001))) * heartBase;
+  } else if (u.shapeKind > 6.5 && u.shapeKind < 7.5) {
+    d = pathPolygonDistance(localPx, u32(u.shapeParams.z));
   } else {
     let normalized = localPx / max(halfSize, vec2f(0.001));
     d = polarShapeDistance(normalized, u.shapeParams.z, u.shapeParams.w, u.shapeKind > 4.5) * min(halfSize.x, halfSize.y);
@@ -185,7 +211,7 @@ export class ShapeRenderPipeline {
       primitive: { topology: 'triangle-list' },
     })
     this.uniformBuffer = device.createBuffer({
-      size: 96,
+      size: 352,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
   }
@@ -208,6 +234,7 @@ export class ShapeRenderPipeline {
             ? 3
             : 0
     const strokeColor = params.strokeColor ?? params.fillColor
+    const pathVertices = params.pathVertices ?? []
     const uniformData = new Float32Array([
       params.outputWidth,
       params.outputHeight,
@@ -221,12 +248,15 @@ export class ShapeRenderPipeline {
       ...strokeColor,
       params.cornerRadius ?? 0,
       params.strokeWidth ?? 0,
-      params.points ?? (params.shapeType === 'polygon' ? 6 : 5),
+      params.shapeType === 'path'
+        ? pathVertices.length
+        : (params.points ?? (params.shapeType === 'polygon' ? 6 : 5)),
       params.innerRadius ?? 0.5,
       params.rotationRad ?? 0,
       params.aspectRatioLocked === false ? 0 : 1,
       direction,
       0,
+      ...packPathVertices(pathVertices),
     ])
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData)
     const bindGroup = this.ensureBindGroup()
@@ -272,7 +302,18 @@ function shapeKind(shapeType: ShapeItem['shapeType']): number | null {
       return 5
     case 'heart':
       return 6
+    case 'path':
+      return 7
     default:
       return null
   }
+}
+
+function packPathVertices(vertices: Array<[number, number]>): number[] {
+  const packed: number[] = []
+  for (let i = 0; i < 16; i++) {
+    const vertex = vertices[i] ?? [0, 0]
+    packed.push(vertex[0], vertex[1], 0, 0)
+  }
+  return packed
 }

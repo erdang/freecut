@@ -1924,6 +1924,7 @@ type ResolvedGpuMediaParticipantSource =
       sourceHeight: number
       fillColor: [number, number, number, number]
       strokeColor?: [number, number, number, number]
+      pathVertices?: Array<[number, number]>
       close?: () => void
     }
 
@@ -2235,6 +2236,7 @@ async function renderGpuMediaParticipantToTexture(
             points: media.item.points,
             innerRadius: media.item.innerRadius,
             aspectRatioLocked: participant.item.transform?.aspectRatioLocked,
+            pathVertices: media.pathVertices,
           }) ?? false)
         : (rctx.gpuMediaPipeline?.renderSourceToTexture(media.source, mediaOutputTexture, {
             sourceWidth: media.sourceWidth,
@@ -2354,7 +2356,11 @@ async function resolveGpuMediaParticipantSource(
   if (participant.item.type === 'shape') {
     if (!rctx.gpuShapePipeline) return null
     const shape = participant.item
-    if (shape.isMask || shape.shapeType === 'path') return null
+    if (shape.isMask) return null
+    const resolvedPathVertices =
+      shape.shapeType === 'path' ? resolveGpuShapePathVertices(shape, transform) : undefined
+    if (shape.shapeType === 'path' && !resolvedPathVertices) return null
+    const pathVertices = resolvedPathVertices ?? undefined
     if (participant.effects.length > 0 && !rctx.gpuPipeline) return null
     const fillColor = parseGpuColor(shape.fillColor)
     if (!fillColor) return null
@@ -2373,6 +2379,7 @@ async function resolveGpuMediaParticipantSource(
       sourceHeight: transform.height,
       fillColor,
       strokeColor,
+      pathVertices,
     }
   }
 
@@ -2462,6 +2469,26 @@ function parseGpuColor(color: string): [number, number, number, number] | null {
   const a = parts[3] === undefined ? 1 : Number.parseFloat(parts[3])
   if (![r, g, b, a].every(Number.isFinite)) return null
   return [r, g, b, a]
+}
+
+function resolveGpuShapePathVertices(
+  shape: ShapeItem,
+  transform: ItemTransform,
+): Array<[number, number]> | null {
+  const vertices = shape.pathVertices
+  if (!vertices || vertices.length < 3 || vertices.length > 16) return null
+  const hasCurves = vertices.some(
+    (vertex, index) =>
+      vertex.outHandle[0] !== 0 ||
+      vertex.outHandle[1] !== 0 ||
+      vertices[(index + 1) % vertices.length]?.inHandle[0] !== 0 ||
+      vertices[(index + 1) % vertices.length]?.inHandle[1] !== 0,
+  )
+  if (hasCurves) return null
+  return vertices.map((vertex) => [
+    (vertex.position[0] - 0.5) * transform.width,
+    (vertex.position[1] - 0.5) * transform.height,
+  ])
 }
 
 function resolveVideoParticipantSourceTime(

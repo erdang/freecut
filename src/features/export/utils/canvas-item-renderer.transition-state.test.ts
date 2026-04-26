@@ -808,10 +808,15 @@ describe('renderTransitionToGpuTexture', () => {
       ...leftClip,
       id: 'right-shape',
       label: 'Right shape',
-      shapeType: 'ellipse',
+      shapeType: 'path',
       fillColor: '#0000ff',
       strokeColor: undefined,
       strokeWidth: 0,
+      pathVertices: [
+        { position: [0, 0], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [1, 0], inHandle: [0, 0], outHandle: [0, 0] },
+        { position: [0.5, 1], inHandle: [0, 0], outHandle: [0, 0] },
+      ],
     } as ShapeItem
     const activeTransition = createActiveTransition({
       leftClip,
@@ -881,6 +886,18 @@ describe('renderTransitionToGpuTexture', () => {
         strokeWidth: 4,
         opacity: 0.75,
         rotationRad: (10 * Math.PI) / 180,
+      }),
+    )
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenNthCalledWith(
+      2,
+      rightTexture,
+      expect.objectContaining({
+        shapeType: 'path',
+        pathVertices: [
+          [-320, -180],
+          [320, -180],
+          [0, 180],
+        ],
       }),
     )
     expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
