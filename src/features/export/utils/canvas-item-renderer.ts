@@ -345,12 +345,15 @@ export async function renderItem(
   const itemKeyframes = rctx.getCurrentKeyframes?.(item.id) ?? rctx.keyframesMap.get(item.id)
   const animatedTextItem =
     item.type === 'text'
-      ? resolveAnimatedTextItem(item, itemKeyframes, frame - item.from, rctx.canvasSettings)
+      ? {
+          ...resolveAnimatedTextItem(item, itemKeyframes, frame - item.from, rctx.canvasSettings),
+          cornerPin: item.cornerPin,
+        }
       : item
   const frameResolvedItem = applyAnimatedCropToItem(animatedTextItem, frame, rctx, renderSpan)
   const resolvedTransform = resolveItemTransform(transform)
   const frameResolvedTransform =
-    frameResolvedItem.type === 'text'
+    frameResolvedItem.type === 'text' && !hasCornerPin(frameResolvedItem.cornerPin)
       ? expandTextTransformToFitContent(frameResolvedItem, resolvedTransform)
       : resolvedTransform
 
@@ -2802,18 +2805,22 @@ function resolveGpuTextParticipantSource(
 
   const itemKeyframes =
     rctx.getCurrentKeyframes?.(participant.item.id) ?? rctx.keyframesMap.get(participant.item.id)
-  const resolvedTextItem = resolveAnimatedTextItem(
-    participant.item,
-    itemKeyframes,
-    frame - participant.item.from,
-    rctx.canvasSettings,
-  )
-  const resolvedTransform = expandTextTransformToFitContent(
-    resolvedTextItem,
-    resolveItemTransform(participant.transform),
-  )
-  const sourceWidth = Math.max(2, Math.ceil(resolvedTransform.width))
-  const sourceHeight = Math.max(2, Math.ceil(resolvedTransform.height))
+  const resolvedTextItem = {
+    ...resolveAnimatedTextItem(
+      participant.item,
+      itemKeyframes,
+      frame - participant.item.from,
+      rctx.canvasSettings,
+    ),
+    cornerPin: participant.item.cornerPin,
+  }
+  const baseTransform = resolveItemTransform(participant.transform)
+  const resolvedTransform = expandTextTransformToFitContent(resolvedTextItem, baseTransform)
+  const textureTransform = hasCornerPin(resolvedTextItem.cornerPin)
+    ? baseTransform
+    : resolvedTransform
+  const sourceWidth = Math.max(2, Math.ceil(textureTransform.width))
+  const sourceHeight = Math.max(2, Math.ceil(textureTransform.height))
   const cacheKey = getGpuTextTextureCacheKey(resolvedTextItem, sourceWidth, sourceHeight)
   const cached = rctx.gpuTextTextureCache.get(cacheKey)
   if (cached) {

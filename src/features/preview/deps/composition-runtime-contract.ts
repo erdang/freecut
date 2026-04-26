@@ -19,6 +19,7 @@ export { expandTextTransformToFitContent } from '@/features/composition-runtime/
 export {
   computeCornerPinHomography,
   invertCornerPinHomography,
+  hasCornerPin,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   withCornerPinReferenceSize,
