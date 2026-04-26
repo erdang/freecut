@@ -1676,7 +1676,8 @@ describe('renderTransitionToGpuTexture', () => {
       label: 'Nested clip mask 2',
       shapeType: 'ellipse',
       isMask: true,
-      maskType: 'clip',
+      maskType: 'alpha',
+      maskFeather: 18,
       maskInvert: true,
       fillColor: '#ffffff',
       transform: {
@@ -1906,6 +1907,7 @@ describe('renderTransitionToGpuTexture', () => {
         transformRect: { x: 80, y: 60, width: 480, height: 240 },
         shapeType: 'ellipse',
         fillColor: [1, 1, 1, 1],
+        maskFeatherPixels: 18,
       }),
     )
     expect(gpuMaskCombinePipeline.combine).toHaveBeenCalledWith(

@@ -3272,7 +3272,7 @@ async function renderPreparedGpuSubCompLayerToTexture(
 function areGpuSubCompMasksSupported(masks: ReturnType<typeof getActiveSubCompMasks>): boolean {
   if (masks.length === 0) return true
   for (const mask of masks) {
-    if (mask.bitmapMask || mask.maskType !== 'clip' || mask.feather > 0) return false
+    if (mask.bitmapMask) return false
     if (hasCornerPin(mask.shape.cornerPin)) return false
     if ((mask.shape.strokeWidth ?? 0) > 0) return false
     if (
@@ -3318,6 +3318,7 @@ function renderGpuSubCompMaskToTexture(
     innerRadius: mask.shape.innerRadius,
     aspectRatioLocked: mask.shape.transform?.aspectRatioLocked,
     pathVertices: resolvedPathVertices,
+    maskFeatherPixels: mask.maskType === 'alpha' ? mask.feather : 0,
     clear: true,
     blend: false,
   })

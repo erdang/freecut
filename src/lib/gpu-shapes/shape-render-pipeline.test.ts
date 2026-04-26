@@ -54,6 +54,7 @@ describe('ShapeRenderPipeline', () => {
       strokeWidth: 12,
       points: 7,
       innerRadius: 0.4,
+      maskFeatherPixels: 16,
     })
 
     expect(rendered).toBe(true)
@@ -70,6 +71,7 @@ describe('ShapeRenderPipeline', () => {
     ])
     expect(uniformData[19]).toBeCloseTo(0.4)
     expect(uniformData[20]).toBeCloseTo(Math.PI / 4)
+    expect(uniformData[23]).toBe(16)
     expect(commandEncoder.beginRenderPass).toHaveBeenCalledWith({
       colorAttachments: [
         {

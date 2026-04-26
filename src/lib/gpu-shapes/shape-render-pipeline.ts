@@ -25,6 +25,7 @@ export interface GpuShapeRenderParams {
   pathVertices?: Array<[number, number]>
   clear?: boolean
   blend?: boolean
+  maskFeatherPixels?: number
 }
 
 const SHAPE_RENDER_SHADER = /* wgsl */ `
@@ -177,7 +178,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     d = polarShapeDistance(normalized, u.shapeParams.z, u.shapeParams.w, u.shapeKind > 4.5) * min(halfSize.x, halfSize.y);
   }
 
-  let fillAlpha = 1.0 - smoothstep(-0.75, 0.75, d);
+  let edgeSoftness = max(u.flags.w, 0.75);
+  let fillAlpha = 1.0 - smoothstep(-edgeSoftness, edgeSoftness, d);
   let strokeWidth = max(u.shapeParams.y, 0.0);
   let strokeAlpha = select(0.0, 1.0 - smoothstep(strokeWidth - 0.75, strokeWidth + 0.75, abs(d)), strokeWidth > 0.0);
   let color = mix(u.fillColor, u.strokeColor, strokeAlpha);
@@ -277,7 +279,7 @@ export class ShapeRenderPipeline {
       params.rotationRad ?? 0,
       params.aspectRatioLocked === false ? 0 : 1,
       direction,
-      0,
+      params.maskFeatherPixels ?? 0,
       ...packPathVertices(pathVertices),
     ])
     this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData)
