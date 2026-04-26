@@ -130,7 +130,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
   let sourcePixel = u.sourceRect.xy + localUv * u.sourceRect.zw;
   let sourceUv = sourcePixel / max(u.sourceSize, vec2f(0.001));
-  let color = textureSample(texSampler, sourceTex, sourceUv);
+  let color = textureSampleLevel(sourceTex, texSampler, sourceUv, 0.0);
   let viewportLocal = samplePixel - u.destRect.xy;
   let leftAlpha = select(1.0, clamp(viewportLocal.x / max(u.feather.x, 0.001), 0.0, 1.0), u.feather.x > 0.0);
   let rightAlpha = select(1.0, clamp((u.destRect.z - viewportLocal.x) / max(u.feather.y, 0.001), 0.0, 1.0), u.feather.y > 0.0);

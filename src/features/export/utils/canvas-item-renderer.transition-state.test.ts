@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vite-plus/test'
 import '@/core/timeline/transitions'
 import type { ItemEffect } from '@/types/effects'
 import type { ItemKeyframes } from '@/types/keyframe'
-import type { ImageItem, TimelineItem, VideoItem } from '@/types/timeline'
+import type { ImageItem, ShapeItem, TimelineItem, VideoItem } from '@/types/timeline'
 import type { ActiveTransition } from './canvas-transitions'
 import type { ItemRenderContext } from './canvas-item-renderer'
 import type { VideoFrameSource } from './shared-video-extractor'
@@ -776,6 +776,119 @@ describe('renderTransitionToGpuTexture', () => {
       rightTexture,
       outputTexture,
       0.6,
+      1920,
+      1080,
+      undefined,
+      undefined,
+    )
+  })
+
+  it('routes eligible shape participants through GPU shape textures without canvas rendering', async () => {
+    const leftClip: ShapeItem = {
+      id: 'left-shape',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Left shape',
+      shapeType: 'rectangle',
+      fillColor: '#ff0000',
+      strokeColor: 'rgba(0, 255, 0, 0.5)',
+      strokeWidth: 4,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 10,
+        opacity: 0.75,
+      },
+    } as ShapeItem
+    const rightClip: ShapeItem = {
+      ...leftClip,
+      id: 'right-shape',
+      label: 'Right shape',
+      shapeType: 'ellipse',
+      fillColor: '#0000ff',
+      strokeColor: undefined,
+      strokeWidth: 0,
+    } as ShapeItem
+    const activeTransition = createActiveTransition({
+      leftClip,
+      rightClip,
+      progress: 0.25,
+    })
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(),
+      release: vi.fn(),
+    }
+    const gpuShapePipeline = {
+      renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: {} as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: null,
+      gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledTimes(2)
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenNthCalledWith(
+      1,
+      leftTexture,
+      expect.objectContaining({
+        shapeType: 'rectangle',
+        fillColor: [1, 0, 0, 1],
+        strokeColor: [0, 1, 0, 0.5],
+        strokeWidth: 4,
+        opacity: 0.75,
+        rotationRad: (10 * Math.PI) / 180,
+      }),
+    )
+    expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
+      'iris',
+      leftTexture,
+      rightTexture,
+      outputTexture,
+      0.25,
       1920,
       1080,
       undefined,

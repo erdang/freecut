@@ -76,6 +76,7 @@ import type {
   GpuMediaRenderParams,
   MediaRenderPipeline,
 } from '@/infrastructure/gpu/media'
+import type { ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
 
 const log = createLogger('CanvasItemRenderer')
 
@@ -216,6 +217,9 @@ export interface ItemRenderContext {
 
   // GPU media renderer (lazily initialized, shares device with gpuPipeline)
   gpuMediaPipeline?: MediaRenderPipeline | null
+
+  // GPU shape renderer (lazily initialized, shares device with gpuPipeline)
+  gpuShapePipeline?: ShapeRenderPipeline | null
 
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Player's <video> elements are already at
@@ -1904,13 +1908,24 @@ type RenderedTransitionTextureParticipants = {
   poolTextures: GPUTexture[]
 }
 
-type ResolvedGpuMediaParticipantSource = {
-  item: ImageItem | VideoItem
-  source: RenderImageSource | VideoFrame
-  sourceWidth: number
-  sourceHeight: number
-  close?: () => void
-}
+type ResolvedGpuMediaParticipantSource =
+  | {
+      kind: 'media'
+      item: ImageItem | VideoItem
+      source: RenderImageSource | VideoFrame
+      sourceWidth: number
+      sourceHeight: number
+      close?: () => void
+    }
+  | {
+      kind: 'shape'
+      item: ShapeItem
+      sourceWidth: number
+      sourceHeight: number
+      fillColor: [number, number, number, number]
+      strokeColor?: [number, number, number, number]
+      close?: () => void
+    }
 
 type PreparedGpuMediaParticipant = {
   participant: TransitionParticipantRenderState
@@ -2129,8 +2144,7 @@ async function renderTransitionGpuMediaTextureParticipants(
   trackOrder: number,
   gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
 ): Promise<RenderedTransitionTextureParticipants | null> {
-  const pipeline = rctx.gpuMediaPipeline
-  if (!pipeline) return null
+  if (!rctx.gpuMediaPipeline && !rctx.gpuShapePipeline) return null
 
   const leftParticipant = resolveTransitionParticipantRenderState(
     activeTransition.leftClip,
@@ -2161,14 +2175,12 @@ async function renderTransitionGpuMediaTextureParticipants(
 
   try {
     const leftRendered = await renderGpuMediaParticipantToTexture(
-      pipeline,
       leftPrepared,
       rctx,
       gpuTexturePool,
       leftTexture,
     )
     const rightRendered = await renderGpuMediaParticipantToTexture(
-      pipeline,
       rightPrepared,
       rctx,
       gpuTexturePool,
@@ -2193,7 +2205,6 @@ async function renderTransitionGpuMediaTextureParticipants(
 }
 
 async function renderGpuMediaParticipantToTexture(
-  pipeline: MediaRenderPipeline,
   prepared: PreparedGpuMediaParticipant,
   rctx: ItemRenderContext,
   gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
@@ -2207,22 +2218,40 @@ async function renderGpuMediaParticipantToTexture(
       : outputTexture
 
   try {
-    const renderedMedia = pipeline.renderSourceToTexture(media.source, mediaOutputTexture, {
-      sourceWidth: media.sourceWidth,
-      sourceHeight: media.sourceHeight,
-      outputWidth: rctx.canvasSettings.width,
-      outputHeight: rctx.canvasSettings.height,
-      sourceRect: prepared.sourceRect,
-      destRect: prepared.destRect,
-      transformRect: prepared.transformRect,
-      featherPixels: prepared.featherPixels,
-      cornerRadius: prepared.cornerRadius,
-      cornerPin: prepared.cornerPin,
-      opacity: participant.transform.opacity,
-      rotationRad: prepared.rotationRad,
-      flipX: prepared.flipX,
-      flipY: prepared.flipY,
-    })
+    const renderedMedia =
+      media.kind === 'shape'
+        ? (rctx.gpuShapePipeline?.renderShapeToTexture(mediaOutputTexture, {
+            outputWidth: rctx.canvasSettings.width,
+            outputHeight: rctx.canvasSettings.height,
+            transformRect: prepared.transformRect,
+            rotationRad: prepared.rotationRad,
+            opacity: participant.transform.opacity,
+            shapeType: media.item.shapeType,
+            fillColor: media.fillColor,
+            strokeColor: media.strokeColor,
+            strokeWidth: media.item.strokeWidth,
+            cornerRadius: media.item.cornerRadius,
+            direction: media.item.direction,
+            points: media.item.points,
+            innerRadius: media.item.innerRadius,
+            aspectRatioLocked: participant.item.transform?.aspectRatioLocked,
+          }) ?? false)
+        : (rctx.gpuMediaPipeline?.renderSourceToTexture(media.source, mediaOutputTexture, {
+            sourceWidth: media.sourceWidth,
+            sourceHeight: media.sourceHeight,
+            outputWidth: rctx.canvasSettings.width,
+            outputHeight: rctx.canvasSettings.height,
+            sourceRect: prepared.sourceRect,
+            destRect: prepared.destRect,
+            transformRect: prepared.transformRect,
+            featherPixels: prepared.featherPixels,
+            cornerRadius: prepared.cornerRadius,
+            cornerPin: prepared.cornerPin,
+            opacity: participant.transform.opacity,
+            rotationRad: prepared.rotationRad,
+            flipX: prepared.flipX,
+            flipY: prepared.flipY,
+          }) ?? false)
     if (!renderedMedia) return false
     if (mediaOutputTexture === outputTexture) return true
     if (!rctx.gpuPipeline) return false
@@ -2250,6 +2279,28 @@ async function prepareGpuMediaParticipant(
     rctx,
   )
   if (!media) return null
+  if (media.kind === 'shape') {
+    const transformRect = {
+      x: rctx.canvasSettings.width / 2 + participant.transform.x - participant.transform.width / 2,
+      y:
+        rctx.canvasSettings.height / 2 + participant.transform.y - participant.transform.height / 2,
+      width: participant.transform.width,
+      height: participant.transform.height,
+    }
+    if (transformRect.width <= 0 || transformRect.height <= 0) return null
+    return {
+      participant,
+      media,
+      sourceRect: { x: 0, y: 0, width: media.sourceWidth, height: media.sourceHeight },
+      destRect: transformRect,
+      transformRect,
+      featherPixels: { left: 0, right: 0, top: 0, bottom: 0 },
+      cornerRadius: participant.transform.cornerRadius,
+      rotationRad: (participant.transform.rotation * Math.PI) / 180,
+      flipX: false,
+      flipY: false,
+    }
+  }
 
   const layout = calculateContainedMediaDrawLayout(
     media.sourceWidth,
@@ -2300,10 +2351,36 @@ async function resolveGpuMediaParticipantSource(
 ): Promise<ResolvedGpuMediaParticipantSource | null> {
   if (transform.opacity < 0 || transform.opacity > 1) return null
 
+  if (participant.item.type === 'shape') {
+    if (!rctx.gpuShapePipeline) return null
+    const shape = participant.item
+    if (shape.isMask || shape.shapeType === 'path' || shape.shapeType === 'heart') return null
+    if (participant.effects.length > 0) return null
+    const fillColor = parseGpuColor(shape.fillColor)
+    if (!fillColor) return null
+    const parsedStrokeColor =
+      shape.strokeWidth && shape.strokeWidth > 0 && shape.strokeColor
+        ? parseGpuColor(shape.strokeColor)
+        : undefined
+    if (shape.strokeWidth && shape.strokeWidth > 0 && shape.strokeColor && !parsedStrokeColor) {
+      return null
+    }
+    const strokeColor = parsedStrokeColor ?? undefined
+    return {
+      kind: 'shape',
+      item: shape,
+      sourceWidth: transform.width,
+      sourceHeight: transform.height,
+      fillColor,
+      strokeColor,
+    }
+  }
+
   if (participant.item.type === 'image') {
     const loadedImage = rctx.imageElements.get(participant.item.id)
     if (!loadedImage) return null
     return {
+      kind: 'media',
       item: participant.item,
       source: loadedImage.source,
       sourceWidth: loadedImage.width,
@@ -2328,6 +2405,7 @@ async function resolveGpuMediaParticipantSource(
   if (!captured.success || !captured.frame) return null
 
   return {
+    kind: 'media',
     item: participant.item,
     source: captured.frame,
     sourceWidth: captured.frame.displayWidth,
@@ -2353,6 +2431,37 @@ function resolveGpuMediaCornerPin(
     height: mediaRect.height,
     inverseMatrix,
   }
+}
+
+function parseGpuColor(color: string): [number, number, number, number] | null {
+  const trimmed = color.trim()
+  const hex = trimmed.match(/^#([\da-f]{3}|[\da-f]{6}|[\da-f]{8})$/i)
+  if (hex) {
+    let value = hex[1]!
+    if (value.length === 3) {
+      value = value
+        .split('')
+        .map((ch) => ch + ch)
+        .join('')
+    }
+    const r = Number.parseInt(value.slice(0, 2), 16) / 255
+    const g = Number.parseInt(value.slice(2, 4), 16) / 255
+    const b = Number.parseInt(value.slice(4, 6), 16) / 255
+    const a = value.length === 8 ? Number.parseInt(value.slice(6, 8), 16) / 255 : 1
+    return [r, g, b, a]
+  }
+  const rgb = trimmed.match(/^rgba?\(([^)]+)\)$/i)
+  if (!rgb) return null
+  const parts = rgb[1]!.split(',').map((part) => part.trim())
+  if (parts.length < 3) return null
+  const parseChannel = (part: string) =>
+    part.endsWith('%') ? Number.parseFloat(part) / 100 : Number.parseFloat(part) / 255
+  const r = parseChannel(parts[0]!)
+  const g = parseChannel(parts[1]!)
+  const b = parseChannel(parts[2]!)
+  const a = parts[3] === undefined ? 1 : Number.parseFloat(parts[3])
+  if (![r, g, b, a].every(Number.isFinite)) return null
+  return [r, g, b, a]
 }
 
 function resolveVideoParticipantSourceTime(
