@@ -41,6 +41,8 @@ export interface GpuMediaRenderParams {
   flipY?: boolean
   clear?: boolean
   blend?: boolean
+  maskTexture?: GPUTexture
+  maskInvert?: boolean
 }
 
 const MEDIA_RENDER_SHADER = /* wgsl */ `
@@ -85,6 +87,7 @@ struct MediaUniforms {
 @group(0) @binding(0) var texSampler: sampler;
 @group(0) @binding(1) var sourceTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> u: MediaUniforms;
+@group(0) @binding(3) var maskTex: texture_2d<f32>;
 
 @fragment
 fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
@@ -139,6 +142,14 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let topAlpha = select(1.0, clamp(viewportLocal.y / max(u.feather.z, 0.001), 0.0, 1.0), u.feather.z > 0.0);
   let bottomAlpha = select(1.0, clamp((u.destRect.w - viewportLocal.y) / max(u.feather.w, 0.001), 0.0, 1.0), u.feather.w > 0.0);
   let featherAlpha = leftAlpha * rightAlpha * topAlpha * bottomAlpha;
+  var layerMaskAlpha = 1.0;
+  if (u.mask.z > 0.5) {
+    let maskUv = samplePixel / max(u.outputSize, vec2f(0.001));
+    layerMaskAlpha = textureSampleLevel(maskTex, texSampler, maskUv, 0.0).a;
+    if (u.mask.w > 0.5) {
+      layerMaskAlpha = 1.0 - layerMaskAlpha;
+    }
+  }
 
   let radius = min(u.mask.x, min(u.transformRect.z, u.transformRect.w) * 0.5);
   var cornerAlpha = 1.0;
@@ -148,7 +159,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     cornerAlpha = 1.0 - smoothstep(-0.75, 0.75, roundedDistance);
   }
 
-  return vec4f(color.rgb, color.a * u.opacity * featherAlpha * cornerAlpha);
+  return vec4f(color.rgb, color.a * u.opacity * featherAlpha * cornerAlpha * layerMaskAlpha);
 }
 `
 
@@ -172,6 +183,7 @@ export class MediaRenderPipeline {
   private bindGroup: GPUBindGroup | null = null
   private inputW = 0
   private inputH = 0
+  private activeMaskView: GPUTextureView | null = null
   private readonly replacePipeline: GPURenderPipeline
   private readonly blendPipeline: GPURenderPipeline
   private readonly sampler: GPUSampler
@@ -190,6 +202,7 @@ export class MediaRenderPipeline {
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
         { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+        { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: {} },
       ],
     })
     this.replacePipeline = this.createRenderPipeline(shaderModule, false)
@@ -253,7 +266,20 @@ export class MediaRenderPipeline {
       { width: sourceWidth, height: sourceHeight },
     )
 
-    return this.renderInputViewToTexture(outputTexture, params, sourceWidth, sourceHeight)
+    if (!params.maskTexture) {
+      return this.renderInputViewToTexture(outputTexture, params, sourceWidth, sourceHeight)
+    }
+
+    const previousMaskView = this.activeMaskView
+    const previousBindGroup = this.bindGroup
+    this.activeMaskView = params.maskTexture.createView()
+    this.bindGroup = null
+    try {
+      return this.renderInputViewToTexture(outputTexture, params, sourceWidth, sourceHeight)
+    } finally {
+      this.activeMaskView = previousMaskView
+      this.bindGroup = previousBindGroup
+    }
   }
 
   renderTextureToTexture(
@@ -273,12 +299,15 @@ export class MediaRenderPipeline {
 
     const previousView = this.inputView
     const previousBindGroup = this.bindGroup
+    const previousMaskView = this.activeMaskView
     this.inputView = sourceTexture.createView()
+    this.activeMaskView = params.maskTexture?.createView() ?? null
     this.bindGroup = null
     try {
       return this.renderInputViewToTexture(outputTexture, params, sourceWidth, sourceHeight)
     } finally {
       this.inputView = previousView
+      this.activeMaskView = previousMaskView
       this.bindGroup = previousBindGroup
     }
   }
@@ -305,12 +334,14 @@ export class MediaRenderPipeline {
   private ensureBindGroup(): GPUBindGroup | null {
     if (this.bindGroup) return this.bindGroup
     if (!this.inputView) return null
+    const maskView = this.activeMaskView ?? this.inputView
     this.bindGroup = this.device.createBindGroup({
       layout: this.bindGroupLayout,
       entries: [
         { binding: 0, resource: this.sampler },
         { binding: 1, resource: this.inputView },
         { binding: 2, resource: { buffer: this.uniformBuffer } },
+        { binding: 3, resource: maskView },
       ],
     })
     return this.bindGroup
@@ -358,8 +389,8 @@ export class MediaRenderPipeline {
       featherPixels.bottom,
       params.cornerRadius ?? 0,
       cornerPin ? 1 : 0,
-      0,
-      0,
+      params.maskTexture ? 1 : 0,
+      params.maskInvert ? 1 : 0,
       cornerPin?.originX ?? 0,
       cornerPin?.originY ?? 0,
       cornerPin?.width ?? 0,
