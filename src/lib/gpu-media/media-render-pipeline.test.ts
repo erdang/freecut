@@ -144,4 +144,33 @@ describe('MediaRenderPipeline', () => {
 
     expect(device.createBindGroup).toHaveBeenCalledTimes(1)
   })
+
+  it('renders an existing GPU texture without uploading an external source', () => {
+    const { device, outputTexture, pipeline, queue } = createPipelineHarness()
+    const sourceTexture = {
+      width: 640,
+      height: 180,
+      createView: vi.fn(() => 'cached-text-view'),
+    } as unknown as GPUTexture
+
+    expect(
+      pipeline.renderTextureToTexture(sourceTexture, outputTexture, {
+        sourceWidth: 640,
+        sourceHeight: 180,
+        outputWidth: 1920,
+        outputHeight: 1080,
+        destRect: { x: 640, y: 450, width: 640, height: 180 },
+      }),
+    ).toBe(true)
+
+    expect(queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+    expect(sourceTexture.createView).toHaveBeenCalled()
+    expect(device.createBindGroup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entries: expect.arrayContaining([
+          expect.objectContaining({ binding: 1, resource: 'cached-text-view' }),
+        ]),
+      }),
+    )
+  })
 })

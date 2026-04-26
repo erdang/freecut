@@ -89,6 +89,7 @@ import {
   type WorkerLoadedImage,
   type ItemRenderContext,
   type SubCompRenderData,
+  type GpuTextTextureCacheEntry,
 } from './canvas-item-renderer'
 import { ScrubbingCache } from '@/features/export/deps/preview'
 import { resolveFrameRenderOptimization } from './render-path-optimizer'
@@ -235,6 +236,7 @@ export async function createCompositionRenderer(
   let gpuTransitionPipeline: TransitionPipeline | null = null
   let gpuMediaPipeline: MediaRenderPipeline | null = null
   let gpuShapePipeline: ShapeRenderPipeline | null = null
+  const gpuTextTextureCache = new Map<string, GpuTextTextureCacheEntry>()
 
   function ensureGpuTransitionPipeline(): boolean {
     if (gpuTransitionPipeline) return true
@@ -574,6 +576,7 @@ export async function createCompositionRenderer(
     gpuTransitionPipeline: null,
     gpuMediaPipeline: null,
     gpuShapePipeline: null,
+    gpuTextTextureCache,
     domVideoElementProvider,
   }
 
@@ -2220,6 +2223,8 @@ export async function createCompositionRenderer(
       gpuMediaPipeline = null
       gpuShapePipeline?.destroy()
       gpuShapePipeline = null
+      for (const entry of gpuTextTextureCache.values()) entry.texture.destroy()
+      gpuTextTextureCache.clear()
       gpuPipeline?.destroy()
       gpuPipeline = null
       frameSceneCache.invalidate()

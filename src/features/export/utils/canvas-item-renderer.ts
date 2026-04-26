@@ -221,6 +221,9 @@ export interface ItemRenderContext {
   // GPU shape renderer (lazily initialized, shares device with gpuPipeline)
   gpuShapePipeline?: ShapeRenderPipeline | null
 
+  // Cached text glyph/layout textures for GPU transition participants.
+  gpuTextTextureCache?: Map<string, GpuTextTextureCacheEntry>
+
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Player's <video> elements are already at
   // the correct frame — use them directly instead of mediabunny decode.
@@ -249,6 +252,12 @@ export interface SubCompRenderData {
   keyframesMap: Map<string, ItemKeyframes>
   /** Adjustment layers from visible tracks, with their track orders */
   adjustmentLayers?: AdjustmentLayerWithTrackOrder[]
+}
+
+export interface GpuTextTextureCacheEntry {
+  texture: GPUTexture
+  width: number
+  height: number
 }
 
 export interface TransitionParticipantRenderState<TItem extends TimelineItem = TimelineItem> {
@@ -1927,6 +1936,14 @@ type ResolvedGpuMediaParticipantSource =
       pathVertices?: Array<[number, number]>
       close?: () => void
     }
+  | {
+      kind: 'text'
+      item: TextItem
+      sourceWidth: number
+      sourceHeight: number
+      texture: GPUTexture
+      close?: () => void
+    }
 
 type PreparedGpuMediaParticipant = {
   participant: TransitionParticipantRenderState
@@ -2327,22 +2344,35 @@ async function renderGpuMediaParticipantToTexture(
             aspectRatioLocked: participant.item.transform?.aspectRatioLocked,
             pathVertices: media.pathVertices,
           }) ?? false)
-        : (rctx.gpuMediaPipeline?.renderSourceToTexture(media.source, mediaOutputTexture, {
-            sourceWidth: media.sourceWidth,
-            sourceHeight: media.sourceHeight,
-            outputWidth: rctx.canvasSettings.width,
-            outputHeight: rctx.canvasSettings.height,
-            sourceRect: prepared.sourceRect,
-            destRect: prepared.destRect,
-            transformRect: prepared.transformRect,
-            featherPixels: prepared.featherPixels,
-            cornerRadius: prepared.cornerRadius,
-            cornerPin: prepared.cornerPin,
-            opacity: participant.transform.opacity,
-            rotationRad: prepared.rotationRad,
-            flipX: prepared.flipX,
-            flipY: prepared.flipY,
-          }) ?? false)
+        : media.kind === 'text'
+          ? (rctx.gpuMediaPipeline?.renderTextureToTexture(media.texture, mediaOutputTexture, {
+              sourceWidth: media.sourceWidth,
+              sourceHeight: media.sourceHeight,
+              outputWidth: rctx.canvasSettings.width,
+              outputHeight: rctx.canvasSettings.height,
+              sourceRect: { x: 0, y: 0, width: media.sourceWidth, height: media.sourceHeight },
+              destRect: prepared.destRect,
+              transformRect: prepared.transformRect,
+              cornerRadius: prepared.cornerRadius,
+              opacity: participant.transform.opacity,
+              rotationRad: prepared.rotationRad,
+            }) ?? false)
+          : (rctx.gpuMediaPipeline?.renderSourceToTexture(media.source, mediaOutputTexture, {
+              sourceWidth: media.sourceWidth,
+              sourceHeight: media.sourceHeight,
+              outputWidth: rctx.canvasSettings.width,
+              outputHeight: rctx.canvasSettings.height,
+              sourceRect: prepared.sourceRect,
+              destRect: prepared.destRect,
+              transformRect: prepared.transformRect,
+              featherPixels: prepared.featherPixels,
+              cornerRadius: prepared.cornerRadius,
+              cornerPin: prepared.cornerPin,
+              opacity: participant.transform.opacity,
+              rotationRad: prepared.rotationRad,
+              flipX: prepared.flipX,
+              flipY: prepared.flipY,
+            }) ?? false)
     if (!renderedMedia) return false
     if (mediaOutputTexture === outputTexture) return true
     if (!rctx.gpuPipeline) return false
@@ -2377,6 +2407,33 @@ async function prepareGpuMediaParticipant(
         rctx.canvasSettings.height / 2 + participant.transform.y - participant.transform.height / 2,
       width: participant.transform.width,
       height: participant.transform.height,
+    }
+    if (transformRect.width <= 0 || transformRect.height <= 0) return null
+    return {
+      participant,
+      media,
+      sourceRect: { x: 0, y: 0, width: media.sourceWidth, height: media.sourceHeight },
+      destRect: transformRect,
+      transformRect,
+      featherPixels: { left: 0, right: 0, top: 0, bottom: 0 },
+      cornerRadius: participant.transform.cornerRadius,
+      rotationRad: (participant.transform.rotation * Math.PI) / 180,
+      flipX: false,
+      flipY: false,
+    }
+  }
+
+  if (media.kind === 'text') {
+    const textTransform = {
+      ...participant.transform,
+      width: media.sourceWidth,
+      height: media.sourceHeight,
+    }
+    const transformRect = {
+      x: rctx.canvasSettings.width / 2 + textTransform.x - textTransform.width / 2,
+      y: rctx.canvasSettings.height / 2 + textTransform.y - textTransform.height / 2,
+      width: textTransform.width,
+      height: textTransform.height,
     }
     if (transformRect.width <= 0 || transformRect.height <= 0) return null
     return {
@@ -2484,6 +2541,14 @@ async function resolveGpuMediaParticipantSource(
     }
   }
 
+  if (participant.item.type === 'text') {
+    return resolveGpuTextParticipantSource(
+      participant as TransitionParticipantRenderState<TextItem>,
+      frame,
+      rctx,
+    )
+  }
+
   if (participant.item.type !== 'video') return null
   if (!rctx.useMediabunny.has(participant.item.id)) return null
   if (rctx.mediabunnyDisabledItems.has(participant.item.id)) return null
@@ -2507,6 +2572,123 @@ async function resolveGpuMediaParticipantSource(
     sourceWidth: captured.frame.displayWidth,
     sourceHeight: captured.frame.displayHeight,
     close: () => captured.frame?.close(),
+  }
+}
+
+function resolveGpuTextParticipantSource(
+  participant: TransitionParticipantRenderState<TextItem>,
+  frame: number,
+  rctx: ItemRenderContext,
+): ResolvedGpuMediaParticipantSource | null {
+  if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline || !rctx.gpuTextTextureCache) return null
+  if (hasCornerPin(participant.item.cornerPin)) return null
+
+  const itemKeyframes =
+    rctx.getCurrentKeyframes?.(participant.item.id) ?? rctx.keyframesMap.get(participant.item.id)
+  const resolvedTextItem = resolveAnimatedTextItem(
+    participant.item,
+    itemKeyframes,
+    frame - participant.item.from,
+    rctx.canvasSettings,
+  )
+  const resolvedTransform = expandTextTransformToFitContent(
+    resolvedTextItem,
+    resolveItemTransform(participant.transform),
+  )
+  const sourceWidth = Math.max(2, Math.ceil(resolvedTransform.width))
+  const sourceHeight = Math.max(2, Math.ceil(resolvedTransform.height))
+  const cacheKey = getGpuTextTextureCacheKey(resolvedTextItem, sourceWidth, sourceHeight)
+  const cached = rctx.gpuTextTextureCache.get(cacheKey)
+  if (cached) {
+    rctx.gpuTextTextureCache.delete(cacheKey)
+    rctx.gpuTextTextureCache.set(cacheKey, cached)
+    return {
+      kind: 'text',
+      item: resolvedTextItem,
+      sourceWidth: cached.width,
+      sourceHeight: cached.height,
+      texture: cached.texture,
+    }
+  }
+
+  const { canvas, ctx } = rctx.canvasPool.acquire()
+  try {
+    canvas.width = sourceWidth
+    canvas.height = sourceHeight
+    ctx.clearRect(0, 0, sourceWidth, sourceHeight)
+    const localRctx: ItemRenderContext = {
+      ...rctx,
+      canvasSettings: { width: sourceWidth, height: sourceHeight, fps: rctx.canvasSettings.fps },
+    }
+    renderTextItem(
+      ctx,
+      resolvedTextItem,
+      {
+        x: 0,
+        y: 0,
+        width: resolvedTransform.width,
+        height: resolvedTransform.height,
+      },
+      localRctx,
+    )
+
+    const texture = rctx.gpuPipeline.getDevice().createTexture({
+      size: { width: sourceWidth, height: sourceHeight },
+      format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    })
+    rctx.gpuPipeline
+      .getDevice()
+      .queue.copyExternalImageToTexture(
+        { source: canvas, flipY: false },
+        { texture },
+        { width: sourceWidth, height: sourceHeight },
+      )
+    rctx.gpuTextTextureCache.set(cacheKey, { texture, width: sourceWidth, height: sourceHeight })
+    pruneGpuTextTextureCache(rctx.gpuTextTextureCache)
+    return {
+      kind: 'text',
+      item: resolvedTextItem,
+      sourceWidth,
+      sourceHeight,
+      texture,
+    }
+  } finally {
+    rctx.canvasPool.release(canvas)
+  }
+}
+
+function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number): string {
+  return JSON.stringify({
+    width,
+    height,
+    text: item.text,
+    textSpans: item.textSpans,
+    fontSize: item.fontSize,
+    fontFamily: item.fontFamily,
+    fontWeight: item.fontWeight,
+    fontStyle: item.fontStyle,
+    underline: item.underline,
+    color: item.color,
+    backgroundColor: item.backgroundColor,
+    backgroundRadius: item.backgroundRadius,
+    textAlign: item.textAlign,
+    verticalAlign: item.verticalAlign,
+    lineHeight: item.lineHeight,
+    letterSpacing: item.letterSpacing,
+    textPadding: item.textPadding,
+    textShadow: item.textShadow,
+    stroke: item.stroke,
+  })
+}
+
+function pruneGpuTextTextureCache(cache: Map<string, GpuTextTextureCacheEntry>): void {
+  const maxEntries = 64
+  while (cache.size > maxEntries) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey === undefined) return
+    cache.get(oldestKey)?.texture.destroy()
+    cache.delete(oldestKey)
   }
 }
 
