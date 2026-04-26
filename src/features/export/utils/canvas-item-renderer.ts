@@ -2361,6 +2361,7 @@ async function renderGpuMediaParticipantToTexture(
               destRect: prepared.destRect,
               transformRect: prepared.transformRect,
               cornerRadius: prepared.cornerRadius,
+              cornerPin: prepared.cornerPin,
               opacity: participant.transform.opacity,
               rotationRad: prepared.rotationRad,
             }) ?? false)
@@ -2451,6 +2452,7 @@ async function prepareGpuMediaParticipant(
       transformRect,
       featherPixels: { left: 0, right: 0, top: 0, bottom: 0 },
       cornerRadius: participant.transform.cornerRadius,
+      cornerPin: resolveGpuMediaCornerPin(media.item, transformRect),
       rotationRad: (participant.transform.rotation * Math.PI) / 180,
       flipX: false,
       flipY: false,
@@ -2588,7 +2590,6 @@ function resolveGpuTextParticipantSource(
   rctx: ItemRenderContext,
 ): ResolvedGpuMediaParticipantSource | null {
   if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline || !rctx.gpuTextTextureCache) return null
-  if (hasCornerPin(participant.item.cornerPin)) return null
 
   const itemKeyframes =
     rctx.getCurrentKeyframes?.(participant.item.id) ?? rctx.keyframesMap.get(participant.item.id)
@@ -2782,7 +2783,7 @@ function logGpuTextTextureCacheEvent(
 }
 
 function resolveGpuMediaCornerPin(
-  item: ImageItem | VideoItem,
+  item: ImageItem | VideoItem | TextItem,
   mediaRect: GpuMediaRect,
 ): NonNullable<GpuMediaRenderParams['cornerPin']> | undefined {
   if (!hasCornerPin(item.cornerPin)) return undefined

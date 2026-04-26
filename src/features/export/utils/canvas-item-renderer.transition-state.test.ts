@@ -996,6 +996,12 @@ describe('renderTransitionToGpuTexture', () => {
       color: '#ffffff',
       fontSize: 48,
       fontFamily: 'Inter',
+      cornerPin: {
+        topLeft: [8, 4],
+        topRight: [-12, 6],
+        bottomRight: [-16, -10],
+        bottomLeft: [10, -8],
+      },
       transform: {
         x: 0,
         y: 0,
@@ -1133,6 +1139,12 @@ describe('renderTransitionToGpuTexture', () => {
       color: '#ffffff',
       fontSize: 48,
       fontFamily: 'Inter',
+      cornerPin: {
+        topLeft: [8, 4],
+        topRight: [-12, 6],
+        bottomRight: [-16, -10],
+        bottomLeft: [10, -8],
+      },
       transform: {
         x: 0,
         y: 0,
@@ -1236,7 +1248,17 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenCalledWith(
       atlasTextTexture,
       textures[1],
-      expect.objectContaining({ sourceWidth: 640, sourceHeight: 180 }),
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 180,
+        cornerPin: expect.objectContaining({
+          originX: 640,
+          originY: 450,
+          width: 640,
+          height: 180,
+          inverseMatrix: expect.any(Array),
+        }),
+      }),
     )
     expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
   })
