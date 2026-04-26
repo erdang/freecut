@@ -970,8 +970,8 @@ describe('renderTransitionToGpuTexture', () => {
     )
   })
 
-  it('caches text participant textures so repeated transition frames avoid text uploads', async () => {
-    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
+  it('caches atlas text participant textures so repeated transition frames avoid text uploads', async () => {
+    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, RENDER_ATTACHMENT: 8, TEXTURE_BINDING: 4 })
     const leftClip: ImageItem = {
       id: 'left-image',
       type: 'image',
@@ -1053,6 +1053,9 @@ describe('renderTransitionToGpuTexture', () => {
       getDevice: vi.fn(() => device),
       applyEffectsToTexture: vi.fn().mockReturnValue(true),
     }
+    const gpuTextPipeline = {
+      renderTextToTexture: vi.fn().mockReturnValue(true),
+    }
     const gpuMediaPipeline = {
       renderSourceToTexture: vi.fn().mockReturnValue(true),
       renderTextureToTexture: vi.fn().mockReturnValue(true),
@@ -1092,14 +1095,16 @@ describe('renderTransitionToGpuTexture', () => {
         gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
       gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
       gpuShapePipeline: null,
+      gpuTextPipeline: gpuTextPipeline as unknown as ItemRenderContext['gpuTextPipeline'],
       gpuTextTextureCache: new Map(),
     }
 
     await renderTransitionToGpuTexture(outputTexture, activeTransition, 55, rctx, 1, gpuTexturePool)
     await renderTransitionToGpuTexture(outputTexture, activeTransition, 56, rctx, 1, gpuTexturePool)
 
-    expect(canvasPool.acquire).toHaveBeenCalledTimes(1)
-    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1)
+    expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledTimes(1)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenCalledTimes(2)
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       2,
@@ -1110,6 +1115,7 @@ describe('renderTransitionToGpuTexture', () => {
         sourceHeight: 180,
       }),
     )
+    expect(cachedTextTexture.destroy).not.toHaveBeenCalled()
     expect(gpuPipeline.applyEffectsToTexture).not.toHaveBeenCalled()
   })
 
@@ -1269,11 +1275,11 @@ describe('renderTransitionToGpuTexture', () => {
         }),
       }),
     )
-    expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(atlasTextTexture.destroy).not.toHaveBeenCalled()
   })
 
   it('evicts least-recent GPU text textures by byte budget', async () => {
-    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, TEXTURE_BINDING: 4 })
+    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, RENDER_ATTACHMENT: 8, TEXTURE_BINDING: 4 })
     const leftClip: ImageItem = {
       id: 'left-image',
       type: 'image',
@@ -1355,6 +1361,9 @@ describe('renderTransitionToGpuTexture', () => {
       getDevice: vi.fn(() => device),
       applyEffectsToTexture: vi.fn().mockReturnValue(true),
     }
+    const gpuTextPipeline = {
+      renderTextToTexture: vi.fn().mockReturnValue(true),
+    }
     const gpuMediaPipeline = {
       renderSourceToTexture: vi.fn().mockReturnValue(true),
       renderTextureToTexture: vi.fn().mockReturnValue(true),
@@ -1395,6 +1404,7 @@ describe('renderTransitionToGpuTexture', () => {
         gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
       gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
       gpuShapePipeline: null,
+      gpuTextPipeline: gpuTextPipeline as unknown as ItemRenderContext['gpuTextPipeline'],
       gpuTextTextureCache,
     }
 
@@ -1418,7 +1428,9 @@ describe('renderTransitionToGpuTexture', () => {
     expect(firstTextTexture.destroy).toHaveBeenCalledTimes(1)
     expect(secondTextTexture.destroy).not.toHaveBeenCalled()
     expect(gpuTextTextureCache.size).toBe(1)
-    expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(2)
+    expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledTimes(2)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
   })
 
   it('keeps GPU-eligible participants direct when the opposite side is a sub-composition', async () => {
@@ -2142,7 +2154,7 @@ describe('renderTransitionToGpuTexture', () => {
         destRect: { x: 640, y: 360, width: 640, height: 360 },
       }),
     )
-    expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(atlasTextTexture.destroy).not.toHaveBeenCalled()
     expect(innerCompTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageBaseTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageEffectTexture.destroy).toHaveBeenCalledTimes(1)

@@ -2800,37 +2800,6 @@ function resolveGpuTextParticipantSource(
   )
   const sourceWidth = Math.max(2, Math.ceil(resolvedTransform.width))
   const sourceHeight = Math.max(2, Math.ceil(resolvedTransform.height))
-  if (rctx.gpuTextPipeline && isGpuGlyphAtlasTextEligible()) {
-    const texture = rctx.gpuPipeline.getDevice().createTexture({
-      size: { width: sourceWidth, height: sourceHeight },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
-    })
-    const rendered = rctx.gpuTextPipeline.renderTextToTexture(texture, {
-      outputWidth: sourceWidth,
-      outputHeight: sourceHeight,
-      item: resolvedTextItem,
-      width: sourceWidth,
-      height: sourceHeight,
-    })
-    if (rendered) {
-      logGpuTextTextureCacheEvent('atlas-render', {
-        itemId: participant.item.id,
-        width: sourceWidth,
-        height: sourceHeight,
-      })
-      return {
-        kind: 'text',
-        item: resolvedTextItem,
-        sourceWidth,
-        sourceHeight,
-        texture,
-        close: () => texture.destroy(),
-      }
-    }
-    texture.destroy()
-  }
-
   const cacheKey = getGpuTextTextureCacheKey(resolvedTextItem, sourceWidth, sourceHeight)
   const cached = rctx.gpuTextTextureCache.get(cacheKey)
   if (cached) {
@@ -2853,65 +2822,54 @@ function resolveGpuTextParticipantSource(
     }
   }
 
-  const { canvas, ctx } = rctx.canvasPool.acquire()
-  try {
-    const bytes = getGpuTextureByteSize(sourceWidth, sourceHeight)
-    canvas.width = sourceWidth
-    canvas.height = sourceHeight
-    ctx.clearRect(0, 0, sourceWidth, sourceHeight)
-    const localRctx: ItemRenderContext = {
-      ...rctx,
-      canvasSettings: { width: sourceWidth, height: sourceHeight, fps: rctx.canvasSettings.fps },
-    }
-    renderTextItem(
-      ctx,
-      resolvedTextItem,
-      {
-        x: 0,
-        y: 0,
-        width: resolvedTransform.width,
-        height: resolvedTransform.height,
-      },
-      localRctx,
-    )
-
+  if (rctx.gpuTextPipeline && isGpuGlyphAtlasTextEligible()) {
     const texture = rctx.gpuPipeline.getDevice().createTexture({
       size: { width: sourceWidth, height: sourceHeight },
       format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
     })
-    rctx.gpuPipeline
-      .getDevice()
-      .queue.copyExternalImageToTexture(
-        { source: canvas, flipY: false },
-        { texture },
-        { width: sourceWidth, height: sourceHeight },
-      )
-    rctx.gpuTextTextureCache.set(cacheKey, {
-      texture,
-      width: sourceWidth,
-      height: sourceHeight,
-      bytes,
-    })
-    logGpuTextTextureCacheEvent('miss', {
-      itemId: participant.item.id,
-      width: sourceWidth,
-      height: sourceHeight,
-      bytes,
-      cacheBytes: getGpuTextTextureCacheBytes(rctx.gpuTextTextureCache),
-      entries: rctx.gpuTextTextureCache.size,
-    })
-    pruneGpuTextTextureCache(rctx.gpuTextTextureCache)
-    return {
-      kind: 'text',
+    const rendered = rctx.gpuTextPipeline.renderTextToTexture(texture, {
+      outputWidth: sourceWidth,
+      outputHeight: sourceHeight,
       item: resolvedTextItem,
-      sourceWidth,
-      sourceHeight,
-      texture,
+      width: sourceWidth,
+      height: sourceHeight,
+    })
+    if (rendered) {
+      logGpuTextTextureCacheEvent('atlas-render', {
+        itemId: participant.item.id,
+        width: sourceWidth,
+        height: sourceHeight,
+        bytes: getGpuTextureByteSize(sourceWidth, sourceHeight),
+      })
+      rctx.gpuTextTextureCache.set(cacheKey, {
+        texture,
+        width: sourceWidth,
+        height: sourceHeight,
+        bytes: getGpuTextureByteSize(sourceWidth, sourceHeight),
+      })
+      pruneGpuTextTextureCache(rctx.gpuTextTextureCache)
+      return {
+        kind: 'text',
+        item: resolvedTextItem,
+        sourceWidth,
+        sourceHeight,
+        texture,
+      }
     }
-  } finally {
-    rctx.canvasPool.release(canvas)
+    texture.destroy()
   }
+
+  logGpuTextTextureCacheEvent('miss', {
+    itemId: participant.item.id,
+    width: sourceWidth,
+    height: sourceHeight,
+    bytes: getGpuTextureByteSize(sourceWidth, sourceHeight),
+    cacheBytes: getGpuTextTextureCacheBytes(rctx.gpuTextTextureCache),
+    entries: rctx.gpuTextTextureCache.size,
+    reason: 'glyph-atlas-unavailable',
+  })
+  return null
 }
 
 function isGpuGlyphAtlasTextEligible(): boolean {
