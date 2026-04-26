@@ -895,4 +895,147 @@ describe('renderTransitionToGpuTexture', () => {
       undefined,
     )
   })
+
+  it('keeps GPU shape participants with effects on the texture path', async () => {
+    const effect: ItemEffect = {
+      id: 'brightness',
+      enabled: true,
+      effect: {
+        type: 'gpu-effect',
+        gpuEffectType: 'gpu-brightness',
+        params: { brightness: 0.2 },
+      },
+    }
+    const leftClip: ShapeItem = {
+      id: 'left-shape',
+      type: 'shape',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      label: 'Left shape',
+      shapeType: 'star',
+      fillColor: '#ff0000',
+      effects: [effect],
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ShapeItem
+    const rightClip: ShapeItem = {
+      ...leftClip,
+      id: 'right-shape',
+      label: 'Right shape',
+      shapeType: 'polygon',
+      effects: [effect],
+    } as ShapeItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip })
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const leftShapeTexture = {
+      width: 1920,
+      height: 1080,
+      createView: vi.fn(),
+    } as unknown as GPUTexture
+    const rightShapeTexture = {
+      width: 1920,
+      height: 1080,
+      createView: vi.fn(),
+    } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const gpuTexturePool = {
+      acquire: vi
+        .fn()
+        .mockReturnValueOnce(leftTexture)
+        .mockReturnValueOnce(rightTexture)
+        .mockReturnValueOnce(leftShapeTexture)
+        .mockReturnValueOnce(rightShapeTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(),
+      release: vi.fn(),
+    }
+    const gpuPipeline = {
+      applyTextureEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuShapePipeline = {
+      renderShapeToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {} as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map(),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map(),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: null,
+      gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenNthCalledWith(
+      1,
+      leftShapeTexture,
+      expect.objectContaining({ shapeType: 'star' }),
+    )
+    expect(gpuPipeline.applyTextureEffectsToTexture).toHaveBeenNthCalledWith(
+      1,
+      leftShapeTexture,
+      expect.any(Array),
+      leftTexture,
+      1920,
+      1080,
+    )
+    expect(gpuPipeline.applyTextureEffectsToTexture).toHaveBeenNthCalledWith(
+      2,
+      rightShapeTexture,
+      expect.any(Array),
+      rightTexture,
+      1920,
+      1080,
+    )
+    expect(gpuTransitionPipeline.renderTexturesToTexture).toHaveBeenCalledWith(
+      'iris',
+      leftTexture,
+      rightTexture,
+      outputTexture,
+      0,
+      1920,
+      1080,
+      undefined,
+      undefined,
+    )
+    expect(gpuTexturePool.release).toHaveBeenCalledWith(leftShapeTexture)
+    expect(gpuTexturePool.release).toHaveBeenCalledWith(rightShapeTexture)
+  })
 })

@@ -2355,7 +2355,7 @@ async function resolveGpuMediaParticipantSource(
     if (!rctx.gpuShapePipeline) return null
     const shape = participant.item
     if (shape.isMask || shape.shapeType === 'path' || shape.shapeType === 'heart') return null
-    if (participant.effects.length > 0) return null
+    if (participant.effects.length > 0 && !rctx.gpuPipeline) return null
     const fillColor = parseGpuColor(shape.fillColor)
     if (!fillColor) return null
     const parsedStrokeColor =
