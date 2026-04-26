@@ -1506,13 +1506,9 @@ export async function createCompositionRenderer(
         return null
       }
 
-      const getEffectiveBlendMode = (
-        item: TimelineItem,
-        trackOrder: number,
-      ): TimelineItem['blendMode'] => {
+      const getEffectiveBlendMode = (item: TimelineItem): TimelineItem['blendMode'] => {
         const blendMode = item.blendMode
         if (!blendMode || blendMode === 'normal') return blendMode
-        void trackOrder
         return blendMode
       }
 
@@ -1660,7 +1656,7 @@ export async function createCompositionRenderer(
           t.type === 'item' &&
           (() => {
             const item = getCurrentItem(t.item)
-            const blendMode = getEffectiveBlendMode(item, t.trackOrder)
+            const blendMode = getEffectiveBlendMode(item)
             return Boolean(blendMode && blendMode !== 'normal')
           })(),
       )
@@ -1683,10 +1679,7 @@ export async function createCompositionRenderer(
       if (shouldDirectRenderSingleTask) {
         const directTask = renderTasks[0]
         if (directTask?.type === 'item') {
-          const blendMode = getEffectiveBlendMode(
-            getCurrentItem(directTask.item),
-            directTask.trackOrder,
-          )
+          const blendMode = getEffectiveBlendMode(getCurrentItem(directTask.item))
           try {
             if (blendMode && blendMode !== 'normal') {
               ctx.globalCompositeOperation = getCompositeOperation(blendMode)
@@ -1898,7 +1891,7 @@ export async function createCompositionRenderer(
 
             const blendMode =
               task.type === 'item'
-                ? (getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder) ?? 'normal')
+                ? (getEffectiveBlendMode(getCurrentItem(task.item)) ?? 'normal')
                 : 'normal'
 
             // Upload item canvas to GPU texture (pooled — no per-frame alloc)
@@ -1977,9 +1970,7 @@ export async function createCompositionRenderer(
                 fallbackSource = fallbackMaskedCanvas
               }
               const blendMode =
-                task.type === 'item'
-                  ? getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder)
-                  : undefined
+                task.type === 'item' ? getEffectiveBlendMode(getCurrentItem(task.item)) : undefined
               if (blendMode && blendMode !== 'normal') {
                 contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
               }
@@ -2021,9 +2012,7 @@ export async function createCompositionRenderer(
             }
 
             const blendMode =
-              task.type === 'item'
-                ? getEffectiveBlendMode(getCurrentItem(task.item), task.trackOrder)
-                : undefined
+              task.type === 'item' ? getEffectiveBlendMode(getCurrentItem(task.item)) : undefined
             if (blendMode && blendMode !== 'normal') {
               contentCtx.globalCompositeOperation = getCompositeOperation(blendMode)
             }

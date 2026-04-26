@@ -107,8 +107,9 @@ export class EffectsPipeline {
   private texH = 0
   private initialized = false
 
-  // Reusable uniform buffers per effect type (avoids per-frame allocation)
-  private uniformBuffers = new Map<string, GPUBuffer>()
+  // Reusable uniform buffers per effect-chain pass. A pass must own its buffer
+  // because multiple passes are encoded before the command buffer is submitted.
+  private uniformBuffers: GPUBuffer[] = []
   // Cached texture views for ping/pong (recreated when textures change)
   private pingView: GPUTextureView | null = null
   private pongView: GPUTextureView | null = null
@@ -314,15 +315,16 @@ export class EffectsPipeline {
     this.texH = h
   }
 
-  private getOrCreateUniformBuffer(effectId: string, size: number): GPUBuffer {
-    let buf = this.uniformBuffers.get(effectId)
+  private getOrCreateUniformBuffer(passIndex: number, size: number): GPUBuffer {
+    let buf = this.uniformBuffers[passIndex]
     if (buf && buf.size >= size) return buf
     buf?.destroy()
     buf = this.device.createBuffer({
       size,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     })
-    this.uniformBuffers.set(effectId, buf)
+    this.uniformBuffers[passIndex] = buf
+    this.effectBindGroupCache.clear()
     return buf
   }
 
@@ -339,7 +341,8 @@ export class EffectsPipeline {
     let inputView = inputTex === this.pingTexture ? this.pingView! : this.pongView!
     let outputView = outputTex === this.pingTexture ? this.pingView! : this.pongView!
 
-    for (const effect of effects) {
+    for (let effectIndex = 0; effectIndex < effects.length; effectIndex++) {
+      const effect = effects[effectIndex]!
       const pipeline = this.pipelines.get(effect.type)
       const layout = this.bindGroupLayouts.get(effect.type)
       if (!pipeline || !layout) continue
@@ -350,15 +353,14 @@ export class EffectsPipeline {
       const uniformData = definition.packUniforms(effect.params, w, h)
       let uniformBuffer: GPUBuffer | undefined
       if (uniformData) {
-        uniformBuffer = this.getOrCreateUniformBuffer(effect.type, uniformData.byteLength)
+        uniformBuffer = this.getOrCreateUniformBuffer(effectIndex, uniformData.byteLength)
         this.device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer)
       }
 
-      // Cache bind groups keyed by effect type + input view identity.
-      // Uniform buffer data changes via writeBuffer but the buffer object stays the same,
-      // so the bind group remains valid across frames.
+      // Cache bind groups by pass, effect type, and input view identity. Uniform data changes
+      // via writeBuffer, but each encoded pass gets a stable buffer object of its own.
       const viewKey = inputView === this.pingView ? 'ping' : 'pong'
-      const cacheKey = `${effect.type}:${viewKey}`
+      const cacheKey = `${effectIndex}:${effect.type}:${viewKey}`
       let bindGroup = this.effectBindGroupCache.get(cacheKey)
       if (!bindGroup) {
         const bindEntries: GPUBindGroupEntry[] = [
@@ -986,10 +988,10 @@ export class EffectsPipeline {
     this.poolMode = false
     this.outputPool = []
     this.batchIndex = 0
-    for (const buf of this.uniformBuffers.values()) {
+    for (const buf of this.uniformBuffers) {
       buf.destroy()
     }
-    this.uniformBuffers.clear()
+    this.uniformBuffers = []
     this.effectBindGroupCache.clear()
     this.blitBindGroupPing = null
     this.blitBindGroupPong = null
