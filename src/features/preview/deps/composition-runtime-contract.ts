@@ -17,6 +17,8 @@ export {
 export type { PreviewPathVerticesOverride } from '@/features/composition-runtime/utils/preview-path-override'
 export { expandTextTransformToFitContent } from '@/features/composition-runtime/utils/text-layout'
 export {
+  computeCornerPinHomography,
+  invertCornerPinHomography,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   withCornerPinReferenceSize,

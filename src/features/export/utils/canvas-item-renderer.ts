@@ -53,8 +53,10 @@ import {
 import {
   applyPreviewPathVerticesToItem,
   applyPreviewPathVerticesToShape,
+  computeCornerPinHomography,
   hasCornerPin,
   drawCornerPinImage,
+  invertCornerPinHomography,
   resolveCornerPinTargetRect,
   resolveCornerPinForSize,
   expandTextTransformToFitContent,
@@ -2342,7 +2344,7 @@ function resolveGpuMediaCornerPin(
   const resolvedPin = resolveCornerPinForSize(item.cornerPin, mediaRect.width, mediaRect.height)
   if (!resolvedPin || !hasCornerPin(resolvedPin)) return undefined
   const homography = computeCornerPinHomography(mediaRect.width, mediaRect.height, resolvedPin)
-  const inverseMatrix = invert3x3(homography)
+  const inverseMatrix = invertCornerPinHomography(homography)
   if (!inverseMatrix) return undefined
   return {
     originX: mediaRect.x,
@@ -2351,71 +2353,6 @@ function resolveGpuMediaCornerPin(
     height: mediaRect.height,
     inverseMatrix,
   }
-}
-
-function computeCornerPinHomography(
-  width: number,
-  height: number,
-  pin: NonNullable<ReturnType<typeof resolveCornerPinForSize>>,
-): [number, number, number, number, number, number, number, number, number] {
-  const x0 = pin.topLeft[0]
-  const y0 = pin.topLeft[1]
-  const x1 = width + pin.topRight[0]
-  const y1 = pin.topRight[1]
-  const x2 = width + pin.bottomRight[0]
-  const y2 = height + pin.bottomRight[1]
-  const x3 = pin.bottomLeft[0]
-  const y3 = height + pin.bottomLeft[1]
-  const dx1 = x1 - x2
-  const dx2 = x3 - x2
-  const sx = x0 - x1 + x2 - x3
-  const dy1 = y1 - y2
-  const dy2 = y3 - y2
-  const sy = y0 - y1 + y2 - y3
-  const det = dx1 * dy2 - dy1 * dx2
-  if (Math.abs(det) < 1e-10) return [1, 0, 0, 0, 1, 0, 0, 0, 1]
-  const g = (sx * dy2 - sy * dx2) / det
-  const hCoeff = (dx1 * sy - dy1 * sx) / det
-  return [
-    (x1 - x0 + g * x1) / width,
-    (x3 - x0 + hCoeff * x3) / height,
-    x0,
-    (y1 - y0 + g * y1) / width,
-    (y3 - y0 + hCoeff * y3) / height,
-    y0,
-    g / width,
-    hCoeff / height,
-    1,
-  ]
-}
-
-function invert3x3(
-  m: [number, number, number, number, number, number, number, number, number],
-): [number, number, number, number, number, number, number, number, number] | null {
-  const [a, b, c, d, e, f, g, h, i] = m
-  const A = e * i - f * h
-  const B = c * h - b * i
-  const C = b * f - c * e
-  const D = f * g - d * i
-  const E = a * i - c * g
-  const F = c * d - a * f
-  const G = d * h - e * g
-  const H = b * g - a * h
-  const I = a * e - b * d
-  const det = a * A + b * D + c * G
-  if (Math.abs(det) < 1e-10) return null
-  const invDet = 1 / det
-  return [
-    A * invDet,
-    B * invDet,
-    C * invDet,
-    D * invDet,
-    E * invDet,
-    F * invDet,
-    G * invDet,
-    H * invDet,
-    I * invDet,
-  ]
 }
 
 function resolveVideoParticipantSourceTime(
