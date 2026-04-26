@@ -1822,6 +1822,12 @@ describe('renderTransitionToGpuTexture', () => {
       createView: vi.fn(),
       destroy: vi.fn(),
     } as unknown as GPUTexture
+    const cachedBitmapMaskTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const combinedImageMaskTexture2 = {
       width: 640,
       height: 360,
@@ -1875,6 +1881,7 @@ describe('renderTransitionToGpuTexture', () => {
         .mockReturnValueOnce(imageMaskTexture3)
         .mockReturnValueOnce(combinedImageMaskTexture)
         .mockReturnValueOnce(combinedImageMaskTexture2)
+        .mockReturnValueOnce(cachedBitmapMaskTexture)
         .mockReturnValueOnce(atlasTextTexture)
         .mockReturnValueOnce(textBaseTexture)
         .mockReturnValueOnce(textEffectTexture)
@@ -1985,6 +1992,7 @@ describe('renderTransitionToGpuTexture', () => {
         gpuMaskCombinePipeline as unknown as ItemRenderContext['gpuMaskCombinePipeline'],
       gpuTextPipeline: gpuTextPipeline as unknown as ItemRenderContext['gpuTextPipeline'],
       gpuTextTextureCache: new Map(),
+      gpuBitmapMaskTextureCache: new Map(),
     }
 
     const rendered = await renderTransitionToGpuTexture(
@@ -2000,6 +2008,11 @@ describe('renderTransitionToGpuTexture', () => {
     expect(canvasPool.acquire).not.toHaveBeenCalled()
     expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledWith(
       { source: expect.objectContaining({ width: 640, height: 360 }), flipY: false },
+      { texture: cachedBitmapMaskTexture },
+      { width: 640, height: 360 },
+    )
+    expect(commandEncoder.copyTextureToTexture).toHaveBeenCalledWith(
+      { texture: cachedBitmapMaskTexture },
       { texture: imageMaskTexture3 },
       { width: 640, height: 360 },
     )
@@ -2146,6 +2159,7 @@ describe('renderTransitionToGpuTexture', () => {
     expect(imageMaskTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageMaskTexture2.destroy).toHaveBeenCalledTimes(1)
     expect(imageMaskTexture3.destroy).toHaveBeenCalledTimes(1)
+    expect(cachedBitmapMaskTexture.destroy).not.toHaveBeenCalled()
     expect(combinedImageMaskTexture.destroy).toHaveBeenCalledTimes(1)
     expect(combinedImageMaskTexture2.destroy).toHaveBeenCalledTimes(1)
     expect(textBaseTexture.destroy).toHaveBeenCalledTimes(1)

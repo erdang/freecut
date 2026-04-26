@@ -236,6 +236,9 @@ export interface ItemRenderContext {
   // Cached text glyph/layout textures for GPU transition participants.
   gpuTextTextureCache?: Map<string, GpuTextTextureCacheEntry>
 
+  // Cached CPU-rasterized bitmap masks uploaded for GPU sub-composition layers.
+  gpuBitmapMaskTextureCache?: Map<string, GpuBitmapMaskTextureCacheEntry>
+
   // DOM video element provider for zero-copy playback rendering.
   // During playback, the Player's <video> elements are already at
   // the correct frame — use them directly instead of mediabunny decode.
@@ -276,7 +279,15 @@ export interface GpuTextTextureCacheEntry {
   bytes: number
 }
 
+export interface GpuBitmapMaskTextureCacheEntry {
+  texture: GPUTexture
+  width: number
+  height: number
+  bytes: number
+}
+
 const GPU_TEXT_TEXTURE_CACHE_MAX_BYTES = 64 * 1024 * 1024
+const GPU_BITMAP_MASK_TEXTURE_CACHE_MAX_BYTES = 64 * 1024 * 1024
 
 export interface TransitionParticipantRenderState<TItem extends TimelineItem = TimelineItem> {
   item: TItem
@@ -3127,7 +3138,10 @@ async function renderPreparedGpuSubCompLayerToTexture(
     device.createTexture({
       size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
       format: 'rgba8unorm',
-      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+      usage:
+        GPUTextureUsage.TEXTURE_BINDING |
+        GPUTextureUsage.RENDER_ATTACHMENT |
+        GPUTextureUsage.COPY_DST,
     }),
   )
   const combinedMaskTextures = Array.from({ length: Math.max(0, masks.length - 1) }, () =>
@@ -3290,6 +3304,39 @@ function renderGpuSubCompMaskToTexture(
     ) {
       return false
     }
+    const cache = rctx.gpuBitmapMaskTextureCache
+    const cacheKey = cache ? getGpuBitmapMaskTextureCacheKey(mask) : null
+    const cached = cacheKey ? cache?.get(cacheKey) : undefined
+    if (cached) {
+      cache?.delete(cacheKey!)
+      cache?.set(cacheKey!, cached)
+      copyGpuTextureToTexture(device, cached.texture, outputTexture, cached.width, cached.height)
+      return true
+    }
+    if (cache && cacheKey) {
+      const cachedTexture = device.createTexture({
+        size: { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
+        format: 'rgba8unorm',
+        usage:
+          GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC,
+      })
+      device.queue.copyExternalImageToTexture(
+        { source: mask.bitmapMask, flipY: false },
+        { texture: cachedTexture },
+        { width: mask.bitmapMask.width, height: mask.bitmapMask.height },
+      )
+      cache.set(cacheKey, {
+        texture: cachedTexture,
+        width: mask.bitmapMask.width,
+        height: mask.bitmapMask.height,
+        bytes: getGpuTextureByteSize(mask.bitmapMask.width, mask.bitmapMask.height),
+      })
+      pruneGpuBitmapMaskTextureCache(cache)
+      const latest = cache.get(cacheKey)
+      if (!latest) return false
+      copyGpuTextureToTexture(device, latest.texture, outputTexture, latest.width, latest.height)
+      return true
+    }
     device.queue.copyExternalImageToTexture(
       { source: mask.bitmapMask, flipY: false },
       { texture: outputTexture },
@@ -3331,6 +3378,18 @@ function renderGpuSubCompMaskToTexture(
   })
 }
 
+function copyGpuTextureToTexture(
+  device: GPUDevice,
+  source: GPUTexture,
+  target: GPUTexture,
+  width: number,
+  height: number,
+): void {
+  const commandEncoder = device.createCommandEncoder()
+  commandEncoder.copyTextureToTexture({ texture: source }, { texture: target }, { width, height })
+  device.queue.submit([commandEncoder.finish()])
+}
+
 function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number): string {
   return JSON.stringify({
     width,
@@ -3355,6 +3414,36 @@ function getGpuTextTextureCacheKey(item: TextItem, width: number, height: number
   })
 }
 
+function getGpuBitmapMaskTextureCacheKey(
+  mask: ReturnType<typeof getActiveSubCompMasks>[number],
+): string {
+  return JSON.stringify({
+    id: mask.shape.id,
+    shapeType: mask.shape.shapeType,
+    width: mask.bitmapMask?.width,
+    height: mask.bitmapMask?.height,
+    transform: {
+      x: mask.transform.x,
+      y: mask.transform.y,
+      width: mask.transform.width,
+      height: mask.transform.height,
+      rotation: mask.transform.rotation,
+      opacity: mask.transform.opacity,
+      cornerRadius: mask.transform.cornerRadius,
+    },
+    cornerPin: mask.shape.cornerPin,
+    fillColor: mask.shape.fillColor,
+    strokeColor: mask.shape.strokeColor,
+    strokeWidth: mask.shape.strokeWidth,
+    direction: mask.shape.direction,
+    points: mask.shape.points,
+    innerRadius: mask.shape.innerRadius,
+    pathVertices: mask.shape.pathVertices,
+    maskType: mask.maskType,
+    feather: mask.feather,
+  })
+}
+
 function pruneGpuTextTextureCache(cache: Map<string, GpuTextTextureCacheEntry>): void {
   while (getGpuTextTextureCacheBytes(cache) > GPU_TEXT_TEXTURE_CACHE_MAX_BYTES) {
     const oldestKey = cache.keys().next().value
@@ -3372,11 +3461,29 @@ function pruneGpuTextTextureCache(cache: Map<string, GpuTextTextureCacheEntry>):
   }
 }
 
+function pruneGpuBitmapMaskTextureCache(cache: Map<string, GpuBitmapMaskTextureCacheEntry>): void {
+  while (getGpuBitmapMaskTextureCacheBytes(cache) > GPU_BITMAP_MASK_TEXTURE_CACHE_MAX_BYTES) {
+    const oldestKey = cache.keys().next().value
+    if (oldestKey === undefined) return
+    const oldestEntry = cache.get(oldestKey)
+    oldestEntry?.texture.destroy()
+    cache.delete(oldestKey)
+  }
+}
+
 function getGpuTextureByteSize(width: number, height: number): number {
   return width * height * 4
 }
 
 function getGpuTextTextureCacheBytes(cache: Map<string, GpuTextTextureCacheEntry>): number {
+  let bytes = 0
+  for (const entry of cache.values()) bytes += entry.bytes
+  return bytes
+}
+
+function getGpuBitmapMaskTextureCacheBytes(
+  cache: Map<string, GpuBitmapMaskTextureCacheEntry>,
+): number {
   let bytes = 0
   for (const entry of cache.values()) bytes += entry.bytes
   return bytes

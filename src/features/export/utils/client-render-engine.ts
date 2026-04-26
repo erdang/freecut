@@ -90,6 +90,7 @@ import {
   type WorkerLoadedImage,
   type ItemRenderContext,
   type SubCompRenderData,
+  type GpuBitmapMaskTextureCacheEntry,
   type GpuTextTextureCacheEntry,
 } from './canvas-item-renderer'
 import { ScrubbingCache } from '@/features/export/deps/preview'
@@ -241,6 +242,7 @@ export async function createCompositionRenderer(
   let gpuTextPipeline: GlyphAtlasTextPipeline | null = null
   let gpuMaskCombinePipeline: MaskCombinePipeline | null = null
   const gpuTextTextureCache = new Map<string, GpuTextTextureCacheEntry>()
+  const gpuBitmapMaskTextureCache = new Map<string, GpuBitmapMaskTextureCacheEntry>()
 
   function ensureGpuTransitionPipeline(): boolean {
     if (gpuTransitionPipeline) return true
@@ -605,6 +607,7 @@ export async function createCompositionRenderer(
     gpuTextPipeline: null,
     gpuMaskCombinePipeline: null,
     gpuTextTextureCache,
+    gpuBitmapMaskTextureCache,
     domVideoElementProvider,
   }
 
@@ -2271,6 +2274,8 @@ export async function createCompositionRenderer(
       gpuMaskCombinePipeline = null
       for (const entry of gpuTextTextureCache.values()) entry.texture.destroy()
       gpuTextTextureCache.clear()
+      for (const entry of gpuBitmapMaskTextureCache.values()) entry.texture.destroy()
+      gpuBitmapMaskTextureCache.clear()
       gpuPipeline?.destroy()
       gpuPipeline = null
       frameSceneCache.invalidate()
