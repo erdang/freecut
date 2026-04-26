@@ -1,5 +1,6 @@
 import type { TextItem } from '@/types/timeline'
 import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts'
+import { getTextItemSpans } from '@/shared/utils/text-item-spans'
 
 export interface GpuTextRenderParams {
   outputWidth: number
@@ -32,6 +33,17 @@ interface PackedGlyph {
   y: number
   width: number
   height: number
+  color: [number, number, number, number]
+}
+
+interface TextLayoutLine {
+  text: string
+  font: string
+  fontSize: number
+  lineHeightPx: number
+  baselineOffset: number
+  letterSpacing: number
+  color: [number, number, number, number]
 }
 
 const ATLAS_SIZE = 2048
@@ -198,15 +210,14 @@ export class GlyphAtlasTextPipeline {
     const layout = this.layoutText(params.item, params.width, params.height)
     if (!layout) return false
     if (layout.glyphs.length === 0) return this.clearTexture(outputTexture)
+    if (layout.glyphs.length > MAX_GLYPHS_PER_RENDER) return false
 
-    const color = parseGpuTextColor(params.item.color ?? '#ffffff')
-    if (!color) return false
     const vertexData = new Float32Array(
       layout.glyphs.length * VERTICES_PER_GLYPH * FLOATS_PER_VERTEX,
     )
     let offset = 0
     for (const glyph of layout.glyphs) {
-      offset = writeGlyphVertices(vertexData, offset, glyph, color)
+      offset = writeGlyphVertices(vertexData, offset, glyph)
     }
     this.device.queue.writeBuffer(this.vertexBuffer, 0, vertexData, 0, offset)
     this.device.queue.writeBuffer(
@@ -249,18 +260,11 @@ export class GlyphAtlasTextPipeline {
     width: number,
     height: number,
   ): { glyphs: PackedGlyph[] } | null {
-    const fontSize = item.fontSize ?? 60
-    const fontFamily = item.fontFamily ?? 'Inter'
-    const fontStyle = item.fontStyle ?? 'normal'
-    const fontWeightName = item.fontWeight ?? 'normal'
-    const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? 400
-    const font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`
-    const lineHeightPx = fontSize * (item.lineHeight ?? 1.2)
     const padding = Math.max(0, item.textPadding ?? 16)
-    const letterSpacing = item.letterSpacing ?? 0
     const availableWidth = Math.max(1, width - padding * 2)
-    const lines = this.wrapText(item.text ?? '', font, availableWidth, letterSpacing)
-    const totalHeight = lines.length * lineHeightPx
+    const lines = this.layoutLines(item, availableWidth)
+    if (!lines) return null
+    const totalHeight = lines.reduce((sum, line) => sum + line.lineHeightPx, 0)
     const availableHeight = height - padding * 2
     const verticalAlign = item.verticalAlign ?? 'middle'
     let currentTop =
@@ -272,7 +276,7 @@ export class GlyphAtlasTextPipeline {
 
     const glyphs: PackedGlyph[] = []
     for (const line of lines) {
-      const lineWidth = this.measureText(line, font, letterSpacing)
+      const lineWidth = this.measureText(line.text, line.font, line.letterSpacing)
       const textAlign = item.textAlign ?? 'center'
       let currentX =
         textAlign === 'left'
@@ -280,9 +284,9 @@ export class GlyphAtlasTextPipeline {
           : textAlign === 'right'
             ? width - padding - lineWidth
             : (width - lineWidth) / 2
-      const baselineY = currentTop + fontSize * 0.9
-      for (const char of line) {
-        const metrics = this.ensureGlyph(char, font, fontSize)
+      const baselineY = currentTop + line.baselineOffset
+      for (const char of line.text) {
+        const metrics = this.ensureGlyph(char, line.font, line.fontSize)
         if (!metrics) return null
         if (char !== ' ') {
           glyphs.push({
@@ -291,13 +295,62 @@ export class GlyphAtlasTextPipeline {
             y: baselineY + metrics.offsetY,
             width: metrics.contentWidth,
             height: metrics.contentHeight,
+            color: line.color,
           })
         }
-        currentX += metrics.advance + letterSpacing
+        currentX += metrics.advance + line.letterSpacing
       }
-      currentTop += lineHeightPx
+      currentTop += line.lineHeightPx
     }
     return { glyphs }
+  }
+
+  private layoutLines(item: TextItem, availableWidth: number): TextLayoutLine[] | null {
+    const itemFontSize = item.fontSize ?? 60
+    const itemFontFamily = item.fontFamily ?? 'Inter'
+    const itemFontStyle = item.fontStyle ?? 'normal'
+    const itemFontWeightName = item.fontWeight ?? 'normal'
+    const itemFontWeight = FONT_WEIGHT_MAP[itemFontWeightName] ?? 400
+    const itemLineHeight = item.lineHeight ?? 1.2
+    const lines: TextLayoutLine[] = []
+
+    for (const span of getTextItemSpans(item)) {
+      const fontSize = span.fontSize ?? itemFontSize
+      const fontFamily = span.fontFamily ?? itemFontFamily
+      const fontStyle = span.fontStyle ?? itemFontStyle
+      const fontWeightName = span.fontWeight ?? itemFontWeightName
+      const fontWeight = FONT_WEIGHT_MAP[fontWeightName] ?? itemFontWeight
+      const font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`
+      const lineHeightPx = fontSize * itemLineHeight
+      const letterSpacing = span.letterSpacing ?? item.letterSpacing ?? 0
+      const color = parseGpuTextColor(span.color ?? item.color ?? '#ffffff')
+      if (!color) return null
+      const metrics = this.measureFont(font, fontSize)
+      const halfLeading = (lineHeightPx - metrics.height) / 2
+      const baselineOffset = halfLeading + metrics.ascent
+      for (const line of this.wrapText(span.text ?? '', font, availableWidth, letterSpacing)) {
+        lines.push({
+          text: line,
+          font,
+          fontSize,
+          lineHeightPx,
+          baselineOffset,
+          letterSpacing,
+          color,
+        })
+      }
+    }
+    return lines
+  }
+
+  private measureFont(font: string, fontSize: number): { ascent: number; height: number } {
+    this.scratchCtx.font = font
+    const metrics = this.scratchCtx.measureText('Hg')
+    const ascent =
+      metrics.actualBoundingBoxAscent || metrics.fontBoundingBoxAscent || fontSize * 0.8
+    const descent =
+      metrics.actualBoundingBoxDescent || metrics.fontBoundingBoxDescent || fontSize * 0.2
+    return { ascent, height: ascent + descent }
   }
 
   private wrapText(text: string, font: string, maxWidth: number, letterSpacing: number): string[] {
@@ -431,13 +484,9 @@ export class GlyphAtlasTextPipeline {
   }
 }
 
-function writeGlyphVertices(
-  data: Float32Array,
-  offset: number,
-  glyph: PackedGlyph,
-  color: [number, number, number, number],
-): number {
+function writeGlyphVertices(data: Float32Array, offset: number, glyph: PackedGlyph): number {
   const { metrics } = glyph
+  const { color } = glyph
   const x0 = glyph.x
   const y0 = glyph.y
   const x1 = glyph.x + glyph.width
