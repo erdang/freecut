@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vite-plus/test'
+import { BLEND_MODE_INDEX, type BlendMode } from '@/types/blend-modes'
 import {
   CompositorPipeline,
   DEFAULT_LAYER_PARAMS,
@@ -65,6 +66,11 @@ function readHasMask(writeCall: unknown[]): number {
   return new Uint32Array(buffer, 40, 1)[0] ?? 0
 }
 
+function readBlendMode(writeCall: unknown[]): number {
+  const buffer = writeCall[2] as ArrayBuffer
+  return new Uint32Array(buffer, 4, 1)[0] ?? 0
+}
+
 describe('CompositorPipeline', () => {
   it('binds independent uniforms for masked and unmasked layers encoded in one command buffer', () => {
     const { commandEncoder, device, pipeline, queue } = createPipelineHarness()
@@ -112,4 +118,45 @@ describe('CompositorPipeline', () => {
     )?.resource
     expect(firstUniformResource).not.toBe(secondUniformResource)
   })
+
+  it.each(['normal', 'multiply', 'darken', 'lighten', 'screen', 'dissolve'] satisfies BlendMode[])(
+    'preserves mask state when a masked underlay is composited with %s mode',
+    (blendMode) => {
+      const { commandEncoder, pipeline, queue } = createPipelineHarness()
+      const layers: CompositeLayer[] = [
+        {
+          params: {
+            ...DEFAULT_LAYER_PARAMS,
+            blendMode,
+            hasMask: true,
+          },
+          textureView: 'video-layer-view' as unknown as GPUTextureView,
+          maskView: 'heart-mask-view' as unknown as GPUTextureView,
+        },
+        {
+          params: {
+            ...DEFAULT_LAYER_PARAMS,
+            blendMode: 'normal',
+            hasMask: false,
+          },
+          textureView: 'shape-layer-view' as unknown as GPUTextureView,
+          maskView: 'fallback-mask-view' as unknown as GPUTextureView,
+        },
+      ]
+
+      const result = pipeline.compositeToTexture(
+        layers,
+        640,
+        360,
+        commandEncoder as unknown as GPUCommandEncoder,
+      )
+
+      expect(result).not.toBeNull()
+      expect(queue.writeBuffer).toHaveBeenCalledTimes(2)
+      expect(readBlendMode(queue.writeBuffer.mock.calls[0]!)).toBe(BLEND_MODE_INDEX[blendMode])
+      expect(readHasMask(queue.writeBuffer.mock.calls[0]!)).toBe(1)
+      expect(readBlendMode(queue.writeBuffer.mock.calls[1]!)).toBe(BLEND_MODE_INDEX.normal)
+      expect(readHasMask(queue.writeBuffer.mock.calls[1]!)).toBe(0)
+    },
+  )
 })
