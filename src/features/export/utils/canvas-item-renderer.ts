@@ -2088,64 +2088,25 @@ async function renderTransitionTextureParticipants(
 ): Promise<RenderedTransitionTextureParticipants | null> {
   if (!rctx.gpuPipeline) return null
 
-  const directMediaParticipants = await renderTransitionGpuMediaTextureParticipants(
+  return renderTransitionHybridTextureParticipants(
     activeTransition,
     frame,
     rctx,
     trackOrder,
     gpuTexturePool,
-  )
-  if (directMediaParticipants) return directMediaParticipants
-
-  const { canvasPool, canvasSettings } = rctx
-  const baseParticipants = await renderTransitionBaseParticipants(
-    activeTransition,
-    frame,
-    rctx,
-    trackOrder,
     trackMasks,
   )
-  const { leftCanvas, rightCanvas, leftParticipant, rightParticipant, poolCanvases } =
-    baseParticipants
-  const poolTextures: GPUTexture[] = []
-
-  try {
-    const leftTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
-    const rightTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
-    poolTextures.push(leftTexture, rightTexture)
-
-    const leftOk = rctx.gpuPipeline.applyEffectsToTexture(
-      leftCanvas,
-      getGpuEffectInstances(leftParticipant.effects),
-      leftTexture,
-    )
-    const rightOk = rctx.gpuPipeline.applyEffectsToTexture(
-      rightCanvas,
-      getGpuEffectInstances(rightParticipant.effects),
-      rightTexture,
-    )
-    if (!leftOk || !rightOk) {
-      for (const texture of poolTextures) gpuTexturePool.release(texture)
-      for (const canvas of poolCanvases) canvasPool.release(canvas)
-      return null
-    }
-
-    return { leftTexture, rightTexture, poolCanvases, poolTextures }
-  } catch (error) {
-    for (const texture of poolTextures) gpuTexturePool.release(texture)
-    for (const canvas of poolCanvases) canvasPool.release(canvas)
-    throw error
-  }
 }
 
-async function renderTransitionGpuMediaTextureParticipants(
+async function renderTransitionHybridTextureParticipants(
   activeTransition: ActiveTransition,
   frame: number,
   rctx: ItemRenderContext,
   trackOrder: number,
   gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
+  trackMasks: EffectSourceMask[] = [],
 ): Promise<RenderedTransitionTextureParticipants | null> {
-  if (!rctx.gpuMediaPipeline && !rctx.gpuShapePipeline) return null
+  if (!rctx.gpuPipeline) return null
 
   const leftParticipant = resolveTransitionParticipantRenderState(
     activeTransition.leftClip,
@@ -2161,48 +2122,104 @@ async function renderTransitionGpuMediaTextureParticipants(
     trackOrder,
     rctx,
   )
-  const leftPrepared = await prepareGpuMediaParticipant(leftParticipant, frame, rctx)
-  const rightPrepared = await prepareGpuMediaParticipant(rightParticipant, frame, rctx)
-  if (!leftPrepared || !rightPrepared) {
-    leftPrepared?.media.close?.()
-    rightPrepared?.media.close?.()
-    return null
-  }
 
-  const leftTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
-  const rightTexture = gpuTexturePool.acquire(rctx.canvasSettings.width, rctx.canvasSettings.height)
-  const poolTextures = [leftTexture, rightTexture]
-  let ownsPoolTextures = true
+  const poolTextures: GPUTexture[] = []
+  const poolCanvases: OffscreenCanvas[] = []
+  const prevTransitionFlag = rctx.isRenderingTransition
 
   try {
-    const leftRendered = await renderGpuMediaParticipantToTexture(
-      leftPrepared,
-      rctx,
-      gpuTexturePool,
-      leftTexture,
+    const leftTexture = gpuTexturePool.acquire(
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
     )
-    const rightRendered = await renderGpuMediaParticipantToTexture(
-      rightPrepared,
-      rctx,
-      gpuTexturePool,
-      rightTexture,
+    const rightTexture = gpuTexturePool.acquire(
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
     )
-    if (!leftRendered || !rightRendered) return null
+    poolTextures.push(leftTexture, rightTexture)
 
-    ownsPoolTextures = false
-    return {
+    rctx.isRenderingTransition = true
+    const leftOk = await renderTransitionParticipantToTexture(
+      leftParticipant,
+      frame,
+      rctx,
+      gpuTexturePool,
       leftTexture,
+      poolCanvases,
+      trackMasks,
+    )
+    const rightOk = await renderTransitionParticipantToTexture(
+      rightParticipant,
+      frame,
+      rctx,
+      gpuTexturePool,
       rightTexture,
-      poolCanvases: [],
-      poolTextures,
-    }
-  } finally {
-    leftPrepared.media.close?.()
-    rightPrepared.media.close?.()
-    if (ownsPoolTextures) {
+      poolCanvases,
+      trackMasks,
+    )
+    if (!leftOk || !rightOk) {
       for (const texture of poolTextures) gpuTexturePool.release(texture)
+      for (const canvas of poolCanvases) rctx.canvasPool.release(canvas)
+      return null
+    }
+
+    return { leftTexture, rightTexture, poolCanvases, poolTextures }
+  } catch (error) {
+    for (const texture of poolTextures) gpuTexturePool.release(texture)
+    for (const canvas of poolCanvases) rctx.canvasPool.release(canvas)
+    throw error
+  } finally {
+    rctx.isRenderingTransition = prevTransitionFlag
+  }
+}
+
+async function renderTransitionParticipantToTexture(
+  participant: TransitionParticipantRenderState,
+  frame: number,
+  rctx: ItemRenderContext,
+  gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
+  outputTexture: GPUTexture,
+  poolCanvases: OffscreenCanvas[],
+  trackMasks: EffectSourceMask[] = [],
+): Promise<boolean> {
+  const prepared = await prepareGpuMediaParticipant(participant, frame, rctx)
+  if (prepared) {
+    try {
+      const rendered = await renderGpuMediaParticipantToTexture(
+        prepared,
+        rctx,
+        gpuTexturePool,
+        outputTexture,
+      )
+      if (rendered) return true
+    } finally {
+      prepared.media.close?.()
     }
   }
+
+  const { canvas, ctx } = rctx.canvasPool.acquire()
+  poolCanvases.push(canvas)
+  canvas.width = rctx.canvasSettings.width
+  canvas.height = rctx.canvasSettings.height
+  ctx.clearRect(0, 0, canvas.width, canvas.height)
+  await renderItem(
+    ctx,
+    participant.item,
+    participant.transform,
+    frame,
+    rctx,
+    0,
+    participant.renderSpan,
+    trackMasks,
+  )
+
+  return (
+    rctx.gpuPipeline?.applyEffectsToTexture(
+      canvas,
+      getGpuEffectInstances(participant.effects),
+      outputTexture,
+    ) ?? false
+  )
 }
 
 async function renderGpuMediaParticipantToTexture(
