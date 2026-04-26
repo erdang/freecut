@@ -1110,7 +1110,12 @@ describe('renderTransitionToGpuTexture', () => {
   })
 
   it('renders simple text participants through the GPU glyph atlas before canvas fallback', async () => {
-    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, RENDER_ATTACHMENT: 8, TEXTURE_BINDING: 4 })
+    vi.stubGlobal('GPUTextureUsage', {
+      COPY_DST: 2,
+      COPY_SRC: 1,
+      RENDER_ATTACHMENT: 8,
+      TEXTURE_BINDING: 4,
+    })
     const leftClip: ImageItem = {
       id: 'left-image',
       type: 'image',
@@ -1603,6 +1608,13 @@ describe('renderTransitionToGpuTexture', () => {
       color: '#ffffff',
       fontSize: 48,
       fontFamily: 'Inter',
+      effects: [
+        {
+          id: 'nested-brightness',
+          enabled: true,
+          effect: { type: 'gpu-effect', gpuEffectType: 'gpu-brightness', params: { amount: 0.15 } },
+        },
+      ],
       transform: {
         x: 0,
         y: 0,
@@ -1663,12 +1675,26 @@ describe('renderTransitionToGpuTexture', () => {
       createView: vi.fn(),
       destroy: vi.fn(),
     } as unknown as GPUTexture
+    const textBaseTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const textEffectTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const outputTexture = { width: 1920, height: 1080 } as GPUTexture
     const device = {
       createTexture: vi
         .fn()
         .mockReturnValueOnce(subCompTexture)
-        .mockReturnValueOnce(atlasTextTexture),
+        .mockReturnValueOnce(atlasTextTexture)
+        .mockReturnValueOnce(textBaseTexture)
+        .mockReturnValueOnce(textEffectTexture),
       queue: { copyExternalImageToTexture: vi.fn() },
     }
     const gpuTexturePool = {
@@ -1682,6 +1708,7 @@ describe('renderTransitionToGpuTexture', () => {
     const gpuPipeline = {
       getDevice: vi.fn(() => device),
       applyEffectsToTexture: vi.fn().mockReturnValue(true),
+      applyTextureEffectsToTexture: vi.fn().mockReturnValue(true),
     }
     const gpuTextPipeline = {
       renderTextToTexture: vi.fn().mockReturnValue(true),
@@ -1782,17 +1809,42 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       1,
       atlasTextTexture,
-      subCompTexture,
+      textBaseTexture,
       expect.objectContaining({
         sourceWidth: 640,
         sourceHeight: 180,
         destRect: { x: 0, y: 90, width: 640, height: 180 },
+        clear: true,
+        blend: false,
+      }),
+    )
+    expect(gpuPipeline.applyTextureEffectsToTexture).toHaveBeenCalledWith(
+      textBaseTexture,
+      [
+        expect.objectContaining({
+          id: 'nested-brightness',
+          type: 'gpu-brightness',
+          params: { amount: 0.15 },
+        }),
+      ],
+      textEffectTexture,
+      640,
+      360,
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      2,
+      textEffectTexture,
+      subCompTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 360,
+        destRect: { x: 0, y: 0, width: 640, height: 360 },
         clear: false,
         blend: true,
       }),
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
-      2,
+      3,
       subCompTexture,
       rightTexture,
       expect.objectContaining({
@@ -1802,6 +1854,8 @@ describe('renderTransitionToGpuTexture', () => {
       }),
     )
     expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(textBaseTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(textEffectTexture.destroy).toHaveBeenCalledTimes(1)
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
   })
 

@@ -2979,7 +2979,7 @@ async function renderGpuSubCompChildrenToTexture(
   if (!gpuPipeline) return null
   const subData = rctx.subCompRenderData.get(participant.item.compositionId)
   const subAdjustmentLayers = subData?.adjustmentLayers ?? []
-  if (!subData || subAdjustmentLayers.length > 0) return null
+  if (!subData) return null
   const effectiveRenderSpan = participant.renderSpan ?? getItemRenderTimelineSpan(participant.item)
   const sourceOffset = getRenderTimelineSourceStart(participant.item, effectiveRenderSpan)
   const localFrame = frame - effectiveRenderSpan.from + sourceOffset
@@ -3009,11 +3009,24 @@ async function renderGpuSubCompChildrenToTexture(
       if (localFrame < item.from || localFrame >= item.from + item.durationInFrames) continue
       if (item.type === 'adjustment' || (item.type === 'shape' && item.isMask)) continue
       if (item.blendMode && item.blendMode !== 'normal') return null
-      const effects =
+      const itemEffects =
         (rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride?.(item.id) : undefined) ??
         item.effects ??
         []
-      if (effects.some((effect) => effect.enabled !== false)) return null
+      const adjEffects = getAdjustmentLayerEffects(
+        track.order,
+        subAdjustmentLayers,
+        localFrame,
+        rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride : undefined,
+        rctx.renderMode === 'preview' ? rctx.getLiveItemSnapshotById : undefined,
+      )
+      const effects = combineEffects(itemEffects, adjEffects)
+      if (
+        effects.some((effect) => effect.enabled && effect.effect.type !== 'gpu-effect') ||
+        (effects.some((effect) => effect.enabled) && !rctx.gpuPipeline)
+      ) {
+        return null
+      }
       visibleChildren.push({
         item,
         transform: getAnimatedTransform(
@@ -3048,16 +3061,10 @@ async function renderGpuSubCompChildrenToTexture(
         return null
       }
       try {
-        const rendered = await renderGpuMediaParticipantToTexture(
-          prepared,
-          subRctx,
-          {
-            acquire: () => texture,
-            release: () => undefined,
-          },
-          texture,
-          { clear: layerIndex === 0, blend: true },
-        )
+        const rendered = await renderPreparedGpuSubCompLayerToTexture(prepared, subRctx, texture, {
+          clear: layerIndex === 0,
+          blend: true,
+        })
         if (!rendered) {
           texture.destroy()
           return null
@@ -3071,6 +3078,105 @@ async function renderGpuSubCompChildrenToTexture(
   } catch (error) {
     texture.destroy()
     throw error
+  }
+}
+
+async function renderPreparedGpuSubCompLayerToTexture(
+  prepared: PreparedGpuMediaParticipant,
+  rctx: ItemRenderContext,
+  outputTexture: GPUTexture,
+  options: { clear: boolean; blend: boolean },
+): Promise<boolean> {
+  const enabledEffects = prepared.participant.effects.filter((effect) => effect.enabled)
+  if (enabledEffects.length === 0) {
+    return renderGpuMediaParticipantToTexture(
+      prepared,
+      rctx,
+      {
+        acquire: () => outputTexture,
+        release: () => undefined,
+      },
+      outputTexture,
+      options,
+    )
+  }
+
+  const gpuPipeline = rctx.gpuPipeline
+  const gpuMediaPipeline = rctx.gpuMediaPipeline
+  if (!gpuPipeline || !gpuMediaPipeline) return false
+
+  const device = gpuPipeline.getDevice()
+  const baseTexture = device.createTexture({
+    size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+    format: 'rgba8unorm',
+    usage:
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.RENDER_ATTACHMENT |
+      GPUTextureUsage.COPY_SRC,
+  })
+  const effectedTexture = device.createTexture({
+    size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+  })
+
+  try {
+    const preparedWithoutEffects: PreparedGpuMediaParticipant = {
+      ...prepared,
+      participant: { ...prepared.participant, effects: [] },
+    }
+    const renderedBase = await renderGpuMediaParticipantToTexture(
+      preparedWithoutEffects,
+      rctx,
+      {
+        acquire: () => baseTexture,
+        release: () => undefined,
+      },
+      baseTexture,
+      { clear: true, blend: false },
+    )
+    if (!renderedBase) return false
+
+    const effectsApplied = gpuPipeline.applyTextureEffectsToTexture(
+      baseTexture,
+      getGpuEffectInstances(enabledEffects),
+      effectedTexture,
+      rctx.canvasSettings.width,
+      rctx.canvasSettings.height,
+    )
+    if (!effectsApplied) return false
+
+    return gpuMediaPipeline.renderTextureToTexture(effectedTexture, outputTexture, {
+      sourceWidth: rctx.canvasSettings.width,
+      sourceHeight: rctx.canvasSettings.height,
+      outputWidth: rctx.canvasSettings.width,
+      outputHeight: rctx.canvasSettings.height,
+      sourceRect: {
+        x: 0,
+        y: 0,
+        width: rctx.canvasSettings.width,
+        height: rctx.canvasSettings.height,
+      },
+      destRect: {
+        x: 0,
+        y: 0,
+        width: rctx.canvasSettings.width,
+        height: rctx.canvasSettings.height,
+      },
+      transformRect: {
+        x: 0,
+        y: 0,
+        width: rctx.canvasSettings.width,
+        height: rctx.canvasSettings.height,
+      },
+      opacity: 1,
+      rotationRad: 0,
+      clear: options.clear,
+      blend: options.blend,
+    })
+  } finally {
+    baseTexture.destroy()
+    effectedTexture.destroy()
   }
 }
 
