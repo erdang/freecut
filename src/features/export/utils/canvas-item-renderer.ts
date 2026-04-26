@@ -28,6 +28,7 @@ import { getTextItemSpans } from '@/shared/utils/text-item-spans'
 import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes'
 import {
   renderEffectsFromMaskedSource,
+  getGpuEffectInstances,
   getAdjustmentLayerEffects,
   combineEffects,
   type EffectSourceMask,
@@ -67,6 +68,7 @@ import {
   resolveTransitionRenderTimelineSpan,
   type RenderTimelineSpan,
 } from './render-span'
+import type { GpuTexturePool } from '@/infrastructure/gpu/compositor'
 
 const log = createLogger('CanvasItemRenderer')
 
@@ -1885,6 +1887,13 @@ type RenderedTransitionParticipants = {
   poolCanvases: OffscreenCanvas[]
 }
 
+type RenderedTransitionTextureParticipants = {
+  leftTexture: GPUTexture
+  rightTexture: GPUTexture
+  poolCanvases: OffscreenCanvas[]
+  poolTextures: GPUTexture[]
+}
+
 async function renderTransitionParticipants(
   activeTransition: ActiveTransition,
   frame: number,
@@ -1987,6 +1996,96 @@ async function renderTransitionParticipants(
   }
 }
 
+async function renderTransitionTextureParticipants(
+  activeTransition: ActiveTransition,
+  frame: number,
+  rctx: ItemRenderContext,
+  trackOrder: number,
+  gpuTexturePool: Pick<GpuTexturePool, 'acquire' | 'release'>,
+  trackMasks: EffectSourceMask[] = [],
+): Promise<RenderedTransitionTextureParticipants | null> {
+  if (!rctx.gpuPipeline) return null
+
+  const { canvasPool, canvasSettings } = rctx
+  const { leftClip, rightClip } = activeTransition
+  const leftParticipant = resolveTransitionParticipantRenderState(
+    leftClip,
+    activeTransition,
+    frame,
+    trackOrder,
+    rctx,
+  )
+  const rightParticipant = resolveTransitionParticipantRenderState(
+    rightClip,
+    activeTransition,
+    frame,
+    trackOrder,
+    rctx,
+  )
+
+  const { canvas: leftCanvas, ctx: leftCtx } = canvasPool.acquire()
+  const { canvas: rightCanvas, ctx: rightCtx } = canvasPool.acquire()
+  const poolCanvases = [leftCanvas, rightCanvas]
+  const poolTextures: GPUTexture[] = []
+
+  try {
+    const prevTransitionFlag = rctx.isRenderingTransition
+    rctx.isRenderingTransition = true
+    try {
+      await Promise.all([
+        renderItem(
+          leftCtx,
+          leftParticipant.item,
+          leftParticipant.transform,
+          frame,
+          rctx,
+          0,
+          leftParticipant.renderSpan,
+          trackMasks,
+        ),
+        renderItem(
+          rightCtx,
+          rightParticipant.item,
+          rightParticipant.transform,
+          frame,
+          rctx,
+          0,
+          rightParticipant.renderSpan,
+          trackMasks,
+        ),
+      ])
+    } finally {
+      rctx.isRenderingTransition = prevTransitionFlag
+    }
+
+    const leftTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
+    const rightTexture = gpuTexturePool.acquire(canvasSettings.width, canvasSettings.height)
+    poolTextures.push(leftTexture, rightTexture)
+
+    const leftOk = rctx.gpuPipeline.applyEffectsToTexture(
+      leftCanvas,
+      getGpuEffectInstances(leftParticipant.effects),
+      leftTexture,
+    )
+    const rightOk = rctx.gpuPipeline.applyEffectsToTexture(
+      rightCanvas,
+      getGpuEffectInstances(rightParticipant.effects),
+      rightTexture,
+    )
+    if (!leftOk || !rightOk) {
+      for (const texture of poolTextures) gpuTexturePool.release(texture)
+      for (const canvas of poolCanvases) canvasPool.release(canvas)
+      return null
+    }
+
+    return { leftTexture, rightTexture, poolCanvases, poolTextures }
+  } catch (error) {
+    for (const texture of poolTextures) gpuTexturePool.release(texture)
+    for (const canvas of poolCanvases) canvasPool.release(canvas)
+    throw error
+  }
+}
+
 /**
  * Render a transition into a caller-owned GPU texture for downstream GPU
  * compositing. Falls back by returning false when the transition does not have
@@ -1998,11 +2097,41 @@ export async function renderTransitionToGpuTexture(
   frame: number,
   rctx: ItemRenderContext,
   trackOrder: number,
+  gpuTexturePool?: Pick<GpuTexturePool, 'acquire' | 'release'>,
 ): Promise<boolean> {
   const renderer = transitionRegistry.getRenderer(activeTransition.transition.presentation)
   const gpuTransitionId = renderer?.gpuTransitionId
   const pipeline = rctx.gpuTransitionPipeline
   if (!gpuTransitionId || !pipeline?.has(gpuTransitionId)) return false
+
+  if (gpuTexturePool) {
+    const textureParticipants = await renderTransitionTextureParticipants(
+      activeTransition,
+      frame,
+      rctx,
+      trackOrder,
+      gpuTexturePool,
+    )
+    if (textureParticipants) {
+      try {
+        const rendered = pipeline.renderTexturesToTexture(
+          gpuTransitionId,
+          textureParticipants.leftTexture,
+          textureParticipants.rightTexture,
+          outputTexture,
+          activeTransition.progress,
+          rctx.canvasSettings.width,
+          rctx.canvasSettings.height,
+          activeTransition.transition.direction as string | undefined,
+          activeTransition.transition.properties,
+        )
+        if (rendered) return true
+      } finally {
+        for (const texture of textureParticipants.poolTextures) gpuTexturePool.release(texture)
+        for (const canvas of textureParticipants.poolCanvases) rctx.canvasPool.release(canvas)
+      }
+    }
+  }
 
   const participants = await renderTransitionParticipants(activeTransition, frame, rctx, trackOrder)
   try {

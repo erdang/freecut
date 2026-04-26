@@ -689,6 +689,62 @@ export class EffectsPipeline {
   }
 
   /**
+   * Apply effects into a caller-owned GPU texture.
+   *
+   * This keeps the effect output GPU-native for downstream passes such as
+   * transitions or compositing. The source is still uploaded when it is a canvas,
+   * but the effect result no longer bounces through a WebGPU canvas just to be
+   * uploaded again by the next GPU stage.
+   */
+  applyEffectsToTexture(
+    source: OffscreenCanvas | HTMLCanvasElement | HTMLVideoElement,
+    effects: GpuEffectInstance[],
+    outputTexture: GPUTexture,
+  ): boolean {
+    const enabled = effects.filter((e) => e.enabled)
+
+    const w = source instanceof HTMLVideoElement ? source.videoWidth : source.width
+    const h = source instanceof HTMLVideoElement ? source.videoHeight : source.height
+    if (w < 2 || h < 2) return false
+    if (outputTexture.width !== w || outputTexture.height !== h) return false
+
+    if (enabled.length === 0) {
+      this.device.queue.copyExternalImageToTexture(
+        { source, flipY: false },
+        { texture: outputTexture },
+        { width: w, height: h },
+      )
+      return true
+    }
+
+    this.ensurePingPong(w, h)
+    if (!this.pingTexture || !this.pongTexture) return false
+
+    this.device.queue.copyExternalImageToTexture(
+      { source, flipY: false },
+      { texture: this.pingTexture },
+      { width: w, height: h },
+    )
+
+    const commandEncoder = this.device.createCommandEncoder()
+    const finalTex = this.runEffectChain(
+      commandEncoder,
+      enabled,
+      this.pingTexture,
+      this.pongTexture,
+      w,
+      h,
+    )
+    commandEncoder.copyTextureToTexture(
+      { texture: finalTex },
+      { texture: outputTexture },
+      { width: w, height: h },
+    )
+    this.device.queue.submit([commandEncoder.finish()])
+    return true
+  }
+
+  /**
    * Apply effects directly from an HTMLVideoElement via importExternalTexture.
    * Zero-copy: the GPU reads directly from the video decoder's output buffer.
    * Positions the video at `destRect` on a canvas of `canvasWidth × canvasHeight`.

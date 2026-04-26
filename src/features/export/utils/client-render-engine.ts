@@ -1693,6 +1693,7 @@ export async function createCompositionRenderer(
                 frame,
                 itemRenderContext,
                 task.trackOrder,
+                gpuTexturePool,
               )
               if (renderedToTexture) {
                 return {
