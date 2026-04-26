@@ -1913,6 +1913,61 @@ function findSubCompOcclusionCutoffOrder(
   return null
 }
 
+function getActiveSubCompMasks(
+  subData: SubCompRenderData,
+  localFrame: number,
+  subCanvasSettings: CanvasSettings,
+  rctx: ItemRenderContext,
+): Array<{
+  path?: Path2D
+  bitmapMask?: OffscreenCanvas
+  inverted: boolean
+  feather: number
+  maskType: 'clip' | 'alpha'
+  trackOrder: number
+}> {
+  const subMaskSettings: MaskCanvasSettings = {
+    width: subCanvasSettings.width,
+    height: subCanvasSettings.height,
+    fps: subCanvasSettings.fps,
+  }
+  const activeMasks: Array<{
+    path?: Path2D
+    bitmapMask?: OffscreenCanvas
+    inverted: boolean
+    feather: number
+    maskType: 'clip' | 'alpha'
+    trackOrder: number
+  }> = []
+  for (const track of subData.sortedTracks) {
+    if (!track.visible) continue
+    for (const subItem of track.items) {
+      if (localFrame < subItem.from || localFrame >= subItem.from + subItem.durationInFrames) {
+        continue
+      }
+      if (subItem.type !== 'shape' || !subItem.isMask) continue
+      const effectiveMaskItem =
+        rctx.renderMode === 'preview'
+          ? applyPreviewPathVerticesToShape(subItem, rctx.getPreviewPathVerticesOverride)
+          : subItem
+      activeMasks.push({
+        ...buildPreparedMask(
+          effectiveMaskItem,
+          getAnimatedTransform(
+            subItem,
+            subData.keyframesMap.get(subItem.id),
+            localFrame,
+            subCanvasSettings,
+          ),
+          subMaskSettings,
+        ),
+        trackOrder: track.order,
+      })
+    }
+  }
+  return activeMasks
+}
+
 function isSubCompFullyOccludingItem(
   item: TimelineItem,
   trackOrder: number,
@@ -2850,6 +2905,24 @@ async function resolveGpuCompositionParticipantSource(
   if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline) return null
   const width = Math.max(2, Math.ceil(participant.item.compositionWidth))
   const height = Math.max(2, Math.ceil(participant.item.compositionHeight))
+  const directTexture = await renderSingleGpuSubCompChildToTexture(
+    participant,
+    frame,
+    rctx,
+    width,
+    height,
+  )
+  if (directTexture) {
+    return {
+      kind: 'composition',
+      item: participant.item,
+      sourceWidth: width,
+      sourceHeight: height,
+      texture: directTexture,
+      close: () => directTexture.destroy(),
+    }
+  }
+
   const { canvas, ctx } = rctx.canvasPool.acquire()
   try {
     canvas.width = width
@@ -2885,6 +2958,93 @@ async function resolveGpuCompositionParticipantSource(
     }
   } finally {
     rctx.canvasPool.release(canvas)
+  }
+}
+
+async function renderSingleGpuSubCompChildToTexture(
+  participant: TransitionParticipantRenderState<CompositionItem>,
+  frame: number,
+  rctx: ItemRenderContext,
+  width: number,
+  height: number,
+): Promise<GPUTexture | null> {
+  const gpuPipeline = rctx.gpuPipeline
+  if (!gpuPipeline) return null
+  const subData = rctx.subCompRenderData.get(participant.item.compositionId)
+  if (!subData || (subData.adjustmentLayers ?? []).length > 0) return null
+  const effectiveRenderSpan = participant.renderSpan ?? getItemRenderTimelineSpan(participant.item)
+  const sourceOffset = getRenderTimelineSourceStart(participant.item, effectiveRenderSpan)
+  const localFrame = frame - effectiveRenderSpan.from + sourceOffset
+  if (localFrame < 0 || localFrame >= subData.durationInFrames) return null
+
+  const activeMasks = getActiveSubCompMasks(
+    subData,
+    localFrame,
+    { width, height, fps: subData.fps },
+    rctx,
+  )
+  if (activeMasks.length > 0) return null
+
+  const visibleChildren: TransitionParticipantRenderState[] = []
+  const subCanvasSettings = { width, height, fps: subData.fps }
+  for (const track of subData.sortedTracks) {
+    if (!track.visible) continue
+    for (const item of track.items) {
+      if (localFrame < item.from || localFrame >= item.from + item.durationInFrames) continue
+      if (item.type === 'adjustment' || (item.type === 'shape' && item.isMask)) continue
+      if (item.blendMode && item.blendMode !== 'normal') return null
+      const effects =
+        (rctx.renderMode === 'preview' ? rctx.getPreviewEffectsOverride?.(item.id) : undefined) ??
+        item.effects ??
+        []
+      if (effects.some((effect) => effect.enabled !== false)) return null
+      visibleChildren.push({
+        item,
+        transform: getAnimatedTransform(
+          item,
+          subData.keyframesMap.get(item.id),
+          localFrame,
+          subCanvasSettings,
+        ),
+        effects,
+        renderSpan: getItemRenderTimelineSpan(item),
+      })
+    }
+  }
+  if (visibleChildren.length !== 1) return null
+
+  const texture = gpuPipeline.getDevice().createTexture({
+    size: { width, height },
+    format: 'rgba8unorm',
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+  })
+  const subRctx: ItemRenderContext = {
+    ...rctx,
+    fps: subData.fps,
+    canvasSettings: subCanvasSettings,
+  }
+  const prepared = await prepareGpuMediaParticipant(visibleChildren[0]!, localFrame, subRctx)
+  if (!prepared) {
+    texture.destroy()
+    return null
+  }
+  try {
+    const rendered = await renderGpuMediaParticipantToTexture(
+      prepared,
+      subRctx,
+      {
+        acquire: () => texture,
+        release: () => undefined,
+      },
+      texture,
+    )
+    if (!rendered) {
+      texture.destroy()
+      return null
+    }
+    return texture
+  } finally {
+    prepared.media.close?.()
   }
 }
 

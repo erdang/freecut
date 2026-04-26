@@ -1573,6 +1573,200 @@ describe('renderTransitionToGpuTexture', () => {
     )
   })
 
+  it('renders a single GPU-eligible sub-composition child directly to a GPU texture', async () => {
+    vi.stubGlobal('GPUTextureUsage', { COPY_DST: 2, RENDER_ATTACHMENT: 8, TEXTURE_BINDING: 4 })
+    const leftClip: ImageItem = {
+      id: 'left-image',
+      type: 'image',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 60,
+      src: 'left.png',
+      label: 'Left image',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as ImageItem
+    const nestedText: TextItem = {
+      id: 'nested-title',
+      type: 'text',
+      trackId: 'sub-track-1',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Nested title',
+      text: 'Nested GPU title',
+      color: '#ffffff',
+      fontSize: 48,
+      fontFamily: 'Inter',
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 180,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as TextItem
+    const rightClip: CompositionItem = {
+      id: 'right-comp',
+      type: 'composition',
+      trackId: 'track-1',
+      from: 60,
+      durationInFrames: 60,
+      label: 'Nested scene',
+      compositionId: 'sub-comp-1',
+      compositionWidth: 640,
+      compositionHeight: 360,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as CompositionItem
+    const activeTransition = createActiveTransition({ leftClip, rightClip, progress: 0.5 })
+    const leftTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const rightTexture = { width: 1920, height: 1080, createView: vi.fn() } as unknown as GPUTexture
+    const subCompTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const atlasTextTexture = {
+      width: 640,
+      height: 180,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const device = {
+      createTexture: vi
+        .fn()
+        .mockReturnValueOnce(subCompTexture)
+        .mockReturnValueOnce(atlasTextTexture),
+      queue: { copyExternalImageToTexture: vi.fn() },
+    }
+    const gpuTexturePool = {
+      acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
+      release: vi.fn(),
+    }
+    const canvasPool = {
+      acquire: vi.fn(),
+      release: vi.fn(),
+    }
+    const gpuPipeline = {
+      getDevice: vi.fn(() => device),
+      applyEffectsToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTextPipeline = {
+      renderTextToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaPipeline = {
+      renderSourceToTexture: vi.fn().mockReturnValue(true),
+      renderTextureToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuTransitionPipeline = {
+      has: vi.fn().mockReturnValue(true),
+      renderTexturesToTexture: vi.fn().mockReturnValue(true),
+    }
+    const rctx: ItemRenderContext = {
+      fps: 30,
+      canvasSettings: { width: 1920, height: 1080, fps: 30 },
+      canvasPool: canvasPool as unknown as ItemRenderContext['canvasPool'],
+      textMeasureCache: {
+        measure: vi.fn(
+          (_ctx: OffscreenCanvasRenderingContext2D, text: string, letterSpacing: number) =>
+            text.length * 10 + Math.max(0, text.length - 1) * letterSpacing,
+        ),
+      } as unknown as ItemRenderContext['textMeasureCache'],
+      renderMode: 'export',
+      videoExtractors: new Map(),
+      videoElements: new Map(),
+      useMediabunny: new Set(),
+      mediabunnyDisabledItems: new Set(),
+      mediabunnyFailureCountByItem: new Map(),
+      imageElements: new Map([
+        [
+          leftClip.id,
+          { source: { width: 1280, height: 720 } as ImageBitmap, width: 1280, height: 720 },
+        ],
+      ]),
+      gifFramesMap: new Map(),
+      keyframesMap: new Map(),
+      adjustmentLayers: [],
+      subCompRenderData: new Map([
+        [
+          'sub-comp-1',
+          {
+            fps: 30,
+            durationInFrames: 120,
+            sortedTracks: [{ order: 0, visible: true, items: [nestedText] }],
+            keyframesMap: new Map(),
+            adjustmentLayers: [],
+          },
+        ],
+      ]),
+      gpuPipeline: gpuPipeline as unknown as ItemRenderContext['gpuPipeline'],
+      gpuTransitionPipeline:
+        gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
+      gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+      gpuShapePipeline: null,
+      gpuTextPipeline: gpuTextPipeline as unknown as ItemRenderContext['gpuTextPipeline'],
+      gpuTextTextureCache: new Map(),
+    }
+
+    const rendered = await renderTransitionToGpuTexture(
+      outputTexture,
+      activeTransition,
+      55,
+      rctx,
+      1,
+      gpuTexturePool,
+    )
+
+    expect(rendered).toBe(true)
+    expect(canvasPool.acquire).not.toHaveBeenCalled()
+    expect(device.queue.copyExternalImageToTexture).not.toHaveBeenCalled()
+    expect(gpuTextPipeline.renderTextToTexture).toHaveBeenCalledWith(
+      atlasTextTexture,
+      expect.objectContaining({
+        outputWidth: 640,
+        outputHeight: 180,
+        item: expect.objectContaining({ text: 'Nested GPU title' }),
+      }),
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      1,
+      atlasTextTexture,
+      subCompTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 180,
+        destRect: { x: 0, y: 90, width: 640, height: 180 },
+      }),
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      2,
+      subCompTexture,
+      rightTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 360,
+        destRect: { x: 640, y: 360, width: 640, height: 360 },
+      }),
+    )
+    expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
+  })
+
   it('routes eligible shape participants through GPU shape textures without canvas rendering', async () => {
     const leftClip: ShapeItem = {
       id: 'left-shape',
