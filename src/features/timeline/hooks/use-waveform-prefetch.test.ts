@@ -221,7 +221,11 @@ describe('waveform prefetch filtering', () => {
           viewportWidth: 1000,
           viewportHeight: 120,
         })
-        vi.runAllTimers()
+        vi.advanceTimersByTime(90)
+      })
+
+      act(() => {
+        vi.runOnlyPendingTimers()
       })
 
       expect(prefetchSpy).toHaveBeenCalledWith(item.mediaId, 'blob:prefetch')

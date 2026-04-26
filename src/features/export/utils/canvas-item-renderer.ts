@@ -2641,12 +2641,39 @@ function downsampleClosedPathVertices(
 ): Array<[number, number]> | null {
   if (vertices.length <= maxVertices) return vertices
   if (maxVertices < 3) return null
+  const segmentLengths = vertices.map((vertex, index) =>
+    distance2d(vertex, vertices[(index + 1) % vertices.length]!),
+  )
+  const perimeter = segmentLengths.reduce((sum, length) => sum + length, 0)
+  if (perimeter <= 0) return null
+
   const result: Array<[number, number]> = [vertices[0]!]
   for (let i = 1; i < maxVertices; i++) {
-    const sourceIndex = Math.round((i * vertices.length) / maxVertices)
-    result.push(vertices[Math.min(sourceIndex, vertices.length - 1)]!)
+    result.push(
+      sampleClosedPolylineAtDistance(vertices, segmentLengths, (perimeter * i) / maxVertices),
+    )
   }
   return result.length >= 3 ? result : null
+}
+
+function sampleClosedPolylineAtDistance(
+  vertices: Array<[number, number]>,
+  segmentLengths: number[],
+  targetDistance: number,
+): [number, number] {
+  let traversed = 0
+  for (let i = 0; i < vertices.length; i++) {
+    const segmentLength = segmentLengths[i] ?? 0
+    const next = vertices[(i + 1) % vertices.length]!
+    if (segmentLength <= 0) continue
+    if (traversed + segmentLength >= targetDistance) {
+      const t = (targetDistance - traversed) / segmentLength
+      const current = vertices[i]!
+      return [current[0] + (next[0] - current[0]) * t, current[1] + (next[1] - current[1]) * t]
+    }
+    traversed += segmentLength
+  }
+  return vertices[vertices.length - 1]!
 }
 
 function resolveVideoParticipantSourceTime(

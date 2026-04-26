@@ -1319,6 +1319,19 @@ describe('renderTransitionToGpuTexture', () => {
     const leftPathParams = gpuShapePipeline.renderShapeToTexture.mock.calls[0]?.[1]
     expect(leftPathParams).toEqual(expect.objectContaining({ shapeType: 'path' }))
     expect(leftPathParams?.pathVertices).toHaveLength(16)
+    const originalLocalVertices: Array<[number, number]> = pathVertices.map((vertex) => [
+      (vertex.position[0] - 0.5) * 640,
+      (vertex.position[1] - 0.5) * 360,
+    ])
+    const sampledPathVertices = leftPathParams?.pathVertices as Array<[number, number]> | undefined
+    expect(
+      sampledPathVertices?.some(
+        (sample) =>
+          !originalLocalVertices.some(
+            ([x, y]) => Math.abs(sample[0] - x) < 0.001 && Math.abs(sample[1] - y) < 0.001,
+          ),
+      ),
+    ).toBe(true)
   })
 
   it('keeps GPU shape participants with effects on the texture path', async () => {
