@@ -1633,6 +1633,7 @@ describe('renderTransitionToGpuTexture', () => {
       color: '#ffffff',
       fontSize: 48,
       fontFamily: 'Inter',
+      blendMode: 'multiply',
       effects: [
         {
           id: 'nested-brightness',
@@ -1822,7 +1823,23 @@ describe('renderTransitionToGpuTexture', () => {
       createView: vi.fn(),
       destroy: vi.fn(),
     } as unknown as GPUTexture
+    const textBlendOutputTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
+    const textBlendLayerTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const outputTexture = { width: 1920, height: 1080 } as GPUTexture
+    const commandEncoder = {
+      copyTextureToTexture: vi.fn(),
+      finish: vi.fn(() => 'finished-command-buffer'),
+    }
     const device = {
       createTexture: vi
         .fn()
@@ -1836,8 +1853,11 @@ describe('renderTransitionToGpuTexture', () => {
         .mockReturnValueOnce(combinedImageMaskTexture2)
         .mockReturnValueOnce(atlasTextTexture)
         .mockReturnValueOnce(textBaseTexture)
-        .mockReturnValueOnce(textEffectTexture),
-      queue: { copyExternalImageToTexture: vi.fn() },
+        .mockReturnValueOnce(textEffectTexture)
+        .mockReturnValueOnce(textBlendOutputTexture)
+        .mockReturnValueOnce(textBlendLayerTexture),
+      createCommandEncoder: vi.fn(() => commandEncoder),
+      queue: { copyExternalImageToTexture: vi.fn(), submit: vi.fn() },
     }
     const gpuTexturePool = {
       acquire: vi.fn().mockReturnValueOnce(leftTexture).mockReturnValueOnce(rightTexture),
@@ -1858,6 +1878,9 @@ describe('renderTransitionToGpuTexture', () => {
     const gpuMediaPipeline = {
       renderSourceToTexture: vi.fn().mockReturnValue(true),
       renderTextureToTexture: vi.fn().mockReturnValue(true),
+    }
+    const gpuMediaBlendPipeline = {
+      blend: vi.fn().mockReturnValue(true),
     }
     const gpuShapePipeline = {
       renderShapeToTexture: vi.fn().mockReturnValue(true),
@@ -1921,6 +1944,8 @@ describe('renderTransitionToGpuTexture', () => {
       gpuTransitionPipeline:
         gpuTransitionPipeline as unknown as ItemRenderContext['gpuTransitionPipeline'],
       gpuMediaPipeline: gpuMediaPipeline as unknown as ItemRenderContext['gpuMediaPipeline'],
+      gpuMediaBlendPipeline:
+        gpuMediaBlendPipeline as unknown as ItemRenderContext['gpuMediaBlendPipeline'],
       gpuShapePipeline: gpuShapePipeline as unknown as ItemRenderContext['gpuShapePipeline'],
       gpuMaskCombinePipeline:
         gpuMaskCombinePipeline as unknown as ItemRenderContext['gpuMaskCombinePipeline'],
@@ -2038,14 +2063,25 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       3,
       textEffectTexture,
-      subCompTexture,
+      textBlendLayerTexture,
       expect.objectContaining({
         sourceWidth: 640,
         sourceHeight: 360,
         destRect: { x: 0, y: 0, width: 640, height: 360 },
-        clear: false,
-        blend: true,
+        clear: true,
+        blend: false,
       }),
+    )
+    expect(gpuMediaBlendPipeline.blend).toHaveBeenCalledWith(
+      subCompTexture,
+      textBlendLayerTexture,
+      textBlendOutputTexture,
+      'multiply',
+    )
+    expect(commandEncoder.copyTextureToTexture).toHaveBeenCalledWith(
+      { texture: textBlendOutputTexture },
+      { texture: subCompTexture },
+      { width: 640, height: 360 },
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       4,
@@ -2067,6 +2103,8 @@ describe('renderTransitionToGpuTexture', () => {
     expect(combinedImageMaskTexture2.destroy).toHaveBeenCalledTimes(1)
     expect(textBaseTexture.destroy).toHaveBeenCalledTimes(1)
     expect(textEffectTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(textBlendOutputTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(textBlendLayerTexture.destroy).toHaveBeenCalledTimes(1)
     expect(subCompTexture.destroy).toHaveBeenCalledTimes(1)
   })
 

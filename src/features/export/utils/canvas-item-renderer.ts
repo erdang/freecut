@@ -72,6 +72,7 @@ import {
 } from './render-span'
 import type { GpuTexturePool } from '@/infrastructure/gpu/compositor'
 import type {
+  MediaBlendPipeline,
   GpuMediaRect,
   GpuMediaRenderParams,
   MediaRenderPipeline,
@@ -219,6 +220,9 @@ export interface ItemRenderContext {
 
   // GPU media renderer (lazily initialized, shares device with gpuPipeline)
   gpuMediaPipeline?: MediaRenderPipeline | null
+
+  // GPU media blend renderer for non-normal subcomp layer blending.
+  gpuMediaBlendPipeline?: MediaBlendPipeline | null
 
   // GPU shape renderer (lazily initialized, shares device with gpuPipeline)
   gpuShapePipeline?: ShapeRenderPipeline | null
@@ -3017,7 +3021,9 @@ async function renderGpuSubCompChildrenToTexture(
     for (const item of track.items) {
       if (localFrame < item.from || localFrame >= item.from + item.durationInFrames) continue
       if (item.type === 'adjustment' || (item.type === 'shape' && item.isMask)) continue
-      if (item.blendMode && item.blendMode !== 'normal') return null
+      if (item.blendMode && item.blendMode !== 'normal' && !rctx.gpuMediaBlendPipeline) {
+        return null
+      }
       const applicableMasks = activeMasks.filter((mask) =>
         doesMaskAffectTrack(mask.trackOrder, track.order),
       )
@@ -3061,7 +3067,10 @@ async function renderGpuSubCompChildrenToTexture(
   const texture = gpuPipeline.getDevice().createTexture({
     size: { width, height },
     format: 'rgba8unorm',
-    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+    usage:
+      GPUTextureUsage.TEXTURE_BINDING |
+      GPUTextureUsage.RENDER_ATTACHMENT |
+      GPUTextureUsage.COPY_DST,
   })
   const subRctx: ItemRenderContext = {
     ...rctx,
@@ -3130,11 +3139,15 @@ async function renderPreparedGpuSubCompLayerToTexture(
 
   const gpuPipeline = rctx.gpuPipeline
   const gpuMediaPipeline = rctx.gpuMediaPipeline
+  const gpuMediaBlendPipeline = rctx.gpuMediaBlendPipeline
   const gpuShapePipeline = rctx.gpuShapePipeline
   const gpuMaskCombinePipeline = rctx.gpuMaskCombinePipeline
+  const blendMode = prepared.participant.item.blendMode ?? 'normal'
+  const needsBlendMode = blendMode !== 'normal' && !options.clear
   if (
     !gpuPipeline ||
     !gpuMediaPipeline ||
+    (needsBlendMode && !gpuMediaBlendPipeline) ||
     (masks.length > 0 && !gpuShapePipeline) ||
     (masks.length > 1 && !gpuMaskCombinePipeline)
   ) {
@@ -3158,6 +3171,24 @@ async function renderPreparedGpuSubCompLayerToTexture(
       GPUTextureUsage.COPY_DST |
       GPUTextureUsage.RENDER_ATTACHMENT,
   })
+  const blendOutputTexture =
+    needsBlendMode && gpuMediaBlendPipeline
+      ? device.createTexture({
+          size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+          format: 'rgba8unorm',
+          usage:
+            GPUTextureUsage.TEXTURE_BINDING |
+            GPUTextureUsage.RENDER_ATTACHMENT |
+            GPUTextureUsage.COPY_SRC,
+        })
+      : null
+  const blendLayerTexture = needsBlendMode
+    ? device.createTexture({
+        size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+      })
+    : null
   const maskTextures = masks.map(() =>
     device.createTexture({
       size: { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
@@ -3231,39 +3262,65 @@ async function renderPreparedGpuSubCompLayerToTexture(
       }
     }
 
-    return gpuMediaPipeline.renderTextureToTexture(compositeSourceTexture, outputTexture, {
-      sourceWidth: rctx.canvasSettings.width,
-      sourceHeight: rctx.canvasSettings.height,
-      outputWidth: rctx.canvasSettings.width,
-      outputHeight: rctx.canvasSettings.height,
-      sourceRect: {
-        x: 0,
-        y: 0,
-        width: rctx.canvasSettings.width,
-        height: rctx.canvasSettings.height,
+    const layerOutputTexture =
+      needsBlendMode && blendLayerTexture ? blendLayerTexture : outputTexture
+    const renderedLayer = gpuMediaPipeline.renderTextureToTexture(
+      compositeSourceTexture,
+      layerOutputTexture,
+      {
+        sourceWidth: rctx.canvasSettings.width,
+        sourceHeight: rctx.canvasSettings.height,
+        outputWidth: rctx.canvasSettings.width,
+        outputHeight: rctx.canvasSettings.height,
+        sourceRect: {
+          x: 0,
+          y: 0,
+          width: rctx.canvasSettings.width,
+          height: rctx.canvasSettings.height,
+        },
+        destRect: {
+          x: 0,
+          y: 0,
+          width: rctx.canvasSettings.width,
+          height: rctx.canvasSettings.height,
+        },
+        transformRect: {
+          x: 0,
+          y: 0,
+          width: rctx.canvasSettings.width,
+          height: rctx.canvasSettings.height,
+        },
+        opacity: 1,
+        rotationRad: 0,
+        clear: needsBlendMode ? true : options.clear,
+        blend: needsBlendMode ? false : options.blend,
+        maskTexture: layerMaskTexture ?? undefined,
+        maskInvert: masks.length === 1 ? masks[0]?.inverted : false,
       },
-      destRect: {
-        x: 0,
-        y: 0,
-        width: rctx.canvasSettings.width,
-        height: rctx.canvasSettings.height,
-      },
-      transformRect: {
-        x: 0,
-        y: 0,
-        width: rctx.canvasSettings.width,
-        height: rctx.canvasSettings.height,
-      },
-      opacity: 1,
-      rotationRad: 0,
-      clear: options.clear,
-      blend: options.blend,
-      maskTexture: layerMaskTexture ?? undefined,
-      maskInvert: masks.length === 1 ? masks[0]?.inverted : false,
-    })
+    )
+    if (!renderedLayer) return false
+    if (!needsBlendMode || !gpuMediaBlendPipeline || !blendOutputTexture) return true
+
+    const blended = gpuMediaBlendPipeline.blend(
+      outputTexture,
+      layerOutputTexture,
+      blendOutputTexture,
+      blendMode,
+    )
+    if (!blended) return false
+    const commandEncoder = device.createCommandEncoder()
+    commandEncoder.copyTextureToTexture(
+      { texture: blendOutputTexture },
+      { texture: outputTexture },
+      { width: rctx.canvasSettings.width, height: rctx.canvasSettings.height },
+    )
+    device.queue.submit([commandEncoder.finish()])
+    return true
   } finally {
     baseTexture.destroy()
     effectedTexture.destroy()
+    blendOutputTexture?.destroy()
+    blendLayerTexture?.destroy()
     for (const maskTexture of maskTextures) maskTexture.destroy()
     for (const maskTexture of combinedMaskTextures) maskTexture.destroy()
   }

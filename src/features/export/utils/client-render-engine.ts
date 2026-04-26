@@ -41,7 +41,7 @@ import {
 } from './canvas-effects'
 import { EffectsPipeline } from '@/infrastructure/gpu/effects'
 import { TransitionPipeline } from '@/infrastructure/gpu/transitions'
-import { MediaRenderPipeline } from '@/infrastructure/gpu/media'
+import { MediaBlendPipeline, MediaRenderPipeline } from '@/infrastructure/gpu/media'
 import { ShapeRenderPipeline } from '@/infrastructure/gpu/shapes'
 import { GlyphAtlasTextPipeline } from '@/infrastructure/gpu/text'
 import {
@@ -236,6 +236,7 @@ export async function createCompositionRenderer(
   // Shares the GPU device with the effects pipeline
   let gpuTransitionPipeline: TransitionPipeline | null = null
   let gpuMediaPipeline: MediaRenderPipeline | null = null
+  let gpuMediaBlendPipeline: MediaBlendPipeline | null = null
   let gpuShapePipeline: ShapeRenderPipeline | null = null
   let gpuTextPipeline: GlyphAtlasTextPipeline | null = null
   let gpuMaskCombinePipeline: MaskCombinePipeline | null = null
@@ -252,6 +253,13 @@ export async function createCompositionRenderer(
     if (gpuMediaPipeline) return true
     if (!gpuPipeline) return false
     gpuMediaPipeline = new MediaRenderPipeline(gpuPipeline.getDevice())
+    return true
+  }
+
+  function ensureGpuMediaBlendPipeline(): boolean {
+    if (gpuMediaBlendPipeline) return true
+    if (!gpuPipeline) return false
+    gpuMediaBlendPipeline = new MediaBlendPipeline(gpuPipeline.getDevice())
     return true
   }
 
@@ -592,6 +600,7 @@ export async function createCompositionRenderer(
     gpuPipeline: null,
     gpuTransitionPipeline: null,
     gpuMediaPipeline: null,
+    gpuMediaBlendPipeline: null,
     gpuShapePipeline: null,
     gpuTextPipeline: null,
     gpuMaskCombinePipeline: null,
@@ -1346,11 +1355,13 @@ export async function createCompositionRenderer(
           if (activeTransitions.length > 0) {
             if (!itemRenderContext.gpuTransitionPipeline) ensureGpuTransitionPipeline()
             if (!itemRenderContext.gpuMediaPipeline) ensureGpuMediaPipeline()
+            if (!itemRenderContext.gpuMediaBlendPipeline) ensureGpuMediaBlendPipeline()
             if (!itemRenderContext.gpuShapePipeline) ensureGpuShapePipeline()
             if (!itemRenderContext.gpuTextPipeline) ensureGpuTextPipeline()
             if (!itemRenderContext.gpuMaskCombinePipeline) ensureGpuMaskCombinePipeline()
             itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
             itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
+            itemRenderContext.gpuMediaBlendPipeline = gpuMediaBlendPipeline
             itemRenderContext.gpuShapePipeline = gpuShapePipeline
             itemRenderContext.gpuTextPipeline = gpuTextPipeline
             itemRenderContext.gpuMaskCombinePipeline = gpuMaskCombinePipeline
@@ -2175,12 +2186,14 @@ export async function createCompositionRenderer(
       if (pipeline) {
         ensureGpuTransitionPipeline()
         ensureGpuMediaPipeline()
+        ensureGpuMediaBlendPipeline()
         ensureGpuShapePipeline()
         ensureGpuTextPipeline()
         ensureGpuMaskCombinePipeline()
         itemRenderContext.gpuPipeline = pipeline
         itemRenderContext.gpuTransitionPipeline = gpuTransitionPipeline
         itemRenderContext.gpuMediaPipeline = gpuMediaPipeline
+        itemRenderContext.gpuMediaBlendPipeline = gpuMediaBlendPipeline
         itemRenderContext.gpuShapePipeline = gpuShapePipeline
         itemRenderContext.gpuTextPipeline = gpuTextPipeline
         itemRenderContext.gpuMaskCombinePipeline = gpuMaskCombinePipeline
@@ -2248,6 +2261,8 @@ export async function createCompositionRenderer(
       gpuTransitionPipeline = null
       gpuMediaPipeline?.destroy()
       gpuMediaPipeline = null
+      gpuMediaBlendPipeline?.destroy()
+      gpuMediaBlendPipeline = null
       gpuShapePipeline?.destroy()
       gpuShapePipeline = null
       gpuTextPipeline?.destroy()
