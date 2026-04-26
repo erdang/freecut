@@ -3,8 +3,11 @@ import { TRANSITION_COMMON_WGSL } from './common'
 import type { GpuTransitionDefinition } from './types'
 import { GPU_TRANSITION_REGISTRY, getGpuTransition } from './index'
 
-function getLogger() {
-  return createLogger('TransitionPipeline')
+const log = createLogger('TransitionPipeline')
+
+interface TransitionPipelineRecord {
+  pipeline: GPURenderPipeline
+  bindGroupLayout: GPUBindGroupLayout
 }
 
 /**
@@ -17,8 +20,7 @@ export class TransitionPipeline {
   private device: GPUDevice
   private format: GPUTextureFormat
   private sampler: GPUSampler
-  private pipelines = new Map<string, GPURenderPipeline>()
-  private bindGroupLayouts = new Map<string, GPUBindGroupLayout>()
+  private pipelines = new Map<string, TransitionPipelineRecord>()
   private uniformBuffers = new Map<string, GPUBuffer>()
   private cachedBindGroups = new Map<string, GPUBindGroup>()
 
@@ -78,7 +80,7 @@ export class TransitionPipeline {
         .then((info) => {
           for (const msg of info.messages) {
             if (msg.type === 'error') {
-              getLogger().error(
+              log.error(
                 `Shader "${id}" error at line ${msg.lineNum}:${msg.linePos}: ${msg.message}`,
               )
             }
@@ -105,7 +107,6 @@ export class TransitionPipeline {
         label: `transition-${id}-layout`,
         entries,
       })
-      this.bindGroupLayouts.set(id, bindGroupLayout)
 
       // Render directly to the output canvas format (single-pass, no intermediate blit)
       const pipeline = this.device.createRenderPipeline({
@@ -119,9 +120,9 @@ export class TransitionPipeline {
         },
         primitive: { topology: 'triangle-list' },
       })
-      this.pipelines.set(id, pipeline)
+      this.pipelines.set(id, { pipeline, bindGroupLayout })
     } catch (e) {
-      getLogger().warn(`Failed to create pipeline for "${id}"`, e)
+      log.warn(`Failed to create pipeline for "${id}"`, e)
     }
   }
 
@@ -164,6 +165,67 @@ export class TransitionPipeline {
     return buf
   }
 
+  private writeUniforms(
+    transitionId: string,
+    def: GpuTransitionDefinition,
+    progress: number,
+    width: number,
+    height: number,
+    direction?: string,
+    properties?: Record<string, unknown>,
+  ): GPUBuffer | null {
+    if (def.uniformSize <= 0) return null
+
+    const uniformData = def.packUniforms(
+      progress,
+      width,
+      height,
+      directionToNumber(direction),
+      properties,
+    )
+    if (uniformData.byteLength > def.uniformSize) {
+      log.warn(
+        `Uniform data for "${transitionId}" is ${uniformData.byteLength} bytes, exceeding declared size ${def.uniformSize}`,
+      )
+      return null
+    }
+
+    const uniformBuffer = this.getOrCreateUniformBuffer(transitionId, def.uniformSize)
+    this.device.queue.writeBuffer(
+      uniformBuffer,
+      0,
+      uniformData.buffer,
+      uniformData.byteOffset,
+      uniformData.byteLength,
+    )
+    return uniformBuffer
+  }
+
+  private getOrCreateBindGroup(
+    transitionId: string,
+    layout: GPUBindGroupLayout,
+    def: GpuTransitionDefinition,
+    uniformBuffer: GPUBuffer | null,
+  ): GPUBindGroup | null {
+    let bindGroup = this.cachedBindGroups.get(transitionId)
+    if (bindGroup) return bindGroup
+    if (!this.leftView || !this.rightView) return null
+    if (def.uniformSize > 0 && !uniformBuffer) return null
+
+    const entries: GPUBindGroupEntry[] = [
+      { binding: 0, resource: this.sampler },
+      { binding: 1, resource: this.leftView },
+      { binding: 2, resource: this.rightView },
+    ]
+    if (uniformBuffer) {
+      entries.push({ binding: 3, resource: { buffer: uniformBuffer } })
+    }
+
+    bindGroup = this.device.createBindGroup({ layout, entries })
+    this.cachedBindGroups.set(transitionId, bindGroup)
+    return bindGroup
+  }
+
   /**
    * Render a GPU transition.
    * Returns an OffscreenCanvas with the composited result, or null on failure.
@@ -181,14 +243,11 @@ export class TransitionPipeline {
     direction?: string,
     properties?: Record<string, unknown>,
   ): OffscreenCanvas | null {
-    const pipeline = this.pipelines.get(transitionId)
-    const layout = this.bindGroupLayouts.get(transitionId)
+    const record = this.pipelines.get(transitionId)
     const def = getGpuTransition(transitionId)
-    if (!pipeline || !layout || !def) return null
+    if (!record || !def) return null
     if (width < 2 || height < 2) return null
 
-    // Ensure textures (invalidates cached bind groups on resize)
-    const sizeChanged = this.texW !== width || this.texH !== height
     this.ensureTextures(width, height)
     if (!this.leftTexture || !this.rightTexture) return null
 
@@ -220,32 +279,22 @@ export class TransitionPipeline {
       { width, height },
     )
 
-    // Pack uniforms
-    const dirNum = directionToNumber(direction)
-    const uniformData = def.packUniforms(progress, width, height, dirNum, properties)
-    const uniformBuffer = this.getOrCreateUniformBuffer(transitionId, uniformData.byteLength)
-    this.device.queue.writeBuffer(
-      uniformBuffer,
-      0,
-      uniformData.buffer,
-      uniformData.byteOffset,
-      uniformData.byteLength,
+    const uniformBuffer = this.writeUniforms(
+      transitionId,
+      def,
+      progress,
+      width,
+      height,
+      direction,
+      properties,
     )
-
-    // Reuse cached bind group (only recreate on texture resize)
-    let bindGroup = this.cachedBindGroups.get(transitionId)
-    if (!bindGroup || sizeChanged) {
-      const bindEntries: GPUBindGroupEntry[] = [
-        { binding: 0, resource: this.sampler },
-        { binding: 1, resource: this.leftView! },
-        { binding: 2, resource: this.rightView! },
-      ]
-      if (def.uniformSize > 0) {
-        bindEntries.push({ binding: 3, resource: { buffer: uniformBuffer } })
-      }
-      bindGroup = this.device.createBindGroup({ layout, entries: bindEntries })
-      this.cachedBindGroups.set(transitionId, bindGroup)
-    }
+    const bindGroup = this.getOrCreateBindGroup(
+      transitionId,
+      record.bindGroupLayout,
+      def,
+      uniformBuffer,
+    )
+    if (!bindGroup) return null
 
     // Single-pass render directly to the output canvas
     const commandEncoder = this.device.createCommandEncoder()
@@ -258,7 +307,7 @@ export class TransitionPipeline {
         },
       ],
     })
-    pass.setPipeline(pipeline)
+    pass.setPipeline(record.pipeline)
     pass.setBindGroup(0, bindGroup)
     pass.draw(6)
     pass.end()
@@ -287,7 +336,6 @@ export class TransitionPipeline {
     this.uniformBuffers.clear()
     this.cachedBindGroups.clear()
     this.pipelines.clear()
-    this.bindGroupLayouts.clear()
     this.initialized = false
   }
 }
