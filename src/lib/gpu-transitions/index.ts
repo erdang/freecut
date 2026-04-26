@@ -17,6 +17,8 @@ import { clockWipe } from './transitions/clock-wipe'
 import { iris } from './transitions/iris'
 import { liquidDistort } from './transitions/liquid-distort'
 import { lensWarpZoom } from './transitions/lens-warp-zoom'
+import { lightLeakBurn } from './transitions/light-leak-burn'
+import { filmGateSlip } from './transitions/film-gate-slip'
 
 export const GPU_TRANSITION_REGISTRY = new Map<string, GpuTransitionDefinition>()
 
@@ -39,6 +41,8 @@ register(clockWipe)
 register(iris)
 register(liquidDistort)
 register(lensWarpZoom)
+register(lightLeakBurn)
+register(filmGateSlip)
 
 export function getGpuTransition(id: string): GpuTransitionDefinition | undefined {
   return GPU_TRANSITION_REGISTRY.get(id)

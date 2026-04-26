@@ -730,6 +730,135 @@ const lensWarpZoomDef: TransitionDefinition = {
 }
 
 // ============================================================================
+// Light Leak Burn
+// ============================================================================
+
+const lightLeakBurnRenderer: TransitionRenderer = {
+  gpuTransitionId: 'lightLeakBurn',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    return { opacity: fadeOpacity(clamp01(progress), isOutgoing) }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, direction, canvas) {
+    const p = clamp01(progress)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    const dir = (direction as WipeDirection) || 'from-left'
+    const envelope = Math.sin(p * Math.PI)
+
+    ctx.save()
+    ctx.globalAlpha = fadeOpacity(p, false)
+    ctx.drawImage(rightCanvas, 0, 0, w, h)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalAlpha = fadeOpacity(p, true)
+    ctx.drawImage(leftCanvas, 0, 0, w, h)
+    ctx.restore()
+
+    if (envelope <= 0.06) return
+
+    const gx =
+      dir === 'from-right'
+        ? (1 - p) * w
+        : dir === 'from-top' || dir === 'from-bottom'
+          ? w / 2
+          : p * w
+    const gy =
+      dir === 'from-bottom'
+        ? (1 - p) * h
+        : dir === 'from-left' || dir === 'from-right'
+          ? h / 2
+          : p * h
+    const radius = Math.max(w, h) * (0.28 + envelope * 0.22)
+    const burn = ctx.createRadialGradient(gx, gy, 0, gx, gy, radius)
+    burn.addColorStop(0, `rgba(255, 250, 220, ${0.42 * envelope})`)
+    burn.addColorStop(0.32, `rgba(255, 150, 70, ${0.28 * envelope})`)
+    burn.addColorStop(1, 'rgba(255, 105, 35, 0)')
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = burn
+    ctx.fillRect(0, 0, w, h)
+    ctx.restore()
+  },
+}
+
+const lightLeakBurnDef: TransitionDefinition = {
+  id: 'lightLeakBurn',
+  label: 'Light Leak Burn',
+  description: 'Hot overexposed burn sweep with organic warm bloom',
+  category: 'light',
+  icon: 'Flame',
+  hasDirection: true,
+  directions: ['from-left', 'from-right', 'from-top', 'from-bottom'],
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 26,
+  minDuration: 8,
+  maxDuration: 90,
+}
+
+// ============================================================================
+// Film Gate Slip
+// ============================================================================
+
+const filmGateSlipRenderer: TransitionRenderer = {
+  gpuTransitionId: 'filmGateSlip',
+  calculateStyles(progress, isOutgoing): TransitionStyleCalculation {
+    const p = clamp01(progress)
+    const envelope = Math.sin(p * Math.PI)
+    const y = (isOutgoing ? 1 : -0.55) * (p - 0.5) * envelope * 18
+    const x = Math.sin(p * Math.PI * 18) * envelope * 2
+    return {
+      opacity: fadeOpacity(p, isOutgoing),
+      transform: envelope > 0.08 ? `translate(${x}px, ${y}px)` : undefined,
+    }
+  },
+  renderCanvas(ctx, leftCanvas, rightCanvas, progress, _direction, canvas) {
+    const p = clamp01(progress)
+    const w = canvas?.width ?? leftCanvas.width
+    const h = canvas?.height ?? leftCanvas.height
+    const envelope = Math.sin(p * Math.PI)
+    const frame = Math.floor(p * 18)
+    const jitter = (seededRandom(frame * 17.3) - 0.5) * envelope
+    const slip = (p - 0.5) * envelope * h * 0.08
+    const shake = jitter * 8
+
+    ctx.save()
+    ctx.globalAlpha = fadeOpacity(p, false)
+    ctx.drawImage(rightCanvas, -shake * 0.5, -slip * 0.55, w, h)
+    ctx.restore()
+
+    ctx.save()
+    ctx.globalAlpha = fadeOpacity(p, true)
+    ctx.drawImage(leftCanvas, shake, slip, w, h)
+    ctx.restore()
+
+    if (envelope <= 0.08) return
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'screen'
+    ctx.fillStyle = `rgba(255, 245, 220, ${0.08 * envelope})`
+    ctx.fillRect(0, 0, w, h)
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.14 * envelope})`
+    ctx.fillRect(0, 0, w, h * 0.045)
+    ctx.fillRect(0, h * 0.955, w, h * 0.045)
+    ctx.restore()
+  },
+}
+
+const filmGateSlipDef: TransitionDefinition = {
+  id: 'filmGateSlip',
+  label: 'Film Gate Slip',
+  description: 'Analog frame slip with exposure flicker and gate-edge flash',
+  category: 'custom',
+  icon: 'Film',
+  hasDirection: false,
+  supportedTimings: [...ALL_TIMINGS],
+  defaultDuration: 22,
+  minDuration: 8,
+  maxDuration: 72,
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -743,4 +872,6 @@ export function registerGpuTransitions(registry: TransitionRegistry): void {
   registry.register('radialBlur', radialBlurDef, radialBlurRenderer)
   registry.register('liquidDistort', liquidDistortDef, liquidDistortRenderer)
   registry.register('lensWarpZoom', lensWarpZoomDef, lensWarpZoomRenderer)
+  registry.register('lightLeakBurn', lightLeakBurnDef, lightLeakBurnRenderer)
+  registry.register('filmGateSlip', filmGateSlipDef, filmGateSlipRenderer)
 }

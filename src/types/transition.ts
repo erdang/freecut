@@ -41,6 +41,8 @@ export type BuiltinTransitionPresentation =
   | 'radialBlur'
   | 'liquidDistort'
   | 'lensWarpZoom'
+  | 'lightLeakBurn'
+  | 'filmGateSlip'
 
 /**
  * Visual presentation styles for transitions.

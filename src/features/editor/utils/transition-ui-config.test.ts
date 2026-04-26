@@ -78,4 +78,42 @@ describe('transition-ui-config', () => {
       ),
     ).toBe(true)
   })
+
+  it('shows light leak burn as a directional light transition', () => {
+    const lightConfigs = getTransitionConfigsByCategory().light ?? []
+    const burnConfigs = lightConfigs.filter((config) => config.id === 'lightLeakBurn')
+
+    expect(burnConfigs.map((config) => config.direction)).toEqual([
+      'from-left',
+      'from-right',
+      'from-top',
+      'from-bottom',
+    ])
+    expect(burnConfigs.every((config) => config.icon !== undefined)).toBe(true)
+  })
+
+  it('shows film gate slip in the custom category', () => {
+    const customConfigs = getTransitionConfigsByCategory().custom ?? []
+
+    expect(customConfigs.some((config) => config.id === 'filmGateSlip')).toBe(true)
+    expect(
+      getTransitionPresentationConfigs().some(
+        (config) => config.id === 'filmGateSlip' && config.icon === 'Film',
+      ),
+    ).toBe(true)
+  })
+
+  it('shows text, ink, and radial shatter reveals in the mask category', () => {
+    const maskConfigs = getTransitionConfigsByCategory().mask ?? []
+
+    expect(maskConfigs.some((config) => config.id === 'textReveal' && config.icon === 'Type')).toBe(
+      true,
+    )
+    expect(
+      maskConfigs.some((config) => config.id === 'inkSpread' && config.icon === 'Droplets'),
+    ).toBe(true)
+    expect(
+      maskConfigs.some((config) => config.id === 'radialShatter' && config.icon === 'Triangle'),
+    ).toBe(true)
+  })
 })

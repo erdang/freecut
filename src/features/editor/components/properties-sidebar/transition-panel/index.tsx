@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -49,6 +50,21 @@ const EASE_OPTIONS = [
   { value: 'ease-out', label: 'Out' },
   { value: 'ease-in-out', label: 'In & Out' },
 ] as const satisfies ReadonlyArray<{ value: TransitionTiming; label: string }>
+
+const TEXT_REVEAL_WORD_OPTIONS = [
+  { value: '0', label: 'TEXT' },
+  { value: '1', label: 'CUT' },
+  { value: '2', label: 'NEXT' },
+  { value: '3', label: 'PLAY' },
+] as const
+
+function sanitizeTextRevealInput(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .slice(0, 8)
+}
 
 function getSupportedEaseOptions(
   supportedTimings: readonly TransitionTiming[],
@@ -226,6 +242,36 @@ export function TransitionPanel() {
     [selectedTransitionId, updateTransition],
   )
 
+  const handlePropertyChange = useCallback(
+    (key: string, value: number | string) => {
+      if (!selectedTransitionId || !selectedTransition) return
+      updateTransition(selectedTransitionId, {
+        properties: {
+          ...(selectedTransition.properties ?? {}),
+          [key]: value,
+        },
+      })
+    },
+    [selectedTransition, selectedTransitionId, updateTransition],
+  )
+
+  const handleTextRevealPresetChange = useCallback(
+    (value: string) => {
+      const preset = Number(value)
+      const option = TEXT_REVEAL_WORD_OPTIONS.find((entry) => entry.value === value)
+      if (!option) return
+      if (!selectedTransitionId || !selectedTransition) return
+      updateTransition(selectedTransitionId, {
+        properties: {
+          ...(selectedTransition.properties ?? {}),
+          textPreset: preset,
+          text: option.label,
+        },
+      })
+    },
+    [selectedTransition, selectedTransitionId, updateTransition],
+  )
+
   // Handle delete
   const handleDelete = useCallback(() => {
     if (selectedTransitionId) {
@@ -350,6 +396,86 @@ export function TransitionPanel() {
               ))}
             </div>
           </PropertyRow>
+        )}
+
+        {selectedTransition.presentation === 'textReveal' && (
+          <>
+            <PropertyRow label="Word" tooltip="Text preset used as the reveal mask">
+              <Select
+                value={String(
+                  (selectedTransition.properties?.textPreset as number | undefined) ?? 0,
+                )}
+                onValueChange={handleTextRevealPresetChange}
+              >
+                <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
+                  <SelectValue placeholder="Word" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEXT_REVEAL_WORD_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </PropertyRow>
+
+            <PropertyRow label="Text" tooltip="Custom text for the reveal mask">
+              <Input
+                value={String(selectedTransition.properties?.text ?? 'TEXT')}
+                onChange={(event) =>
+                  handlePropertyChange('text', sanitizeTextRevealInput(event.target.value))
+                }
+                className="h-7 text-xs uppercase"
+                maxLength={8}
+                placeholder="TEXT"
+              />
+            </PropertyRow>
+
+            <PropertyRow label="Size" tooltip="Text mask size">
+              <SliderInput
+                value={(selectedTransition.properties?.scale as number | undefined) ?? 0.9}
+                onChange={(value) => handlePropertyChange('scale', value)}
+                min={0.45}
+                max={1.4}
+                step={0.01}
+                className="flex-1 min-w-0"
+              />
+            </PropertyRow>
+
+            <PropertyRow label="Edge" tooltip="Text mask edge softness">
+              <SliderInput
+                value={(selectedTransition.properties?.softness as number | undefined) ?? 0.012}
+                onChange={(value) => handlePropertyChange('softness', value)}
+                min={0.001}
+                max={0.05}
+                step={0.001}
+                className="flex-1 min-w-0"
+              />
+            </PropertyRow>
+
+            <PropertyRow label="Fill" tooltip="How quickly the text reveal fills">
+              <SliderInput
+                value={(selectedTransition.properties?.fillSpeed as number | undefined) ?? 1.35}
+                onChange={(value) => handlePropertyChange('fillSpeed', value)}
+                min={0.6}
+                max={2.2}
+                step={0.01}
+                className="flex-1 min-w-0"
+              />
+            </PropertyRow>
+
+            <PropertyRow label="Zoom" tooltip="Incoming clip zoom through the text">
+              <SliderInput
+                value={(selectedTransition.properties?.zoom as number | undefined) ?? 1}
+                onChange={(value) => handlePropertyChange('zoom', value)}
+                min={0}
+                max={2}
+                step={0.01}
+                className="flex-1 min-w-0"
+              />
+            </PropertyRow>
+          </>
         )}
 
         {/* Action buttons */}
