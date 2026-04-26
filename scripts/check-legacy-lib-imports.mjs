@@ -18,6 +18,9 @@ const ALLOWED_FACADE_FILES = new Set([
   'src/infrastructure/gpu/transitions.ts',
   'src/infrastructure/gpu/masks.ts',
   'src/infrastructure/gpu/scopes.ts',
+  'src/infrastructure/gpu/media.ts',
+  'src/infrastructure/gpu/shapes.ts',
+  'src/infrastructure/gpu/text.ts',
   'src/infrastructure/audio/time-stretch.ts',
   'src/infrastructure/analysis/index.ts',
 ]);
