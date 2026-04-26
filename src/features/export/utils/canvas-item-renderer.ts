@@ -245,6 +245,9 @@ export interface ItemRenderContext {
   // DOM video drift threshold to prefer stale zero-copy frames over
   // 170ms mediabunny stalls during transition ramp-up / exit.
   isRenderingTransition?: boolean
+
+  // Composition IDs currently resolving through the GPU subcomp path.
+  gpuCompositionStack?: Set<string>
 }
 
 /**
@@ -2921,12 +2924,18 @@ async function resolveGpuCompositionParticipantSource(
   rctx: ItemRenderContext,
 ): Promise<ResolvedGpuMediaParticipantSource | null> {
   if (!rctx.gpuPipeline || !rctx.gpuMediaPipeline) return null
+  if (rctx.gpuCompositionStack?.has(participant.item.compositionId)) return null
   const width = Math.max(2, Math.ceil(participant.item.compositionWidth))
   const height = Math.max(2, Math.ceil(participant.item.compositionHeight))
+  const gpuCompositionStack = new Set(rctx.gpuCompositionStack)
+  gpuCompositionStack.add(participant.item.compositionId)
   const directTexture = await renderGpuSubCompChildrenToTexture(
     participant,
     frame,
-    rctx,
+    {
+      ...rctx,
+      gpuCompositionStack,
+    },
     width,
     height,
   )

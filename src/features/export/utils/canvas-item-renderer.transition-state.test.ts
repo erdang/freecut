@@ -1667,6 +1667,25 @@ describe('renderTransitionToGpuTexture', () => {
         opacity: 1,
       },
     } as ImageItem
+    const nestedComp: CompositionItem = {
+      id: 'nested-comp',
+      type: 'composition',
+      trackId: 'sub-track-2',
+      from: 0,
+      durationInFrames: 120,
+      label: 'Inner nested scene',
+      compositionId: 'inner-comp-1',
+      compositionWidth: 640,
+      compositionHeight: 360,
+      transform: {
+        x: 0,
+        y: 0,
+        width: 640,
+        height: 360,
+        rotation: 0,
+        opacity: 1,
+      },
+    } as CompositionItem
     const nestedMask: ShapeItem = {
       id: 'nested-mask',
       type: 'shape',
@@ -1763,6 +1782,12 @@ describe('renderTransitionToGpuTexture', () => {
       createView: vi.fn(),
       destroy: vi.fn(),
     } as unknown as GPUTexture
+    const innerCompTexture = {
+      width: 640,
+      height: 360,
+      createView: vi.fn(),
+      destroy: vi.fn(),
+    } as unknown as GPUTexture
     const imageBaseTexture = {
       width: 640,
       height: 360,
@@ -1844,6 +1869,7 @@ describe('renderTransitionToGpuTexture', () => {
       createTexture: vi
         .fn()
         .mockReturnValueOnce(subCompTexture)
+        .mockReturnValueOnce(innerCompTexture)
         .mockReturnValueOnce(imageBaseTexture)
         .mockReturnValueOnce(imageEffectTexture)
         .mockReturnValueOnce(imageMaskTexture)
@@ -1928,13 +1954,23 @@ describe('renderTransitionToGpuTexture', () => {
             fps: 30,
             durationInFrames: 120,
             sortedTracks: [
-              { order: 1, visible: true, items: [nestedImage] },
+              { order: 1, visible: true, items: [nestedComp] },
               {
                 order: 0,
                 visible: true,
                 items: [nestedText, nestedMask, nestedMask2, nestedMask3],
               },
             ],
+            keyframesMap: new Map(),
+            adjustmentLayers: [],
+          },
+        ],
+        [
+          'inner-comp-1',
+          {
+            fps: 30,
+            durationInFrames: 120,
+            sortedTracks: [{ order: 0, visible: true, items: [nestedImage] }],
             keyframesMap: new Map(),
             adjustmentLayers: [],
           },
@@ -1972,13 +2008,13 @@ describe('renderTransitionToGpuTexture', () => {
     expect(gpuMediaPipeline.renderSourceToTexture).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({ width: 640, height: 360 }),
-      imageBaseTexture,
+      innerCompTexture,
       expect.objectContaining({
         sourceWidth: 640,
         sourceHeight: 360,
         destRect: { x: 0, y: 0, width: 640, height: 360 },
         clear: true,
-        blend: false,
+        blend: true,
       }),
     )
     expect(gpuShapePipeline.renderShapeToTexture).toHaveBeenCalledWith(
@@ -2016,6 +2052,18 @@ describe('renderTransitionToGpuTexture', () => {
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
       1,
+      innerCompTexture,
+      imageBaseTexture,
+      expect.objectContaining({
+        sourceWidth: 640,
+        sourceHeight: 360,
+        destRect: { x: 0, y: 0, width: 640, height: 360 },
+        clear: true,
+        blend: false,
+      }),
+    )
+    expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
+      2,
       imageBaseTexture,
       subCompTexture,
       expect.objectContaining({
@@ -2036,7 +2084,7 @@ describe('renderTransitionToGpuTexture', () => {
       }),
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
-      2,
+      3,
       atlasTextTexture,
       textBaseTexture,
       expect.objectContaining({
@@ -2061,7 +2109,7 @@ describe('renderTransitionToGpuTexture', () => {
       360,
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
-      3,
+      4,
       textEffectTexture,
       textBlendLayerTexture,
       expect.objectContaining({
@@ -2084,7 +2132,7 @@ describe('renderTransitionToGpuTexture', () => {
       { width: 640, height: 360 },
     )
     expect(gpuMediaPipeline.renderTextureToTexture).toHaveBeenNthCalledWith(
-      4,
+      5,
       subCompTexture,
       rightTexture,
       expect.objectContaining({
@@ -2094,6 +2142,7 @@ describe('renderTransitionToGpuTexture', () => {
       }),
     )
     expect(atlasTextTexture.destroy).toHaveBeenCalledTimes(1)
+    expect(innerCompTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageBaseTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageEffectTexture.destroy).toHaveBeenCalledTimes(1)
     expect(imageMaskTexture.destroy).toHaveBeenCalledTimes(1)
