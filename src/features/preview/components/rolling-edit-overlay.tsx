@@ -4,7 +4,7 @@ import {
 } from '@/features/preview/deps/timeline-store';
 import { useRollingEditPreviewStore } from '@/features/preview/deps/timeline-edit-preview';
 import { EditTwoUpPanels } from './edit-2up-panels';
-import { getSourceFrameInfo } from './edit-overlay-utils';
+import { getRollingEditPanelFrames } from './rolling-edit-overlay-utils';
 
 interface RollingEditOverlayProps {
   fps: number;
@@ -27,19 +27,12 @@ export function RollingEditOverlay({ fps }: RollingEditOverlayProps) {
   const neighborItem = itemsMap.get(neighborItemId);
   if (!trimmedItem || !neighborItem) return null;
 
-  const leftItem = handle === 'end' ? trimmedItem : neighborItem;
-  const rightItem = handle === 'end' ? neighborItem : trimmedItem;
-
-  const editPointFrame =
-    handle === 'end'
-      ? leftItem.from + leftItem.durationInFrames + neighborDelta
-      : rightItem.from + neighborDelta;
-
-  const outLocalFrame = Math.max(0, editPointFrame - leftItem.from - 1);
-  const inLocalFrame = Math.max(0, editPointFrame - rightItem.from);
-
-  const outInfo = getSourceFrameInfo(leftItem, outLocalFrame, fps);
-  const inInfo = getSourceFrameInfo(rightItem, inLocalFrame, fps);
+  const {
+    leftItem,
+    rightItem,
+    outInfo,
+    inInfo,
+  } = getRollingEditPanelFrames({ trimmedItem, neighborItem, handle, neighborDelta, fps });
 
   return (
     <EditTwoUpPanels
@@ -58,4 +51,3 @@ export function RollingEditOverlay({ fps }: RollingEditOverlayProps) {
     />
   );
 }
-

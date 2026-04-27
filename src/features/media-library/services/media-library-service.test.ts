@@ -18,6 +18,12 @@ const indexedDbMocks = vi.hoisted(() => ({
   getProjectsUsingMedia: vi.fn(),
   getMediaForProject: vi.fn(),
   deleteTranscript: vi.fn(),
+  readAiOutput: vi.fn(),
+}));
+
+const captionsStorageMocks = vi.hoisted(() => ({
+  saveCaptions: vi.fn(async () => []),
+  deleteCaptions: vi.fn(async () => undefined),
 }));
 
 const opfsMocks = vi.hoisted(() => ({
@@ -73,6 +79,8 @@ const backgroundMediaWorkMocks = vi.hoisted(() => ({
 
 vi.mock('@/infrastructure/storage', () => indexedDbMocks);
 
+vi.mock('@/infrastructure/storage/workspace-fs/captions', () => captionsStorageMocks);
+
 vi.mock('./opfs-service', () => ({
   opfsService: opfsMocks,
 }));
@@ -118,6 +126,8 @@ vi.mock('../utils/proxy-key', () => ({
 import { mediaLibraryService, FileAccessError } from './media-library-service';
 import type { MediaMetadata } from '@/types/storage';
 
+const fetchMock = vi.fn();
+
 function makeMediaMetadata(overrides: Partial<MediaMetadata> = {}): MediaMetadata {
   return {
     id: 'media-1',
@@ -141,9 +151,12 @@ function makeMediaMetadata(overrides: Partial<MediaMetadata> = {}): MediaMetadat
 describe('MediaLibraryService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
     compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(false);
     compositionRuntimeMocks.startPreviewAudioStartupWarm.mockResolvedValue(undefined);
     filmstripCacheMocks.prewarmPriorityWindow.mockResolvedValue(undefined);
+    indexedDbMocks.readAiOutput.mockResolvedValue(undefined);
   });
 
   describe('getAllMedia', () => {
@@ -199,6 +212,7 @@ describe('MediaLibraryService', () => {
         thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
       });
       mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false });
+      indexedDbMocks.getAllMedia.mockResolvedValue([]);
       indexedDbMocks.getMediaForProject.mockResolvedValue([]);
 
       const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1');
@@ -231,6 +245,7 @@ describe('MediaLibraryService', () => {
         fileName: 'video.mp4',
         fileSize: 4,
       });
+      indexedDbMocks.getAllMedia.mockResolvedValue([]);
       indexedDbMocks.getMediaForProject.mockResolvedValue([existingMedia]);
 
       const mockFile = new File(['data'], 'video.mp4', { type: 'video/mp4' });
@@ -246,6 +261,46 @@ describe('MediaLibraryService', () => {
       expect(result.isDuplicate).toBe(true);
       expect(result.id).toBe('existing-1');
       expect(indexedDbMocks.createMedia).not.toHaveBeenCalled();
+    });
+
+    it('refreshes the stored handle when reusing a workspace duplicate', async () => {
+      const existingMedia = makeMediaMetadata({
+        id: 'existing-1',
+        fileName: 'video.mp4',
+        fileSize: 4,
+        fileLastModified: 1234,
+        storageType: 'handle',
+      });
+      const refreshedMedia = {
+        ...existingMedia,
+        fileHandle: {} as FileSystemFileHandle,
+      };
+      indexedDbMocks.getAllMedia.mockResolvedValue([existingMedia]);
+      indexedDbMocks.getProjectMediaIds.mockResolvedValue([]);
+      indexedDbMocks.updateMedia.mockResolvedValue(refreshedMedia);
+
+      const mockFile = new File(['data'], 'video.mp4', {
+        type: 'video/mp4',
+        lastModified: 1234,
+      });
+      const mockHandle = {
+        name: 'video.mp4',
+        getFile: vi.fn().mockResolvedValue(mockFile),
+        queryPermission: vi.fn().mockResolvedValue('granted'),
+        requestPermission: vi.fn().mockResolvedValue('granted'),
+      } as unknown as FileSystemFileHandle;
+
+      const result = await mediaLibraryService.importMediaWithHandle(mockHandle, 'project-2');
+
+      expect(indexedDbMocks.updateMedia).toHaveBeenCalledWith('existing-1', expect.objectContaining({
+        fileHandle: mockHandle,
+        fileName: 'video.mp4',
+        fileSize: 4,
+        fileLastModified: 1234,
+      }));
+      expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-2', 'existing-1');
+      expect(result.id).toBe('existing-1');
+      expect(result.isDuplicate).toBe(false);
     });
 
     it('starts preview audio conform in background for custom-decoded imports', async () => {
@@ -271,6 +326,7 @@ describe('MediaLibraryService', () => {
         },
       });
       mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false });
+      indexedDbMocks.getAllMedia.mockResolvedValue([]);
       indexedDbMocks.getMediaForProject.mockResolvedValue([]);
       compositionRuntimeMocks.needsCustomAudioDecoder.mockReturnValue(true);
 
@@ -292,6 +348,106 @@ describe('MediaLibraryService', () => {
       await expect(
         mediaLibraryService.importMediaWithHandle(mockHandle, 'project-1')
       ).rejects.toThrow(FileAccessError);
+    });
+  });
+
+  describe('importMediaFromUrl', () => {
+    it('downloads a direct media URL and persists it as OPFS-backed media', async () => {
+      const remoteBlob = new Blob(['remote-video'], { type: 'video/mp4' });
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'https://cdn.example.com/assets/clip.mp4?token=123',
+        headers: new Headers({
+          'content-type': 'video/mp4',
+        }),
+        blob: vi.fn().mockResolvedValue(remoteBlob),
+      } satisfies Partial<Response>);
+
+      mediaProcessorMocks.processMedia.mockResolvedValue({
+        metadata: {
+          type: 'video',
+          duration: 10,
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          codec: 'avc1',
+          audioCodec: 'aac',
+          audioCodecSupported: true,
+          bitrate: 5000,
+        },
+        thumbnail: new Blob(['thumb'], { type: 'image/webp' }),
+      });
+      mediaProcessorMocks.hasUnsupportedAudioCodec.mockReturnValue({ unsupported: false });
+      indexedDbMocks.getMediaForProject.mockResolvedValue([]);
+      indexedDbMocks.createMedia.mockImplementation(async (metadata) => metadata);
+
+      const result = await mediaLibraryService.importMediaFromUrl(
+        'https://cdn.example.com/assets/clip.mp4?token=123',
+        'project-1',
+      );
+
+      expect(fetchMock).toHaveBeenCalledWith('https://cdn.example.com/assets/clip.mp4?token=123');
+      expect(result.storageType).toBe('opfs');
+      expect(result.fileName).toBe('clip.mp4');
+      expect(opfsMocks.saveFile).toHaveBeenCalledTimes(1);
+      expect(indexedDbMocks.createMedia).toHaveBeenCalledWith(expect.objectContaining({
+        id: result.id,
+        storageType: 'opfs',
+        fileName: 'clip.mp4',
+        mimeType: 'video/mp4',
+      }));
+      expect(indexedDbMocks.associateMediaWithProject).toHaveBeenCalledWith('project-1', result.id);
+      expect(filmstripCacheMocks.prewarmPriorityWindow).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns an existing project media item when the downloaded file matches by name and size', async () => {
+      const existing = makeMediaMetadata({
+        id: 'existing-remote',
+        storageType: 'opfs',
+        fileName: 'clip.mp4',
+        fileSize: 12,
+      });
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'https://cdn.example.com/assets/clip.mp4',
+        headers: new Headers({
+          'content-type': 'video/mp4',
+        }),
+        blob: vi.fn().mockResolvedValue(new Blob(['remote-video'], { type: 'video/mp4' })),
+      } satisfies Partial<Response>);
+      indexedDbMocks.getMediaForProject.mockResolvedValue([existing]);
+
+      const result = await mediaLibraryService.importMediaFromUrl(
+        'https://cdn.example.com/assets/clip.mp4',
+        'project-1',
+      );
+
+      expect(result).toMatchObject({
+        id: 'existing-remote',
+        isDuplicate: true,
+      });
+      expect(indexedDbMocks.createMedia).not.toHaveBeenCalled();
+    });
+
+    it('rejects YouTube-style page URLs with a direct media hint', async () => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        url: 'https://www.youtube.com/watch?v=abc123',
+        headers: new Headers({
+          'content-type': 'text/html; charset=utf-8',
+        }),
+        blob: vi.fn(),
+      } satisfies Partial<Response>);
+
+      await expect(
+        mediaLibraryService.importMediaFromUrl('https://www.youtube.com/watch?v=abc123', 'project-1')
+      ).rejects.toThrow(/YouTube and similar page URLs/);
     });
   });
 
@@ -475,6 +631,47 @@ describe('MediaLibraryService', () => {
       await expect(
         mediaLibraryService.copyMediaToProject('nonexistent', 'project-2')
       ).rejects.toThrow('Media not found');
+    });
+  });
+
+  describe('updateMediaCaptions', () => {
+    it('preserves existing analysis metadata on partial caption rewrites', async () => {
+      const media = makeMediaMetadata({ id: 'm1' });
+      indexedDbMocks.readAiOutput.mockResolvedValue({
+        service: 'lfm-captioning',
+        model: 'lfm-2.5-vl',
+        params: { sampleIntervalSec: 3 },
+        data: {
+          sampleIntervalSec: 3,
+          embeddingModel: 'embed-old',
+          embeddingDim: 384,
+          imageEmbeddingModel: 'clip-old',
+          imageEmbeddingDim: 512,
+          contentHash: 'hash-abc',
+          captions: [{ timeSec: 0, text: 'old' }],
+        },
+      });
+      indexedDbMocks.updateMedia.mockResolvedValue({
+        ...media,
+        aiCaptions: [{ timeSec: 0, text: 'new' }],
+      });
+
+      await mediaLibraryService.updateMediaCaptions('m1', [{ timeSec: 0, text: 'new' }]);
+
+      expect(captionsStorageMocks.saveCaptions).toHaveBeenCalledWith(expect.objectContaining({
+        mediaId: 'm1',
+        sampleIntervalSec: 3,
+        embeddingModel: 'embed-old',
+        embeddingDim: 384,
+        imageEmbeddingModel: 'clip-old',
+        imageEmbeddingDim: 512,
+        contentHash: 'hash-abc',
+        service: 'lfm-captioning',
+        model: 'lfm-2.5-vl',
+      }));
+      expect(indexedDbMocks.updateMedia).toHaveBeenCalledWith('m1', {
+        aiCaptions: [{ timeSec: 0, text: 'new' }],
+      });
     });
   });
 

@@ -7,6 +7,13 @@ import type { TimelineItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import type { CaptureOptions } from '@/shared/state/playback';
 import { usePlaybackStore } from '@/shared/state/playback';
+import {
+  useCompositionNavigationStore,
+  useCompositionsStore,
+  useItemsStore,
+  type SubComposition,
+} from '@/features/preview/deps/timeline-store';
+import { usePreviewBridgeStore, type PostEditWarmRequest } from '@/shared/state/preview-bridge';
 import { createLogger } from '@/shared/logging/logger';
 import type { PreviewPathVerticesOverride } from '../deps/composition-runtime';
 import { getPreviewRuntimeSnapshotFromPlaybackState } from '../utils/preview-state-coordinator';
@@ -15,8 +22,14 @@ import {
   FAST_SCRUB_RENDERER_ENABLED,
   blobToDataUrl,
 } from '../utils/preview-constants';
+import { setActivePreviewScrubbingCache } from '../utils/preview-scrubbing-cache-bridge';
 import { collectVisualInvalidationRanges } from '../utils/preview-frame-invalidation';
-import { isFrameInRanges } from '@/shared/utils/frame-invalidation';
+import {
+  isFrameInRanges,
+  normalizeFrameRanges,
+  type FrameInvalidationRequest,
+  type FrameRange,
+} from '@/shared/utils/frame-invalidation';
 import { usePreviewCaptureBridge } from './use-preview-capture-bridge';
 
 const logger = createLogger('VideoPreview');
@@ -27,6 +40,7 @@ interface UsePreviewRendererControllerParams {
   fps: number;
   isResolving: boolean;
   forceFastScrubOverlay: boolean;
+  items: TimelineItem[];
   playerRenderSize: { width: number; height: number };
   renderSize: { width: number; height: number };
   fastScrubInputProps: CompositionInputProps;
@@ -93,6 +107,7 @@ export function usePreviewRendererController({
   fps,
   isResolving,
   forceFastScrubOverlay,
+  items,
   playerRenderSize,
   renderSize,
   fastScrubInputProps,
@@ -159,6 +174,10 @@ export function usePreviewRendererController({
     tracks: fastScrubScaledTracks,
     keyframes: fastScrubScaledKeyframes,
   });
+  const previousItemsRef = useRef(items);
+  const previousIsResolvingRef = useRef(isResolving);
+  const pendingPostEditWarmRequestRef = useRef<PostEditWarmRequest | null>(null);
+  const postEditWarmInFlightRef = useRef(false);
 
   useLayoutEffect(() => {
     const canvas = scrubCanvasRef.current;
@@ -200,6 +219,7 @@ export function usePreviewRendererController({
         logger.warn('Failed to dispose renderer:', error);
       }
       scrubRendererRef.current = null;
+      setActivePreviewScrubbingCache(null);
     }
     scrubRendererStructureKeyRef.current = null;
 
@@ -333,15 +353,48 @@ export function usePreviewRendererController({
           getLiveItemSnapshot,
           getLiveKeyframes,
         });
+        scrubOffscreenCanvasRef.current = offscreen;
+        scrubOffscreenCtxRef.current = offscreenCtx;
+        scrubOffscreenRenderedFrameRef.current = null;
+        scrubRendererRef.current = renderer;
+        scrubRendererStructureKeyRef.current = fastScrubRendererStructureKey;
+        setActivePreviewScrubbingCache(
+          'getScrubbingCache' in renderer ? renderer.getScrubbingCache() : null,
+        );
+        if ('warmGpuPipeline' in renderer) {
+          void renderer.warmGpuPipeline();
+        }
+
         const playbackState = usePlaybackStore.getState();
         const runtimeSnapshot = getPreviewRuntimeSnapshotFromPlaybackState(
           playbackState,
           isGizmoInteractingRef.current,
         );
         const preloadPriorityFrame = runtimeSnapshot.anchorFrame;
+        // Invalidate the current frame and re-request a render. Used both
+        // after priority media is ready (earlier, partial preload) and after
+        // full preload completes, so the real video + GPU effects appear
+        // without needing a manual scrub. Idempotent.
+        const kickRerender = () => {
+          if (scrubRendererRef.current !== renderer) return;
+          const playbackState = usePlaybackStore.getState();
+          const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+          try {
+            renderer.invalidateFrameCache({ frames: [targetFrame] });
+          } catch {
+            return;
+          }
+          if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+            scrubOffscreenRenderedFrameRef.current = null;
+          }
+          scrubRequestedFrameRef.current = targetFrame;
+          void resumeScrubLoopRef.current();
+        };
+
         const preloadPromise = renderer.preload({
           priorityFrame: preloadPriorityFrame,
           priorityWindowFrames: Math.max(12, Math.round(fps * 4)),
+          onPriorityMediaReady: kickRerender,
         })
           .catch((error) => {
             logger.warn('Renderer preload failed:', error);
@@ -350,28 +403,20 @@ export function usePreviewRendererController({
             if (scrubPreloadPromiseRef.current === preloadPromise) {
               scrubPreloadPromiseRef.current = null;
             }
+            kickRerender();
           });
         scrubPreloadPromiseRef.current = preloadPromise;
-
-        await Promise.race([
+        void Promise.race([
           preloadPromise,
           new Promise<void>((resolve) => {
             setTimeout(resolve, FAST_SCRUB_PRELOAD_BUDGET_MS);
           }),
         ]);
-
-        scrubOffscreenCanvasRef.current = offscreen;
-        scrubOffscreenCtxRef.current = offscreenCtx;
-        scrubOffscreenRenderedFrameRef.current = null;
-        scrubRendererRef.current = renderer;
-        scrubRendererStructureKeyRef.current = fastScrubRendererStructureKey;
-        if ('warmGpuPipeline' in renderer) {
-          void renderer.warmGpuPipeline();
-        }
         return renderer;
       } catch (error) {
         logger.warn('Failed to initialize renderer, falling back to Player seeks:', error);
         scrubRendererRef.current = null;
+        setActivePreviewScrubbingCache(null);
         scrubOffscreenCanvasRef.current = null;
         scrubOffscreenCtxRef.current = null;
         scrubOffscreenRenderedFrameRef.current = null;
@@ -426,8 +471,43 @@ export function usePreviewRendererController({
   }, [ensureFastScrubRenderer, scrubOffscreenCanvasRef, scrubOffscreenRenderedFrameRef]);
 
   useEffect(() => {
+    const hadRenderer = scrubRendererRef.current !== null || bgTransitionRendererRef.current !== null;
     disposeFastScrubRenderer();
-  }, [disposeFastScrubRenderer, fastScrubRendererStructureKey, renderSize.height, renderSize.width]);
+
+    if (!hadRenderer) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    if (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    ) {
+      // Defer the kick to a microtask so it fires after the render-pump
+      // useEffect has re-assigned resumeScrubLoopRef to the new closure.
+      // Without this, the cleanup order (pump cleanup sets ref to no-op
+      // before the new pump effect runs) silently drops the resume.
+      queueMicrotask(() => {
+        scrubRequestedFrameRef.current = targetFrame;
+        void resumeScrubLoopRef.current();
+      });
+    }
+  }, [
+    bgTransitionRendererRef,
+    disposeFastScrubRenderer,
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+    renderSize.height,
+    renderSize.width,
+    resumeScrubLoopRef,
+    scrubRendererRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
 
   useEffect(() => {
     const previousVisualState = previousVisualStateRef.current;
@@ -519,6 +599,308 @@ export function usePreviewRendererController({
     showPlaybackTransitionOverlayRef,
     transitionSessionBufferedFramesRef,
   ]);
+
+  useEffect(() => {
+    const wasResolving = previousIsResolvingRef.current;
+    previousIsResolvingRef.current = isResolving;
+
+    if (isResolving || !wasResolving) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const needsRenderedFrame = (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    );
+
+    if (!needsRenderedFrame) {
+      return;
+    }
+
+    scrubRequestedFrameRef.current = targetFrame;
+    void resumeScrubLoopRef.current();
+  }, [
+    forceFastScrubOverlay,
+    isResolving,
+    resumeScrubLoopRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const previousItems = previousItemsRef.current;
+    previousItemsRef.current = items;
+
+    if (previousItems === items) {
+      return;
+    }
+
+    const scrubRenderer = scrubRendererRef.current;
+    const scrubRendererMatchesStructure = (
+      scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
+    );
+    if (!scrubRenderer || !scrubRendererMatchesStructure) {
+      return;
+    }
+
+    const playbackState = usePlaybackStore.getState();
+    const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+    const needsRenderedFrame = (
+      forceFastScrubOverlay
+      || playbackState.previewFrame !== null
+      || showFastScrubOverlayRef.current
+      || showPlaybackTransitionOverlayRef.current
+    );
+
+    if (!needsRenderedFrame) {
+      return;
+    }
+
+    scrubRenderer.invalidateFrameCache({ frames: [targetFrame] });
+    if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+      scrubOffscreenRenderedFrameRef.current = null;
+    }
+    scrubRequestedFrameRef.current = targetFrame;
+    void resumeScrubLoopRef.current();
+  }, [
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+    items,
+    resumeScrubLoopRef,
+    scrubOffscreenRenderedFrameRef,
+    scrubRendererRef,
+    scrubRendererStructureKeyRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const computeChangedCompositionIds = (
+      nextById: Record<string, SubComposition>,
+      prevById: Record<string, SubComposition>,
+    ): Set<string> => {
+      const changed = new Set<string>();
+      for (const id of Object.keys(nextById)) {
+        if (nextById[id] !== prevById[id]) changed.add(id);
+      }
+      for (const id of Object.keys(prevById)) {
+        if (!(id in nextById)) changed.add(id);
+      }
+      return changed;
+    };
+
+    const invalidateForChangedCompositions = (changedIds: Set<string>) => {
+      const scrubRenderer = scrubRendererRef.current;
+      const bgRenderer = bgTransitionRendererRef.current;
+      const scrubRendererMatchesStructure = (
+        scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey
+      );
+      const bgRendererMatchesStructure = (
+        bgTransitionRendererStructureKeyRef.current === fastScrubRendererStructureKey
+      );
+      if (!scrubRenderer && !bgRenderer) return;
+
+      const playbackState = usePlaybackStore.getState();
+      const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+
+      // Read the latest items directly — when exitComposition fires, this
+      // subscription runs synchronously inside saveCurrentToComposition,
+      // before restoreTimeline updates the items store. Reading from the
+      // closure would see stale sub-comp items. The microtask defer below
+      // handles the ordering, but we still read live to be safe.
+      const currentItems = useItemsStore.getState().items;
+      const ranges: FrameRange[] = [];
+      for (const compItem of currentItems) {
+        if (compItem.type !== 'composition') continue;
+        if (!changedIds.has(compItem.compositionId)) continue;
+        ranges.push({
+          startFrame: compItem.from,
+          endFrame: compItem.from + compItem.durationInFrames,
+        });
+      }
+
+      const normalized = normalizeFrameRanges(ranges);
+      const request: FrameInvalidationRequest = normalized.length > 0
+        ? { ranges: normalized }
+        : { frames: [targetFrame] };
+
+      if (scrubRenderer && scrubRendererMatchesStructure) {
+        scrubRenderer.invalidateFrameCache(request);
+      }
+      if (bgRenderer && bgRendererMatchesStructure) {
+        bgRenderer.invalidateFrameCache(request);
+      }
+
+      const currentFrameInvalidated = normalized.length === 0
+        || isFrameInRanges(targetFrame, normalized);
+      if (
+        currentFrameInvalidated
+        && scrubOffscreenRenderedFrameRef.current === targetFrame
+      ) {
+        scrubOffscreenRenderedFrameRef.current = null;
+      }
+
+      const needsRenderedFrame = (
+        forceFastScrubOverlay
+        || playbackState.previewFrame !== null
+        || showFastScrubOverlayRef.current
+        || showPlaybackTransitionOverlayRef.current
+      );
+      if (!needsRenderedFrame || !currentFrameInvalidated) return;
+
+      scrubRequestedFrameRef.current = targetFrame;
+      void resumeScrubLoopRef.current();
+    };
+
+    let pendingMicrotask = false;
+    const pendingChangedIds = new Set<string>();
+
+    const unsubCompositions = useCompositionsStore.subscribe((state, prev) => {
+      if (state.compositionById === prev.compositionById) return;
+      const changedIds = computeChangedCompositionIds(state.compositionById, prev.compositionById);
+      if (changedIds.size === 0) return;
+      for (const id of changedIds) pendingChangedIds.add(id);
+
+      if (pendingMicrotask) return;
+      pendingMicrotask = true;
+      queueMicrotask(() => {
+        pendingMicrotask = false;
+        const batchedIds = new Set(pendingChangedIds);
+        pendingChangedIds.clear();
+        if (batchedIds.size === 0) return;
+        invalidateForChangedCompositions(batchedIds);
+      });
+    });
+
+    // On composition navigation (enter/exit/navigate), the tracks topology
+    // swaps wholesale. The dispose useEffect recreates the renderer on the
+    // structure-key change, but its render pump can race with Zustand's
+    // batched items/tracks updates. Queue an explicit invalidation in a
+    // microtask so the pump sees the fully restored timeline before it
+    // re-renders the current frame.
+    const unsubNav = useCompositionNavigationStore.subscribe((state, prev) => {
+      if (state.activeCompositionId === prev.activeCompositionId
+        && state.breadcrumbs === prev.breadcrumbs) {
+        return;
+      }
+      queueMicrotask(() => {
+        const scrubRenderer = scrubRendererRef.current;
+        const bgRenderer = bgTransitionRendererRef.current;
+        const playbackState = usePlaybackStore.getState();
+        const targetFrame = playbackState.previewFrame ?? playbackState.currentFrame;
+
+        if (scrubRenderer
+          && scrubRendererStructureKeyRef.current === fastScrubRendererStructureKey) {
+          scrubRenderer.invalidateFrameCache({ frames: [targetFrame] });
+        }
+        if (bgRenderer
+          && bgTransitionRendererStructureKeyRef.current === fastScrubRendererStructureKey) {
+          bgRenderer.invalidateFrameCache({ frames: [targetFrame] });
+        }
+        if (scrubOffscreenRenderedFrameRef.current === targetFrame) {
+          scrubOffscreenRenderedFrameRef.current = null;
+        }
+
+        const needsRenderedFrame = (
+          forceFastScrubOverlay
+          || playbackState.previewFrame !== null
+          || showFastScrubOverlayRef.current
+          || showPlaybackTransitionOverlayRef.current
+        );
+        if (!needsRenderedFrame) return;
+
+        scrubRequestedFrameRef.current = targetFrame;
+        void resumeScrubLoopRef.current();
+      });
+    });
+
+    return () => {
+      unsubCompositions();
+      unsubNav();
+    };
+  }, [
+    bgTransitionRendererRef,
+    bgTransitionRendererStructureKeyRef,
+    fastScrubRendererStructureKey,
+    forceFastScrubOverlay,
+    resumeScrubLoopRef,
+    scrubOffscreenRenderedFrameRef,
+    scrubRendererRef,
+    scrubRendererStructureKeyRef,
+    scrubRequestedFrameRef,
+    showFastScrubOverlayRef,
+    showPlaybackTransitionOverlayRef,
+  ]);
+
+  useEffect(() => {
+    const flushPostEditWarmRequest = async () => {
+      if (postEditWarmInFlightRef.current) {
+        return;
+      }
+
+      postEditWarmInFlightRef.current = true;
+      try {
+        while (pendingPostEditWarmRequestRef.current) {
+          const request = pendingPostEditWarmRequestRef.current;
+          pendingPostEditWarmRequestRef.current = null;
+
+          const playbackState = usePlaybackStore.getState();
+          if (isResolving || playbackState.isPlaying || playbackState.previewFrame !== null) {
+            continue;
+          }
+
+          const renderer = await ensureFastScrubRenderer();
+          if (!renderer) {
+            continue;
+          }
+
+          try {
+            const framesToWarm = request.frames.length > 0 ? request.frames : [request.frame];
+            const warmRunwayFrames = Array.from(new Set([
+              ...framesToWarm,
+              request.frame - 2,
+              request.frame - 1,
+              request.frame + 1,
+              request.frame + 2,
+            ].filter((frame) => frame >= 0)));
+
+            if ('prewarmFrames' in renderer && warmRunwayFrames.length > 0) {
+              await renderer.prewarmFrames?.(warmRunwayFrames);
+            }
+            if ('prewarmItems' in renderer && request.itemIds.length > 0) {
+              await renderer.prewarmItems?.(request.itemIds, request.frame);
+            }
+            if (scrubOffscreenRenderedFrameRef.current !== request.frame) {
+              await renderer.renderFrame(request.frame);
+              scrubOffscreenRenderedFrameRef.current = request.frame;
+            }
+          } catch {
+            // Best effort only.
+          }
+        }
+      } finally {
+        postEditWarmInFlightRef.current = false;
+        if (pendingPostEditWarmRequestRef.current) {
+          void flushPostEditWarmRequest();
+        }
+      }
+    };
+
+    return usePreviewBridgeStore.subscribe((state, prev) => {
+      if (state.postEditWarmRequest === prev.postEditWarmRequest || !state.postEditWarmRequest) {
+        return;
+      }
+      const request = state.postEditWarmRequest;
+      pendingPostEditWarmRequestRef.current = request;
+      void flushPostEditWarmRequest();
+    });
+  }, [ensureFastScrubRenderer, isResolving, scrubOffscreenRenderedFrameRef]);
 
   const captureCurrentFrame = useCallback(async (options?: CaptureOptions): Promise<string | null> => {
     if (captureInFlightRef.current) {

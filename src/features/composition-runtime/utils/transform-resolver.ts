@@ -2,9 +2,29 @@ import type {
   ResolvedTransform,
   SourceDimensions,
   CanvasSettings,
+  TransformProperties,
 } from '@/types/transform';
 import type { TimelineItem, VideoItem, ImageItem, CompositionItem } from '@/types/timeline';
 import { useMediaLibraryStore } from '@/features/composition-runtime/deps/stores';
+
+function buildCssTransform(
+  rotation: number,
+  transform?: TransformProperties
+): string | undefined {
+  const transforms: string[] = [];
+
+  if (rotation !== 0) {
+    transforms.push(`rotate(${rotation}deg)`);
+  }
+
+  const scaleX = transform?.flipHorizontal ? -1 : 1;
+  const scaleY = transform?.flipVertical ? -1 : 1;
+  if (scaleX !== 1 || scaleY !== 1) {
+    transforms.push(`scale(${scaleX}, ${scaleY})`);
+  }
+
+  return transforms.length > 0 ? transforms.join(' ') : undefined;
+}
 
 /**
  * Resolve transform properties to concrete values for rendering.
@@ -39,12 +59,16 @@ export function resolveTransform(
   // Resolve each property (use explicit value or compute default)
   const width = transform?.width ?? defaultWidth;
   const height = transform?.height ?? defaultHeight;
+  const anchorX = transform?.anchorX ?? (width / 2);
+  const anchorY = transform?.anchorY ?? (height / 2);
 
   return {
     x: transform?.x ?? 0, // Centered (offset from center)
     y: transform?.y ?? 0,
     width,
     height,
+    anchorX,
+    anchorY,
     rotation: transform?.rotation ?? 0,
     opacity: transform?.opacity ?? 1,
     cornerRadius: transform?.cornerRadius ?? 0,
@@ -98,7 +122,8 @@ export function getSourceDimensions(
  */
 export function toTransformStyle(
   resolved: ResolvedTransform,
-  canvas: CanvasSettings
+  canvas: CanvasSettings,
+  transform?: TransformProperties
 ): React.CSSProperties {
   const centerX = canvas.width / 2;
   const centerY = canvas.height / 2;
@@ -117,9 +142,9 @@ export function toTransformStyle(
     top,
     width: resolved.width,
     height: resolved.height,
-    // Rotate around center (matches gizmo behavior)
-    transform: rotation !== 0 ? `rotate(${rotation}deg)` : undefined,
-    transformOrigin: 'center center',
+    // Rotate/flip around center (matches canvas/export item transforms)
+    transform: buildCssTransform(rotation, transform),
+    transformOrigin: `${resolved.anchorX}px ${resolved.anchorY}px`,
     opacity: resolved.opacity,
     borderRadius: resolved.cornerRadius > 0 ? resolved.cornerRadius : undefined,
     willChange: 'transform', // Hint for GPU acceleration

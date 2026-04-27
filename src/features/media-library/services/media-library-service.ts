@@ -55,7 +55,10 @@ import {
   getProjectsUsingMedia,
   getMediaForProject as getMediaForProjectDB,
   deleteTranscript,
+  readAiOutput,
 } from '@/infrastructure/storage';
+import { saveCaptions, deleteCaptions } from '@/infrastructure/storage/workspace-fs/captions';
+import { deleteScenes } from '@/infrastructure/storage/workspace-fs/scenes';
 import { filmstripCache, gifFrameCache, waveformCache } from '@/features/media-library/deps/timeline-services';
 import { opfsService } from './opfs-service';
 import { proxyService } from './proxy-service';
@@ -89,14 +92,126 @@ const IMPORT_FILMSTRIP_PREWARM_SECONDS = 12;
 const IMPORT_BACKGROUND_COVER_WARM_DELAY_MS = 0;
 const IMPORT_BACKGROUND_WARM_DELAY_MS = 600;
 const IMPORT_BACKGROUND_HEAVY_DELAY_MS = 2200;
+const PAGE_URL_IMPORT_HOSTS = [
+  'youtube.com',
+  'www.youtube.com',
+  'm.youtube.com',
+  'youtu.be',
+  'vimeo.com',
+  'www.vimeo.com',
+  'dailymotion.com',
+  'www.dailymotion.com',
+];
+
+const MIME_TYPE_TO_EXTENSION: Record<string, string> = {
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/x-matroska': '.mkv',
+  'video/matroska': '.mkv',
+  'video/x-msvideo': '.avi',
+  'audio/mp3': '.mp3',
+  'audio/mpeg': '.mp3',
+  'audio/wav': '.wav',
+  'audio/aac': '.aac',
+  'audio/x-m4a': '.m4a',
+  'audio/mp4': '.m4a',
+  'audio/ogg': '.ogg',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/svg+xml': '.svg',
+};
+
+function normalizeMimeType(value: string | null | undefined): string {
+  return value?.split(';')[0]?.trim().toLowerCase() ?? '';
+}
+
+function isPageMimeType(mimeType: string): boolean {
+  return mimeType.startsWith('text/') || mimeType === 'application/xhtml+xml';
+}
+
+function isKnownMediaPageHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  return PAGE_URL_IMPORT_HOSTS.some((host) => normalized === host || normalized.endsWith(`.${host}`));
+}
+
+function extractContentDispositionFileName(contentDisposition: string | null): string | null {
+  if (!contentDisposition) return null;
+
+  const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+  const rawUtf8Name = utf8Match?.[1]?.trim();
+  if (rawUtf8Name) {
+    try {
+      return decodeURIComponent(rawUtf8Name.replace(/^"(.*)"$/, '$1'));
+    } catch {
+      return rawUtf8Name.replace(/^"(.*)"$/, '$1');
+    }
+  }
+
+  const basicMatch = contentDisposition.match(/filename\s*=\s*("?)([^";]+)\1/i);
+  return basicMatch?.[2]?.trim() || null;
+}
+
+function extractFileNameFromUrl(input: string): string | null {
+  try {
+    const url = new URL(input);
+    const segment = url.pathname.split('/').filter(Boolean).pop();
+    if (!segment) return null;
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
+function inferExtensionFromMimeType(mimeType: string): string {
+  return MIME_TYPE_TO_EXTENSION[mimeType] ?? '';
+}
+
+function buildImportedUrlFileName(
+  requestedUrl: string,
+  responseUrl: string | undefined,
+  contentDisposition: string | null,
+  mimeType: string,
+): string {
+  const fileName =
+    extractContentDispositionFileName(contentDisposition)
+    ?? extractFileNameFromUrl(responseUrl ?? requestedUrl)
+    ?? extractFileNameFromUrl(requestedUrl);
+
+  if (fileName && fileName.length > 0) {
+    return fileName;
+  }
+
+  const extension = inferExtensionFromMimeType(mimeType);
+  return `remote-media${extension}`;
+}
+
+function parseMediaImportUrl(input: string): URL {
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(input);
+  } catch {
+    throw new Error('Enter a valid http:// or https:// media URL.');
+  }
+
+  if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+    throw new Error('Only http:// and https:// media URLs are supported.');
+  }
+
+  return parsedUrl;
+}
 
 /**
- * Media Library Service - Coordinates OPFS + IndexedDB + metadata extraction
+ * Media Library Service - Coordinates handle/OPFS media access with
+ * workspace-backed metadata, thumbnails, and derived caches.
  *
  * Includes in-memory thumbnail URL cache to prevent flicker on re-renders.
  *
- * Provides atomic operations for media management, ensuring OPFS and IndexedDB
- * stay in sync.
+ * Provides atomic operations for media management while keeping origin-scoped
+ * sources and the workspace folder in sync.
  */
 class MediaLibraryService {
   /** In-memory cache for thumbnail blob URLs to prevent flicker on re-renders */
@@ -107,6 +222,22 @@ class MediaLibraryService {
       await deleteTranscript(mediaId);
     } catch (error) {
       logger.warn('Failed to delete transcript:', error);
+    }
+  }
+
+  private async deleteCaptionsSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteCaptions(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete captions:', error);
+    }
+  }
+
+  private async deleteScenesSafely(mediaId: string): Promise<void> {
+    try {
+      await deleteScenes(mediaId);
+    } catch (error) {
+      logger.warn('Failed to delete scenes:', error);
     }
   }
 
@@ -142,7 +273,7 @@ class MediaLibraryService {
 
   /**
    * Clear waveform caches for a fully-dereferenced media item. Removes
-   * the in-memory LRU entry, the IndexedDB binned persistence, and the
+   * the in-memory LRU entry, the persisted binned waveform cache, and the
    * OPFS + workspace-folder multi-resolution mirrors.
    */
   private async clearWaveformCacheSafely(mediaId: string): Promise<void> {
@@ -216,8 +347,222 @@ class MediaLibraryService {
     }
   }
 
+  private schedulePostImportWork(
+    file: File,
+    mediaMetadata: MediaMetadata,
+    options: {
+      isVideo: boolean;
+      previewAudioCodec?: string;
+    }
+  ): void {
+    if (options.isVideo && mediaMetadata.duration > 0) {
+      const coverWarmEndTime = Math.min(
+        mediaMetadata.duration,
+        IMPORT_FILMSTRIP_COVER_PREWARM_SECONDS,
+      );
+      enqueueBackgroundMediaWork(() => (
+        filmstripCache.prewarmPriorityWindow(mediaMetadata.id, file, mediaMetadata.duration, {
+          startTime: 0,
+          endTime: coverWarmEndTime,
+        })
+      ), {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_COVER_WARM_DELAY_MS,
+      });
+
+      const warmEndTime = Math.min(mediaMetadata.duration, IMPORT_FILMSTRIP_PREWARM_SECONDS);
+      enqueueBackgroundMediaWork(() => (
+        filmstripCache.prewarmPriorityWindow(mediaMetadata.id, file, mediaMetadata.duration, {
+          startTime: 0,
+          endTime: warmEndTime,
+        })
+      ), {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
+      });
+    }
+
+    if (needsCustomAudioDecoder(options.previewAudioCodec)) {
+      enqueueBackgroundMediaWork(() => (
+        startPreviewAudioStartupWarm(mediaMetadata.id, file)
+      ), {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
+      });
+      enqueueBackgroundMediaWork(() => (
+        startPreviewAudioConform(mediaMetadata.id, file)
+      ), {
+        priority: 'heavy',
+        delayMs: IMPORT_BACKGROUND_HEAVY_DELAY_MS,
+      });
+    }
+
+    if (mediaMetadata.mimeType === 'image/gif') {
+      enqueueBackgroundMediaWork(async () => {
+        const blobUrl = URL.createObjectURL(file);
+        try {
+          await gifFrameCache.getGifFrames(mediaMetadata.id, blobUrl);
+        } finally {
+          URL.revokeObjectURL(blobUrl);
+        }
+      }, {
+        priority: 'warm',
+        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
+      });
+    }
+  }
+
+  private async importMediaFileToOpfs(
+    file: File,
+    projectId: string
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
+    const validationResult = validateMediaFile(file);
+    if (!validationResult.valid) {
+      throw new Error(validationResult.error);
+    }
+
+    const projectMedia = await getMediaForProjectDB(projectId);
+    const existingMedia = projectMedia.find(
+      (media) => media.fileName === file.name && media.fileSize === file.size,
+    );
+    if (existingMedia) {
+      return { ...existingMedia, isDuplicate: true };
+    }
+
+    const resolvedMimeType = getMimeType(file);
+    const { metadata, thumbnail } = await mediaProcessorService.processMedia(
+      file,
+      resolvedMimeType,
+      { thumbnailTimestamp: 1 }
+    );
+
+    let thumbnailBlob = thumbnail;
+    if (!thumbnailBlob && resolvedMimeType === 'image/svg+xml') {
+      try {
+        thumbnailBlob = await generateThumbnail(file, { maxSize: 320, quality: 0.6 });
+      } catch (error) {
+        logger.warn('Failed to generate SVG thumbnail on main thread:', error);
+      }
+    }
+
+    const mediaId = crypto.randomUUID();
+    const createdAt = Date.now();
+    const opfsPath = buildGeneratedMediaOpfsPath(mediaId);
+    const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
+    const previewAudioCodec = metadata.type === 'audio'
+      ? metadata.codec
+      : metadata.type === 'video'
+        ? metadata.audioCodec
+        : undefined;
+
+    const thumbnailDimensions = thumbnailBlob
+      ? metadata.type === 'audio'
+        ? { width: 320, height: 180 }
+        : getThumbnailDimensions(
+          Math.max(1, 'width' in metadata ? metadata.width || 1 : 1),
+          Math.max(1, 'height' in metadata ? metadata.height || 1 : 1),
+          320,
+        )
+      : undefined;
+
+    const mediaMetadata: MediaMetadata = {
+      id: mediaId,
+      storageType: 'opfs',
+      opfsPath,
+      fileName: file.name,
+      fileSize: file.size,
+      mimeType: resolvedMimeType,
+      duration: 'duration' in metadata ? metadata.duration : 0,
+      width: 'width' in metadata ? metadata.width : 0,
+      height: 'height' in metadata ? metadata.height : 0,
+      fps: metadata.type === 'video' ? metadata.fps : 0,
+      codec: metadata.type === 'video'
+        ? metadata.codec
+        : metadata.type === 'audio'
+          ? (metadata.codec || 'unknown')
+          : 'unknown',
+      bitrate: 'bitrate' in metadata ? (metadata.bitrate ?? 0) : 0,
+      audioCodec: metadata.type === 'video' ? metadata.audioCodec : undefined,
+      audioCodecSupported: metadata.type === 'video' ? metadata.audioCodecSupported : true,
+      keyframeTimestamps: metadata.type === 'video' ? metadata.keyframeTimestamps : undefined,
+      gopInterval: metadata.type === 'video' ? metadata.gopInterval : undefined,
+      tags: [],
+      createdAt,
+      updatedAt: createdAt,
+    };
+
+    const persistedMedia = await persistGeneratedMediaAsset({
+      file,
+      projectId,
+      mediaMetadata,
+      thumbnailBlob,
+      thumbnailWidth: thumbnailDimensions?.width,
+      thumbnailHeight: thumbnailDimensions?.height,
+    });
+
+    this.schedulePostImportWork(file, persistedMedia, {
+      isVideo: metadata.type === 'video',
+      previewAudioCodec,
+    });
+
+    return {
+      ...persistedMedia,
+      hasUnsupportedCodec: codecCheck.unsupported,
+    };
+  }
+
+  private async fetchMediaFromUrl(url: string): Promise<File> {
+    const parsedUrl = parseMediaImportUrl(url.trim());
+
+    let response: Response;
+    try {
+      response = await fetch(parsedUrl.toString());
+    } catch (error) {
+      logger.warn(`Failed to fetch media URL "${parsedUrl.toString()}":`, error);
+      throw new Error(
+        'Could not download that URL. The site may block cross-origin downloads, require sign-in, or need a direct file link.',
+      );
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to download media (${response.status}${response.statusText ? ` ${response.statusText}` : ''}).`,
+      );
+    }
+
+    const responseMimeType = normalizeMimeType(response.headers.get('content-type'));
+    if (isPageMimeType(responseMimeType)) {
+      if (isKnownMediaPageHost(parsedUrl.hostname)) {
+        throw new Error(
+          'YouTube and similar page URLs are not direct media files here yet. Paste a direct MP4/MP3/image URL, or download the media first.',
+        );
+      }
+      throw new Error(
+        'That URL points to a web page, not a media file. Paste the direct file URL instead.',
+      );
+    }
+
+    const blob = await response.blob();
+    if (blob.size === 0) {
+      throw new Error('The downloaded file was empty.');
+    }
+
+    const mimeType = normalizeMimeType(blob.type) || responseMimeType;
+    const fileName = buildImportedUrlFileName(
+      parsedUrl.toString(),
+      response.url,
+      response.headers.get('content-disposition'),
+      mimeType,
+    );
+
+    return new File([blob], fileName, {
+      type: mimeType || blob.type,
+      lastModified: Date.now(),
+    });
+  }
+
   /**
-   * Get all media items from IndexedDB
+   * Get all media items from workspace storage
    */
   async getAllMedia(): Promise<MediaMetadata[]> {
     return getAllMediaDB();
@@ -265,15 +610,64 @@ class MediaLibraryService {
       throw new Error(validationResult.error);
     }
 
-    // Stage 3: Check for duplicates (by fileName + fileSize)
-    const projectMedia = await getMediaForProjectDB(projectId);
-
-    const existingMedia = projectMedia.find(
-      (m) => m.fileName === file.name && m.fileSize === file.size
+    // Stage 3a: Cross-workspace dedup by (fileName + fileSize + lastModified).
+    // A File's triple-tuple is effectively unique: the same bytes re-saved
+    // bumps lastModified, and two different files sharing name + exact byte
+    // size + exact mtime is a practical non-occurrence. Zero file I/O — all
+    // three fields come from File metadata — so unique imports pay nothing.
+    // A match reuses the existing media record across projects instead of
+    // re-mirroring the bytes into a fresh `media/{id}/` directory.
+    //
+    // `isDuplicate` is only set when the matched media is already in THIS
+    // project. Cross-project reuse (new project importing the same file) is
+    // a successful import from the UI's perspective — the media just happens
+    // to already live in the workspace, so we associate and return it as a
+    // regular import result. `getAllMedia` includes media whose only project
+    // is trashed; re-associating into the new project effectively brings
+    // those records forward, and the trash sweep's ref-counted delete still
+    // keeps the bytes alive because the new project now references them.
+    const workspaceMedia = await getAllMediaDB();
+    const workspaceDuplicate = workspaceMedia.find(
+      (m) =>
+        m.fileName === file.name
+        && m.fileSize === file.size
+        && m.fileLastModified === file.lastModified,
     );
+    if (workspaceDuplicate) {
+      let resolvedDuplicate = workspaceDuplicate;
+      if (workspaceDuplicate.storageType === 'handle') {
+        resolvedDuplicate = await updateMediaDB(workspaceDuplicate.id, {
+          fileHandle: handle,
+          fileName: file.name,
+          fileSize: file.size,
+          fileLastModified: file.lastModified,
+          updatedAt: Date.now(),
+        });
+      }
+      mirrorSourceToWorkspaceInBackground(resolvedDuplicate.id, file, file.name);
+      const projectMediaIds = await getProjectMediaIds(projectId).catch(() => [] as string[]);
+      const alreadyInThisProject = projectMediaIds.includes(resolvedDuplicate.id);
+      if (!alreadyInThisProject) {
+        await associateMediaWithProject(projectId, resolvedDuplicate.id);
+      }
+      return { ...resolvedDuplicate, isDuplicate: alreadyInThisProject };
+    }
 
+    // Stage 3b: Project-scoped name+size fallback for legacy records missing
+    // `fileLastModified` (imported before that field was persisted). Only
+    // fires for records already in the current project — cross-project
+    // reuse is covered by 3a.
+    const projectMedia = await getMediaForProjectDB(projectId);
+    const existingMedia = projectMedia.find(
+      (m) =>
+        m.fileName === file.name
+        && m.fileSize === file.size
+        // Only consider legacy records that lack `fileLastModified` — current
+        // records with a different mtime must not be collapsed onto the new
+        // file since they describe different bytes.
+        && (m.fileLastModified === null || m.fileLastModified === undefined),
+    );
     if (existingMedia) {
-      // File already exists in project - return existing with duplicate flag
       return { ...existingMedia, isDuplicate: true };
     }
 
@@ -320,7 +714,7 @@ class MediaLibraryService {
     // Check for unsupported audio codec (included in metadata from worker)
     const codecCheck = mediaProcessorService.hasUnsupportedAudioCodec(metadata);
 
-    // Stage 6: Save metadata to IndexedDB with file handle
+    // Stage 6: Save metadata with the file handle-backed source reference
     const mediaMetadata: MediaMetadata = {
       id,
       storageType: 'handle',
@@ -360,67 +754,15 @@ class MediaLibraryService {
     // Stage 7: Associate with project
     await associateMediaWithProject(projectId, id);
 
-    if (metadata.type === 'video' && mediaMetadata.duration > 0) {
-      const coverWarmEndTime = Math.min(
-        mediaMetadata.duration,
-        IMPORT_FILMSTRIP_COVER_PREWARM_SECONDS,
-      );
-      enqueueBackgroundMediaWork(() => (
-        filmstripCache.prewarmPriorityWindow(id, file, mediaMetadata.duration, {
-          startTime: 0,
-          endTime: coverWarmEndTime,
-        })
-      ), {
-        priority: 'warm',
-        delayMs: IMPORT_BACKGROUND_COVER_WARM_DELAY_MS,
-      });
-
-      const warmEndTime = Math.min(mediaMetadata.duration, IMPORT_FILMSTRIP_PREWARM_SECONDS);
-      enqueueBackgroundMediaWork(() => (
-        filmstripCache.prewarmPriorityWindow(id, file, mediaMetadata.duration, {
-          startTime: 0,
-          endTime: warmEndTime,
-        })
-      ), {
-        priority: 'warm',
-        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
-      });
-    }
-
     const previewAudioCodec = metadata.type === 'audio'
       ? metadata.codec
       : metadata.type === 'video'
         ? metadata.audioCodec
         : undefined;
-    if (needsCustomAudioDecoder(previewAudioCodec)) {
-      enqueueBackgroundMediaWork(() => (
-        startPreviewAudioStartupWarm(id, file)
-      ), {
-        priority: 'warm',
-        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
-      });
-      enqueueBackgroundMediaWork(() => (
-        startPreviewAudioConform(id, file)
-      ), {
-        priority: 'heavy',
-        delayMs: IMPORT_BACKGROUND_HEAVY_DELAY_MS,
-      });
-    }
-
-    // Pre-extract GIF frames in background
-    if (resolvedMimeType === 'image/gif') {
-      enqueueBackgroundMediaWork(async () => {
-        const blobUrl = URL.createObjectURL(file);
-        try {
-          await gifFrameCache.getGifFrames(id, blobUrl);
-        } finally {
-          URL.revokeObjectURL(blobUrl);
-        }
-      }, {
-        priority: 'warm',
-        delayMs: IMPORT_BACKGROUND_WARM_DELAY_MS,
-      });
-    }
+    this.schedulePostImportWork(file, mediaMetadata, {
+      isVideo: metadata.type === 'video',
+      previewAudioCodec,
+    });
 
     return {
       ...mediaMetadata,
@@ -463,6 +805,28 @@ class MediaLibraryService {
     }
 
     return results;
+  }
+
+  /**
+   * Import media from a direct URL.
+   *
+   * Since remote URLs do not provide a durable FileSystemFileHandle, the
+   * downloaded bytes are stored in OPFS and mirrored into the workspace.
+   *
+   * Works with direct media URLs that allow browser-side fetches. Page URLs
+   * such as YouTube/Vimeo watch pages typically do not expose a fetchable
+   * media file and should be handled upstream.
+   */
+  async importMediaFromUrl(
+    url: string,
+    projectId: string
+  ): Promise<MediaMetadata & { isDuplicate?: boolean; hasUnsupportedCodec?: boolean }> {
+    if (!projectId) {
+      throw new Error('No project selected');
+    }
+
+    const file = await this.fetchMediaFromUrl(url);
+    return this.importMediaFileToOpfs(file, projectId);
   }
 
   /**
@@ -656,6 +1020,8 @@ class MediaLibraryService {
       await deleteMediaDB(mediaId);
 
       await this.deleteTranscriptSafely(mediaId);
+      await this.deleteCaptionsSafely(mediaId);
+      await this.deleteScenesSafely(mediaId);
       await this.deleteThumbnailsSafely(mediaId);
       await this.clearGifFrameCacheSafely(mediaId);
       await this.clearFilmstripCacheSafely(mediaId);
@@ -758,6 +1124,8 @@ class MediaLibraryService {
     await deleteMediaDB(id);
 
     await this.deleteTranscriptSafely(id);
+    await this.deleteCaptionsSafely(id);
+    await this.deleteScenesSafely(id);
   }
 
   /**
@@ -1009,11 +1377,67 @@ class MediaLibraryService {
 
   /**
    * Update AI-generated captions for a media item.
+   *
+   * Captions live in `cache/ai/captions.json` as the authoritative source.
+   * We also mirror them onto `MediaMetadata.aiCaptions` so in-memory zustand
+   * consumers and search (`media-library-store.ts`) don't need a separate
+   * hydration pass — the mirror stays consistent because this is the only
+   * writer.
    */
   async updateMediaCaptions(
     mediaId: string,
-    captions: Array<{ timeSec: number; text: string }>,
+    captions: NonNullable<MediaMetadata['aiCaptions']>,
+    options?: {
+      service?: string;
+      model?: string;
+      sampleIntervalSec?: number;
+      embeddingModel?: string;
+      embeddingDim?: number;
+      imageEmbeddingModel?: string;
+      imageEmbeddingDim?: number;
+      /**
+       * When provided, the captions envelope and heavy assets are mirrored
+       * into the shared content-addressable cache so other mediaIds with the
+       * same source bytes skip re-analysis.
+       */
+      contentHash?: string;
+    },
   ): Promise<MediaMetadata> {
+    const existingEnvelope = await readAiOutput(mediaId, 'captions').catch(() => undefined);
+    const existingSampleInterval = (() => {
+      const fromData = existingEnvelope?.data.sampleIntervalSec;
+      if (typeof fromData === 'number') return fromData;
+      const fromParams = (existingEnvelope?.params as { sampleIntervalSec?: unknown } | undefined)?.sampleIntervalSec;
+      return typeof fromParams === 'number' ? fromParams : undefined;
+    })();
+
+    const resolvedOptions = {
+      service: options?.service ?? existingEnvelope?.service ?? 'lfm-captioning',
+      model: options?.model ?? existingEnvelope?.model ?? 'lfm-2.5-vl',
+      sampleIntervalSec: options?.sampleIntervalSec ?? existingSampleInterval,
+      embeddingModel: options?.embeddingModel ?? existingEnvelope?.data.embeddingModel,
+      embeddingDim: options?.embeddingDim ?? existingEnvelope?.data.embeddingDim,
+      imageEmbeddingModel: options?.imageEmbeddingModel ?? existingEnvelope?.data.imageEmbeddingModel,
+      imageEmbeddingDim: options?.imageEmbeddingDim ?? existingEnvelope?.data.imageEmbeddingDim,
+      contentHash: options?.contentHash ?? existingEnvelope?.data.contentHash,
+    };
+
+    try {
+      await saveCaptions({
+        mediaId,
+        captions,
+        service: resolvedOptions.service,
+        model: resolvedOptions.model,
+        sampleIntervalSec: resolvedOptions.sampleIntervalSec,
+        embeddingModel: resolvedOptions.embeddingModel,
+        embeddingDim: resolvedOptions.embeddingDim,
+        imageEmbeddingModel: resolvedOptions.imageEmbeddingModel,
+        imageEmbeddingDim: resolvedOptions.imageEmbeddingDim,
+        contentHash: resolvedOptions.contentHash,
+      });
+    } catch (error) {
+      logger.warn(`Failed to persist captions for ${mediaId}; metadata mirror will still update`, error);
+    }
     return updateMediaDB(mediaId, { aiCaptions: captions });
   }
 
@@ -1071,7 +1495,7 @@ class MediaLibraryService {
   }
 
   /**
-   * Validate sync between OPFS and IndexedDB
+   * Validate sync between OPFS and workspace-backed metadata
    * Returns list of issues found
    *
    * Note: Only validates OPFS-based media. Handle-based media is validated

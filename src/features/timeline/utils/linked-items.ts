@@ -30,6 +30,43 @@ export function getLinkedItemIds(items: TimelineItem[], itemId: string): string[
   return getLinkedItems(items, itemId).map((item) => item.id);
 }
 
+export function getAttachedCaptionItemIds(items: TimelineItem[], itemId: string): string[] {
+  const anchor = items.find((item) => item.id === itemId);
+  if (!anchor || anchor.type === 'text') {
+    return [];
+  }
+
+  return items
+    .filter((item) =>
+      item.type === 'text'
+      && (item.textRole === 'caption' || item.captionSource !== undefined)
+      && item.captionSource?.clipId === anchor.id
+    )
+    .map((item) => item.id);
+}
+
+export function expandItemIdsWithAttachedCaptions(items: TimelineItem[], itemIds: string[]): string[] {
+  const expandedIds = new Set<string>();
+  const captionIds = new Set<string>();
+
+  for (const itemId of itemIds) {
+    expandedIds.add(itemId);
+    for (const captionId of getAttachedCaptionItemIds(items, itemId)) {
+      captionIds.add(captionId);
+    }
+  }
+
+  for (const captionId of captionIds) {
+    expandedIds.add(captionId);
+  }
+
+  return Array.from(expandedIds);
+}
+
+export function getLinkedAndAttachedItemIds(items: TimelineItem[], itemId: string): string[] {
+  return expandItemIdsWithAttachedCaptions(items, getLinkedItemIds(items, itemId));
+}
+
 export function filterUnlockedItemIds(
   items: TimelineItem[],
   tracks: Pick<TimelineTrack, 'id' | 'locked'>[],
@@ -290,6 +327,52 @@ export function buildLinkedMovePreviewUpdates(
 
     return [applyMovePreview(sourceItem, movedItem.from - sourceItem.from)];
   });
+}
+
+export function buildAttachedCaptionBoundsPreviewUpdates(
+  items: TimelineItem[],
+  clipBounds: Array<{ id: string; from: number; durationInFrames: number }>,
+): PreviewItemUpdate[] {
+  if (clipBounds.length === 0) {
+    return [];
+  }
+
+  const itemById = new Map(items.map((item) => [item.id, item]));
+  const updatesByCaptionId = new Map<string, PreviewItemUpdate>();
+
+  for (const bounds of clipBounds) {
+    const clip = itemById.get(bounds.id);
+    if (!clip || clip.type === 'text' || bounds.durationInFrames <= 0) continue;
+
+    const clipStart = bounds.from;
+    const clipEnd = bounds.from + bounds.durationInFrames;
+
+    for (const captionId of getAttachedCaptionItemIds(items, clip.id)) {
+      const caption = itemById.get(captionId);
+      if (!caption || caption.type !== 'text') continue;
+
+      const captionStart = caption.from;
+      const captionEnd = caption.from + caption.durationInFrames;
+      const nextStart = Math.max(captionStart, clipStart);
+      const nextEnd = Math.min(captionEnd, clipEnd);
+
+      if (nextEnd <= nextStart) {
+        updatesByCaptionId.set(caption.id, { id: caption.id, hidden: true });
+        continue;
+      }
+
+      const nextDuration = nextEnd - nextStart;
+      if (nextStart !== caption.from || nextDuration !== caption.durationInFrames) {
+        updatesByCaptionId.set(caption.id, {
+          id: caption.id,
+          from: nextStart,
+          durationInFrames: nextDuration,
+        });
+      }
+    }
+  }
+
+  return [...updatesByCaptionId.values()];
 }
 
 export function canLinkItems(items: TimelineItem[]): boolean {

@@ -73,8 +73,8 @@ export const EDITOR_DENSITY_PRESETS = {
 
 export type EditorDensityPresetName = keyof typeof EDITOR_DENSITY_PRESETS;
 export type EditorLayout = (typeof EDITOR_DENSITY_PRESETS)[EditorDensityPresetName];
-type LeftSidebarLayoutBounds = Pick<EditorLayout, 'leftSidebarMinWidth' | 'leftSidebarMaxWidth'>;
-type RightSidebarLayoutBounds = Pick<EditorLayout, 'rightSidebarMinWidth' | 'rightSidebarMaxWidth'>;
+type LeftSidebarLayoutBounds = { leftSidebarMinWidth: number; leftSidebarMaxWidth: number };
+type RightSidebarLayoutBounds = { rightSidebarMinWidth: number; rightSidebarMaxWidth: number };
 
 export const DEFAULT_EDITOR_DENSITY_PRESET: EditorDensityPresetName = 'compact';
 

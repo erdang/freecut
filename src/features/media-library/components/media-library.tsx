@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText, ScanSearch } from 'lucide-react';
+import { SceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -24,14 +25,29 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
 import { CompositionsSection } from './compositions-section';
+import { BackgroundTaskProgress } from './background-task-progress';
 import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
@@ -47,10 +63,16 @@ import {
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
+import { mediaTranscriptionService } from '../services/media-transcription-service';
+import { mediaAnalysisService } from '../services/media-analysis-service';
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { getMediaType } from '../utils/validation';
 import { getProjectBrokenMediaIds } from '@/features/media-library/utils/broken-media';
+import {
+  getTranscriptionOverallProgress,
+  getTranscriptionStageLabel,
+} from '@/shared/utils/transcription-progress';
 import type { MediaMetadata } from '@/types/storage';
 import { isMarqueeJustFinished, useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 
@@ -69,6 +91,21 @@ function CopyButton({ text }: { text: string }) {
     >
       {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
     </button>
+  );
+}
+
+function HeaderActionTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -141,12 +178,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({ mediaIds: [], compositionIds: [] });
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['video', 'audio', 'image', 'gif']));
   const [isDragging, setIsDragging] = useState(false);
+  const [showImportUrlDialog, setShowImportUrlDialog] = useState(false);
+  const [importUrlValue, setImportUrlValue] = useState('');
+  const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false);
 
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId);
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject);
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
+  const importMediaFromUrl = useMediaLibraryStore((s) => s.importMediaFromUrl);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
   const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const showNotification = useMediaLibraryStore((s) => s.showNotification);
@@ -158,6 +199,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setSortBy = useMediaLibraryStore((s) => s.setSortBy);
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
+  const sceneBrowserOpen = useSceneBrowserStore((s) => s.open);
+  const openSceneBrowser = useSceneBrowserStore((s) => s.openBrowser);
+  const closeSceneBrowser = useSceneBrowserStore((s) => s.closeBrowser);
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
   const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
@@ -175,6 +219,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
+  const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus);
+  const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress);
   const filteredMediaItems = useFilteredMediaItems();
   const mediaGroups = useMemo(() => {
     const groups: { key: string; label: string; icon: 'video' | 'audio' | 'image' | 'gif'; items: MediaMetadata[] }[] = [];
@@ -313,7 +359,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     [compositions, filteredMediaItems]
   );
 
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee } = useMarqueeSelection({
     containerRef: scrollContainerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     enabled: marqueeItems.length > 0,
@@ -336,30 +382,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     },
   });
 
-  // Track focus and clear selection when clicking outside the media library
+  // Track focus scope for the Delete hotkey. Selection itself is only cleared
+  // by explicit user action (empty-area click or marquee), never by focus
+  // changes — otherwise selection leaks away when the user clicks the timeline
+  // or another panel.
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
-      const isInside = containerRef.current?.contains(event.target as Node);
-
-      if (isInside) {
-        // Clicked inside - mark as focused
-        isFocusedRef.current = true;
-      } else {
-        // Clicked outside - clear focus and selection
-        isFocusedRef.current = false;
-        if (selectedAssetCount > 0) {
-          clearSelection();
-        }
-      }
+      isFocusedRef.current = !!containerRef.current?.contains(event.target as Node);
     };
 
-    // Use capture phase to catch events before they're stopped by other handlers
     document.addEventListener('mousedown', handleMouseDown, true);
-
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
     };
-  }, [selectedAssetCount, clearSelection]);
+  }, []);
 
   // Handle Delete key to delete selected items
   useEffect(() => {
@@ -406,6 +442,26 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       logger.error('Import failed:', error);
     }
   };
+
+  const handleImportUrl = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isImportUrlSubmitting) {
+      return;
+    }
+
+    setIsImportUrlSubmitting(true);
+    try {
+      await importMediaFromUrl(importUrlValue);
+      if (!useMediaLibraryStore.getState().error) {
+        setShowImportUrlDialog(false);
+        setImportUrlValue('');
+      }
+    } catch (error) {
+      logger.error('Import from URL failed:', error);
+    } finally {
+      setIsImportUrlSubmitting(false);
+    }
+  }, [importMediaFromUrl, importUrlValue, isImportUrlSubmitting]);
 
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(async (handles: FileSystemFileHandle[]) => {
@@ -487,6 +543,19 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return count;
   }, [proxyStatus]);
 
+  const analysisProgress = useMediaLibraryStore((s) => s.analysisProgress);
+  const analysisPercent = analysisProgress && analysisProgress.total > 0
+    ? (analysisProgress.completed / analysisProgress.total) * 100
+    : 0;
+
+  const transcribingCount = useMemo(() => {
+    let count = 0;
+    for (const status of transcriptStatus.values()) {
+      if (status === 'queued' || status === 'transcribing') count++;
+    }
+    return count;
+  }, [transcriptStatus]);
+
   const currentProjectBrokenMediaIds = useMemo(
     () => getProjectBrokenMediaIds(brokenMediaIds, mediaById),
     [brokenMediaIds, mediaById]
@@ -505,6 +574,31 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
     return count > 0 ? total / count : 0;
   }, [proxyStatus, proxyProgress, generatingCount]);
+
+  const transcribingAvgProgress = useMemo(() => {
+    if (transcribingCount === 0) return 0;
+    let total = 0;
+    let count = 0;
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id);
+        total += progress ? getTranscriptionOverallProgress(progress) : 0;
+        count++;
+      }
+    }
+    return count > 0 ? total / count : 0;
+  }, [transcriptStatus, transcriptProgress, transcribingCount]);
+
+  const singleTranscriptionStageLabel = useMemo(() => {
+    if (transcribingCount !== 1) return null;
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id);
+        return progress ? getTranscriptionStageLabel(progress.stage) : null;
+      }
+    }
+    return null;
+  }, [transcriptStatus, transcriptProgress, transcribingCount]);
 
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
@@ -539,6 +633,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       const media = mediaById[mediaId];
       proxyService.cancelProxy(mediaId, media ? getSharedProxyKey(media) : undefined);
+    }
+  };
+
+  const handleCancelAllTranscriptions = () => {
+    for (const [mediaId, status] of transcriptStatus.entries()) {
+      if (status !== 'queued' && status !== 'transcribing') {
+        continue;
+      }
+
+      mediaTranscriptionService.cancelTranscription(mediaId);
     }
   };
 
@@ -622,86 +726,169 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   return (
     <div ref={containerRef} className="h-full flex flex-col">
       {/* Header toolbar */}
-      <div className="px-3 py-2 border-b border-border flex-shrink-0">
-        <div className="flex items-center gap-2 text-xs">
-          {/* Import action */}
-          <button
-            onClick={handleImport}
-            disabled={!currentProjectId}
-            className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-              bg-primary text-primary-foreground
-              hover:bg-primary/90
-              disabled:opacity-40 disabled:cursor-not-allowed
-              transition-colors duration-150"
-            title="Import media files"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span>Import</span>
-          </button>
-
-          {/* Missing media indicator */}
-          {currentProjectBrokenMediaIds.length > 0 && (
-            <button
-              onClick={openMissingMediaDialog}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-md
-                bg-destructive/10 border border-destructive/25 text-destructive
-                hover:bg-destructive/20 hover:border-destructive/40
-                transition-colors duration-150"
-              title="View missing media files"
-            >
-              <Link2Off className="w-3.5 h-3.5" />
-              <span>{currentProjectBrokenMediaIds.length} Missing</span>
-            </button>
-          )}
-
-
-          {/* Selection indicator & actions */}
-          {selectedAssetCount > 0 && (
-            <>
-              <div className="h-4 w-px bg-border" />
-
-              {/* Selection badge */}
-              <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border">
-                <span className="tabular-nums">{selectedAssetCount}</span>
-                <span className="text-muted-foreground">selected</span>
-                <button
-                  onClick={clearSelection}
-                  className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
-                  title="Clear selection"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Generate proxies for selection */}
-              {selectedProxyEligibleCount > 0 && (
-                <button
-                  onClick={handleGenerateSelectedProxies}
-                  className="flex items-center gap-1 h-7 px-2 rounded-md
-                    text-muted-foreground hover:text-primary hover:bg-primary/10
-                    transition-colors duration-150"
-                  title="Generate proxies for selected"
-                >
-                  <Zap className="w-3 h-3" />
-                  <span>Proxy ({selectedProxyEligibleCount})</span>
-                </button>
-              )}
-
-              {/* Delete action */}
+      <div className="@container px-3 py-2 border-b border-border flex-shrink-0">
+        <TooltipProvider>
+          <div className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden">
+            {/* Import action */}
+            <HeaderActionTooltip label="Import media files">
               <button
-                onClick={handleDeleteSelected}
-                className="flex items-center gap-1 h-7 px-2 rounded-md
-                  text-destructive/80 hover:text-destructive hover:bg-destructive/10
+                onClick={handleImport}
+                disabled={!currentProjectId}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                  bg-primary text-primary-foreground
+                  hover:bg-primary/90
+                  disabled:opacity-40 disabled:cursor-not-allowed
                   transition-colors duration-150"
-                title="Delete selected"
               >
-                <Trash2 className="w-3 h-3" />
-                <span>Delete</span>
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span className="hidden @[260px]:inline">Import</span>
               </button>
-            </>
-          )}
-        </div>
+            </HeaderActionTooltip>
+
+            <HeaderActionTooltip label="Import media from URL">
+              <button
+                onClick={() => setShowImportUrlDialog(true)}
+                disabled={!currentProjectId}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                  bg-secondary border-border text-muted-foreground
+                  hover:text-primary hover:bg-primary/10 hover:border-primary/40
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  transition-colors duration-150"
+              >
+                <Link className="w-3.5 h-3.5" />
+                <span className="hidden @[360px]:inline">URL</span>
+              </button>
+            </HeaderActionTooltip>
+
+            {/* Missing media indicator */}
+            {currentProjectBrokenMediaIds.length > 0 && (
+              <HeaderActionTooltip label={`View ${currentProjectBrokenMediaIds.length} missing media file${currentProjectBrokenMediaIds.length === 1 ? '' : 's'}`}>
+                <button
+                  onClick={openMissingMediaDialog}
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                    bg-destructive/10 border border-destructive/25 text-destructive
+                    hover:bg-destructive/20 hover:border-destructive/40
+                    transition-colors duration-150"
+                >
+                  <Link2Off className="w-3.5 h-3.5" />
+                  <span className="hidden @[340px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
+                </button>
+              </HeaderActionTooltip>
+            )}
+
+
+            {/* Selection indicator & actions */}
+            {selectedAssetCount > 0 && (
+              <>
+                <div className="h-4 w-px bg-border hidden @[300px]:block" />
+
+                {/* Selection badge */}
+                <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
+                  <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
+                  <span className="text-muted-foreground hidden @[360px]:inline">selected</span>
+                  <HeaderActionTooltip label="Clear selection">
+                    <button
+                      onClick={clearSelection}
+                      className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </HeaderActionTooltip>
+                </div>
+
+                {/* Generate proxies for selection */}
+                {selectedProxyEligibleCount > 0 && (
+                  <HeaderActionTooltip label={`Generate proxies for ${selectedProxyEligibleCount} selected item${selectedProxyEligibleCount === 1 ? '' : 's'}`}>
+                    <button
+                      onClick={handleGenerateSelectedProxies}
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                        bg-secondary border-border text-muted-foreground
+                        hover:text-primary hover:bg-primary/10 hover:border-primary/40
+                        transition-colors duration-150"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span className="hidden @[440px]:inline">Proxy ({selectedProxyEligibleCount})</span>
+                    </button>
+                  </HeaderActionTooltip>
+                )}
+
+                {/* Delete action */}
+                <HeaderActionTooltip label="Delete selected assets">
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                      bg-destructive/10 border border-destructive/25 text-destructive
+                      hover:bg-destructive/20 hover:border-destructive/40
+                      transition-colors duration-150"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden @[400px]:inline">Delete</span>
+                  </button>
+                </HeaderActionTooltip>
+              </>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
+
+      <Dialog
+        open={showImportUrlDialog}
+        onOpenChange={(open) => {
+          setShowImportUrlDialog(open);
+          if (!open && !isImportUrlSubmitting) {
+            setImportUrlValue('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Import From URL</DialogTitle>
+            <DialogDescription>
+              Paste a direct link to a media file. MP4, WebM, MOV, MP3, WAV, JPG, PNG, GIF, WebP, and SVG links work when the site allows browser downloads. YouTube and similar page URLs usually will not.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleImportUrl} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                autoFocus
+                type="url"
+                inputMode="url"
+                placeholder="https://example.com/video.mp4"
+                value={importUrlValue}
+                onChange={(event) => setImportUrlValue(event.target.value)}
+                disabled={isImportUrlSubmitting}
+              />
+              <p className="text-xs text-muted-foreground">
+                The file is downloaded into the current project and stored locally for editing.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!isImportUrlSubmitting) {
+                    setShowImportUrlDialog(false);
+                    setImportUrlValue('');
+                  }
+                }}
+                disabled={isImportUrlSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!currentProjectId || importUrlValue.trim().length === 0 || isImportUrlSubmitting}
+              >
+                {isImportUrlSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Import
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Error message */}
       {error && (
@@ -772,26 +959,77 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       )}
 
-      {/* Search and filters */}
+      {/* Search + view toggle always render so the toggle stays reachable
+          in Scene mode. The search input and the filter row below only scope
+          the media-library grid, so they're hidden when the Scene browser is
+          mounted (it has its own search). */}
       <div className="px-4 pt-3 pb-2 space-y-2 flex-shrink-0">
-        {/* Search */}
-        <div className="relative group">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            placeholder="Search media..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-            >
-              <X className="w-3 h-3" />
-            </button>
+        {/* Search + Media/Scenes toggle group */}
+        <div className="@container flex items-center gap-2">
+          {!sceneBrowserOpen && (
+            <div className="relative group flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Input
+                placeholder="Search media..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
+          {sceneBrowserOpen && <div className="flex-1 min-w-0" aria-hidden />}
+          <div
+            role="group"
+            aria-label="Library view"
+            className="inline-flex items-center h-7 rounded-md border border-border bg-secondary p-0.5 shrink-0"
+          >
+            <HeaderActionTooltip label="Show media library">
+              <button
+                onClick={() => {
+                  if (sceneBrowserOpen) closeSceneBrowser();
+                }}
+                aria-pressed={!sceneBrowserOpen}
+                className={cn(
+                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
+                  !sceneBrowserOpen
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Film className="w-3 h-3" />
+                <span className="hidden @[280px]:inline">Media</span>
+              </button>
+            </HeaderActionTooltip>
+            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
+              <button
+                onClick={() => {
+                  if (!sceneBrowserOpen) openSceneBrowser();
+                }}
+                aria-pressed={sceneBrowserOpen}
+                className={cn(
+                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
+                  sceneBrowserOpen
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <ScanSearch className="w-3 h-3" />
+                <span className="hidden @[280px]:inline">Scenes</span>
+              </button>
+            </HeaderActionTooltip>
+          </div>
         </div>
+
+        {!sceneBrowserOpen && (<>
+
 
         {/* Filters and sort */}
         <div className="@container flex items-center gap-1.5 min-w-0">
@@ -922,6 +1160,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </div>
           </div>
         </div>
+        </>)}
       </div>
 
       {/* Composition navigation banner — shown when inside a sub-composition */}
@@ -941,16 +1180,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
+        {sceneBrowserOpen && <SceneBrowserPanel className="absolute inset-0 bg-background" />}
         <div
           ref={scrollContainerRef}
-          className="relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
+          className={cn(
+            'relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]',
+            sceneBrowserOpen && 'hidden',
+          )}
           onClick={handleScrollContentClick}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <MarqueeOverlay marqueeState={marqueeState} />
+          <MarqueeOverlay marquee={marquee} />
 
           {/* Compositions section — collapsible, auto-hidden when empty */}
           <CompositionsSection />
@@ -1015,38 +1258,91 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         )}
       </div>
 
+      {/* Background AI analysis status */}
+      {analysisProgress && (
+        <BackgroundTaskProgress
+          icon={<Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />}
+          label={
+            analysisProgress.total > 1
+              ? `Analyzing ${Math.min(analysisProgress.completed + 1, analysisProgress.total)} of ${analysisProgress.total} with AI`
+              : 'Analyzing 1 item with AI'
+          }
+          progressAriaLabel="AI analysis progress"
+          progressPercent={analysisPercent}
+          meta={(
+            <>
+              <span className="tabular-nums">{Math.round(analysisPercent)}%</span>
+              {!analysisProgress.cancelRequested ? (
+                <button
+                  type="button"
+                  onClick={() => mediaAnalysisService.requestCancel()}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <span className="text-muted-foreground/80">Cancelling…</span>
+              )}
+            </>
+          )}
+          trailing={<Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
+          fillClassName="bg-purple-500"
+        />
+      )}
+
+      {/* Transcript generation progress bar */}
+      {transcribingCount > 0 && (
+        <BackgroundTaskProgress
+          icon={<FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />}
+          label={`Generating ${transcribingCount} ${transcribingCount === 1 ? 'transcript' : 'transcripts'} in background`}
+          progressAriaLabel="Transcript generation progress"
+          progressPercent={transcribingAvgProgress * 100}
+          meta={(
+            <>
+              {singleTranscriptionStageLabel && (
+                <span className="hidden sm:inline truncate">
+                  {singleTranscriptionStageLabel}
+                </span>
+              )}
+              <span className="tabular-nums">
+                {Math.round(transcribingAvgProgress * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelAllTranscriptions}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel all
+              </button>
+            </>
+          )}
+          fillClassName="bg-blue-500"
+        />
+      )}
+
       {/* Proxy generation progress bar */}
       {generatingCount > 0 && (
-        <div className="px-3 py-2 border-t border-border flex-shrink-0 bg-panel-bg/50">
-          <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-muted-foreground">
-                  Generating {generatingCount} {generatingCount === 1 ? 'proxy' : 'proxies'} in background
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground tabular-nums">
-                    {Math.round(generatingAvgProgress * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCancelAllProxies}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Cancel all
-                  </button>
-                </div>
-              </div>
-              <div className="h-1 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(generatingAvgProgress * 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <BackgroundTaskProgress
+          icon={<Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />}
+          label={`Generating ${generatingCount} ${generatingCount === 1 ? 'proxy' : 'proxies'} in background`}
+          progressAriaLabel="Proxy generation progress"
+          progressPercent={generatingAvgProgress * 100}
+          meta={(
+            <>
+              <span className="tabular-nums">
+                {Math.round(generatingAvgProgress * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelAllProxies}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel all
+              </button>
+            </>
+          )}
+          fillClassName="bg-green-500"
+        />
       )}
 
       {/* Delete confirmation dialog */}

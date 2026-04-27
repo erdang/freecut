@@ -4,10 +4,14 @@
  * Applies GPU shader effects to canvas items for client-side export.
  */
 
+import type { ItemKeyframes } from '@/types/keyframe';
 import type { ItemEffect, GpuEffect } from '@/types/effects';
-import type { AdjustmentItem } from '@/types/timeline';
+import type { AdjustmentItem, TimelineItem } from '@/types/timeline';
 import { createLogger } from '@/shared/logging/logger';
 import type { EffectsPipeline, GpuEffectInstance } from '@/infrastructure/gpu/effects';
+import { applyMasks, type MaskCanvasSettings } from './canvas-masks';
+import type { CanvasPool } from './canvas-pool';
+import { resolveAnimatedColorEffects } from '@/features/export/deps/keyframes';
 
 const log = createLogger('CanvasEffects');
 
@@ -20,11 +24,65 @@ export interface AdjustmentLayerWithTrackOrder {
 }
 
 /**
+ * Applies any track-scoped shape masks to the source canvas before running the
+ * effect stack. The caller can still apply a final post-effect mask pass during
+ * compositing so effect bleed is trimmed to the same shape.
+ */
+export async function renderEffectsFromMaskedSource(
+  canvasPool: Pick<CanvasPool, 'acquire'>,
+  sourceCanvas: OffscreenCanvas,
+  effects: ItemEffect[],
+  masks: EffectSourceMask[],
+  frame: number,
+  canvas: EffectCanvasSettings & MaskCanvasSettings,
+  gpuPipeline?: EffectsPipeline | null,
+): Promise<{ source: OffscreenCanvas; poolCanvases: OffscreenCanvas[] }> {
+  const poolCanvases: OffscreenCanvas[] = [];
+  let effectSource = sourceCanvas;
+
+  if (masks.length > 0) {
+    const { canvas: maskedSourceCanvas, ctx: maskedSourceCtx } = canvasPool.acquire();
+    applyMasks(maskedSourceCtx, sourceCanvas, masks, canvas);
+    effectSource = maskedSourceCanvas;
+    poolCanvases.push(maskedSourceCanvas);
+  }
+
+  if (effects.length === 0) {
+    return { source: effectSource, poolCanvases };
+  }
+
+  const { canvas: effectCanvas, ctx: effectCtx } = canvasPool.acquire();
+  const deferredGpuCanvas = await applyAllEffectsAsync(
+    effectCtx,
+    effectSource,
+    effects,
+    frame,
+    canvas,
+    gpuPipeline,
+  );
+  poolCanvases.push(effectCanvas);
+
+  return {
+    source: deferredGpuCanvas ?? effectCanvas,
+    poolCanvases,
+  };
+}
+
+/**
  * Canvas settings for effect rendering
  */
 interface EffectCanvasSettings {
   width: number;
   height: number;
+}
+
+export interface EffectSourceMask {
+  path?: Path2D;
+  bitmapMask?: OffscreenCanvas;
+  inverted: boolean;
+  feather: number;
+  maskType: 'clip' | 'alpha';
+  trackOrder?: number;
 }
 
 // ============================================================================
@@ -110,10 +168,19 @@ export function getAdjustmentLayerEffects(
   adjustmentLayers: AdjustmentLayerWithTrackOrder[],
   frame: number,
   getPreviewEffectsOverride?: (itemId: string) => ItemEffect[] | undefined,
+  getLiveItemSnapshot?: (itemId: string) => TimelineItem | undefined,
+  getCurrentKeyframes?: (itemId: string) => ItemKeyframes | undefined,
 ): ItemEffect[] {
   if (adjustmentLayers.length === 0) return [];
 
   return adjustmentLayers
+    .map(({ layer, trackOrder }) => {
+      const liveLayer = getLiveItemSnapshot?.(layer.id);
+      return {
+        layer: liveLayer?.type === 'adjustment' ? liveLayer : layer,
+        trackOrder,
+      };
+    })
     .filter(({ layer, trackOrder }) => {
       // Item must be BEHIND the adjustment (higher track order = lower zIndex)
       if (itemTrackOrder <= trackOrder) return false;
@@ -123,7 +190,12 @@ export function getAdjustmentLayerEffects(
     .sort((a, b) => a.trackOrder - b.trackOrder) // Apply in track order
     .flatMap(({ layer }) => {
       const effectiveEffects = getPreviewEffectsOverride?.(layer.id) ?? layer.effects;
-      return effectiveEffects?.filter((e) => e.enabled) ?? [];
+      const animatedEffects = resolveAnimatedColorEffects(
+        effectiveEffects,
+        getCurrentKeyframes?.(layer.id),
+        frame - layer.from,
+      );
+      return animatedEffects?.filter((e) => e.enabled) ?? [];
     });
 }
 

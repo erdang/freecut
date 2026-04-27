@@ -27,6 +27,7 @@ import {
   ZOOM_MIN_VELOCITY,
   TIMELINE_RULER_HEIGHT,
   TRACK_SECTION_DIVIDER_HEIGHT,
+  computeWheelZoomStep,
 } from '../constants';
 
 // Components
@@ -51,6 +52,12 @@ import { useTransitionsStore } from '../stores/transitions-store';
 import { getFilteredItemSnapEdges } from '../utils/timeline-snap-utils';
 import { expandSelectionWithLinkedItems } from '../utils/linked-items';
 import { getTimelineWidth, getZoomToFitLevel } from '../utils/timeline-layout';
+import {
+  getAnchoredZoomScrollLeft,
+  getCursorZoomAnchor,
+  getPlayheadZoomAnchor,
+  type TimelineZoomAnchor,
+} from '../utils/zoom-anchor';
 
 const ACTIVE_TIMELINE_GESTURE_CURSOR_CLASSES = [
   'timeline-cursor-trim-left',
@@ -425,7 +432,7 @@ const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
     [containerRef, itemIds]
   );
 
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee, isActive } = useMarqueeSelection({
     containerRef: containerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     onSelectionChange,
@@ -437,10 +444,10 @@ const TimelineMarqueeLayer = memo(function TimelineMarqueeLayer({
   });
 
   useEffect(() => {
-    onMarqueeActiveChange(marqueeState.active);
-  }, [marqueeState.active, onMarqueeActiveChange]);
+    onMarqueeActiveChange(isActive);
+  }, [isActive, onMarqueeActiveChange]);
 
-  return <MarqueeOverlay marqueeState={marqueeState} />;
+  return <MarqueeOverlay marquee={marquee} />;
 });
 
 interface TimelineTrackSectionsSurfaceProps {
@@ -720,6 +727,7 @@ export const TimelineContent = memo(function TimelineContent({
   const selectMarker = useSelectionStore((s) => s.selectMarker);
   const clearItemSelection = useSelectionStore((s) => s.clearItemSelection);
   const activeTrackId = useSelectionStore((s) => s.activeTrackId);
+  const isTranscriptionDialogOpen = useEditorStore((s) => s.transcriptionDialogDepth > 0);
   // Granular selectors for drag state - avoid subscribing to entire dragState object
   const isDragging = useSelectionStore((s) => !!s.dragState?.isDragging);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -757,6 +765,13 @@ export const TimelineContent = memo(function TimelineContent({
       usePlaybackStore.getState().setPreviewFrame(null);
     }
   }, [isDragging]);
+
+  useEffect(() => {
+    if (!isTranscriptionDialogOpen) return;
+    if (usePlaybackStore.getState().previewFrame !== null) {
+      usePlaybackStore.getState().setPreviewFrame(null);
+    }
+  }, [isTranscriptionDialogOpen]);
 
   // Cleanup preview RAF on unmount
   useEffect(() => {
@@ -1125,12 +1140,23 @@ export const TimelineContent = memo(function TimelineContent({
   // Preview scrubber: show ghost playhead on hover
   const handleTimelineMouseDownCapture = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    if (target.closest('.timeline-ruler') || target.closest('[data-playhead-handle]')) {
+      return;
+    }
     if (usePlaybackStore.getState().previewFrame !== null) {
       setPreviewFrameRef.current(null);
     }
   }, []);
 
   const handleTimelineMouseMove = useCallback((e: React.MouseEvent) => {
+    if (useEditorStore.getState().transcriptionDialogDepth > 0) {
+      if (usePlaybackStore.getState().previewFrame !== null) {
+        setPreviewFrameRef.current(null);
+      }
+      return;
+    }
+
     // Skip during playback
     if (usePlaybackStore.getState().isPlaying) {
       if (usePlaybackStore.getState().previewFrame !== null) {
@@ -1235,15 +1261,27 @@ export const TimelineContent = memo(function TimelineContent({
 
   actualDurationRef.current = actualDuration;
 
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const maxScrollLeft = Math.max(0, timelineWidth - container.clientWidth);
+    if (container.scrollLeft <= maxScrollLeft + 1) {
+      return;
+    }
+
+    // Clamp stale scroll after timeline shrink so ruler and tracks stay aligned
+    // without subscribing broad UI surfaces to item-array churn.
+    container.scrollLeft = maxScrollLeft;
+    scrollLeftRef.current = maxScrollLeft;
+    syncViewportFromContainer();
+  }, [timelineWidth, syncViewportFromContainer]);
+
   // NOTE: itemsByTrack removed - TimelineTrack now fetches its own items
   // This prevents cascade re-renders when only one track's items change
 
-  /**
-   * Adjusts scroll position to keep cursor position stable when zoom changes
-   * (Anchor zooming - cursor stays visually fixed, content scales around it)
-   *
-   * Uses refs for dynamic values to avoid callback recreation on every render
-   */
   const scheduleZoomApply = useCallback((nextZoomLevel: number, nextScrollLeft: number) => {
     queuedZoomLevelRef.current = nextZoomLevel;
     queuedZoomScrollLeftRef.current = nextScrollLeft;
@@ -1278,64 +1316,64 @@ export const TimelineContent = memo(function TimelineContent({
     }
   }, []);
 
-  const applyZoomWithPlayheadCentering = useCallback((newZoomLevel: number) => {
+  const applyZoomWithAnchor = useCallback((newZoomLevel: number, anchor: TimelineZoomAnchor) => {
+    const currentZoom = queuedZoomLevelRef.current ?? zoomLevelRef.current;
+    const clampedZoom = Math.max(0.01, Math.min(2, newZoomLevel));
+    if (clampedZoom === currentZoom) return;
+
+    const nextScrollLeft = getAnchoredZoomScrollLeft({
+      anchor,
+      maxDurationSeconds: actualDurationRef.current,
+      nextZoomLevel: clampedZoom,
+    });
+
+    scheduleZoomApply(clampedZoom, nextScrollLeft);
+  }, [scheduleZoomApply]);
+
+  const applyZoomWithCursorAnchor = useCallback((newZoomLevel: number) => {
     const container = containerRef.current;
     if (!container) return;
 
     const currentZoom = queuedZoomLevelRef.current ?? zoomLevelRef.current;
-
-    // Clamp zoom to valid range
-    const clampedZoom = Math.max(0.01, Math.min(2, newZoomLevel));
-    if (clampedZoom === currentZoom) return;
-
-    // Cursor's screen position (relative to container's visible left edge)
-    const cursorScreenX = zoomCursorXRef.current;
-
-    // Calculate cursor's position in CONTENT coordinates (timeline space)
     const baseScrollLeft = queuedZoomScrollLeftRef.current ?? pendingScrollRef.current ?? container.scrollLeft;
-    const cursorContentX = baseScrollLeft + cursorScreenX;
 
-    // Convert to time using current zoom, clamped to actual content duration
-    const currentPixelsPerSecond = currentZoom * 100;
-    const cursorTime = Math.min(
-      cursorContentX / currentPixelsPerSecond,
-      actualDurationRef.current
-    );
+    applyZoomWithAnchor(newZoomLevel, getCursorZoomAnchor({
+      currentZoomLevel: currentZoom,
+      cursorScreenX: zoomCursorXRef.current,
+      maxDurationSeconds: actualDurationRef.current,
+      scrollLeft: baseScrollLeft,
+    }));
+  }, [applyZoomWithAnchor]);
 
-    // Calculate where that same time point will be at the new zoom
-    const newPixelsPerSecond = clampedZoom * 100;
-    const newCursorContentX = cursorTime * newPixelsPerSecond;
+  const applyZoomWithPlayheadAnchor = useCallback((newZoomLevel: number) => {
+    const container = containerRef.current;
+    if (!container) return;
 
-    // Calculate scroll needed to keep cursor at same screen position
-    // cursor should stay at cursorScreenX, so:
-    // newScrollLeft + cursorScreenX = newCursorContentX
-    // newScrollLeft = newCursorContentX - cursorScreenX
-    const newScrollLeft = newCursorContentX - cursorScreenX;
+    const currentZoom = queuedZoomLevelRef.current ?? zoomLevelRef.current;
+    const baseScrollLeft = queuedZoomScrollLeftRef.current ?? pendingScrollRef.current ?? container.scrollLeft;
 
-    // Only clamp to prevent negative scroll (left boundary)
-    const clampedScrollLeft = Math.max(0, newScrollLeft);
+    applyZoomWithAnchor(newZoomLevel, getPlayheadZoomAnchor({
+      currentFrame: currentFrameRef.current,
+      currentZoomLevel: currentZoom,
+      fps: useTimelineStore.getState().fps,
+      maxDurationSeconds: actualDurationRef.current,
+      scrollLeft: baseScrollLeft,
+    }));
+  }, [applyZoomWithAnchor]);
 
-    // Coalesce dense wheel updates into a single visual zoom publish per frame.
-    scheduleZoomApply(clampedZoom, clampedScrollLeft);
-  }, [scheduleZoomApply]);
-
-  // Create zoom handlers that include playhead centering
-  // These callbacks are stable and don't recreate on every render thanks to refs
   const handleZoomChange = useCallback((newZoom: number) => {
-    applyZoomWithPlayheadCentering(newZoom);
-  }, [applyZoomWithPlayheadCentering]);
+    applyZoomWithPlayheadAnchor(newZoom);
+  }, [applyZoomWithPlayheadAnchor]);
 
   const handleZoomIn = useCallback(() => {
-    // Use standard zoom step (0.1), read from ref to avoid callback recreation
     const newZoomLevel = Math.min(2, zoomLevelRef.current + 0.1);
-    applyZoomWithPlayheadCentering(newZoomLevel);
-  }, [applyZoomWithPlayheadCentering]);
+    applyZoomWithPlayheadAnchor(newZoomLevel);
+  }, [applyZoomWithPlayheadAnchor]);
 
   const handleZoomOut = useCallback(() => {
-    // Use standard zoom step (0.1), read from ref to avoid callback recreation
     const newZoomLevel = Math.max(0.01, zoomLevelRef.current - 0.1);
-    applyZoomWithPlayheadCentering(newZoomLevel);
-  }, [applyZoomWithPlayheadCentering]);
+    applyZoomWithPlayheadAnchor(newZoomLevel);
+  }, [applyZoomWithPlayheadAnchor]);
 
   // Keep a ref to containerWidth for use in stable callbacks
   const containerWidthRef = useRef(containerWidth);
@@ -1460,7 +1498,7 @@ export const TimelineContent = memo(function TimelineContent({
           const logZoom = Math.log(currentZoom);
           const newLogZoom = logZoom - velocityZoomRef.current * 1.2; // Scale factor for feel
           const newZoomLevel = Math.exp(newLogZoom);
-          applyZoomWithPlayheadCentering(newZoomLevel);
+          applyZoomWithCursorAnchor(newZoomLevel);
           lastZoomApplyTimeRef.current = now;
         }
 
@@ -1479,7 +1517,7 @@ export const TimelineContent = memo(function TimelineContent({
     };
 
     momentumIdRef.current = requestAnimationFrame(momentumLoop);
-  }, [applyZoomWithPlayheadCentering]);
+  }, [applyZoomWithCursorAnchor]);
 
   // Cleanup momentum on unmount
   useEffect(() => {
@@ -1524,23 +1562,7 @@ export const TimelineContent = memo(function TimelineContent({
         const rect = container.getBoundingClientRect();
         zoomCursorXRef.current = event.clientX - rect.left;
 
-        const currentZoom = zoomLevelRef.current;
-        // Use logarithmic zoom (multiplicative) for uniform perceptual speed
-        // This matches the slider's logarithmic behavior
-        const ZOOM_FACTOR = 1.15; // ~15% perceptual change per tick
-        const MIN_ZOOM = 0.01; // 1%
-        const MAX_ZOOM = 2; // 200%
-
-        let newZoom: number;
-        if (event.deltaY > 0) {
-          // Scroll down = zoom out (divide by factor)
-          newZoom = Math.max(MIN_ZOOM, currentZoom / ZOOM_FACTOR);
-        } else {
-          // Scroll up = zoom in (multiply by factor)
-          newZoom = Math.min(MAX_ZOOM, currentZoom * ZOOM_FACTOR);
-        }
-
-        applyZoomWithPlayheadCentering(newZoom);
+        applyZoomWithCursorAnchor(computeWheelZoomStep(zoomLevelRef.current, event.deltaY));
         return;
       }
 
@@ -1589,7 +1611,7 @@ export const TimelineContent = memo(function TimelineContent({
     return () => {
       container.removeEventListener('wheel', wheelHandler);
     };
-  }, [applyZoomWithPlayheadCentering, getVerticalScrollTarget, hasTrackSections, startMomentumScroll]);
+  }, [applyZoomWithCursorAnchor, getVerticalScrollTarget, hasTrackSections, startMomentumScroll]);
 
   const singleSectionTracks = videoTracks.length > 0 ? videoTracks : audioTracks;
   const singleSectionKind = videoTracks.length > 0 ? 'video' : 'audio';

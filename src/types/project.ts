@@ -2,6 +2,7 @@ import type { AnimatableProperty, EasingType, EasingConfig } from './keyframe';
 import type { AudioEqSettings } from './audio';
 import type { Transition } from './transition';
 import type { CropSettings } from './transform';
+import type { TextStylePresetId } from '@/shared/typography/text-style-preset-ids';
 
 export interface Project {
   id: string;
@@ -15,7 +16,7 @@ export interface Project {
    * Increment CURRENT_SCHEMA_VERSION in lib/migrations when adding migrations.
    */
   schemaVersion?: number;
-  thumbnailId?: string; // Reference to ThumbnailData in IndexedDB
+  thumbnailId?: string; // Reference to workspace-backed ThumbnailData
   thumbnail?: string; // @deprecated Base64 data URL (for backward compatibility)
   metadata: ProjectResolution;
   timeline?: ProjectTimeline;
@@ -80,14 +81,79 @@ export interface ProjectTimeline {
     sourceDuration?: number; // Total duration of source media (frames)
     sourceFps?: number; // Source media frame rate for source* frame fields
     text?: string;
+    textRole?: 'caption';
     captionSource?: {
-      type: 'transcript';
+      type: 'transcript' | 'ai-captions';
       clipId: string;
       mediaId: string;
     };
     fontSize?: number;
     fontFamily?: string;
+    fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+    fontStyle?: 'normal' | 'italic';
+    underline?: boolean;
     color?: string;
+    textStylePresetId?: TextStylePresetId;
+    textStyleScale?: number;
+    textSpans?: Array<{
+      text: string;
+      fontSize?: number;
+      fontFamily?: string;
+      fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+      fontStyle?: 'normal' | 'italic';
+      underline?: boolean;
+      color?: string;
+      letterSpacing?: number;
+    }>;
+    textLayoutDrafts?: {
+      single?: {
+        text: string;
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+        fontStyle?: 'normal' | 'italic';
+        underline?: boolean;
+        color?: string;
+        letterSpacing?: number;
+      };
+      twoSpans?: Array<{
+        text: string;
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+        fontStyle?: 'normal' | 'italic';
+        underline?: boolean;
+        color?: string;
+        letterSpacing?: number;
+      }>;
+      threeSpans?: Array<{
+        text: string;
+        fontSize?: number;
+        fontFamily?: string;
+        fontWeight?: 'normal' | 'medium' | 'semibold' | 'bold';
+        fontStyle?: 'normal' | 'italic';
+        underline?: boolean;
+        color?: string;
+        letterSpacing?: number;
+      }>;
+    };
+    backgroundColor?: string;
+    backgroundRadius?: number;
+    textAlign?: 'left' | 'center' | 'right';
+    verticalAlign?: 'top' | 'middle' | 'bottom';
+    lineHeight?: number;
+    letterSpacing?: number;
+    textPadding?: number;
+    textShadow?: {
+      offsetX: number;
+      offsetY: number;
+      blur: number;
+      color: string;
+    };
+    stroke?: {
+      width: number;
+      color: string;
+    };
     shapeType?: 'rectangle' | 'circle' | 'triangle' | 'ellipse' | 'star' | 'polygon';
     fillColor?: string;
     strokeColor?: string;
@@ -109,7 +175,11 @@ export interface ProjectTimeline {
       y?: number;
       width?: number;
       height?: number;
+      anchorX?: number;
+      anchorY?: number;
       rotation?: number;
+      flipHorizontal?: boolean;
+      flipVertical?: boolean;
       opacity?: number;
       cornerRadius?: number;
       aspectRatioLocked?: boolean;

@@ -99,8 +99,13 @@ function waitForReady(
   });
 }
 
-function captionSingle(worker: Worker, id: number, imageBlob: Blob, signal?: AbortSignal): Promise<string> {
-  return new Promise<string>((resolve, reject) => {
+function captionSingle(
+  worker: Worker,
+  id: number,
+  imageBlob: Blob,
+  signal?: AbortSignal,
+): Promise<Pick<MediaCaption, 'text' | 'sceneData'>> {
+  return new Promise<Pick<MediaCaption, 'text' | 'sceneData'>>((resolve, reject) => {
     const onAbort = () => {
       cleanup();
       reject(signal!.reason);
@@ -115,7 +120,10 @@ function captionSingle(worker: Worker, id: number, imageBlob: Blob, signal?: Abo
     const onMessage = (event: MessageEvent) => {
       if (event.data.type === 'caption' && event.data.id === id) {
         cleanup();
-        resolve(event.data.caption ?? '');
+        resolve({
+          text: event.data.caption ?? '',
+          sceneData: event.data.sceneData,
+        });
       }
     };
 
@@ -145,6 +153,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
       onProgress,
       signal,
       sampleIntervalSec: rawSampleInterval = DEFAULT_SAMPLE_INTERVAL_SEC,
+      saveThumbnail,
     } = options;
     const sampleIntervalSec = Number.isFinite(rawSampleInterval) && rawSampleInterval > 0
       ? rawSampleInterval
@@ -191,15 +200,25 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
           totalFrames: timestamps.length,
         });
 
-        const text = await captionSingle(worker, index, blob, signal);
-        if (text) {
+        const result = await captionSingle(worker, index, blob, signal);
+        if (result.text) {
+          let thumbRelPath: string | undefined;
+          if (saveThumbnail) {
+            try {
+              thumbRelPath = await saveThumbnail(index, blob);
+            } catch (error) {
+              log.warn('Caption thumbnail persist failed — skipping', { index, error });
+            }
+          }
           captions.push({
             timeSec: Math.round(timeSec * 10) / 10,
-            text,
+            text: result.text,
+            ...(result.sceneData ? { sceneData: result.sceneData } : {}),
+            ...(thumbRelPath ? { thumbRelPath } : {}),
           });
         }
 
-        log.info('Frame caption', { frame: index, time: timeSec.toFixed(1), length: text.length });
+        log.info('Frame caption', { frame: index, time: timeSec.toFixed(1), length: result.text.length });
       }
 
       return captions;
@@ -225,7 +244,7 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
         totalFrames: 1,
       });
 
-      const text = await captionSingle(worker, 0, imageBlob, signal);
+      const result = await captionSingle(worker, 0, imageBlob, signal);
 
       onProgress?.({
         stage: 'captioning',
@@ -234,8 +253,14 @@ export const lfmCaptioningProvider: MediaCaptioningProvider = {
         totalFrames: 1,
       });
 
-      log.info('Image caption', { length: text.length });
-      return text ? [{ timeSec: 0, text }] : [];
+      log.info('Image caption', { length: result.text.length });
+      return result.text
+        ? [{
+          timeSec: 0,
+          text: result.text,
+          ...(result.sceneData ? { sceneData: result.sceneData } : {}),
+        }]
+        : [];
     } finally {
       worker.postMessage({ type: 'dispose' });
       setTimeout(() => worker.terminate(), 500);

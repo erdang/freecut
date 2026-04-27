@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CompositionItem, TextItem, VideoItem } from '@/types/timeline';
-import { getAnimatedTransform } from './canvas-keyframes';
+import type { ItemKeyframes } from '@/types/keyframe';
+import { getAnimatedCrop, getAnimatedTransform } from './canvas-keyframes';
 
 describe('canvas-keyframes text sizing', () => {
   it('expands text height to fit content during export', () => {
@@ -98,5 +99,40 @@ describe('canvas-keyframes visual fades', () => {
     });
 
     expect(transform.opacity).toBeCloseTo(0.75, 5);
+  });
+});
+
+describe('canvas-keyframes crop animation', () => {
+  it('resolves crop keyframes in source-pixel space for export', () => {
+    const item: VideoItem = {
+      id: 'video-crop-1',
+      type: 'video',
+      trackId: 'track-1',
+      from: 10,
+      durationInFrames: 90,
+      label: 'Video',
+      src: 'blob:test',
+      sourceWidth: 1920,
+      sourceHeight: 1080,
+    };
+    const keyframes: ItemKeyframes = {
+      itemId: item.id,
+      properties: [
+        {
+          property: 'cropLeft',
+          keyframes: [
+            { id: 'k1', frame: 0, value: 0, easing: 'linear' },
+            { id: 'k2', frame: 10, value: 192, easing: 'linear' },
+          ],
+        },
+      ],
+    };
+
+    const crop = getAnimatedCrop(item, keyframes, 15, {
+      width: 1920,
+      height: 1080,
+    });
+
+    expect(crop?.left).toBeCloseTo(0.05, 5);
   });
 });

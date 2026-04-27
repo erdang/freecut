@@ -1,14 +1,16 @@
-import { memo, useState, useEffect, useRef, useCallback } from 'react';
-import { Video, FileAudio, Image as ImageIcon, MoreVertical, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText, Play, Square, Sparkles } from 'lucide-react';
+import { Fragment, memo, useState, useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { Video, FileAudio, Image as ImageIcon, Trash2, Loader2, Link2Off, RefreshCw, Zap, FileText, Play, Square, Sparkles } from 'lucide-react';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Button } from '@/components/ui/button';
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '@/components/ui/context-menu';
 import type { MediaMetadata } from '@/types/storage';
 import { mediaLibraryService } from '../services/media-library-service';
+import { mediaAnalysisService } from '../services/media-analysis-service';
 import { getMediaType, formatDuration } from '../utils/validation';
 import { MediaInfoPopover } from './media-info-popover';
 import { getSharedProxyKey } from '../utils/proxy-key';
@@ -17,14 +19,20 @@ import { CARD_GRID_BASE, CARD_LIST_BASE, CARD_PERF_STYLE } from './card-styles';
 import { setMediaDragData, clearMediaDragData } from '../utils/drag-data-cache';
 import { proxyService } from '../services/proxy-service';
 import { mediaTranscriptionService } from '../services/media-transcription-service';
-import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
 import { useEditorStore } from '@/app/state/editor';
+import { usePlaybackStore } from '@/shared/state/playback';
 import { useSourcePlayerStore } from '@/shared/state/source-player';
-import { captionVideo, captionImage } from '../deps/analysis';
 import {
   getTranscriptionOverallPercent,
   getTranscriptionStageLabel,
 } from '@/shared/utils/transcription-progress';
+import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
+import {
+  isTranscriptionCancellationError,
+  isTranscriptionOutOfMemoryError,
+  TRANSCRIPTION_OOM_HINT,
+} from '@/shared/utils/transcription-cancellation';
+import { TranscribeDialog, type TranscribeDialogValues } from './transcribe-dialog';
 
 interface MediaCardProps {
   media: MediaMetadata;
@@ -32,7 +40,7 @@ interface MediaCardProps {
   isBroken?: boolean;
   onSelect?: (event: React.MouseEvent) => void;
   onDoubleClick?: () => void;
-  onDelete?: () => void;
+  onDelete?: (mediaIds: string[]) => void;
   onRelink?: () => void;
   viewMode?: 'grid' | 'list';
 }
@@ -43,18 +51,15 @@ interface MediaCardActionMenuProps {
   canGenerateProxy: boolean;
   hasProxy: boolean;
   proxyStatus?: 'generating' | 'ready' | 'error';
-  proxyProgress?: number;
   isTranscribable: boolean;
   isTranscribing: boolean;
   hasTranscript: boolean;
-  transcriptProgressLabel: string;
   isTaggable: boolean;
   isTagging: boolean;
-  hasTags: boolean;
   onGenerateProxy: (event: React.MouseEvent) => void | Promise<void>;
-  onCancelProxy: (event: React.MouseEvent) => void | Promise<void>;
   onDeleteProxy: (event: React.MouseEvent) => Promise<void>;
-  onGenerateTranscript: (event: React.MouseEvent) => Promise<void>;
+  onGenerateTranscript: (event: React.MouseEvent) => void | Promise<void>;
+  onDeleteTranscript: (event: React.MouseEvent) => Promise<void>;
   onAnalyzeWithAI: (event: React.MouseEvent) => void;
   onDelete: (event: React.MouseEvent) => void;
 }
@@ -67,81 +72,112 @@ function MediaCardActionMenuItems({
   canGenerateProxy,
   hasProxy,
   proxyStatus,
-  proxyProgress,
   isTranscribable,
   isTranscribing,
   hasTranscript,
-  transcriptProgressLabel,
   isTaggable,
   isTagging,
-  hasTags,
   onGenerateProxy,
-  onCancelProxy,
   onDeleteProxy,
   onGenerateTranscript,
+  onDeleteTranscript,
   onAnalyzeWithAI,
   onDelete,
 }: MediaCardActionMenuProps) {
-  return (
-    <>
-      {isBroken && onRelink && (
-        <DropdownMenuItem onClick={(event) => { event.stopPropagation(); onRelink(); }} className="text-primary focus:text-primary">
+  const hasBrokenGroup = isBroken && !!onRelink;
+  const canShowGenerateProxy = canGenerateProxy && !hasProxy && proxyStatus !== 'generating';
+  const showProxyGroup = !isBroken && (canShowGenerateProxy || hasProxy);
+  const canShowGenerateTranscript = isTranscribable && !isBroken && !isTranscribing;
+  const canShowDeleteTranscript = isTranscribable && !isBroken && hasTranscript && !isTranscribing;
+  const showTranscriptGroup = canShowGenerateTranscript || canShowDeleteTranscript;
+  const showAiGroup = isTaggable && !isBroken && !isTagging;
+
+  const groups: ReactNode[] = [];
+
+  if (hasBrokenGroup) {
+    groups.push(
+      <Fragment key="broken">
+        <ContextMenuLabel>File</ContextMenuLabel>
+        <ContextMenuItem
+          onClick={(event) => { event.stopPropagation(); onRelink!(); }}
+          className="text-primary focus:text-primary"
+        >
           <RefreshCw className="w-3 h-3 mr-2" />
           Relink File...
-        </DropdownMenuItem>
-      )}
-      {canGenerateProxy && !hasProxy && proxyStatus !== 'generating' && (
-        <DropdownMenuItem onClick={onGenerateProxy}>
-          <Zap className="w-3 h-3 mr-2" />
-          Generate Proxy
-        </DropdownMenuItem>
-      )}
-      {isTranscribable && !isBroken && !isTranscribing && (
-        <DropdownMenuItem onClick={onGenerateTranscript}>
-          <FileText className="w-3 h-3 mr-2" />
-          {hasTranscript ? 'Regenerate Transcript' : 'Transcribe Audio'}
-        </DropdownMenuItem>
-      )}
-      {isTranscribable && !isBroken && isTranscribing && (
-        <DropdownMenuItem disabled>
-          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-          {transcriptProgressLabel}
-        </DropdownMenuItem>
-      )}
-      {proxyStatus === 'generating' && (
-        <>
-          <DropdownMenuItem disabled>
-            <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-            Generating Proxy{proxyProgress != null ? ` (${Math.round(proxyProgress * 100)}%)` : '...'}
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={onCancelProxy}>
-            <Square className="w-3 h-3 mr-2" />
-            Cancel Proxy Generation
-          </DropdownMenuItem>
-        </>
-      )}
-      {hasProxy && (
-        <DropdownMenuItem onClick={onDeleteProxy} className="text-destructive focus:text-destructive">
-          <Trash2 className="w-3 h-3 mr-2" />
-          Delete Proxy
-        </DropdownMenuItem>
-      )}
-      {isTaggable && !isBroken && !isTagging && (
-        <DropdownMenuItem onClick={onAnalyzeWithAI}>
+        </ContextMenuItem>
+      </Fragment>
+    );
+  }
+
+  if (showProxyGroup) {
+    groups.push(
+      <Fragment key="proxy">
+        <ContextMenuLabel>Proxy</ContextMenuLabel>
+        {canShowGenerateProxy && (
+          <ContextMenuItem onClick={onGenerateProxy}>
+            <Zap className="w-3 h-3 mr-2" />
+            Generate Proxy
+          </ContextMenuItem>
+        )}
+        {hasProxy && (
+          <ContextMenuItem onClick={onDeleteProxy} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3 h-3 mr-2" />
+            Delete Proxy
+          </ContextMenuItem>
+        )}
+      </Fragment>
+    );
+  }
+
+  if (showTranscriptGroup) {
+    groups.push(
+      <Fragment key="transcript">
+        <ContextMenuLabel>Transcript</ContextMenuLabel>
+        {canShowGenerateTranscript && (
+          <ContextMenuItem onClick={onGenerateTranscript}>
+            <FileText className="w-3 h-3 mr-2" />
+            {hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'}
+          </ContextMenuItem>
+        )}
+        {canShowDeleteTranscript && (
+          <ContextMenuItem onClick={onDeleteTranscript} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3 h-3 mr-2" />
+            Delete Transcript
+          </ContextMenuItem>
+        )}
+      </Fragment>
+    );
+  }
+
+  if (showAiGroup) {
+    groups.push(
+      <Fragment key="ai">
+        <ContextMenuLabel>AI</ContextMenuLabel>
+        <ContextMenuItem onClick={onAnalyzeWithAI}>
           <Sparkles className="w-3 h-3 mr-2" />
-          {hasTags ? 'Re-analyze with AI' : 'Analyze with AI'}
-        </DropdownMenuItem>
-      )}
-      {isTaggable && !isBroken && isTagging && (
-        <DropdownMenuItem disabled>
-          <Loader2 className="w-3 h-3 mr-2 animate-spin" />
-          Analyzing...
-        </DropdownMenuItem>
-      )}
-      <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+          Analyze with AI
+        </ContextMenuItem>
+      </Fragment>
+    );
+  }
+
+  groups.push(
+    <Fragment key="destructive">
+      <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
         <Trash2 className="w-3 h-3 mr-2" />
         Delete
-      </DropdownMenuItem>
+      </ContextMenuItem>
+    </Fragment>
+  );
+
+  return (
+    <>
+      {groups.map((group, index) => (
+        <Fragment key={index}>
+          {index > 0 && <ContextMenuSeparator />}
+          {group}
+        </Fragment>
+      ))}
     </>
   );
 }
@@ -163,7 +199,6 @@ export const MediaCard = memo(function MediaCard({
   );
 
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus.get(media.id));
-  const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress.get(media.id));
   const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus.get(media.id) ?? 'idle');
   const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress.get(media.id));
 
@@ -176,7 +211,7 @@ export const MediaCard = memo(function MediaCard({
     && proxyService.canGenerateProxy(media.mimeType);
   const hasProxy = proxyStatus === 'ready';
   const hasTranscript = transcriptStatus === 'ready';
-  const isTranscribing = transcriptStatus === 'transcribing';
+  const isTranscribing = transcriptStatus === 'transcribing' || transcriptStatus === 'queued';
   const isTagging = useMediaLibraryStore((s) => s.taggingMediaIds.has(media.id));
   const isTaggable = mediaType === 'video' || mediaType === 'image';
   const hasCaptions = (media.aiCaptions?.length ?? 0) > 0;
@@ -187,8 +222,12 @@ export const MediaCard = memo(function MediaCard({
   const dragImageRef = useRef<HTMLDivElement | null>(null);
   const setMediaSkimPreview = useEditorStore((s) => s.setMediaSkimPreview);
   const clearMediaSkimPreview = useEditorStore((s) => s.clearMediaSkimPreview);
+  const isTranscriptionDialogOpen = useEditorStore((s) => s.transcriptionDialogDepth > 0);
+  const pauseTimelinePlayback = usePlaybackStore((s) => s.pause);
 
   const isAudio = mediaType === 'audio' && !isBroken && !isImporting;
+  const [transcribeDialogOpen, setTranscribeDialogOpen] = useState(false);
+  const [transcribeErrorMessage, setTranscribeErrorMessage] = useState<string | null>(null);
 
   // Load thumbnail on mount and when thumbnailId changes (e.g. after regeneration)
   useEffect(() => {
@@ -208,157 +247,257 @@ export const MediaCard = memo(function MediaCard({
     };
   }, [media.id, media.thumbnailId]);
 
+  const getTargetMediaItems = useCallback((): MediaMetadata[] => {
+    const store = useMediaLibraryStore.getState();
+    const selectedIds = store.selectedMediaIds;
+    if (selectedIds.length > 1 && selectedIds.includes(media.id)) {
+      return selectedIds
+        .map((id) => store.mediaItems.find((m) => m.id === id))
+        .filter((m): m is MediaMetadata => m !== undefined);
+    }
+    return [media];
+  }, [media]);
+
+  const handleContextMenuOpenChange = useCallback((open: boolean) => {
+    if (!open) return;
+    const store = useMediaLibraryStore.getState();
+    if (!store.selectedMediaIds.includes(media.id)) {
+      store.setSelection({ mediaIds: [media.id], compositionIds: [] });
+    }
+  }, [media.id]);
+
   const handleDelete = (e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
-    onDelete?.();
+    const targets = getTargetMediaItems();
+    onDelete?.(targets.map((m) => m.id));
   };
 
   const handleGenerateProxy = (e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
-    try {
-      const proxyKey = getSharedProxyKey(media);
-      proxyService.setProxyKey(media.id, proxyKey);
-      proxyService.generateProxy(
-        media.id,
-        media.storageType === 'opfs' && media.opfsPath
-          ? { kind: 'opfs', path: media.opfsPath, mimeType: media.mimeType }
-          : () => mediaLibraryService.getMediaFile(media.id),
-        media.width,
-        media.height,
-        proxyKey
-      );
-    } catch {
-      useMediaLibraryStore.getState().setProxyStatus(media.id, 'error');
+    const store = useMediaLibraryStore.getState();
+    const targets = getTargetMediaItems().filter((m) =>
+      proxyService.canGenerateProxy(m.mimeType)
+      && store.proxyStatus.get(m.id) !== 'ready'
+      && store.proxyStatus.get(m.id) !== 'generating'
+    );
+    for (const item of targets) {
+      try {
+        const proxyKey = getSharedProxyKey(item);
+        proxyService.setProxyKey(item.id, proxyKey);
+        proxyService.generateProxy(
+          item.id,
+          item.storageType === 'opfs' && item.opfsPath
+            ? { kind: 'opfs', path: item.opfsPath, mimeType: item.mimeType }
+            : () => mediaLibraryService.getMediaFile(item.id),
+          item.width,
+          item.height,
+          proxyKey
+        );
+      } catch {
+        useMediaLibraryStore.getState().setProxyStatus(item.id, 'error');
+      }
     }
   };
 
   const handleDeleteProxy = async (e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
-    try {
-      const sharedProxyKey = getSharedProxyKey(media);
-      await proxyService.deleteProxy(media.id, sharedProxyKey);
+    const targets = getTargetMediaItems().filter(
+      (m) => useMediaLibraryStore.getState().proxyStatus.get(m.id) === 'ready'
+    );
+    const uniqueKeys = new Map<string, MediaMetadata>();
+    for (const item of targets) {
+      const key = getSharedProxyKey(item);
+      if (!uniqueKeys.has(key)) uniqueKeys.set(key, item);
+    }
+    for (const [sharedProxyKey, representative] of uniqueKeys) {
+      try {
+        await proxyService.deleteProxy(representative.id, sharedProxyKey);
 
-      const store = useMediaLibraryStore.getState();
-      for (const item of store.mediaItems) {
-        if (item.mimeType.startsWith('video/') && getSharedProxyKey(item) === sharedProxyKey) {
-          store.clearProxyStatus(item.id);
-          proxyService.clearProxyKey(item.id);
+        const store = useMediaLibraryStore.getState();
+        for (const other of store.mediaItems) {
+          if (other.mimeType.startsWith('video/') && getSharedProxyKey(other) === sharedProxyKey) {
+            store.clearProxyStatus(other.id);
+            proxyService.clearProxyKey(other.id);
+          }
+        }
+      } catch {
+        const store = useMediaLibraryStore.getState();
+        for (const other of store.mediaItems) {
+          if (other.mimeType.startsWith('video/') && getSharedProxyKey(other) === sharedProxyKey) {
+            store.setProxyStatus(other.id, 'error');
+          }
         }
       }
-    } catch {
-      useMediaLibraryStore.getState().setProxyStatus(media.id, 'error');
     }
   };
 
-  const handleCancelProxy = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleOpenTranscribeDialog = (e: React.MouseEvent) => {
     e.stopPropagation();
-    proxyService.cancelProxy(media.id, getSharedProxyKey(media));
+    setTranscribeErrorMessage(null);
+    setTranscribeDialogOpen(true);
   };
 
-  const handleGenerateTranscript = async (e: React.MouseEvent) => {
-    e.preventDefault();
+  const handleStartTranscription = useCallback((values: TranscribeDialogValues) => {
+    const store = useMediaLibraryStore.getState();
+    const targets = getTargetMediaItems();
+    const previousStatusById = new Map<string, ReturnType<typeof store.transcriptStatus.get>>(
+      targets.map((t) => [t.id, store.transcriptStatus.get(t.id) ?? 'idle']),
+    );
+
+    setTranscribeErrorMessage(null);
+    for (const t of targets) {
+      store.setTranscriptStatus(t.id, 'queued');
+      store.setTranscriptProgress(t.id, { stage: 'queued', progress: 0 });
+    }
+
+    scheduleAfterPaint(() => {
+      void (async () => {
+        let succeeded = 0;
+        let failed = 0;
+        let lastErrorMessage: string | null = null;
+
+        for (const target of targets) {
+          const previousStatus = previousStatusById.get(target.id) ?? 'idle';
+          try {
+            await mediaTranscriptionService.transcribeMedia(target.id, {
+              model: values.model,
+              quantization: values.quantization,
+              language: values.language || undefined,
+              onQueueStatusChange: (state) => {
+                if (state === 'queued') {
+                  store.setTranscriptStatus(target.id, 'queued');
+                  store.setTranscriptProgress(target.id, { stage: 'queued', progress: 0 });
+                  return;
+                }
+                store.setTranscriptStatus(target.id, 'transcribing');
+                store.setTranscriptProgress(target.id, { stage: 'loading', progress: 0 });
+              },
+              onProgress: (progress) => {
+                store.setTranscriptProgress(target.id, progress);
+              },
+            });
+            store.setTranscriptStatus(target.id, 'ready');
+            store.clearTranscriptProgress(target.id);
+            succeeded += 1;
+          } catch (error) {
+            if (isTranscriptionCancellationError(error)) {
+              store.setTranscriptStatus(target.id, previousStatus);
+              store.clearTranscriptProgress(target.id);
+              continue;
+            }
+
+            store.setTranscriptStatus(target.id, previousStatus === 'ready' ? 'ready' : 'error');
+            store.clearTranscriptProgress(target.id);
+
+            const baseMessage = error instanceof Error ? error.message : 'Failed to transcribe media';
+            lastErrorMessage = isTranscriptionOutOfMemoryError(error) ? TRANSCRIPTION_OOM_HINT : baseMessage;
+            failed += 1;
+          }
+        }
+
+        if (failed === 0 && succeeded > 0) {
+          if (targets.length === 1) {
+            store.showNotification({
+              type: 'success',
+              message: `Transcript ready for "${targets[0]!.fileName}"`,
+            });
+          } else {
+            store.showNotification({
+              type: 'success',
+              message: `Transcripts ready for ${succeeded} media files`,
+            });
+          }
+          setTranscribeDialogOpen(false);
+        } else if (failed > 0) {
+          const msg = lastErrorMessage ?? 'Failed to transcribe media';
+          setTranscribeErrorMessage(msg);
+          store.showNotification({
+            type: 'error',
+            message: targets.length === 1
+              ? msg
+              : `Transcription failed for ${failed} of ${targets.length} media files`,
+          });
+        } else {
+          setTranscribeDialogOpen(false);
+        }
+      })();
+    });
+  }, [getTargetMediaItems]);
+
+  const handleCancelTranscript = (e?: React.MouseEvent) => {
+    e?.preventDefault();
+    e?.stopPropagation();
+    const store = useMediaLibraryStore.getState();
+    const targets = getTargetMediaItems().filter((m) => {
+      const status = store.transcriptStatus.get(m.id);
+      return status === 'queued' || status === 'transcribing';
+    });
+    for (const item of targets) {
+      mediaTranscriptionService.cancelTranscription(item.id);
+    }
+  };
+
+  const handleDeleteTranscript = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
     const store = useMediaLibraryStore.getState();
-    const previousStatus = store.transcriptStatus.get(media.id) ?? 'idle';
+    const targets = getTargetMediaItems().filter(
+      (m) => store.transcriptStatus.get(m.id) === 'ready'
+    );
 
-    store.setTranscriptStatus(media.id, 'transcribing');
-    store.setTranscriptProgress(media.id, { stage: 'loading', progress: 0 });
+    let failures = 0;
+    for (const item of targets) {
+      try {
+        await mediaTranscriptionService.deleteTranscript(item.id);
+        store.setTranscriptStatus(item.id, 'idle');
+        store.clearTranscriptProgress(item.id);
+      } catch {
+        failures += 1;
+      }
+    }
 
-    try {
-      await mediaTranscriptionService.transcribeMedia(media.id, {
-        onProgress: (progress) => {
-          store.setTranscriptProgress(media.id, progress);
-        },
-      });
-      store.setTranscriptStatus(media.id, 'ready');
-      store.clearTranscriptProgress(media.id);
+    if (targets.length === 1 && failures === 0) {
+      const [only] = targets;
       store.showNotification({
         type: 'success',
-        message: `Transcript ready for "${media.fileName}"`,
+        message: `Transcript deleted for "${only!.fileName}"`,
       });
-    } catch (error) {
-      if (isLocalInferenceCancellationError(error)) {
-        store.setTranscriptStatus(media.id, previousStatus);
-        store.clearTranscriptProgress(media.id);
-        return;
-      }
-
-      store.setTranscriptStatus(media.id, previousStatus === 'ready' ? 'ready' : 'error');
-      store.clearTranscriptProgress(media.id);
+    } else if (targets.length > 1 && failures === 0) {
+      store.showNotification({
+        type: 'success',
+        message: `Deleted ${targets.length} transcripts`,
+      });
+    } else if (failures > 0) {
       store.showNotification({
         type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to transcribe media',
+        message: failures === targets.length
+          ? 'Failed to delete transcript'
+          : `Failed to delete ${failures} of ${targets.length} transcripts`,
       });
     }
   };
 
   const handleAnalyzeWithAI = useCallback(async (e: React.MouseEvent) => {
-    e.preventDefault();
     e.stopPropagation();
-
     const store = useMediaLibraryStore.getState();
-    store.setTaggingMedia(media.id, true);
-
-    try {
-      let captions: Array<{ timeSec: number; text: string }>;
-
-      if (mediaType === 'video') {
-        const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-        if (!blobUrl) throw new Error('Could not load media file');
-
-        const video = document.createElement('video');
-        video.muted = true;
-        video.preload = 'auto';
-        video.src = blobUrl;
-
-        await new Promise<void>((resolve, reject) => {
-          video.onloadedmetadata = () => resolve();
-          video.onerror = () => reject(new Error('Failed to load video'));
-        });
-
-        try {
-          captions = await captionVideo(video);
-        } finally {
-          video.src = '';
-          URL.revokeObjectURL(blobUrl);
-        }
-      } else {
-        const blobUrl = await mediaLibraryService.getMediaBlobUrl(media.id);
-        if (!blobUrl) throw new Error('Could not load media file');
-
-        const response = await fetch(blobUrl);
-        const blob = await response.blob();
-        URL.revokeObjectURL(blobUrl);
-        captions = await captionImage(blob);
+    const analyzable = getTargetMediaItems().filter((m) => {
+      const type = getMediaType(m.mimeType);
+      if (type !== 'video' && type !== 'image') return false;
+      if (store.brokenMediaIds?.includes(m.id)) return false;
+      if (store.importingIds?.includes(m.id)) return false;
+      return true;
+    });
+    if (analyzable.length > 1) {
+      await mediaAnalysisService.analyzeBatch({ mediaIds: analyzable.map((m) => m.id) });
+    } else if (analyzable.length === 1) {
+      await mediaAnalysisService.analyzeMedia(analyzable[0]!);
+    } else {
+      const type = getMediaType(media.mimeType);
+      if (type === 'video' || type === 'image') {
+        await mediaAnalysisService.analyzeMedia(media);
       }
-
-      if (captions.length > 0) {
-        await mediaLibraryService.updateMediaCaptions(media.id, captions);
-        store.updateMediaCaptions(media.id, captions);
-        store.showNotification({
-          type: 'success',
-          message: `Generated ${captions.length} caption${captions.length === 1 ? '' : 's'} for "${media.fileName}"`,
-        });
-      } else {
-        store.showNotification({
-          type: 'info',
-          message: `No captions generated for "${media.fileName}"`,
-        });
-      }
-    } catch (error) {
-      store.showNotification({
-        type: 'error',
-        message: error instanceof Error ? error.message : 'Failed to analyze media',
-      });
-    } finally {
-      store.setTaggingMedia(media.id, false);
     }
-  }, [media.id, media.fileName, mediaType]);
+  }, [media, getTargetMediaItems]);
 
   const handleDragStart = useCallback((e: React.DragEvent) => {
     // Set drag data for timeline drop
@@ -441,8 +580,17 @@ export const MediaCard = memo(function MediaCard({
     onSelect?.(e);
   };
 
-  const canHoverPreview = (mediaType === 'video' || mediaType === 'image') && !isBroken && !isImporting;
-  const canScrubPreview = mediaType === 'video' && media.duration > 0 && !isBroken && !isImporting;
+  const canHoverPreview = (mediaType === 'video' || mediaType === 'image')
+    && !isBroken
+    && !isImporting
+    && !isTranscriptionDialogOpen;
+  const canScrubPreview = mediaType === 'video'
+    && media.duration > 0
+    && !isBroken
+    && !isImporting
+    && !isTranscriptionDialogOpen;
+  const skimRafRef = useRef<number | null>(null);
+  const pendingSkimClientXRef = useRef<number | null>(null);
 
   const updateSkimPreview = useCallback((clientX: number) => {
     const thumbnailContainer = thumbnailContainerRef.current;
@@ -465,30 +613,58 @@ export const MediaCard = memo(function MediaCard({
     setMediaSkimPreview(media.id, frame);
   }, [canHoverPreview, canScrubPreview, media.duration, media.fps, media.id, setMediaSkimPreview]);
 
+  const flushScheduledSkimPreview = useCallback(() => {
+    skimRafRef.current = null;
+    const clientX = pendingSkimClientXRef.current;
+    pendingSkimClientXRef.current = null;
+    if (clientX === null) return;
+    updateSkimPreview(clientX);
+  }, [updateSkimPreview]);
+
+  const scheduleSkimPreview = useCallback((clientX: number) => {
+    pendingSkimClientXRef.current = clientX;
+    if (skimRafRef.current !== null) {
+      return;
+    }
+
+    skimRafRef.current = requestAnimationFrame(flushScheduledSkimPreview);
+  }, [flushScheduledSkimPreview]);
+
+  const cancelScheduledSkimPreview = useCallback(() => {
+    pendingSkimClientXRef.current = null;
+    if (skimRafRef.current !== null) {
+      cancelAnimationFrame(skimRafRef.current);
+      skimRafRef.current = null;
+    }
+  }, []);
+
   const handleThumbnailPointerEnter = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!canHoverPreview || event.pointerType === 'touch') return;
+    pauseTimelinePlayback();
     updateSkimPreview(event.clientX);
-  }, [canHoverPreview, updateSkimPreview]);
+  }, [canHoverPreview, pauseTimelinePlayback, updateSkimPreview]);
 
   const handleThumbnailPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (!canScrubPreview || event.pointerType === 'touch') return;
-    updateSkimPreview(event.clientX);
-  }, [canScrubPreview, updateSkimPreview]);
+    scheduleSkimPreview(event.clientX);
+  }, [canScrubPreview, scheduleSkimPreview]);
 
   const handleThumbnailPointerLeave = useCallback(() => {
     if (!canHoverPreview) return;
+    cancelScheduledSkimPreview();
     setSkimProgress(null);
     clearMediaSkimPreview();
-  }, [canHoverPreview, clearMediaSkimPreview]);
+  }, [canHoverPreview, cancelScheduledSkimPreview, clearMediaSkimPreview]);
 
   useEffect(() => {
     if (!canHoverPreview) return;
     return () => {
+      cancelScheduledSkimPreview();
       if (useEditorStore.getState().mediaSkimPreviewMediaId === media.id) {
         clearMediaSkimPreview();
       }
     };
-  }, [canHoverPreview, clearMediaSkimPreview, media.id]);
+  }, [canHoverPreview, cancelScheduledSkimPreview, clearMediaSkimPreview, media.id]);
 
   // Cleanup audio on unmount
   useEffect(() => {
@@ -568,9 +744,30 @@ export const MediaCard = memo(function MediaCard({
     useEditorStore.getState().setSourcePreviewMediaId(media.id);
   }, [media.duration, media.fps, media.id]);
 
+  const transcriptProgressPercent = transcriptProgress
+    ? Math.round(getTranscriptionOverallPercent(transcriptProgress))
+    : null;
   const transcriptProgressLabel = transcriptProgress
-    ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(getTranscriptionOverallPercent(transcriptProgress))}%)`
+    ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${transcriptProgressPercent}%)`
     : 'Transcribing...';
+
+  const transcribeDialog = (
+    <TranscribeDialog
+      open={transcribeDialogOpen}
+      onOpenChange={(next) => {
+        if (!next) setTranscribeErrorMessage(null);
+        setTranscribeDialogOpen(next);
+      }}
+      fileName={media.fileName}
+      hasTranscript={hasTranscript}
+      isRunning={isTranscribing}
+      progressPercent={transcriptProgressPercent}
+      progressLabel={transcriptProgressLabel}
+      errorMessage={transcribeErrorMessage}
+      onStart={handleStartTranscription}
+      onCancel={handleCancelTranscript}
+    />
+  );
 
   const actionMenuItems = (
     <MediaCardActionMenuItems
@@ -579,18 +776,15 @@ export const MediaCard = memo(function MediaCard({
       canGenerateProxy={canGenerateProxy}
       hasProxy={hasProxy}
       proxyStatus={proxyStatus}
-      proxyProgress={proxyProgress}
       isTranscribable={isTranscribable}
       isTranscribing={isTranscribing}
       hasTranscript={hasTranscript}
-      transcriptProgressLabel={transcriptProgressLabel}
       isTaggable={isTaggable}
       isTagging={isTagging}
-      hasTags={hasCaptions}
       onGenerateProxy={handleGenerateProxy}
-      onCancelProxy={handleCancelProxy}
       onDeleteProxy={handleDeleteProxy}
-      onGenerateTranscript={handleGenerateTranscript}
+      onGenerateTranscript={handleOpenTranscribeDialog}
+      onDeleteTranscript={handleDeleteTranscript}
       onAnalyzeWithAI={handleAnalyzeWithAI}
       onDelete={handleDelete}
     />
@@ -612,6 +806,10 @@ export const MediaCard = memo(function MediaCard({
   // List view
   if (viewMode === 'list') {
     return (
+      <>
+      {transcribeDialog}
+      <ContextMenu onOpenChange={handleContextMenuOpenChange}>
+      <ContextMenuTrigger asChild disabled={isImporting}>
       <div
         style={CARD_PERF_STYLE}
         className={`
@@ -661,7 +859,12 @@ export const MediaCard = memo(function MediaCard({
           )}
           {/* Proxy badge for list view */}
           {!isBroken && !isImporting && proxyStatus === 'generating' && (
-            <div className="absolute bottom-0.5 right-0.5 p-0.5 rounded bg-amber-500/90 text-black">
+            <div className="absolute bottom-0.5 right-0.5 p-0.5 rounded bg-green-500/90 text-black">
+              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            </div>
+          )}
+          {!isBroken && !isImporting && isTagging && (
+            <div className="absolute bottom-0.5 left-0.5 p-0.5 rounded bg-purple-500/90 text-white" title="Analyzing with AI">
               <Loader2 className="w-2.5 h-2.5 animate-spin" />
             </div>
           )}
@@ -675,6 +878,21 @@ export const MediaCard = memo(function MediaCard({
                 className="absolute inset-y-0 w-px bg-white/80 shadow-[0_0_0_1px_rgba(0,0,0,0.25)] pointer-events-none"
                 style={{ left: `${skimProgress * 100}%` }}
               />
+          )}
+          {!isBroken && !isImporting && isTranscribing && transcriptProgressPercent !== null && (
+            <div
+              role="progressbar"
+              aria-label="Transcript progress"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={transcriptProgressPercent}
+              className="absolute inset-x-0 bottom-0 z-10 h-1 overflow-hidden bg-black/25 pointer-events-none"
+            >
+              <div
+                className="h-full bg-blue-500 transition-all duration-300"
+                style={{ width: `${transcriptProgressPercent}%` }}
+              />
+            </div>
           )}
           {/* Audio play button for list view */}
           {isAudio && (
@@ -730,28 +948,24 @@ export const MediaCard = memo(function MediaCard({
               triggerClassName="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-foreground/10 transition-colors"
               onSeekToCaption={handleSeekToCaption}
             />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-                >
-                  <MoreVertical className="w-3 h-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                {actionMenuItems}
-              </DropdownMenuContent>
-            </DropdownMenu>
           </div>
         )}
       </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+        {actionMenuItems}
+      </ContextMenuContent>
+      </ContextMenu>
+      </>
     );
   }
 
   // Grid view
   return (
+    <>
+    {transcribeDialog}
+    <ContextMenu onOpenChange={handleContextMenuOpenChange}>
+    <ContextMenuTrigger asChild disabled={isImporting}>
     <div
       style={CARD_PERF_STYLE}
       className={`
@@ -817,7 +1031,12 @@ export const MediaCard = memo(function MediaCard({
               </div>
             )}
             {!isBroken && proxyStatus === 'generating' && (
-              <div className="p-0.5 rounded bg-amber-500/90 text-black pointer-events-none">
+              <div className="p-0.5 rounded bg-green-500/90 text-black pointer-events-none">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+              </div>
+            )}
+            {!isBroken && isTagging && (
+              <div className="p-0.5 rounded bg-purple-500/90 text-white pointer-events-none" title="Analyzing with AI">
                 <Loader2 className="w-2.5 h-2.5 animate-spin" />
               </div>
             )}
@@ -883,6 +1102,21 @@ export const MediaCard = memo(function MediaCard({
               style={{ left: `${skimProgress * 100}%` }}
             />
         )}
+        {!isBroken && !isImporting && isTranscribing && transcriptProgressPercent !== null && (
+          <div
+            role="progressbar"
+            aria-label="Transcript progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={transcriptProgressPercent}
+            className="absolute inset-x-0 bottom-0 z-10 h-1 overflow-hidden bg-black/25 pointer-events-none"
+          >
+            <div
+              className="h-full bg-blue-500 transition-all duration-300"
+              style={{ width: `${transcriptProgressPercent}%` }}
+            />
+          </div>
+        )}
       </div>
 
       {/* Content footer - minimal */}
@@ -893,24 +1127,6 @@ export const MediaCard = memo(function MediaCard({
               {media.fileName}
             </h3>
           </div>
-
-          {/* Actions dropdown - hidden during upload */}
-          {!isImporting && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 transition-all hover:bg-primary/20 hover:text-primary flex-shrink-0"
-                >
-                  <MoreVertical className="w-2.5 h-2.5" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
-                {actionMenuItems}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
         </div>
       </div>
 
@@ -918,5 +1134,11 @@ export const MediaCard = memo(function MediaCard({
       <div className="absolute left-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
       <div className="absolute right-0 top-0 bottom-0 w-[2px] bg-gradient-to-b from-border via-muted to-border opacity-50" />
     </div>
+    </ContextMenuTrigger>
+    <ContextMenuContent onClick={(e) => e.stopPropagation()}>
+      {actionMenuItems}
+    </ContextMenuContent>
+    </ContextMenu>
+    </>
   );
 });

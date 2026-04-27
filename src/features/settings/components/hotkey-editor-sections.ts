@@ -65,6 +65,7 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
       { label: 'Zoom to fit all content', keys: ['ZOOM_TO_FIT'] },
       { label: 'Zoom to 100%', keys: ['ZOOM_TO_100', 'ZOOM_TO_100_ALT'] },
       { label: 'Toggle snap', keys: ['TOGGLE_SNAP'] },
+      { label: 'Toggle canvas (gizmo) snap', keys: ['TOGGLE_CANVAS_SNAP'] },
       { label: 'Toggle keyframe editor panel', keys: ['TOGGLE_KEYFRAME_EDITOR'] },
     ],
   },
@@ -113,6 +114,7 @@ export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
     items: [
       { label: 'Save project', keys: ['SAVE'] },
       { label: 'Export video', keys: ['EXPORT'] },
+      { label: 'Open Scene Browser (search AI captions)', keys: ['OPEN_SCENE_BROWSER'] },
     ],
   },
 ] as const;

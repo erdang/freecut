@@ -46,7 +46,8 @@ export function prewarmDroppedTimelineAudio(
       continue;
     }
 
-    const entry = entryByMediaId.get(item.mediaId);
+    const mediaId = item.mediaId;
+    const entry = entryByMediaId.get(mediaId);
     if (!entry) {
       continue;
     }
@@ -64,7 +65,7 @@ export function prewarmDroppedTimelineAudio(
     const sourceFps = Math.max(1, item.sourceFps ?? entry.media.fps ?? 30);
     const trimBeforeFrames = item.sourceStart ?? item.trimStart ?? ('offset' in item ? item.offset ?? 0 : 0);
     const targetTimeSeconds = Math.max(0, trimBeforeFrames / sourceFps);
-    const warmKey = `${item.mediaId}:${src}:${targetTimeSeconds.toFixed(3)}`;
+    const warmKey = `${mediaId}:${src}:${targetTimeSeconds.toFixed(3)}`;
     if (warmedKeys.has(warmKey)) {
       continue;
     }
@@ -78,21 +79,21 @@ export function prewarmDroppedTimelineAudio(
 
     const codec = entry.media.audioCodec ?? entry.media.codec;
     if (needsCustomAudioDecoder(codec)) {
-      const warmup = getOrDecodeAudioSliceForPlayback(item.mediaId, src, {
+      const warmup = getOrDecodeAudioSliceForPlayback(mediaId, src, {
         minReadySeconds: PARTIAL_AUDIO_READY_SECONDS,
         waitTimeoutMs: PARTIAL_AUDIO_WAIT_TIMEOUT_MS,
         targetTimeSeconds,
       }).catch((error) => {
         log.warn('Failed to prewarm custom-decoded drop audio', {
-          mediaId: item.mediaId,
+          mediaId,
           error,
         });
       });
       customWarmups.push(warmup);
       void warmup.finally(() => {
-        void startPreviewAudioConform(item.mediaId, src).catch((error) => {
+        void startPreviewAudioConform(mediaId, src).catch((error) => {
           log.warn('Failed to start background conform for dropped custom audio', {
-            mediaId: item.mediaId,
+            mediaId,
             error,
           });
         });

@@ -51,6 +51,7 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
   mediaSkimPreviewFrame: null,
   compoundClipSkimPreviewCompositionId: null,
   compoundClipSkimPreviewFrame: null,
+  transcriptionDialogDepth: 0,
   sourcePatchVideoEnabled: true,
   sourcePatchAudioEnabled: true,
   sourcePatchVideoTrackId: null,
@@ -104,12 +105,18 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
     sidebarWidth: normalizeSidebarWidth(
       currentState.sidebarWidth,
       layout.leftSidebarDefaultWidth,
-      getLeftEditorSidebarBounds(layout)
+      getLeftEditorSidebarBounds({
+        leftSidebarMinWidth: layout.leftSidebarMinWidth,
+        leftSidebarMaxWidth: layout.leftSidebarMaxWidth,
+      })
     ),
     rightSidebarWidth: normalizeSidebarWidth(
       currentState.rightSidebarWidth,
       layout.rightSidebarDefaultWidth,
-      getRightEditorSidebarBounds(layout)
+      getRightEditorSidebarBounds({
+        rightSidebarMinWidth: layout.rightSidebarMinWidth,
+        rightSidebarMaxWidth: layout.rightSidebarMaxWidth,
+      })
     ),
   })),
   setTimelineHeight: (height) => set({ timelineHeight: height }),
@@ -179,6 +186,12 @@ export const useEditorStore = create<EditorState & EditorActions>((set) => ({
       compoundClipSkimPreviewFrame: null,
     };
   }),
+  beginTranscriptionDialog: () => set((state) => ({
+    transcriptionDialogDepth: state.transcriptionDialogDepth + 1,
+  })),
+  endTranscriptionDialog: () => set((state) => ({
+    transcriptionDialogDepth: Math.max(0, state.transcriptionDialogDepth - 1),
+  })),
   setSourcePatchVideoEnabled: (enabled) => set({ sourcePatchVideoEnabled: enabled }),
   setSourcePatchAudioEnabled: (enabled) => set({ sourcePatchAudioEnabled: enabled }),
   setSourcePatchVideoTrackId: (trackId) => set({ sourcePatchVideoTrackId: trackId }),

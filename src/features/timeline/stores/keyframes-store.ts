@@ -126,7 +126,7 @@ export const useKeyframesStore = create<KeyframesState & KeyframesActions>()(
     _addKeyframe: (itemId, property, frame, value, easing = 'linear', easingConfig) => {
       const keyframeId = crypto.randomUUID();
       const newKeyframe: Keyframe = { id: keyframeId, frame, value, easing, easingConfig };
-      let resultingId = keyframeId;
+      let resultingId: string = keyframeId;
 
       set((state) => {
         const existingItemKeyframes = state.keyframes.find((k) => k.itemId === itemId);

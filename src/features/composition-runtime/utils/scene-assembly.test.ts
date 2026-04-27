@@ -343,8 +343,10 @@ describe('scene assembly', () => {
     const windows = resolveTransitionWindowsForItems([
       {
         id: 'transition-1',
+        type: 'crossfade',
         leftClipId: 'video-1',
         rightClipId: 'image-1',
+        trackId: 'track-1',
         durationInFrames: 10,
         timing: 'linear',
         presentation: 'fade',

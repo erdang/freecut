@@ -23,10 +23,14 @@ import {
 } from '@/components/ui/select';
 import {
   DopesheetEditor,
+  getEffectPropertyBaseValue,
   getBezierPresetForEasing,
+  getCropPropertyValue,
   getTransitionBlockedRanges,
   interpolatePropertyValue,
   getAnimatablePropertiesForItem,
+  getTextAnimatableBaseValue,
+  isTextAnimatableProperty,
 } from '@/features/timeline/deps/keyframes';
 import {
   resolveTransform,
@@ -62,6 +66,7 @@ import type { TimelineItem } from '@/types/timeline';
 import * as timelineActions from '../stores/timeline-actions';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
+import { isEffectAnimatableProperty } from '@/types/keyframe';
 
 /** Height of the panel header bar in pixels */
 const GRAPH_PANEL_HEADER_HEIGHT = 32;
@@ -136,12 +141,36 @@ function getBaseKeyframeValue(
   property: AnimatableProperty,
   canvas: CanvasSettings
 ): number {
+  if (isEffectAnimatableProperty(property)) {
+    return getEffectPropertyBaseValue(item, property) ?? 0;
+  }
+
   if (property === 'volume') {
     return item.volume ?? 0;
   }
 
+  if (item.type === 'text' && isTextAnimatableProperty(property)) {
+    return getTextAnimatableBaseValue(item, property);
+  }
+
+  if (
+    property === 'cropLeft'
+    || property === 'cropRight'
+    || property === 'cropTop'
+    || property === 'cropBottom'
+    || property === 'cropSoftness'
+  ) {
+    const sourceDimensions = getSourceDimensions(item);
+    return getCropPropertyValue(item.crop, property, {
+      width: Math.max(1, sourceDimensions?.width ?? item.transform?.width ?? canvas.width),
+      height: Math.max(1, sourceDimensions?.height ?? item.transform?.height ?? canvas.height),
+    });
+  }
+
   const resolved = resolveTransform(item, canvas, getSourceDimensions(item));
-  return resolved[property];
+  return property in resolved
+    ? resolved[property as keyof typeof resolved]
+    : 0;
 }
 
 function buildEasingConfig(

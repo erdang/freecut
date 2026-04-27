@@ -169,16 +169,63 @@ export interface VideoFrameEntry {
 }
 
 class VideoFrameCache {
-  private cache = new Map<string, VideoFrameEntry>();
+  private cache = new Map<string, VideoFrameEntry[]>();
+  private maxEntriesPerItem: number;
 
-  get(itemId: string): VideoFrameEntry | undefined {
-    return this.cache.get(itemId);
+  constructor(maxEntriesPerItem = 4) {
+    this.maxEntriesPerItem = Math.max(1, maxEntriesPerItem);
+  }
+
+  get(
+    itemId: string,
+    sourceTime?: number,
+    maxSourceTimeDelta = Number.POSITIVE_INFINITY,
+  ): VideoFrameEntry | undefined {
+    const entries = this.cache.get(itemId);
+    if (!entries || entries.length === 0) {
+      return undefined;
+    }
+
+    if (sourceTime === undefined) {
+      return entries[entries.length - 1];
+    }
+
+    let bestIndex = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i]!;
+      const distance = Math.abs(entry.sourceTime - sourceTime);
+      if (distance > maxSourceTimeDelta || distance >= bestDistance) {
+        continue;
+      }
+      bestDistance = distance;
+      bestIndex = i;
+    }
+
+    if (bestIndex === -1) {
+      return undefined;
+    }
+
+    const [entry] = entries.splice(bestIndex, 1);
+    entries.push(entry!);
+    return entry;
   }
 
   put(itemId: string, frame: Tier2VideoFrame, sourceTime: number): void {
-    const old = this.cache.get(itemId);
-    if (old) old.frame.close();
-    this.cache.set(itemId, { frame, sourceTime });
+    const entries = this.cache.get(itemId) ?? [];
+    const existingIndex = entries.findIndex((entry) => Math.abs(entry.sourceTime - sourceTime) <= Number.EPSILON);
+    if (existingIndex !== -1) {
+      const [existing] = entries.splice(existingIndex, 1);
+      existing?.frame.close();
+    }
+
+    entries.push({ frame, sourceTime });
+    while (entries.length > this.maxEntriesPerItem) {
+      const evicted = entries.shift();
+      evicted?.frame.close();
+    }
+
+    this.cache.set(itemId, entries);
   }
 
   has(itemId: string): boolean {
@@ -186,12 +233,18 @@ class VideoFrameCache {
   }
 
   get size(): number {
-    return this.cache.size;
+    let total = 0;
+    for (const entries of this.cache.values()) {
+      total += entries.length;
+    }
+    return total;
   }
 
   clear(): void {
-    for (const entry of this.cache.values()) {
-      entry.frame.close();
+    for (const entries of this.cache.values()) {
+      for (const entry of entries) {
+        entry.frame.close();
+      }
     }
     this.cache.clear();
   }
@@ -411,14 +464,8 @@ export class ScrubbingCache {
     sourceTime?: number,
     maxSourceTimeDelta = Number.POSITIVE_INFINITY,
   ): VideoFrameEntry | undefined {
-    const entry = this.tier2.get(itemId);
+    const entry = this.tier2.get(itemId, sourceTime, maxSourceTimeDelta);
     if (!entry) {
-      return undefined;
-    }
-    if (
-      sourceTime !== undefined
-      && Math.abs(entry.sourceTime - sourceTime) > maxSourceTimeDelta
-    ) {
       return undefined;
     }
     this._tier2Hits++;

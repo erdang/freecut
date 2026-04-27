@@ -11,6 +11,8 @@ import type { MainThreadMessage, PCMChunk } from '../types';
 let port: MessagePort | null = null;
 let whisperQueueSize = 0;
 let whisperQueueWaiter: (() => void) | null = null;
+let paused = false;
+let pauseWaiter: (() => void) | null = null;
 
 self.onmessage = async (event: MessageEvent) => {
   const message = event.data as { type: string; port?: MessagePort; file?: File };
@@ -27,6 +29,21 @@ self.onmessage = async (event: MessageEvent) => {
     return;
   }
 
+  if (message.type === 'pause') {
+    paused = true;
+    return;
+  }
+
+  if (message.type === 'resume') {
+    paused = false;
+    if (pauseWaiter) {
+      const waiter = pauseWaiter;
+      pauseWaiter = null;
+      waiter();
+    }
+    return;
+  }
+
   if (message.type === 'init' && message.file) {
     try {
       await run(message.file);
@@ -38,6 +55,13 @@ self.onmessage = async (event: MessageEvent) => {
     }
   }
 };
+
+function awaitResume(): Promise<void> {
+  if (!paused) return Promise.resolve();
+  return new Promise<void>((resolve) => {
+    pauseWaiter = resolve;
+  });
+}
 
 async function run(file: File): Promise<void> {
   if (typeof AudioDecoder === 'undefined') {
@@ -146,6 +170,10 @@ async function run(file: File): Promise<void> {
   try {
     const sink = new EncodedPacketSink(audioTrack);
     for await (const packet of sink.packets()) {
+      if (paused) {
+        await awaitResume();
+      }
+
       while (decoder.decodeQueueSize > 10 || whisperQueueSize >= 3) {
         await new Promise<void>((resolve) => {
           if (decoder.decodeQueueSize > 10) {

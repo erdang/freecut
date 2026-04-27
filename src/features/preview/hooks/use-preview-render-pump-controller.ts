@@ -1,4 +1,4 @@
-import { useEffect, type MutableRefObject, type RefObject } from 'react';
+import { useEffect, useRef, type MutableRefObject, type RefObject } from 'react';
 import type { PlayerRef } from '@/features/preview/deps/player-core';
 import { getGlobalVideoSourcePool } from '@/features/preview/deps/player-pool';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -229,6 +229,15 @@ export function usePreviewRenderPump({
   trackPlayerSeek,
   recordRenderFrameJitter,
 }: UsePreviewRenderPumpParams) {
+  const unmountingRef = useRef(false);
+
+  useEffect(() => {
+    unmountingRef.current = false;
+    return () => {
+      unmountingRef.current = true;
+    };
+  }, []);
+
   useEffect(() => {
     scrubMountedRef.current = true;
 
@@ -1556,7 +1565,9 @@ export function usePreviewRenderPump({
       clearPendingFastScrubHandoff();
       clearScheduledTransitionPrepare();
       clearTransitionPlaybackSession();
-      hideAllOverlays();
+      if (unmountingRef.current) {
+        hideAllOverlays();
+      }
       if (playbackRafId !== null) {
         cancelAnimationFrame(playbackRafId);
         playbackRafId = null;

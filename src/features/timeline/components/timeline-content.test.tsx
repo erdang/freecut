@@ -1,5 +1,5 @@
 import { createRef, type ReactNode } from 'react';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useEditorStore } from '@/app/state/editor';
@@ -23,17 +23,19 @@ vi.mock('../hooks/use-timeline-zoom', () => ({
   }),
 }));
 
-vi.mock('@/hooks/use-marquee-selection', () => ({
-  useMarqueeSelection: () => ({
-    marqueeState: {
-      active: false,
-      startX: 0,
-      startY: 0,
-      currentX: 0,
-      currentY: 0,
-    },
-  }),
-}));
+vi.mock('@/hooks/use-marquee-selection', () => {
+  const INACTIVE = { active: false, startX: 0, startY: 0, currentX: 0, currentY: 0 };
+  return {
+    useMarqueeSelection: () => ({
+      isActive: false,
+      marquee: {
+        subscribe: () => () => {},
+        getSnapshot: () => INACTIVE,
+      },
+      selectedIds: [],
+    }),
+  };
+});
 
 vi.mock('../hooks/use-waveform-prefetch', () => ({
   useWaveformPrefetch: () => {},
@@ -131,6 +133,7 @@ beforeAll(() => {
 function resetStores() {
   useEditorStore.setState({
     linkedSelectionEnabled: true,
+    transcriptionDialogDepth: 0,
   });
 
   useSelectionStore.setState({
@@ -214,6 +217,39 @@ describe('TimelineContent playback selection behavior', () => {
     await waitFor(() => {
       expect(useSelectionStore.getState().selectedItemIds).toEqual([VIDEO_ITEM.id]);
     });
+  });
+
+  it('does not update the hover scrub preview while the transcription dialog is open', async () => {
+    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+    const scrollContainer = container.querySelector('[data-timeline-scroll-container]');
+
+    if (!(scrollContainer instanceof HTMLDivElement)) {
+      throw new Error('Expected timeline scroll container');
+    }
+
+    Object.defineProperty(scrollContainer, 'getBoundingClientRect', {
+      configurable: true,
+      value: () => ({
+        left: 0,
+        top: 0,
+        right: 400,
+        bottom: 200,
+        width: 400,
+        height: 200,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }),
+    });
+
+    act(() => {
+      useEditorStore.setState({ transcriptionDialogDepth: 1 });
+      usePlaybackStore.getState().setPreviewFrame(12);
+    });
+
+    fireEvent.mouseMove(scrollContainer, { clientX: 180, clientY: 48 });
+
+    expect(usePlaybackStore.getState().previewFrame).toBeNull();
   });
 
   it('reveals the active track when selection moves to an offscreen lane', async () => {
@@ -374,5 +410,20 @@ describe('TimelineContent playback selection behavior', () => {
       expect(videoScrollContainer!.scrollTop).toBe(0);
     });
     expect(audioScrollContainer!.scrollTop).toBe(55);
+  });
+
+  it('does not clear previewFrame on ruler mousedown before the ruler handler runs', () => {
+    const { container } = render(<TimelineContent duration={10} tracks={[VIDEO_TRACK]} />);
+
+    act(() => {
+      usePlaybackStore.getState().setPreviewFrame(24);
+    });
+
+    const ruler = container.querySelector('.timeline-ruler') as HTMLDivElement | null;
+    expect(ruler).toBeTruthy();
+
+    fireEvent.mouseDown(ruler!, { button: 0 });
+
+    expect(usePlaybackStore.getState().previewFrame).toBe(24);
   });
 });

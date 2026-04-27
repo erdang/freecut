@@ -12,10 +12,14 @@ describe('mediaTranscriptionAdapterRegistry', () => {
       id: 'browser-whisper',
       label: 'Browser Whisper',
     });
-    expect(getDefaultMediaTranscriptionModel()).toBe('whisper-tiny');
+    expect(getDefaultMediaTranscriptionModel()).toBe('whisper-small');
     expect(getMediaTranscriptionModelOptions()).toContainEqual({
       value: 'whisper-small',
       label: 'Small',
+    });
+    expect(getMediaTranscriptionModelOptions()).not.toContainEqual({
+      value: 'whisper-tiny',
+      label: 'Tiny',
     });
   });
 

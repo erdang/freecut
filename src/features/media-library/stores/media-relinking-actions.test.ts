@@ -62,18 +62,19 @@ function createMockMediaMetadata(id: string, fileName: string): MediaMetadata {
 }
 
 function createMockTimelineItem(
-  overrides: Partial<TimelineItem> & Pick<TimelineItem, 'id' | 'type' | 'trackId' | 'from' | 'durationInFrames' | 'label'>
+  overrides: Partial<TimelineItem> & { id: string; type: TimelineItem['type']; trackId: string; label: string }
 ): TimelineItem {
+  const { id, type, trackId, label, from, durationInFrames, ...rest } = overrides;
   return {
-    id: 'item-1',
-    type: 'video',
-    trackId: 'track-1',
-    from: 0,
-    durationInFrames: 30,
-    label: 'clip.mp4',
+    id,
+    type,
+    trackId,
+    from: from ?? 0,
+    durationInFrames: durationInFrames ?? 30,
+    label,
     mediaId: 'media-1',
     src: 'blob:test',
-    ...overrides,
+    ...rest,
   } as TimelineItem;
 }
 
@@ -156,7 +157,7 @@ describe('createRelinkingActions', () => {
 
       expect(set).toHaveBeenCalled();
       expect(currentState.brokenMediaIds).toContain('media-1');
-      expect(currentState.brokenMediaInfo.has('media-1')).toBe(true);
+      expect(currentState.brokenMediaInfo!.has('media-1')).toBe(true);
     });
 
     it('is idempotent — does not duplicate entries', () => {
@@ -201,7 +202,7 @@ describe('createRelinkingActions', () => {
       actions.markMediaHealthy('media-1');
 
       expect(currentState.brokenMediaIds).toEqual(['media-2']);
-      expect(currentState.brokenMediaInfo.has('media-1')).toBe(false);
+      expect(currentState.brokenMediaInfo!.has('media-1')).toBe(false);
     });
   });
 

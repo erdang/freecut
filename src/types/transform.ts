@@ -12,8 +12,16 @@ export interface TransformProperties {
   width?: number;
   /** Explicit height in pixels. Default: computed from fit-to-canvas */
   height?: number;
+  /** Rotation anchor X in local item pixels from the left edge. Default: width / 2 */
+  anchorX?: number;
+  /** Rotation anchor Y in local item pixels from the top edge. Default: height / 2 */
+  anchorY?: number;
   /** Rotation in degrees (clockwise). Default: 0 */
   rotation?: number;
+  /** Flip content horizontally around its center. Default: false */
+  flipHorizontal?: boolean;
+  /** Flip content vertically around its center. Default: false */
+  flipVertical?: boolean;
   /** Opacity from 0 (transparent) to 1 (opaque). Default: 1 */
   opacity?: number;
   /** Border radius in pixels. Default: 0 */
@@ -45,6 +53,8 @@ export interface ResolvedTransform {
   y: number;
   width: number;
   height: number;
+  anchorX: number;
+  anchorY: number;
   rotation: number;
   opacity: number;
   cornerRadius: number;

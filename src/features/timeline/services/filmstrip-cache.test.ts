@@ -22,10 +22,15 @@ vi.mock('@/shared/logging/logger', () => ({
   createLogger: vi.fn(() => loggerMocks),
 }));
 
-vi.mock('./filmstrip-opfs-storage', () => ({
-  filmstripOPFSStorage: {
+vi.mock('./filmstrip-storage', () => ({
+  filmstripStorage: {
     load: vi.fn(),
     saveMetadata: vi.fn(),
+    saveFrameBlob: vi.fn(),
+    loadSingleFrame: vi.fn(),
+    getExistingIndices: vi.fn(),
+    createFrameFromBitmap: vi.fn(),
+    createFrameFromBlob: vi.fn(),
     revokeUrls: vi.fn(),
     delete: vi.fn(),
     clearAll: vi.fn(),

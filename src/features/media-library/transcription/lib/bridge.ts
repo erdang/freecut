@@ -11,6 +11,7 @@ import { MODEL_IDS } from '../types';
 import { createManagedWorkerSession } from '@/shared/utils/managed-worker-session';
 import { Chunker } from './chunker';
 import { downmixToMono, resampleTo16kHz } from './resampler';
+import { DEFAULT_WHISPER_MODEL } from '@/shared/utils/whisper-settings';
 
 export interface BridgeCallbacks {
   onSegment: (segment: TranscriptSegment) => void;
@@ -73,7 +74,7 @@ export class Bridge {
 
   async start(
     file: File,
-    model: WhisperModel = 'whisper-tiny',
+    model: WhisperModel = DEFAULT_WHISPER_MODEL,
     language?: string,
     quantization?: QuantizationType,
   ): Promise<void> {
@@ -110,6 +111,19 @@ export class Bridge {
     }
 
     this.session.terminate();
+  }
+
+  setPaused(paused: boolean): void {
+    if (this.session.isTerminated()) {
+      return;
+    }
+
+    const message = { type: paused ? 'pause' : 'resume' } as const;
+    this.session.getWorker('whisper').postMessage(message);
+    const hasWebCodecs = typeof window !== 'undefined' && 'AudioDecoder' in window;
+    if (hasWebCodecs) {
+      this.session.getWorker('decoder').postMessage(message);
+    }
   }
 
   private async decodeWithAudioContext(file: File, port: MessagePort): Promise<void> {

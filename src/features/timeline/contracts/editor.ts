@@ -26,12 +26,14 @@ export {
   createDefaultAdjustmentItem,
   createDefaultShapeItem,
   createDefaultTextItem,
+  createTextTemplateItem,
   getDefaultGeneratedLayerDurationInFrames,
 } from '../utils/generated-layer-items';
 export { findCompatibleTrackForItemType } from '../utils/track-item-compatibility';
 export { getTrackKind } from '../utils/classic-tracks';
 export { resolveEffectiveTrackStates } from '../utils/group-utils';
 export { linkItems } from '../stores/actions/item-actions';
+export { rateStretchItemWithoutHistory } from '../stores/actions/item-edit-actions';
 export {
   timelineToSourceFrames,
   sourceToTimelineFrames,

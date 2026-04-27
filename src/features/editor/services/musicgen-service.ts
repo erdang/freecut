@@ -360,12 +360,14 @@ class MusicgenService {
           max_new_tokens: maxNewTokens,
           do_sample: true,
           guidance_scale: guidanceScale,
-          streamer,
+          streamer: streamer as never,
         });
 
         onProgress?.('Encoding WAV...');
-        const sampleRate = runtime.model.config.audio_encoder.sampling_rate;
-        const audio = new module.RawAudio(audioValues.data, sampleRate);
+        const sampleRate = (runtime.model.config as { audio_encoder?: { sampling_rate?: number } })
+          .audio_encoder?.sampling_rate ?? 32000;
+        const audioData = (audioValues as { data: Float32Array | Float32Array[] }).data;
+        const audio = new module.RawAudio(audioData, sampleRate);
         const blob = audio.toBlob();
         const file = new File([blob], createOutputFileName(trimmedPrompt, model), {
           type: 'audio/wav',

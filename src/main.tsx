@@ -56,7 +56,8 @@ window.addEventListener('vite:preloadError', () => {
 });
 
 // IMPORTANT: Intentionally do not dispose filmstrip cache on beforeunload.
-// Filmstrip OPFS data is persistent and should survive refresh/reload.
+// Filmstrip cache data is persistent in the workspace and
+// should survive refresh/reload.
 // The browser tears down workers/resources on navigation anyway.
 
 const rootElement = document.getElementById('root');
@@ -70,4 +71,3 @@ createRoot(rootElement).render(
     <App />
   </StrictMode>
 );
-

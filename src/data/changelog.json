@@ -1,7 +1,7 @@
 {
   "current": {
     "version": "current",
-    "date": "2026-04-20",
+    "date": "2026-04-23",
     "highlights": [
       "Projects now live on disk in a workspace folder you choose",
       "Per-clip pitch shift in semitones and cents",
@@ -50,44 +50,61 @@
           "scope": "editor"
         },
         {
-          "title": "add What's New dialog with weekly changelog viewer",
-          "scope": "editor"
+          "title": "overhaul canvas snap system",
+          "scope": "preview"
         },
         {
-          "title": "weekly CalVer changelog with auto-append and rollup",
-          "scope": "changelog"
+          "title": "promote span text controls and move preset selector"
         },
         {
-          "title": "multi-select with marquee, bulk delete, and double-click to open",
-          "scope": "projects"
+          "title": "add keyframeable color effect params"
         },
         {
-          "title": "add trash section with permanent delete",
-          "scope": "projects"
+          "title": "import media from a direct URL",
+          "scope": "media-library"
         },
         {
-          "title": "report legacy IDB migration progress to banner",
-          "scope": "migration"
+          "title": "move scenes toggle next to search as segmented control",
+          "scope": "media-library"
         },
         {
-          "title": "soft-delete with undo, orphan sweep, and write-path locking",
-          "scope": "projects"
+          "title": "dedup media imports and captions by content",
+          "scope": "media-library"
         },
         {
-          "title": "harden workspace concurrency, handle validation, and migration retry",
-          "scope": "storage"
+          "title": "multi-segment filmstrip for compound clips",
+          "scope": "timeline"
         },
         {
-          "title": "split project master bus from per-device monitor volume",
-          "scope": "audio"
+          "title": "replace card dropdown with right-click context menu",
+          "scope": "media-library"
         },
         {
-          "title": "multi-workspace support, waveform mirroring, and real-filename media sources",
-          "scope": "storage"
+          "title": "wheel zoom/scroll/resize in track headers",
+          "scope": "timeline"
         },
         {
-          "title": "migrate to workspace folder via File System Access API",
-          "scope": "storage"
+          "title": "migrate to v2 layout with per-media caches",
+          "scope": "workspace-fs"
+        },
+        {
+          "title": "grid view, responsive header, analyze service",
+          "scope": "scene-browser"
+        },
+        {
+          "title": "add color mode with library palette grid",
+          "scope": "scene-browser"
+        },
+        {
+          "title": "find scenes with a similar palette",
+          "scope": "scene-browser"
+        },
+        {
+          "title": "add AI analysis indicators and align proxy colors"
+        },
+        {
+          "title": "add AI caption generation with timeline insertion",
+          "scope": "captions"
         }
       ],
       "fixed": [
@@ -116,23 +133,149 @@
           "scope": "editor"
         },
         {
-          "title": "use github.event.before for range and full fetch depth",
-          "scope": "changelog"
+          "title": "resolve develop type errors"
         },
         {
-          "title": "route projects import through contract adapter",
-          "scope": "workspace-gate"
+          "title": "respect visible params and safer effect mapping"
         },
         {
-          "title": "skip fetch for unregistered blob URLs in decoder prewarm",
+          "title": "allow animating non-color GPU effect params"
+        },
+        {
+          "title": "route effects keyframe deps through adapters"
+        },
+        {
+          "title": "remove unused crop helpers"
+        },
+        {
+          "title": "smooth live pitch preview on Semi Tones / Cents sliders",
+          "scope": "audio"
+        },
+        {
+          "title": "pixel-snap audio volume line to avoid subpixel blur",
+          "scope": "timeline"
+        },
+        {
+          "title": "render compound clip hover preview via canvas engine",
           "scope": "preview"
         },
         {
-          "title": "retry video with fresh blob URL on stale-blob load errors",
+          "title": "scale compound clip hover preview to fit wrapper",
           "scope": "preview"
         },
         {
-          "title": "reset timeline and preview UI state by component identity"
+          "title": "stop nested video black flashes from stale sequenceFromRef",
+          "scope": "preview"
+        },
+        {
+          "title": "restore MMB drag to resize A/V divider from anywhere",
+          "scope": "timeline"
+        },
+        {
+          "title": "version shared caption cache by sample interval",
+          "scope": "media-library"
+        },
+        {
+          "title": "stop blanking project list with spinner during mutations",
+          "scope": "projects"
+        },
+        {
+          "title": "eliminate Add Effect picker flash on first open",
+          "scope": "effects"
+        },
+        {
+          "title": "constrain new project page width to 7xl",
+          "scope": "projects"
+        },
+        {
+          "title": "refresh nested compound clip effects during playback",
+          "scope": "preview"
+        },
+        {
+          "title": "route SubComposition type through deps adapter",
+          "scope": "preview"
+        },
+        {
+          "title": "use live sub-comp duration for compound clip trim and display",
+          "scope": "timeline"
+        },
+        {
+          "title": "correct available pane height when no track sections",
+          "scope": "timeline"
+        },
+        {
+          "title": "reliably repaint compound clips on sub-comp edits and nav",
+          "scope": "preview"
+        },
+        {
+          "title": "invalidate frame cache when sub-compositions change",
+          "scope": "preview"
+        },
+        {
+          "title": "apply gpu effects and adjustment layers inside compound clips",
+          "scope": "compositions"
+        },
+        {
+          "title": "input handling edge cases",
+          "scope": "preview,timeline"
+        },
+        {
+          "title": "prevent header toolbar from wrapping on narrow widths",
+          "scope": "media-library"
+        },
+        {
+          "title": "add grid-cols-1 to DialogContent",
+          "scope": "dialog"
+        },
+        {
+          "title": "hydrate proxies from workspace on fresh origins",
+          "scope": "media-library"
+        },
+        {
+          "title": "remove motion semantic search, tighten color queries",
+          "scope": "scene-browser"
+        },
+        {
+          "title": "use palette-only ranking for color queries"
+        },
+        {
+          "title": "route timeline transcribe dialog through media contract"
+        },
+        {
+          "title": "move preview and filmstrip caches into workspace fs"
+        },
+        {
+          "title": "queue and unify transcription progress flows"
+        },
+        {
+          "title": "transcribe custom-decoded audio from conformed wav"
+        },
+        {
+          "title": "anchor timeline slider zoom at the playhead"
+        },
+        {
+          "title": "route analysis imports through infrastructure facade"
+        },
+        {
+          "title": "route preview scrub throttle through contract"
+        },
+        {
+          "title": "keep AI analysis off timeline caption tracks"
+        },
+        {
+          "title": "lower skim overlay below popovers"
+        },
+        {
+          "title": "unify ruler scrub handoff to avoid preview flashes"
+        },
+        {
+          "title": "speed up media skimming and preserve program preview"
+        },
+        {
+          "title": "sync preview timecode and playhead during scrubbing"
+        },
+        {
+          "title": "prefer Player path for generated caption scrubs"
         }
       ],
       "improved": [
@@ -147,6 +290,14 @@
         {
           "title": "Smaller 960×540 proxy resolution with worker-side loading",
           "scope": "preview"
+        },
+        {
+          "title": "kick re-render as soon as priority media is ready",
+          "scope": "preview"
+        },
+        {
+          "title": "subscription-based controller isolates overlay re-renders",
+          "scope": "marquee"
         }
       ]
     }
