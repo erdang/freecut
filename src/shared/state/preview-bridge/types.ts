@@ -1,5 +1,12 @@
 import type { CaptureOptions } from '@/shared/state/playback';
 
+export interface PostEditWarmRequest {
+  frame: number;
+  frames: number[];
+  itemIds: string[];
+  token: number;
+}
+
 export interface PreviewBridgeState {
   /** Frame currently presented to the user in preview output (null when Player path is active) */
   displayedFrame: number | null;
@@ -9,6 +16,8 @@ export interface PreviewBridgeState {
   captureFrameImageData: ((options?: CaptureOptions) => Promise<ImageData | null>) | null;
   /** Returns the rendered canvas directly for GPU-accelerated scope analysis (near-zero-copy) */
   captureCanvasSource: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null;
+  /** Latest request to prewarm the preview renderer after an edit commit. */
+  postEditWarmRequest: PostEditWarmRequest | null;
 }
 
 export interface PreviewBridgeActions {
@@ -19,4 +28,5 @@ export interface PreviewBridgeActions {
   setCaptureFrameImageData: (fn: ((options?: CaptureOptions) => Promise<ImageData | null>) | null) => void;
   /** Register canvas source capture for GPU scopes (optional) */
   setCaptureCanvasSource: (fn: (() => Promise<OffscreenCanvas | HTMLCanvasElement | null>) | null) => void;
+  requestPostEditWarm: (frame: number, itemIds: string[], frames?: number[]) => void;
 }

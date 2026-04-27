@@ -1,6 +1,7 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import {
   CheckCircle2,
+  Info,
   Loader2,
   Pause,
   Play,
@@ -15,6 +16,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select,
   SelectContent,
@@ -25,6 +27,13 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { SliderInput } from '@/shared/ui/property-controls';
+import {
+  getStoredTtsEngine,
+  getStoredTtsQuality,
+  setStoredTtsEngine,
+  setStoredTtsQuality,
+  type StoredTtsEngine,
+} from '@/shared/utils/tts-settings';
 import {
   importMediaLibraryService,
   useMediaLibraryStore,
@@ -39,11 +48,19 @@ import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog';
 import type { AudioItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import {
-  KITTEN_TTS_MODEL_OPTIONS,
-  KITTEN_TTS_VOICE_OPTIONS,
-  kittenTtsService,
-  type KittenTtsVoice,
-} from '@/features/editor/services/kitten-tts-service';
+  KOKORO_TTS_MODEL_OPTIONS,
+  KOKORO_TTS_VOICE_OPTIONS,
+  kokoroTtsService,
+  type KokoroTtsModel,
+  type KokoroTtsVoice,
+} from '@/features/editor/services/kokoro-tts-service';
+import {
+  MOSS_TTS_SUPPORTED_LANGUAGES,
+  MOSS_TTS_VOICE_OPTIONS,
+  getMossTtsVoiceOption,
+  mossTtsService,
+  type MossTtsVoice,
+} from '@/features/editor/services/moss-tts-service';
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -182,7 +199,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         type="button"
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm glow-primary-sm transition-colors hover:bg-primary/90"
         onClick={togglePlay}
-        aria-label={isPlaying ? '暂停' : '播放'}
+        aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying
           ? <Pause className="h-3 w-3" />
@@ -198,7 +215,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         max={100}
         step={0.1}
         className="min-w-0 flex-1"
-        aria-label="跳转"
+        aria-label="Seek"
       />
       <span className="shrink-0 select-none font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatTime(currentTime)}
@@ -215,8 +232,9 @@ interface GenerationResult {
   file: File;
   objectUrl: string;
   duration: number;
-  voice: KittenTtsVoice;
+  voice: string;
   model: string;
+  tags: string[];
 }
 
 export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
@@ -230,9 +248,11 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
   const showNotification = useMediaLibraryStore((state) => state.showNotification);
 
   const [text, setText] = useState('');
-  const [voice, setVoice] = useState<KittenTtsVoice>('Bella');
-  const [model, setModel] = useState<'nano' | 'micro' | 'mini'>('mini');
-  const [speed, setSpeed] = useState(1.25);
+  const [engine, setEngine] = useState<StoredTtsEngine>(() => getStoredTtsEngine());
+  const [kokoroVoice, setKokoroVoice] = useState<KokoroTtsVoice>('af_heart');
+  const [mossVoice, setMossVoice] = useState<MossTtsVoice>('Xiaoyu');
+  const [model, setModel] = useState<KokoroTtsModel>(() => getStoredTtsQuality());
+  const [speed, setSpeed] = useState(1);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isInserting, setIsInserting] = useState(false);
   const [progress, setProgress] = useState<string | null>(null);
@@ -253,12 +273,22 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         resultUrlRef.current = null;
       }
       setText(initialText);
+      setEngine(getStoredTtsEngine());
+      setModel(getStoredTtsQuality());
       setError(null);
       setProgress(null);
       setResult(null);
       setInserted(false);
     }
   }, [isOpen, initialText]);
+
+  useEffect(() => {
+    setStoredTtsQuality(model);
+  }, [model]);
+
+  useEffect(() => {
+    setStoredTtsEngine(engine);
+  }, [engine]);
 
   // Cleanup blob URL when dialog closes
   useEffect(() => {
@@ -271,20 +301,30 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     }
   }, [isOpen, inserted]);
 
-  const isWebGpuSupported = kittenTtsService.isSupported();
+  const isKokoroSupported = kokoroTtsService.isSupported();
+  const isMossSupported = mossTtsService.isSupported();
+  const supportsNativeSpeed = engine === 'kokoro';
+  const effectiveSpeed = supportsNativeSpeed ? speed : 1;
+  const isTtsSupported = engine === 'kokoro' ? isKokoroSupported : isMossSupported;
   const trimmedText = text.trim();
+  const voice = engine === 'kokoro' ? kokoroVoice : mossVoice;
+  const mossLanguagesLabel = MOSS_TTS_SUPPORTED_LANGUAGES.join(', ');
 
   const handleGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setError('请先打开项目再生成音频。');
+      setError('Open a project before generating audio.');
       return;
     }
     if (!trimmedText) {
-      setError('请输入要合成的文本。');
+      setError('Enter some text to synthesize.');
       return;
     }
-    if (!isWebGpuSupported) {
-      setError('Kitten TTS 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。');
+    if (!isTtsSupported) {
+      setError(
+        engine === 'kokoro'
+          ? 'WebGPU is required for Kokoro TTS. Try Chrome 113+, Edge 113+, or Safari 26+.'
+          : 'Browser-managed storage is required for MOSS multilingual TTS. Try a recent Chromium browser.',
+      );
       return;
     }
 
@@ -298,20 +338,31 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     setResult(null);
     setInserted(false);
     setIsGenerating(true);
-    setProgress('正在准备本地语音合成...');
+    setProgress('Preparing local TTS...');
 
     const thisSession = sessionIdRef.current;
 
     try {
-      const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
-        text: trimmedText,
-        voice,
-        speed,
-        model,
-        onProgress: (msg) => {
-          if (sessionIdRef.current === thisSession) setProgress(msg);
-        },
-      });
+      const result = engine === 'kokoro'
+        ? await kokoroTtsService.generateSpeechFile({
+          text: trimmedText,
+          voice: kokoroVoice,
+          speed: effectiveSpeed,
+          model,
+          onProgress: (msg) => {
+            if (sessionIdRef.current === thisSession) setProgress(msg);
+          },
+        })
+        : await mossTtsService.generateSpeechFile({
+          text: trimmedText,
+          voice: mossVoice,
+          speed: effectiveSpeed,
+          onProgress: (msg) => {
+            if (sessionIdRef.current === thisSession) setProgress(msg);
+          },
+        });
+
+      const { blob, file, duration } = result;
 
       if (sessionIdRef.current !== thisSession) {
         // Dialog was closed/reopened — discard stale result
@@ -321,14 +372,35 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       const objectUrl = URL.createObjectURL(blob);
       resultUrlRef.current = objectUrl;
 
-      setResult({ file, objectUrl, duration, voice, model });
+      const voiceLabel = engine === 'kokoro'
+        ? KOKORO_TTS_VOICE_OPTIONS.find((option) => option.value === kokoroVoice)?.label ?? kokoroVoice
+        : getMossTtsVoiceOption(mossVoice).label;
+      const modelLabel = engine === 'kokoro'
+        ? KOKORO_TTS_MODEL_OPTIONS.find((option) => option.value === model)?.label ?? model
+        : 'Multilingual Nano';
+      const tags = engine === 'kokoro'
+        ? [
+          'ai-generated',
+          'kokoro-tts',
+          'tts-engine:kokoro',
+          `kokoro-quality:${model}`,
+          `kokoro-voice:${kokoroVoice}`,
+        ]
+        : [
+          'ai-generated',
+          'moss-tts',
+          'tts-engine:moss',
+          `moss-voice:${mossVoice}`,
+        ];
+
+      setResult({ file, objectUrl, duration, voice: voiceLabel, model: modelLabel, tags });
       setProgress(null);
     } catch (generationError) {
       if (sessionIdRef.current !== thisSession) return;
       setError(
         generationError instanceof Error
           ? generationError.message
-          : '语音生成失败。'
+          : 'Failed to generate speech.'
       );
       setProgress(null);
     } finally {
@@ -336,7 +408,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         setIsGenerating(false);
       }
     }
-  }, [currentProjectId, trimmedText, isWebGpuSupported, voice, speed, model, inserted]);
+  }, [currentProjectId, effectiveSpeed, engine, inserted, isTtsSupported, kokoroVoice, model, mossVoice, trimmedText]);
 
   const handleInsert = useCallback(async () => {
     if (!result || !currentProjectId || !sourceItemId) return;
@@ -347,12 +419,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     try {
       const { mediaLibraryService } = await importMediaLibraryService();
       const media = await mediaLibraryService.importGeneratedAudio(result.file, currentProjectId, {
-        tags: [
-          'ai-generated',
-          'kitten-tts',
-          `kitten-model:${result.model}`,
-          `kitten-voice:${result.voice.toLowerCase()}`,
-        ],
+        tags: result.tags,
       });
 
       await loadMediaItems();
@@ -367,19 +434,19 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         setInserted(true);
         showNotification({
           type: 'success',
-          message: `已将“${media.fileName}”添加到时间线并与文本关联。`,
+          message: `Added "${media.fileName}" to timeline and linked with text.`,
         });
       } else {
         showNotification({
           type: 'warning',
-          message: `已保存“${media.fileName}”，但当前没有可用音频轨道。`,
+          message: `Saved "${media.fileName}" but no audio track is available.`,
         });
       }
     } catch (insertError) {
       setError(
         insertError instanceof Error
           ? insertError.message
-          : '保存并插入音频失败。'
+          : 'Failed to save and insert audio.'
       );
     } finally {
       setIsInserting(false);
@@ -390,7 +457,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     if (!open) close();
   }, [close]);
 
-  const canGenerate = !isGenerating && !isInserting && !!trimmedText && !!currentProjectId && isWebGpuSupported;
+  const canGenerate = !isGenerating && !isInserting && !!trimmedText && !!currentProjectId && isTtsSupported;
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
@@ -398,84 +465,132 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <WandSparkles className="h-4 w-4" />
-            文字转语音
+            Generate Audio from Text
           </DialogTitle>
           <DialogDescription className="text-xs">
-            生成语音并插入到文字片段位置。
+            Generate speech and insert it at the text clip's position.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {!isWebGpuSupported && (
+          {!isTtsSupported && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-              当前浏览器不支持 WebGPU。Kitten TTS 需要 Chrome 113+、Edge 113+ 或 Safari 26+。
+              {engine === 'kokoro'
+                ? 'WebGPU is not available in this browser. Kokoro TTS needs Chrome 113+, Edge 113+, or Safari 26+.'
+                : 'Browser-managed storage is not available in this browser. MOSS multilingual TTS works best in a recent Chromium browser.'}
             </div>
           )}
 
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <Label>Engine</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
+                      aria-label="TTS engine support details"
+                    >
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" className="w-80 space-y-2 p-3">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium">Kokoro</p>
+                      <p className="text-[11px] text-muted-foreground">English voices on WebGPU.</p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium">MOSS Nano</p>
+                      <p className="text-[11px] text-muted-foreground">Supported languages: {mossLanguagesLabel}.</p>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <Select value={engine} onValueChange={(value) => setEngine(value as StoredTtsEngine)} disabled={isGenerating || isInserting}>
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="kokoro" className="text-xs">Kokoro (English, WebGPU)</SelectItem>
+                  <SelectItem value="moss" className="text-xs">MOSS Nano (20 languages, CPU)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className={`grid grid-cols-1 gap-3 ${engine === 'kokoro' ? 'md:grid-cols-2' : ''}`}>
+              {engine === 'kokoro' && (
+                <div className="space-y-1.5">
+                  <Label>Quality</Label>
+                  <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating || isInserting}>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {KOKORO_TTS_MODEL_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value} className="text-xs">
+                          {option.label} ({option.downloadLabel})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label>Voice</Label>
+                <Select
+                  value={voice}
+                  onValueChange={(value) => {
+                    if (engine === 'kokoro') {
+                      setKokoroVoice(value as KokoroTtsVoice);
+                    } else {
+                      setMossVoice(value as MossTtsVoice);
+                    }
+                  }}
+                  disabled={isGenerating || isInserting}
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {(engine === 'kokoro' ? KOKORO_TTS_VOICE_OPTIONS : MOSS_TTS_VOICE_OPTIONS).map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="text-xs">
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+
           {/* Text input */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="tts-dialog-text">文本</Label>
-              <span className={`text-[11px] ${trimmedText.length <= 500 ? 'text-muted-foreground' : 'text-amber-400'}`}>
-                {trimmedText.length}/500（建议）
-              </span>
-            </div>
+            <Label htmlFor="tts-dialog-text">Text</Label>
             <Textarea
               id="tts-dialog-text"
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="输入你想听到的朗读内容..."
+              placeholder="Enter the text you want to hear spoken..."
               className="min-h-28 resize-y bg-secondary/30 text-sm"
               disabled={isGenerating || isInserting}
             />
           </div>
 
-          {/* Model + Voice */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>模型</Label>
-              <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating || isInserting}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {KITTEN_TTS_MODEL_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="text-xs">
-                      {option.label} ({option.downloadLabel})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>音色</Label>
-              <Select value={voice} onValueChange={(value) => setVoice(value as KittenTtsVoice)} disabled={isGenerating || isInserting}>
-                <SelectTrigger className="h-8 text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {KITTEN_TTS_VOICE_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value} className="text-xs">
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
           {/* Speed */}
-          <SliderInput
-            label="语速"
-            value={speed}
-            onChange={setSpeed}
-            min={0.5}
-            max={2}
-            step={0.05}
-            unit="x"
-            disabled={isGenerating || isInserting}
-          />
+          {supportsNativeSpeed && (
+            <SliderInput
+              label="Speed"
+              value={speed}
+              onChange={setSpeed}
+              min={0.5}
+              max={2}
+              step={0.05}
+              unit="x"
+              disabled={isGenerating || isInserting}
+            />
+          )}
 
           {/* Progress */}
           {progress && (
@@ -499,14 +614,14 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 : 'border-border bg-secondary/20'
             }`}>
               <p className="text-[11px] text-muted-foreground">
-                {result.voice} · {result.model} · {result.duration > 0 ? `${result.duration.toFixed(1)}s` : '—'}
+                {result.voice} Â· {result.model} Â· {result.duration > 0 ? `${result.duration.toFixed(1)}s` : '—'}
               </p>
               <MiniAudioPlayer src={result.objectUrl} />
 
               {inserted && (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400">
                   <CheckCircle2 className="h-3 w-3" />
-                  已插入并关联
+                  Inserted & linked
                 </span>
               )}
             </div>
@@ -524,7 +639,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
               {isGenerating
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 : <WandSparkles className="h-3.5 w-3.5" />}
-              {isGenerating ? '生成中...' : result ? '重新生成' : '生成'}
+              {isGenerating ? 'Generating...' : result ? 'Regenerate' : 'Generate'}
             </Button>
 
             {result && !inserted && (
@@ -537,7 +652,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 {isInserting
                   ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   : <CheckCircle2 className="h-3.5 w-3.5" />}
-                {isInserting ? '插入中...' : '插入并关联'}
+                {isInserting ? 'Inserting...' : 'Insert & Link'}
               </Button>
             )}
           </div>

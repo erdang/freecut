@@ -15,6 +15,7 @@ import { expandTextTransformToFitContent } from './text-layout';
 import {
   resolveAnimatedTransform,
   hasKeyframeAnimation,
+  resolveAnimatedTextItem,
 } from '../deps/keyframes';
 import {
   resolveTransitionFrameState,
@@ -57,6 +58,8 @@ export function applyTransformOverride(
   return {
     ...baseTransform,
     ...override,
+    anchorX: override.anchorX ?? baseTransform.anchorX,
+    anchorY: override.anchorY ?? baseTransform.anchorY,
     opacity: override.opacity ?? baseTransform.opacity,
     cornerRadius: override.cornerRadius ?? baseTransform.cornerRadius,
   };
@@ -84,7 +87,10 @@ export function resolveItemTransformAtRelativeFrame(
   const resolved = applyTransformOverride(animatedResolved, previewTransform);
 
   return item.type === 'text'
-    ? expandTextTransformToFitContent(item, resolved)
+    ? expandTextTransformToFitContent(
+        resolveAnimatedTextItem(item, keyframes, relativeFrame, canvas),
+        resolved,
+      )
     : resolved;
 }
 

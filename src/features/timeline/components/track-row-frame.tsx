@@ -79,6 +79,7 @@ export function TrackSectionDivider({ className, onMouseDown }: TrackSectionDivi
       {onMouseDown && (
         <button
           type="button"
+          data-track-section-divider="true"
           className="absolute inset-0 z-40 cursor-row-resize bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
           aria-label="调整视频与音频轨道分区高度"
           onMouseDown={onMouseDown}

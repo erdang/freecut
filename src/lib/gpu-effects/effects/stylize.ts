@@ -1166,18 +1166,18 @@ fn ditherFragment(input: VertexOutput) -> @location(0) vec4f {
     },
   },
   packUniforms: (p, w, h) => new Float32Array([
-    p.cellSize as number ?? 8,
-    p.angle as number ?? 45,
-    p.scale as number ?? 100,
+    (p.cellSize as number) ?? 8,
+    (p.angle as number) ?? 45,
+    (p.scale as number) ?? 100,
     w,
     h,
-    p.offsetX as number ?? 0,
-    p.offsetY as number ?? 0,
-    DITHER_PATTERN_MAP[p.pattern as string] ?? DITHER_PATTERN_MAP.bayer4,
-    DITHER_MODE_MAP[p.mode as string] ?? DITHER_MODE_MAP.image,
-    DITHER_STYLE_MAP[p.style as string] ?? DITHER_STYLE_MAP.threshold,
-    DITHER_SHAPE_MAP[p.shape as string] ?? DITHER_SHAPE_MAP.square,
-    DITHER_PALETTE_MAP[p.palette as string] ?? DITHER_PALETTE_MAP.gameboy,
+    (p.offsetX as number) ?? 0,
+    (p.offsetY as number) ?? 0,
+    DITHER_PATTERN_MAP[p.pattern as string] ?? DITHER_PATTERN_MAP.bayer4 ?? 0,
+    DITHER_MODE_MAP[p.mode as string] ?? DITHER_MODE_MAP.image ?? 0,
+    DITHER_STYLE_MAP[p.style as string] ?? DITHER_STYLE_MAP.threshold ?? 0,
+    DITHER_SHAPE_MAP[p.shape as string] ?? DITHER_SHAPE_MAP.square ?? 0,
+    DITHER_PALETTE_MAP[p.palette as string] ?? DITHER_PALETTE_MAP.gameboy ?? 0,
   ]),
 };
 
@@ -1493,10 +1493,10 @@ fn asciiFragment(input: VertexOutput) -> @location(0) vec4f {
     const textColor = parseHexColor((p.textColor as string) ?? '#ffffff', [1, 1, 1, 1]);
     const bgColor = parseHexColor((p.bgColor as string) ?? '#0a0a0f', [10 / 255, 10 / 255, 15 / 255, 1]);
     return new Float32Array([
-      p.fontSize as number ?? 8,
-      p.letterSpacing as number ?? 0,
-      p.lineHeight as number ?? 1,
-      ASCII_CHARSET_MAP[p.charSet as string] ?? ASCII_CHARSET_MAP.standard,
+      (p.fontSize as number) ?? 8,
+      (p.letterSpacing as number) ?? 0,
+      (p.lineHeight as number) ?? 1,
+      ASCII_CHARSET_MAP[p.charSet as string] ?? ASCII_CHARSET_MAP.standard ?? 0,
       p.matchSourceColor === false ? 0 : 1,
       p.invert === true ? 1 : 0,
       ((p.asciiOpacity as number) ?? 100) / 100,

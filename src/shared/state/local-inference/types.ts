@@ -75,7 +75,7 @@ export function getLocalInferenceSummary(
     totalEstimatedBytes: runtimes.reduce((total, runtime) => total + (runtime.estimatedBytes ?? 0), 0),
     activeJobs: runtimes.reduce((total, runtime) => total + runtime.activeJobs, 0),
     state,
-    backendLabel: backendLabels.size === 1 ? [...backendLabels][0] : backendLabels.size > 1 ? 'Mixed' : null,
+    backendLabel: backendLabels.size === 1 ? ([...backendLabels][0] ?? null) : backendLabels.size > 1 ? 'Mixed' : null,
     primaryLabel: runtimes.length === 1
       ? `${runtimes[0]?.featureLabel} ${runtimes[0]?.modelLabel ?? ''}`.trim()
       : `${runtimes.length} Local Models`,

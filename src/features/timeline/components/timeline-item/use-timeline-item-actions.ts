@@ -2,13 +2,21 @@ import { useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import type { AnimatableProperty } from '@/types/keyframe';
-import type { MediaTranscriptModel } from '@/types/storage';
+import type {
+  MediaTranscriptModel,
+  MediaTranscriptQuantization,
+} from '@/types/storage';
 import { useSelectionStore } from '@/shared/state/selection';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog';
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog';
-import { isLocalInferenceCancellationError } from '@/shared/state/local-inference';
-import { getTranscriptionOverallPercent } from '@/shared/utils/transcription-progress';
+import { getTextItemPlainText } from '@/shared/utils/text-item-spans';
+import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint';
+import {
+  isTranscriptionCancellationError,
+  isTranscriptionOutOfMemoryError,
+  TRANSCRIPTION_OOM_HINT,
+} from '@/shared/utils/transcription-cancellation';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
 import {
   getMediaTranscriptionModelLabel,
@@ -40,8 +48,11 @@ import {
 } from '../../deps/analysis';
 import { resolveMediaUrl } from '../../deps/media-library-resolver';
 import { useBentoLayoutDialogStore } from '../bento-layout-dialog-store';
+import { createLogger } from '@/shared/logging/logger';
+import { saveScenes } from '@/infrastructure/storage/workspace-fs/scenes';
 
-const CAPTION_GENERATION_OVERLAY_ID = 'caption-generation';
+const logger = createLogger('UseTimelineItemActions');
+
 const SCENE_DETECTION_OVERLAY_ID = 'scene-detection';
 
 interface UseTimelineItemActionsParams {
@@ -165,7 +176,7 @@ export function useTimelineItemActions({
     void insertFreezeFrame(item.id, currentFrame);
   }, [item.id, item.type]);
 
-  const textContent = item.type === 'text' ? item.text : '';
+  const textContent = item.type === 'text' ? getTextItemPlainText(item) : '';
   const hasSpeakableText = textContent.trim().length > 0;
 
   const handleGenerateAudioFromText = useCallback(() => {
@@ -180,6 +191,9 @@ export function useTimelineItemActions({
     options?: {
       forceTranscription?: boolean;
       replaceExisting?: boolean;
+      quantization?: MediaTranscriptQuantization;
+      language?: string;
+      onError?: (error: unknown) => void;
     },
   ) => {
     if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId || isBroken) {
@@ -189,11 +203,9 @@ export function useTimelineItemActions({
     const mediaId = item.mediaId;
     const clipId = item.id;
     const store = useMediaLibraryStore.getState();
-    const overlayStore = useTimelineItemOverlayStore.getState();
     const previousStatus = store.transcriptStatus.get(mediaId) ?? 'idle';
     const forceTranscription = options?.forceTranscription ?? false;
     const replaceExisting = options?.replaceExisting ?? false;
-    const overlayLabel = forceTranscription ? '正在重新生成字幕' : '正在生成字幕';
 
     const run = async () => {
       let updatedTranscriptStatus = previousStatus;
@@ -204,28 +216,26 @@ export function useTimelineItemActions({
           forceTranscription || !existingTranscript || existingTranscript.model !== model;
 
         if (needsTranscription) {
-          overlayStore.upsertOverlay(clipId, {
-            id: CAPTION_GENERATION_OVERLAY_ID,
-            label: overlayLabel,
-            progress: 0,
-            tone: 'info',
-          });
-          store.setTranscriptStatus(mediaId, 'transcribing');
-          store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
+          store.setTranscriptStatus(mediaId, 'queued');
+          store.setTranscriptProgress(mediaId, { stage: 'queued', progress: 0 });
 
           await mediaTranscriptionService.transcribeMedia(mediaId, {
             model,
+            quantization: options?.quantization,
+            language: options?.language || undefined,
+            onQueueStatusChange: (state) => {
+              if (state === 'queued') {
+                store.setTranscriptStatus(mediaId, 'queued');
+                store.setTranscriptProgress(mediaId, { stage: 'queued', progress: 0 });
+                return;
+              }
+
+              store.setTranscriptStatus(mediaId, 'transcribing');
+              store.setTranscriptProgress(mediaId, { stage: 'loading', progress: 0 });
+            },
             onProgress: (progress) => {
               const mediaLibraryStore = useMediaLibraryStore.getState();
               mediaLibraryStore.setTranscriptProgress(mediaId, progress);
-              const mergedProgress = mediaLibraryStore.transcriptProgress.get(mediaId) ?? progress;
-
-              useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
-                id: CAPTION_GENERATION_OVERLAY_ID,
-                label: overlayLabel,
-                progress: getTranscriptionOverallPercent(mergedProgress),
-                tone: 'info',
-              });
             },
           });
 
@@ -233,16 +243,10 @@ export function useTimelineItemActions({
           store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
           store.clearTranscriptProgress(mediaId);
         } else {
-          overlayStore.upsertOverlay(clipId, {
-            id: CAPTION_GENERATION_OVERLAY_ID,
-            label: replaceExisting ? '正在替换字幕' : '正在添加字幕',
-            tone: 'info',
-          });
           updatedTranscriptStatus = 'ready';
           store.setTranscriptStatus(mediaId, updatedTranscriptStatus);
           store.clearTranscriptProgress(mediaId);
         }
-
         const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
           clipIds: [clipId],
           replaceExisting,
@@ -251,17 +255,17 @@ export function useTimelineItemActions({
         const successMessage = replaceExisting
           ? result.insertedItemCount > 0
             ? result.removedItemCount > 0
-              ? `已为该片段替换字幕：移除 ${result.removedItemCount} 条，新增 ${result.insertedItemCount} 条（${getMediaTranscriptionModelLabel(model)}）`
-              : `已为该片段重新生成 ${result.insertedItemCount} 条字幕（${getMediaTranscriptionModelLabel(model)}）`
-            : `已移除该片段 ${result.removedItemCount} 条已生成字幕（${getMediaTranscriptionModelLabel(model)}）`
-          : `已为该片段生成 ${result.insertedItemCount} 条字幕（${getMediaTranscriptionModelLabel(model)}）`;
+              ? `Updated captions on this segment with ${getMediaTranscriptionModelLabel(model)}`
+              : `Refreshed captions on this segment with ${getMediaTranscriptionModelLabel(model)}`
+            : `Removed captions from this segment`
+          : `Added captions to this segment with ${getMediaTranscriptionModelLabel(model)}`;
 
         store.showNotification({
           type: 'success',
           message: successMessage,
         });
       } catch (error) {
-        if (isLocalInferenceCancellationError(error)) {
+        if (isTranscriptionCancellationError(error)) {
           store.setTranscriptStatus(mediaId, previousStatus);
           store.clearTranscriptProgress(mediaId);
           return;
@@ -269,32 +273,81 @@ export function useTimelineItemActions({
 
         store.setTranscriptStatus(mediaId, updatedTranscriptStatus === 'ready' ? 'ready' : 'error');
         store.clearTranscriptProgress(mediaId);
+        const fallbackMessage = error instanceof Error
+          ? error.message
+          : 'Failed to generate captions for segment';
+        const friendlyMessage = isTranscriptionOutOfMemoryError(error)
+          ? TRANSCRIPTION_OOM_HINT
+          : fallbackMessage;
+        options?.onError?.(error);
         store.showNotification({
           type: 'error',
-          message: error instanceof Error ? error.message : '该片段字幕生成失败',
+          message: friendlyMessage,
         });
-      } finally {
-        useTimelineItemOverlayStore.getState().removeOverlay(clipId, CAPTION_GENERATION_OVERLAY_ID);
+      }
+    };
+
+    scheduleAfterPaint(() => {
+      void run();
+    });
+  }, [item.id, item.mediaId, item.type, isBroken]);
+
+  const handleCaptionsFromDialog = useCallback((values: {
+    model: MediaTranscriptModel;
+    quantization: MediaTranscriptQuantization;
+    language: string;
+  }, hasExistingCaptions: boolean, onError?: (error: unknown) => void) => {
+    handleCaptionGeneration(values.model, {
+      // The dialog path is always "generate fresh captions". Reusing the
+      // current transcript is handled explicitly by "Insert Existing Captions".
+      forceTranscription: true,
+      replaceExisting: hasExistingCaptions,
+      quantization: values.quantization,
+      language: values.language,
+      onError,
+    });
+  }, [handleCaptionGeneration]);
+
+  const handleApplyCaptionsFromTranscript = useCallback(() => {
+    if ((item.type !== 'video' && item.type !== 'audio') || !item.mediaId || isBroken) {
+      return;
+    }
+
+    const mediaId = item.mediaId;
+    const clipId = item.id;
+    const replaceExisting = useItemsStore.getState().replaceableCaptionClipIds.has(clipId);
+    const store = useMediaLibraryStore.getState();
+
+    const run = async () => {
+      try {
+        const existingTranscript = await mediaTranscriptionService.getTranscript(mediaId);
+        if (!existingTranscript) {
+          throw new Error('Generate a transcript first, then add captions from it.');
+        }
+
+        const result = await mediaTranscriptionService.insertTranscriptAsCaptions(mediaId, {
+          clipIds: [clipId],
+          replaceExisting,
+        });
+
+        store.showNotification({
+          type: 'success',
+          message: replaceExisting
+            ? result.insertedItemCount > 0 || result.removedItemCount > 0
+              ? 'Updated captions on this segment from the current transcript'
+              : 'Removed captions from this segment'
+            : 'Added captions to this segment from the current transcript',
+        });
+      } catch (error) {
+        store.showNotification({
+          type: 'error',
+          message: error instanceof Error ? error.message : 'Failed to update captions for segment',
+        });
       }
     };
 
     void run();
-  }, [item.id, item.mediaId, item.type, isBroken]);
-
-  const handleGenerateCaptions = useCallback((model: MediaTranscriptModel) => {
-    handleCaptionGeneration(model);
-  }, [handleCaptionGeneration]);
-
-  const handleRegenerateCaptions = useCallback((model: MediaTranscriptModel) => {
-    handleCaptionGeneration(model, {
-      forceTranscription: true,
-      replaceExisting: true,
-    });
-  }, [handleCaptionGeneration]);
-
-  const isCaptionGenerationActive = segmentOverlays.some(
-    (overlay) => overlay.id === CAPTION_GENERATION_OVERLAY_ID,
-  );
+  }, [isBroken, item.id, item.mediaId, item.type]);
 
   const isSceneDetectionActive = segmentOverlays.some(
     (overlay) => overlay.id === SCENE_DETECTION_OVERLAY_ID,
@@ -357,7 +410,7 @@ export function useTimelineItemActions({
       try {
         overlayStore.upsertOverlay(clipId, {
           id: SCENE_DETECTION_OVERLAY_ID,
-          label: '正在检测场景',
+          label: 'Detecting scenes',
           progress: 0,
           tone: 'info',
         });
@@ -400,9 +453,9 @@ export function useTimelineItemActions({
               ? getSceneVerificationModelLabel(progress.verificationModel)
               : 'AI';
             const stageLabels = {
-              'optical-flow': `正在分析${method === 'histogram' ? '帧' : '运动'}（${progress.sceneCuts} 个候选）`,
-              'loading-model': `正在加载${modelLabel}模型（${progress.percent.toFixed(0)}%）`,
-              'verifying': `正在校验切点（${progress.sceneCuts}/${progress.totalSamples} 已确认）`,
+              'optical-flow': `Analyzing ${method === 'histogram' ? 'frames' : 'motion'} (${progress.sceneCuts} candidates)`,
+              'loading-model': `Loading ${modelLabel} model (${progress.percent.toFixed(0)}%)`,
+              'verifying': `Verifying cuts (${progress.sceneCuts}/${progress.totalSamples} confirmed)`,
             };
             const label = stageLabels[progress.stage ?? 'optical-flow'];
             useTimelineItemOverlayStore.getState().upsertOverlay(clipId, {
@@ -414,8 +467,23 @@ export function useTimelineItemActions({
           },
         });
 
+        // Persist scene cuts to the workspace so the next session/window
+        // doesn't need to recompute. Fire-and-forget — UX proceeds regardless.
+        if (cuts.length > 0) {
+          void saveScenes({
+            mediaId,
+            service: method === 'histogram' ? 'scene-detect-histogram' : 'scene-detect-optical-flow',
+            model: verificationModel ?? method,
+            method,
+            sampleIntervalMs: method === 'histogram' ? 250 : 500,
+            verificationModel,
+            fps: mediaFps,
+            cuts,
+          }).catch((error) => logger.warn('Failed to persist scene cuts', error));
+        }
+
         if (cuts.length === 0) {
-          toast.info('未检测到场景切点');
+          toast.info('No scene cuts detected');
           return;
         }
 
@@ -429,25 +497,25 @@ export function useTimelineItemActions({
           .map((frame) => frame + clipFrom);
 
         if (splitFrames.length === 0) {
-          toast.info('片段范围内未检测到场景切点');
+          toast.info('No scene cuts within clip bounds');
           return;
         }
 
         const splitCount = splitItemAtFrames(clipId, splitFrames);
 
         if (splitCount > 0) {
-          toast.success(`已在 ${splitCount} 个场景切点处切分片段`);
+          toast.success(`Split clip at ${splitCount} scene cut${splitCount > 1 ? 's' : ''}`);
         } else {
-          toast.info('未找到有效切分点');
+          toast.info('No valid split points found');
         }
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
           return;
         }
         if (error instanceof Error && error.message.includes('WebGPU')) {
-          toast.error('光流场景检测需要 WebGPU 支持');
+          toast.error('Optical flow scene detection requires WebGPU support');
         } else {
-          toast.error('场景检测失败');
+          toast.error('Scene detection failed');
         }
       } finally {
         if (video) {
@@ -470,7 +538,6 @@ export function useTimelineItemActions({
     getCanLinkSelected,
     getCanUnlinkSelected,
     hasSpeakableText,
-    isCaptionGenerationActive,
     isSceneDetectionActive,
     isCompositionItem,
     handleJoinSelected,
@@ -485,8 +552,8 @@ export function useTimelineItemActions({
     handleBentoLayout,
     handleFreezeFrame,
     handleGenerateAudioFromText,
-    handleGenerateCaptions,
-    handleRegenerateCaptions,
+    handleCaptionsFromDialog,
+    handleApplyCaptionsFromTranscript,
     handleCreatePreComp,
     handleEnterComposition,
     handleDissolveComposition,

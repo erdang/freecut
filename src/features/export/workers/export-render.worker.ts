@@ -10,10 +10,13 @@ import type {
 
 // Some third-party browser libs assume `window` exists.
 // In dedicated workers, alias it to `globalThis` to avoid runtime crashes.
-type WorkerGlobalWithWindow = typeof globalThis & { window?: typeof globalThis };
+type WorkerGlobalWithWindow = typeof globalThis & { window?: unknown };
 const workerGlobal = globalThis as WorkerGlobalWithWindow;
 if (typeof workerGlobal.window === 'undefined') {
-  workerGlobal.window = workerGlobal;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: globalThis,
+  });
 }
 
 const log = createLogger('ExportRenderWorker');
@@ -135,4 +138,3 @@ self.onmessage = async (event: MessageEvent<ExportRenderWorkerRequest>) => {
 };
 
 export {};
-

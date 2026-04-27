@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, memo, useCallback, useState } from 'react';
+import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react';
 import type { TimelineItem as TimelineItemType } from '@/types/timeline';
 import { useShallow } from 'zustand/react/shallow';
 import { setMixerLiveGains, getMixerLiveGain, clearMixerLiveGain } from '@/shared/state/mixer-live-gain';
@@ -21,8 +21,17 @@ import {
   useTransitionDragStore,
 } from '@/shared/state/transition-drag';
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store';
+import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service';
+import { TranscribeDialog, type TranscribeDialogValues } from '@/features/timeline/deps/transcribe-dialog';
+import {
+  getTranscriptionOverallPercent,
+  getTranscriptionStageLabel,
+} from '@/shared/utils/transcription-progress';
+import {
+  isTranscriptionOutOfMemoryError,
+  TRANSCRIPTION_OOM_HINT,
+} from '@/shared/utils/transcription-cancellation';
 import type { PreviewItemUpdate } from '../../utils/item-edit-preview';
-import { useSettingsStore } from '@/features/timeline/deps/settings';
 import { useTimelineDrag, dragOffsetRef, dragPreviewOffsetByItemRef } from '../../hooks/use-timeline-drag';
 import { useTimelineTrim } from '../../hooks/use-timeline-trim';
 import { useTrackPush } from '../../hooks/use-track-push';
@@ -208,6 +217,38 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       [item.mediaId]
     )
   );
+  const transcriptProgress = useMediaLibraryStore(
+    useCallback(
+      (s) => (item.mediaId ? s.transcriptProgress.get(item.mediaId) ?? null : null),
+      [item.mediaId]
+    )
+  );
+  const mediaFileName = useMediaLibraryStore(
+    useCallback(
+      (s) => (item.mediaId
+        ? s.mediaItems.find((m) => m.id === item.mediaId)?.fileName ?? ''
+        : ''),
+      [item.mediaId]
+    )
+  );
+  const [captionDialogOpen, setCaptionDialogOpen] = useState(false);
+  const [captionDialogError, setCaptionDialogError] = useState<string | null>(null);
+  const mediaHasTranscript = transcriptStatus === 'ready';
+  const captionStartedRef = useRef(false);
+  const captionStopRequestedRef = useRef(false);
+
+  const captionIsActive =
+    transcriptStatus === 'queued' || transcriptStatus === 'transcribing';
+  useEffect(() => {
+    if (captionStartedRef.current && !captionIsActive) {
+      captionStartedRef.current = false;
+      const keepOpen = captionStopRequestedRef.current || captionDialogError !== null;
+      captionStopRequestedRef.current = false;
+      setCaptionDialogOpen((wasOpen) => {
+        return wasOpen && keepOpen;
+      });
+    }
+  }, [captionIsActive, captionDialogError]);
   // O(1) index lookup that preserves both explicit captionSource links and
   // legacy generated-caption detection.
   const hasGeneratedCaptions = useItemsStore(
@@ -216,10 +257,12 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       [item.id]
     )
   );
-  const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
   // O(1) via index, including legacy linked audio/video pairs.
   const isLinked = useItemsStore(
     useCallback((s) => !!s.linkedItemsByItemId[item.id], [item.id])
+  );
+  const linkedItemsForCaptionOwnership = useItemsStore(
+    useCallback((s) => s.linkedItemsByItemId[item.id] ?? EMPTY_LINKED_ITEMS, [item.id])
   );
   const linkedSelectionEnabled = useEditorStore((s) => s.linkedSelectionEnabled);
   const segmentOverlays = useTimelineItemOverlayStore(
@@ -241,6 +284,20 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     [itemKeyframes]
   );
   const hasKeyframes = keyframedProperties.length > 0;
+  const linkedVideoCaptionOwner = useMemo(() => {
+    if (item.type !== 'audio' || !item.mediaId) {
+      return null;
+    }
+
+    return linkedItemsForCaptionOwnership.find((linkedItem) => (
+      linkedItem.id !== item.id
+      && linkedItem.type === 'video'
+      && linkedItem.mediaId === item.mediaId
+    )) ?? null;
+  }, [item.id, item.mediaId, item.type, linkedItemsForCaptionOwnership]);
+  const canManageCaptions = !!item.mediaId
+    && !isBroken
+    && (item.type === 'video' || (item.type === 'audio' && linkedVideoCaptionOwner === null));
 
   // Use refs for actions to avoid selector re-renders - read from store in callbacks
   const activeTool = useSelectionStore((s) => s.activeTool);
@@ -672,6 +729,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   const contentPreviewItem = useMemo<TimelineItemType>(() => {
     let nextItem = previewBaseItem;
     let previewStartTrimDelta = 0;
+    let previewEndTrimDelta = 0;
     let previewDurationDelta = 0;
 
     // Active local trim (normal / rolling / ripple on trimmed item).
@@ -680,6 +738,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         previewStartTrimDelta += trimDelta;
         previewDurationDelta += -trimDelta;
       } else {
+        previewEndTrimDelta += trimDelta;
         previewDurationDelta += trimDelta;
       }
     }
@@ -692,6 +751,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         previewDurationDelta += -rollingEditDelta;
       } else if (rollingEditHandle === 'start') {
         // Neighbor end handle equivalent.
+        previewEndTrimDelta += rollingEditDelta;
         previewDurationDelta += rollingEditDelta;
       }
     }
@@ -702,6 +762,7 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         previewStartTrimDelta += slideNeighborDelta;
         previewDurationDelta += -slideNeighborDelta;
       } else {
+        previewEndTrimDelta += slideNeighborDelta;
         previewDurationDelta += slideNeighborDelta;
       }
     }
@@ -738,8 +799,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       };
     }
 
+    // Composition wrappers clip their inner segments by sourceEnd/sourceStart,
+    // so treat them like video/audio for source-frame trims.
+    const isCompositionWrapper = nextItem.type === 'composition'
+      || (nextItem.type === 'audio' && !!nextItem.compositionId);
+
     // Start-trim equivalents shift sourceStart in source-frame units.
-    if ((previewBaseItem.type === 'video' || previewBaseItem.type === 'audio') && previewStartTrimDelta !== 0) {
+    const supportsStartTrimSourceShift = previewBaseItem.type === 'video'
+      || previewBaseItem.type === 'audio'
+      || isCompositionWrapper;
+    if (supportsStartTrimSourceShift && previewStartTrimDelta !== 0) {
       const sourceFramesDelta = timelineToSourceFrames(
         previewStartTrimDelta,
         nextItem.speed ?? 1,
@@ -756,6 +825,22 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       nextItem = {
         ...nextItem,
         durationInFrames: Math.max(1, nextItem.durationInFrames + previewDurationDelta),
+      };
+    }
+
+    // Composition wrappers clip their inner segments by sourceEnd, so live
+    // end-trim needs sourceEnd bumped alongside durationInFrames — otherwise
+    // the filmstrip stops at the stale committed value while the clip grows.
+    if (isCompositionWrapper && previewEndTrimDelta !== 0 && nextItem.sourceEnd !== undefined) {
+      const endSourceFramesDelta = timelineToSourceFrames(
+        previewEndTrimDelta,
+        nextItem.speed ?? 1,
+        fps,
+        effectiveSourceFps,
+      );
+      nextItem = {
+        ...nextItem,
+        sourceEnd: Math.max((nextItem.sourceStart ?? 0) + 1, nextItem.sourceEnd + endSourceFramesDelta),
       };
     }
 
@@ -1403,7 +1488,6 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     getCanLinkSelected,
     getCanUnlinkSelected,
     hasSpeakableText,
-    isCaptionGenerationActive,
     isSceneDetectionActive,
     isCompositionItem,
     handleJoinSelected,
@@ -1418,8 +1502,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
     handleBentoLayout,
     handleFreezeFrame,
     handleGenerateAudioFromText,
-    handleGenerateCaptions,
-    handleRegenerateCaptions,
+    handleCaptionsFromDialog,
+    handleApplyCaptionsFromTranscript,
     handleCreatePreComp,
     handleEnterComposition,
     handleDissolveComposition,
@@ -1671,6 +1755,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
   );
   const videoControlsRef = useRef<HTMLDivElement>(null);
   const audioControlsRef = useRef<HTMLDivElement>(null);
+  const volumeLineRef = useRef<HTMLDivElement>(null);
+  const snapVolumeLineTop = useCallback((ratio: number) => {
+    const line = volumeLineRef.current;
+    const container = audioControlsRef.current;
+    if (!line || !container) return;
+    const rect = container.getBoundingClientRect();
+    if (rect.height <= 0) return;
+    const docY = rect.top + rect.height * ratio;
+    line.style.top = `${Math.round(docY) - rect.top}px`;
+  }, []);
   const applyAudioVolumeVisualPreview = useCallback((previewVolumeDb: number) => {
     audioVolumePreviewRef.current = previewVolumeDb;
 
@@ -1685,6 +1779,8 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       );
     }
 
+    snapVolumeLineTop(getAudioVolumeLineY(previewVolumeDb, AUDIO_ENVELOPE_VIEWBOX_HEIGHT) / AUDIO_ENVELOPE_VIEWBOX_HEIGHT);
+
     if (audioVolumeEditLabelRef.current) {
       audioVolumeEditLabelRef.current.textContent = `Volume ${previewVolumeDb >= 0 ? '+' : ''}${previewVolumeDb.toFixed(1)} dB`;
     }
@@ -1698,6 +1794,16 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
 
     applyAudioVolumeVisualPreview(itemVolume ?? 0);
   }, [applyAudioVolumeVisualPreview, audioVolumeEdit, itemType, itemVolume]);
+  useLayoutEffect(() => {
+    if (itemType !== 'audio') return;
+    const container = audioControlsRef.current;
+    if (!container) return;
+    const ratio = audioVolumeLineY / AUDIO_ENVELOPE_VIEWBOX_HEIGHT;
+    snapVolumeLineTop(ratio);
+    const ro = new ResizeObserver(() => snapVolumeLineTop(ratio));
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [itemType, audioVolumeLineY, snapVolumeLineTop]);
   const finalizeAudioVolumeChange = useCallback((nextVolume: number, options?: {
     preserveLiveGainOnCommit?: boolean;
     commitFromActiveEdit?: boolean;
@@ -2480,12 +2586,19 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
         onFreezeFrame={handleFreezeFrame}
         isTextItem={item.type === 'text' && hasSpeakableText}
         onGenerateAudioFromText={handleGenerateAudioFromText}
-        canGenerateCaptions={(item.type === 'video' || item.type === 'audio') && !!item.mediaId && !isBroken}
-        canRegenerateCaptions={hasGeneratedCaptions}
-        isGeneratingCaptions={isCaptionGenerationActive || transcriptStatus === 'transcribing'}
-        defaultCaptionModel={defaultWhisperModel}
-        onGenerateCaptions={handleGenerateCaptions}
-        onRegenerateCaptions={handleRegenerateCaptions}
+        canManageCaptions={canManageCaptions}
+        hasCaptions={hasGeneratedCaptions}
+        hasTranscript={mediaHasTranscript}
+        isGeneratingCaptions={
+          transcriptStatus === 'queued'
+          || transcriptStatus === 'transcribing'
+        }
+        onOpenCaptionDialog={() => {
+          captionStopRequestedRef.current = false;
+          setCaptionDialogError(null);
+          setCaptionDialogOpen(true);
+        }}
+        onApplyCaptionsFromTranscript={handleApplyCaptionsFromTranscript}
         isCompositionItem={isCompositionItem}
         onEnterComposition={handleEnterComposition}
         onDissolveComposition={handleDissolveComposition}
@@ -2594,9 +2707,10 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
                     style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
                   >
                     <div
-                      className="absolute left-0 right-0 h-px -translate-y-1/2 pointer-events-none"
+                      ref={volumeLineRef}
+                      className="absolute left-0 right-0 pointer-events-none"
                       style={{
-                        top: `var(--timeline-audio-volume-line-y, ${audioVolumeLineYPercent}%)`,
+                        height: '1px',
                         backgroundColor: audioVolumeLineStroke,
                       }}
                     />
@@ -2864,6 +2978,56 @@ export const TimelineItem = memo(function TimelineItem({ item, timelineDuration 
       />
 
       <DragBlockedTooltip hint={pointerHint} />
+      {canManageCaptions && item.mediaId && (
+        <TranscribeDialog
+          open={captionDialogOpen}
+          onOpenChange={(next) => {
+            if (!next) setCaptionDialogError(null);
+            setCaptionDialogOpen(next);
+          }}
+          fileName={mediaFileName}
+          hasTranscript={mediaHasTranscript}
+          isRunning={
+            transcriptStatus === 'queued'
+            || transcriptStatus === 'transcribing'
+          }
+          progressPercent={
+            transcriptProgress
+              ? Math.round(getTranscriptionOverallPercent(transcriptProgress))
+              : null
+          }
+          progressLabel={
+            transcriptProgress
+              ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(
+                  getTranscriptionOverallPercent(transcriptProgress),
+                )}%)`
+              : 'Transcribing...'
+          }
+          errorMessage={captionDialogError}
+          onStart={(values: TranscribeDialogValues) => {
+            captionStartedRef.current = true;
+            captionStopRequestedRef.current = false;
+            setCaptionDialogError(null);
+            handleCaptionsFromDialog(values, hasGeneratedCaptions, (error) => {
+              captionStartedRef.current = false;
+              const baseMessage = error instanceof Error
+                ? error.message
+                : 'Failed to generate captions';
+              setCaptionDialogError(
+                isTranscriptionOutOfMemoryError(error)
+                  ? TRANSCRIPTION_OOM_HINT
+                  : baseMessage,
+              );
+            });
+          }}
+          onCancel={() => {
+            if (item.mediaId) {
+              captionStopRequestedRef.current = true;
+              mediaTranscriptionService.cancelTranscription(item.mediaId);
+            }
+          }}
+        />
+      )}
     </>
   );
 }, (prevProps, nextProps) => {

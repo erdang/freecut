@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import type { Transition } from '@/types/transition';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { commitPreviewFrameToCurrentFrame } from '@/shared/state/playback';
 import { TRANSITION_CONFIGS } from '@/types/transition';
 import { useTimelineStore } from '../stores/timeline-store';
 import { useItemsStore } from '../stores/items-store';
@@ -132,7 +132,7 @@ export function useTransitionResize(transition: Transition) {
     (e: React.MouseEvent, handle: ResizeHandle) => {
       e.preventDefault();
       e.stopPropagation();
-      usePlaybackStore.getState().setPreviewFrame(null);
+      commitPreviewFrameToCurrentFrame();
 
       setResizeState({
         isResizing: true,

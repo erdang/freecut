@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { MediaMetadata } from '@/types/storage';
+import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,6 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import {
@@ -30,19 +30,23 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import {
-  RotateCcw, Trash2, Loader2, Check, ImagePlus, Film,
-  Settings2, Rows3, AudioLines, HardDrive,
+  RotateCcw, Trash2, Loader2, Check, ImagePlus, Film, TriangleAlert,
+  Settings2, Rows3, HardDrive, Sparkles,
 } from 'lucide-react';
 import {
   LocalInferenceUnloadControl,
   LocalModelCacheControl,
   useSettingsStore,
+  CAPTIONING_INTERVAL_BOUNDS,
+  DEFAULT_CAPTIONING_INTERVAL_SECONDS,
+  resolveCaptioningIntervalSec,
+  type CaptioningIntervalUnit,
 } from '@/features/editor/deps/settings';
 import {
   useMediaLibraryStore,
   getSharedProxyKey,
-  getMediaTranscriptionModelOptions,
   importProxyService,
   importMediaLibraryService,
   importThumbnailGenerator,
@@ -56,30 +60,126 @@ import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runti
 import { createLogger } from '@/shared/logging/logger';
 import { cn } from '@/shared/ui/cn';
 import { EDITOR_DENSITY_OPTIONS } from '@/app/editor-layout';
-import {
-  getWhisperQuantizationOption,
-  getWhisperLanguageSelectValue,
-  getWhisperLanguageSettingValue,
-  WHISPER_LANGUAGE_OPTIONS,
-  WHISPER_QUANTIZATION_OPTIONS,
-} from '@/shared/utils/whisper-settings';
-import type { MediaTranscriptModel, MediaTranscriptQuantization } from '@/types/storage';
 
 const log = createLogger('SettingsDialog');
-const TRANSCRIPTION_MODEL_OPTIONS = getMediaTranscriptionModelOptions();
 
 const SETTINGS_SECTIONS = [
-  { id: 'general', label: '通用', icon: Settings2 },
-  { id: 'timeline', label: '时间线', icon: Rows3 },
-  { id: 'whisper', label: 'Whisper', icon: AudioLines },
-  { id: 'storage', label: '存储', icon: HardDrive },
+  { id: 'general', label: 'General', icon: Settings2 },
+  { id: 'timeline', label: 'Timeline', icon: Rows3 },
+  { id: 'ai', label: 'AI', icon: Sparkles },
+  { id: 'storage', label: 'Storage', icon: HardDrive },
 ] as const;
+
+const ESTIMATE_REFERENCE_DURATION_SEC = 60;
+const ESTIMATE_REFERENCE_FPS = 30;
+
+function formatCaptionEstimate(unit: CaptioningIntervalUnit, value: number): string {
+  const intervalSec = resolveCaptioningIntervalSec(unit, value, ESTIMATE_REFERENCE_FPS);
+  if (intervalSec <= 0) {
+    return 'Enter an interval above zero.';
+  }
+  const sceneCount = Math.max(1, Math.round(ESTIMATE_REFERENCE_DURATION_SEC / intervalSec));
+  return `~${sceneCount} ${sceneCount === 1 ? 'scene' : 'scenes'} per 1-min clip at ${ESTIMATE_REFERENCE_FPS}fps`;
+}
 
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id'];
 
 interface SettingsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface BatchActionResult {
+  total: number;
+  succeeded: number;
+  failed: number;
+  failedItems: string[];
+}
+
+interface ActionFeedback {
+  tone: 'success' | 'error';
+  message: string;
+}
+
+function formatCount(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+function formatFailedItems(items: string[]): string {
+  if (items.length === 0) return '';
+  if (items.length <= 2) return items.join(', ');
+  return `${items.slice(0, 2).join(', ')}, +${items.length - 2} more`;
+}
+
+function createBatchResult(total: number, failedItems: string[]): BatchActionResult {
+  return {
+    total,
+    succeeded: Math.max(0, total - failedItems.length),
+    failed: failedItems.length,
+    failedItems,
+  };
+}
+
+function getBatchOutcomeFeedback(
+  actionLabel: string,
+  result: BatchActionResult,
+): ActionFeedback {
+  if (result.total === 0) {
+    return {
+      tone: 'success',
+      message: `No project media to ${actionLabel.toLowerCase()}.`,
+    };
+  }
+
+  if (result.failed === 0) {
+    return {
+      tone: 'success',
+      message: `${actionLabel} completed for ${formatCount(result.succeeded, 'item')}.`,
+    };
+  }
+
+  const failedLabel = formatFailedItems(result.failedItems);
+
+  if (result.succeeded === 0) {
+    return {
+      tone: 'error',
+      message: `Couldn't ${actionLabel.toLowerCase()} ${formatCount(result.failed, 'item')}${failedLabel ? `: ${failedLabel}` : '.'}`,
+    };
+  }
+
+  return {
+    tone: 'error',
+    message: `${actionLabel} completed for ${result.succeeded}/${result.total} items. Needs attention: ${failedLabel}.`,
+  };
+}
+
+function showBatchOutcomeToast(
+  successTitle: string,
+  partialTitle: string,
+  failureTitle: string,
+  result: BatchActionResult,
+): void {
+  if (result.total === 0) {
+    toast.success(successTitle, {
+      description: 'No project media needed updating.',
+    });
+    return;
+  }
+
+  if (result.failed === 0) {
+    toast.success(successTitle, {
+      description: `${formatCount(result.succeeded, 'item')} updated.`,
+    });
+    return;
+  }
+
+  const description = result.succeeded === 0
+    ? formatFailedItems(result.failedItems)
+    : `${formatCount(result.succeeded, 'item')} updated. Failed: ${formatFailedItems(result.failedItems)}`;
+
+  toast.error(result.succeeded === 0 ? failureTitle : partialTitle, {
+    description,
+  });
 }
 
 /**
@@ -89,8 +189,10 @@ interface SettingsDialogProps {
  *
  * Does NOT clear thumbnails (not auto-regenerated) or proxies (separate action).
  */
-async function clearProjectCaches(mediaIds: string[]): Promise<void> {
-  if (mediaIds.length === 0) return;
+async function clearProjectCaches(
+  mediaItems: Array<Pick<MediaMetadata, 'id' | 'fileName'>>,
+): Promise<BatchActionResult> {
+  if (mediaItems.length === 0) return createBatchResult(0, []);
 
   const [
     { deleteWaveform, deleteGifFrames, deleteDecodedPreviewAudio },
@@ -109,49 +211,73 @@ async function clearProjectCaches(mediaIds: string[]): Promise<void> {
   // Clear in-memory preview audio cache (not keyed per-media, so clear all)
   clearPreviewAudioCache();
 
-  await Promise.all(
-    mediaIds.flatMap((id) => [
-      deleteWaveform(id).catch((e) => { log.debug('Failed to delete waveform:', id, e); }),
-      deleteGifFrames(id).catch((e) => { log.debug('Failed to delete GIF frames:', id, e); }),
-      deleteDecodedPreviewAudio(id).catch((e) => { log.debug('Failed to delete decoded audio:', id, e); }),
-      deletePreviewAudioConform(id, { clearMetadata: true }).catch((e) => { log.debug('Failed to delete preview conform audio:', id, e); }),
-      gifFrameCache.clearMedia(id).catch((e) => { log.debug('Failed to clear GIF cache:', id, e); }),
-      filmstripCache.clearMedia(id).catch((e) => { log.debug('Failed to clear filmstrip cache:', id, e); }),
-      waveformCache.clearMedia(id).catch((e) => { log.debug('Failed to clear waveform cache:', id, e); }),
-    ])
-  );
+  const failedItems: string[] = [];
 
-  log.info(`Cleared caches for ${mediaIds.length} media items`);
+  await Promise.all(mediaItems.map(async ({ id, fileName }) => {
+    const results = await Promise.allSettled([
+      deleteWaveform(id),
+      deleteGifFrames(id),
+      deleteDecodedPreviewAudio(id),
+      deletePreviewAudioConform(id, { clearMetadata: true }),
+      gifFrameCache.clearMedia(id),
+      filmstripCache.clearMedia(id),
+      waveformCache.clearMedia(id),
+    ]);
+
+    const failures = results.filter((result) => result.status === 'rejected');
+    if (failures.length > 0) {
+      log.warn('Failed to fully clear project cache for media item', {
+        mediaId: id,
+        fileName,
+        failures: failures.map((result) => String(result.reason)),
+      });
+      failedItems.push(fileName);
+    }
+  }));
+
+  const result = createBatchResult(mediaItems.length, failedItems);
+  log.info(`Cleared caches for ${result.succeeded}/${result.total} media items`);
+  return result;
 }
 
 /** Delete all proxy videos for the given media items and clear their store status. */
 async function clearProjectProxies(
   mediaItems: MediaMetadata[]
-): Promise<void> {
-  if (mediaItems.length === 0) return;
+): Promise<BatchActionResult> {
+  if (mediaItems.length === 0) return createBatchResult(0, []);
 
   const { proxyService } = await importProxyService();
+  const failedItems: string[] = [];
 
   await Promise.all(mediaItems.map(async (media) => {
     try {
       await proxyService.deleteProxy(media.id, getSharedProxyKey(media));
-    } catch { /* already absent */ }
-    useMediaLibraryStore.getState().clearProxyStatus(media.id);
-    proxyService.clearProxyKey(media.id);
+      useMediaLibraryStore.getState().clearProxyStatus(media.id);
+      proxyService.clearProxyKey(media.id);
+    } catch (error) {
+      log.warn('Failed to clear proxy for media item', {
+        mediaId: media.id,
+        fileName: media.fileName,
+        error,
+      });
+      failedItems.push(media.fileName);
+    }
   }));
 
-  log.info(`Cleared proxies for ${mediaItems.length} media items`);
+  const result = createBatchResult(mediaItems.length, failedItems);
+  log.info(`Cleared proxies for ${result.succeeded}/${result.total} media items`);
+  return result;
 }
 
 /**
  * Regenerate thumbnails for all media in the current project.
- * Fetches each media file, generates a new thumbnail, and saves it to IndexedDB.
+ * Fetches each media file, generates a new thumbnail, and saves it to workspace storage.
  */
 async function regenerateProjectThumbnails(
   mediaItems: Array<{ id: string; fileName: string; mimeType: string }>,
   onProgress?: (done: number, total: number) => void,
-): Promise<number> {
-  if (mediaItems.length === 0) return 0;
+): Promise<BatchActionResult> {
+  if (mediaItems.length === 0) return createBatchResult(0, []);
 
   const [
     { mediaLibraryService },
@@ -163,7 +289,8 @@ async function regenerateProjectThumbnails(
     import('@/infrastructure/storage'),
   ]);
 
-  let regenerated = 0;
+  let succeeded = 0;
+  const failedItems: string[] = [];
 
   for (const media of mediaItems) {
     try {
@@ -189,18 +316,20 @@ async function regenerateProjectThumbnails(
 
       // Clear the in-memory blob URL cache so UI picks up the new thumbnail
       mediaLibraryService.clearThumbnailCache(media.id);
-      regenerated++;
+      succeeded++;
     } catch (err) {
       log.warn(`Failed to regenerate thumbnail for ${media.fileName}:`, err);
+      failedItems.push(media.fileName);
     }
-    onProgress?.(regenerated, mediaItems.length);
+    onProgress?.(succeeded + failedItems.length, mediaItems.length);
   }
 
   // Reload store so MediaCards see the updated thumbnailId and re-fetch
   await useMediaLibraryStore.getState().loadMediaItems();
 
-  log.info(`Regenerated ${regenerated}/${mediaItems.length} thumbnails`);
-  return regenerated;
+  const result = createBatchResult(mediaItems.length, failedItems);
+  log.info(`Regenerated ${result.succeeded}/${result.total} thumbnails`);
+  return result;
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
@@ -210,32 +339,46 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips);
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval);
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory);
-  const defaultWhisperModel = useSettingsStore((s) => s.defaultWhisperModel);
-  const defaultWhisperQuantization = useSettingsStore((s) => s.defaultWhisperQuantization);
-  const defaultWhisperLanguage = useSettingsStore((s) => s.defaultWhisperLanguage);
+  const captioningIntervalUnit = useSettingsStore((s) => s.captioningIntervalUnit);
+  const captioningIntervalValue = useSettingsStore((s) => s.captioningIntervalValue);
   const setSetting = useSettingsStore((s) => s.setSetting);
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults);
+
+  const intervalBounds = CAPTIONING_INTERVAL_BOUNDS[captioningIntervalUnit];
+  const intervalInputStep = captioningIntervalUnit === 'seconds' ? 0.5 : 1;
+  const intervalUnitLabel = captioningIntervalUnit === 'seconds' ? 'sec' : 'frames';
 
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
 
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('general');
-  const [clearState, setClearState] = useState<'idle' | 'clearing' | 'done'>('idle');
+  const [clearState, setClearState] = useState<'idle' | 'clearing' | 'done' | 'partial'>('idle');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [regenState, setRegenState] = useState<'idle' | 'working' | 'done'>('idle');
+  const [regenState, setRegenState] = useState<'idle' | 'working' | 'done' | 'partial'>('idle');
   const [regenProgress, setRegenProgress] = useState('');
-  const [proxyState, setProxyState] = useState<'idle' | 'clearing' | 'done'>('idle');
+  const [proxyState, setProxyState] = useState<'idle' | 'clearing' | 'done' | 'partial'>('idle');
   const [proxyGenerateState, setProxyGenerateState] = useState<'idle' | 'queueing' | 'done'>('idle');
+  const [clearFeedback, setClearFeedback] = useState<ActionFeedback | null>(null);
+  const [regenFeedback, setRegenFeedback] = useState<ActionFeedback | null>(null);
+  const [proxyFeedback, setProxyFeedback] = useState<ActionFeedback | null>(null);
 
   const handleClearCache = useCallback(async () => {
     setClearState('clearing');
     try {
-      const ids = mediaItems.map((m) => m.id);
-      await clearProjectCaches(ids);
-      setClearState('done');
+      const items = mediaItems.map((m) => ({ id: m.id, fileName: m.fileName }));
+      const result = await clearProjectCaches(items);
+      const feedback = getBatchOutcomeFeedback('Clear Cache', result);
+      setClearFeedback(feedback);
+      setClearState(result.failed === 0 ? 'done' : 'partial');
+      showBatchOutcomeToast('Project cache cleared', 'Project cache partially cleared', 'Project cache not cleared', result);
       setTimeout(() => setClearState('idle'), 2000);
     } catch (err) {
       log.error('Failed to clear caches', err);
+      setClearFeedback({
+        tone: 'error',
+        message: 'Couldn\'t clear project cache.',
+      });
+      toast.error('Failed to clear project cache');
       setClearState('idle');
     }
   }, [mediaItems]);
@@ -245,16 +388,24 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setRegenProgress('0/' + mediaItems.length);
     try {
       const items = mediaItems.map((m) => ({ id: m.id, fileName: m.fileName, mimeType: m.mimeType }));
-      await regenerateProjectThumbnails(items, (done, total) => {
+      const result = await regenerateProjectThumbnails(items, (done, total) => {
         setRegenProgress(`${done}/${total}`);
       });
-      setRegenState('done');
+      const feedback = getBatchOutcomeFeedback('Regenerate Thumbnails', result);
+      setRegenFeedback(feedback);
+      setRegenState(result.failed === 0 ? 'done' : 'partial');
+      showBatchOutcomeToast('Thumbnails regenerated', 'Thumbnails partially regenerated', 'Thumbnails not regenerated', result);
       setTimeout(() => {
         setRegenState('idle');
         setRegenProgress('');
       }, 2000);
     } catch (err) {
       log.error('Failed to regenerate thumbnails', err);
+      setRegenFeedback({
+        tone: 'error',
+        message: 'Couldn\'t regenerate thumbnails.',
+      });
+      toast.error('Failed to regenerate thumbnails');
       setRegenState('idle');
       setRegenProgress('');
     }
@@ -263,11 +414,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
   const handleClearProxies = useCallback(async () => {
     setProxyState('clearing');
     try {
-      await clearProjectProxies(mediaItems);
-      setProxyState('done');
+      const result = await clearProjectProxies(mediaItems);
+      const feedback = getBatchOutcomeFeedback('Delete Proxies', result);
+      setProxyFeedback(feedback);
+      setProxyState(result.failed === 0 ? 'done' : 'partial');
+      showBatchOutcomeToast('Proxies deleted', 'Proxies partially deleted', 'Proxies not deleted', result);
       setTimeout(() => setProxyState('idle'), 2000);
     } catch (err) {
       log.error('Failed to clear proxies', err);
+      setProxyFeedback({
+        tone: 'error',
+        message: 'Couldn\'t delete proxies.',
+      });
+      toast.error('Failed to delete proxies');
       setProxyState('idle');
     }
   }, [mediaItems]);
@@ -318,8 +477,6 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     }
   }, [mediaItems]);
 
-  const defaultWhisperLanguageValue = getWhisperLanguageSelectValue(defaultWhisperLanguage);
-  const defaultWhisperQuantizationOption = getWhisperQuantizationOption(defaultWhisperQuantization);
   const missingProjectProxyCount = mediaItems.filter((media) => (
     media.mimeType.startsWith('video/')
     && proxyStatus.get(media.id) !== 'ready'
@@ -330,10 +487,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0 sm:top-16 sm:max-h-[calc(100vh-4rem)] sm:translate-y-0 sm:origin-top">
         <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-4 pr-14">
-          <DialogTitle>编辑器设置</DialogTitle>
+          <DialogTitle>Editor Settings</DialogTitle>
           <Button variant="ghost" size="sm" onClick={resetToDefaults} className="h-8 shrink-0 gap-1.5">
             <RotateCcw className="w-3.5 h-3.5" />
-            重置
+            Reset
           </Button>
         </DialogHeader>
         <div className="flex min-h-0">
@@ -366,7 +523,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               {activeSection === 'general' && (
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">界面密度</Label>
+                    <Label className="text-sm">Editor Density</Label>
                     <Select
                       value={editorDensity}
                       onValueChange={(value) => setSetting('editorDensity', value as typeof editorDensity)}
@@ -383,11 +540,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      “紧凑”会在 1080p 屏幕中显示更多编辑器内容，“默认”则保留更宽松的布局。
+                      Compact fits more of the editor into a 1080p screen. Default restores the roomier layout.
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">自动保存</Label>
+                    <Label className="text-sm">Auto-save</Label>
                     <Switch
                       checked={autoSaveInterval > 0}
                       onCheckedChange={(v) => setSetting('autoSaveInterval', v ? 5 : 0)}
@@ -395,7 +552,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </div>
                   {autoSaveInterval > 0 && (
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm text-muted-foreground">间隔</Label>
+                      <Label className="text-sm text-muted-foreground">Interval</Label>
                       <div className="w-32 flex items-center gap-2">
                         <Slider
                           value={[autoSaveInterval]}
@@ -409,7 +566,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">撤销历史深度</Label>
+                    <Label className="text-sm">Undo History Depth</Label>
                     <div className="w-32 flex items-center gap-2">
                       <Slider
                         value={[maxUndoHistory]}
@@ -424,94 +581,92 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 </div>
               )}
 
-              {activeSection === 'timeline' && (
+              {activeSection === 'ai' && (
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label className="text-sm">默认开启吸附</Label>
-                      <p className="text-xs text-muted-foreground">设置项目打开时的初始吸附状态。</p>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <Label className="text-sm">Caption sample interval</Label>
+                        <p className="text-xs text-muted-foreground">
+                          How often Analyze with AI samples a frame for captioning.
+                        </p>
+                      </div>
                     </div>
-                    <Switch checked={snapEnabled} onCheckedChange={(v) => setSetting('snapEnabled', v)} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">显示波形</Label>
-                    <Switch checked={showWaveforms} onCheckedChange={(v) => setSetting('showWaveforms', v)} />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm">显示胶片条</Label>
-                    <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center rounded-md border border-border bg-secondary p-0.5">
+                        {(['seconds', 'frames'] as const).map((unit) => (
+                          <button
+                            key={unit}
+                            type="button"
+                            onClick={() => setSetting('captioningIntervalUnit', unit)}
+                            className={cn(
+                              'rounded px-2.5 py-1 text-xs transition-colors',
+                              captioningIntervalUnit === unit
+                                ? 'bg-primary/15 text-primary'
+                                : 'text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            {unit === 'seconds' ? 'Seconds' : 'Frames'}
+                          </button>
+                        ))}
+                      </div>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        className="h-8 w-24"
+                        min={intervalBounds.min}
+                        max={intervalBounds.max}
+                        step={intervalInputStep}
+                        value={captioningIntervalValue}
+                        onChange={(event) => {
+                          const parsed = Number(event.target.value);
+                          if (Number.isFinite(parsed)) {
+                            setSetting('captioningIntervalValue', parsed);
+                          }
+                        }}
+                      />
+                      <span className="text-xs text-muted-foreground">{intervalUnitLabel}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-muted-foreground"
+                        onClick={() => {
+                          setSetting('captioningIntervalUnit', 'seconds');
+                          setSetting('captioningIntervalValue', DEFAULT_CAPTIONING_INTERVAL_SECONDS);
+                        }}
+                        disabled={
+                          captioningIntervalUnit === 'seconds'
+                          && captioningIntervalValue === DEFAULT_CAPTIONING_INTERVAL_SECONDS
+                        }
+                      >
+                        Reset
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {formatCaptionEstimate(captioningIntervalUnit, captioningIntervalValue)}.
+                      Smaller intervals produce denser scenes but take longer to generate.
+                    </p>
                   </div>
                 </div>
               )}
 
-              {activeSection === 'whisper' && (
+              {activeSection === 'timeline' && (
                 <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">默认模型</Label>
-                    <Select
-                      value={defaultWhisperModel}
-                      onValueChange={(value) =>
-                        setSetting('defaultWhisperModel', value as MediaTranscriptModel)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {TRANSCRIPTION_MODEL_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      当转录任务没有手动指定模型时，将使用这里的默认值。
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">Snap by Default</Label>
+                      <p className="text-xs text-muted-foreground">Sets the initial snap state when a project opens.</p>
+                    </div>
+                    <Switch checked={snapEnabled} onCheckedChange={(v) => setSetting('snapEnabled', v)} />
                   </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">默认量化方案</Label>
-                    <Select
-                      value={defaultWhisperQuantization}
-                      onValueChange={(value) =>
-                        setSetting('defaultWhisperQuantization', value as MediaTranscriptQuantization)
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {WHISPER_QUANTIZATION_OPTIONS.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <p className="text-xs text-muted-foreground">
-                      优先根据显存或内存大小选择。{defaultWhisperQuantizationOption.description}
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Show Waveforms</Label>
+                    <Switch checked={showWaveforms} onCheckedChange={(v) => setSetting('showWaveforms', v)} />
                   </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-sm">默认语言</Label>
-                    <Combobox
-                      value={defaultWhisperLanguageValue}
-                      onValueChange={(value) =>
-                        setSetting('defaultWhisperLanguage', getWhisperLanguageSettingValue(value))
-                      }
-                      options={WHISPER_LANGUAGE_OPTIONS}
-                      placeholder="自动检测"
-                      searchPlaceholder="搜索语言..."
-                      emptyMessage="没有匹配的语言。"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      选择“自动检测”可自动识别语言，也可以固定为某种已知语言以获得更快启动速度。
-                    </p>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Show Filmstrips</Label>
+                    <Switch checked={showFilmstrips} onCheckedChange={(v) => setSetting('showFilmstrips', v)} />
                   </div>
-
-                  <LocalInferenceUnloadControl />
                 </div>
               )}
 
@@ -519,9 +674,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">生成缺失代理</Label>
+                      <Label className="text-sm">Generate Missing Proxies</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        为当前项目中尚未生成代理的视频排队生成代理文件
+                        Queue proxy generation for video in this project that does not have one yet
                       </p>
                     </div>
                     <Button
@@ -535,21 +690,30 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {proxyGenerateState === 'done' && <Check className="w-3.5 h-3.5" />}
                       {proxyGenerateState === 'idle' && <Film className="w-3.5 h-3.5" />}
                       {proxyGenerateState === 'queueing'
-                        ? '排队中...'
+                        ? 'Queueing...'
                         : proxyGenerateState === 'done'
-                          ? '已加入队列'
+                          ? 'Queued'
                           : missingProjectProxyCount > 0
-                            ? `生成（${missingProjectProxyCount}）`
-                            : '已是最新'}
+                            ? `Generate (${missingProjectProxyCount})`
+                            : 'Up to date'}
                     </Button>
                   </div>
                   <Separator className="bg-white/8" />
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">清除项目缓存</Label>
+                      <Label className="text-sm">Clear Project Cache</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        波形、胶片条、GIF 帧缓存、已解码音频
+                        Waveforms, filmstrips, GIF frames, decoded audio
                       </p>
+                      {clearFeedback && (
+                        <p className={cn(
+                          'mt-1 text-xs',
+                          clearFeedback.tone === 'error' ? 'text-amber-400' : 'text-muted-foreground',
+                        )}
+                        >
+                          {clearFeedback.message}
+                        </p>
+                      )}
                     </div>
                     <Button
                       variant="outline"
@@ -560,16 +724,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     >
                       {clearState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {clearState === 'done' && <Check className="w-3.5 h-3.5" />}
+                      {clearState === 'partial' && <TriangleAlert className="w-3.5 h-3.5" />}
                       {clearState === 'idle' && <Trash2 className="w-3.5 h-3.5" />}
-                      {clearState === 'clearing' ? '清除中...' : clearState === 'done' ? '已清除' : '清除'}
+                      {clearState === 'clearing'
+                        ? 'Clearing...'
+                        : clearState === 'done'
+                          ? 'Cleared'
+                          : clearState === 'partial'
+                            ? 'Partial'
+                            : 'Clear'}
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">重新生成缩略图</Label>
+                      <Label className="text-sm">Regenerate Thumbnails</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        为当前项目重新生成媒体库缩略图
+                        Re-create media library thumbnails for this project
                       </p>
+                      {regenFeedback && (
+                        <p className={cn(
+                          'mt-1 text-xs',
+                          regenFeedback.tone === 'error' ? 'text-amber-400' : 'text-muted-foreground',
+                        )}
+                        >
+                          {regenFeedback.message}
+                        </p>
+                      )}
                     </div>
                     <Button
                       variant="outline"
@@ -580,16 +760,32 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     >
                       {regenState === 'working' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {regenState === 'done' && <Check className="w-3.5 h-3.5" />}
+                      {regenState === 'partial' && <TriangleAlert className="w-3.5 h-3.5" />}
                       {regenState === 'idle' && <ImagePlus className="w-3.5 h-3.5" />}
-                      {regenState === 'working' ? regenProgress : regenState === 'done' ? '完成' : '重新生成'}
+                      {regenState === 'working'
+                        ? regenProgress
+                        : regenState === 'done'
+                          ? 'Done'
+                          : regenState === 'partial'
+                            ? 'Partial'
+                            : 'Regenerate'}
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">删除代理文件</Label>
+                      <Label className="text-sm">Delete Proxies</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        删除当前项目已生成的代理视频
+                        Remove generated proxy videos for this project
                       </p>
+                      {proxyFeedback && (
+                        <p className={cn(
+                          'mt-1 text-xs',
+                          proxyFeedback.tone === 'error' ? 'text-amber-400' : 'text-muted-foreground',
+                        )}
+                        >
+                          {proxyFeedback.message}
+                        </p>
+                      )}
                     </div>
                     <Button
                       variant="outline"
@@ -600,12 +796,28 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     >
                       {proxyState === 'clearing' && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                       {proxyState === 'done' && <Check className="w-3.5 h-3.5" />}
+                      {proxyState === 'partial' && <TriangleAlert className="w-3.5 h-3.5" />}
                       {proxyState === 'idle' && <Film className="w-3.5 h-3.5" />}
-                      {proxyState === 'clearing' ? '删除中...' : proxyState === 'done' ? '已删除' : '删除'}
+                      {proxyState === 'clearing'
+                        ? 'Deleting...'
+                        : proxyState === 'done'
+                          ? 'Deleted'
+                          : proxyState === 'partial'
+                            ? 'Partial'
+                            : 'Delete'}
                     </Button>
                   </div>
                   <Separator className="bg-white/8" />
-                  <LocalModelCacheControl />
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <Label className="text-sm">Local AI</Label>
+                      <p className="text-xs text-muted-foreground">
+                        Unload resident runtimes or clear cached model downloads.
+                      </p>
+                    </div>
+                    <LocalInferenceUnloadControl />
+                    <LocalModelCacheControl />
+                  </div>
                 </div>
               )}
             </div>
@@ -616,21 +828,22 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>清除项目缓存？</AlertDialogTitle>
+            <AlertDialogTitle>Clear project cache?</AlertDialogTitle>
             <AlertDialogDescription>
-              这会删除当前项目（共 {mediaItems.length} 个媒体项）的波形、胶片条、
-              GIF 帧缓存和已解码音频。它们会在后续需要时自动重新生成。
-              项目数据、媒体文件、缩略图和代理文件不会受到影响。
+              This will delete cached waveforms, filmstrips, GIF frames, and decoded audio
+              for the current project ({mediaItems.length} media items).
+              These will be regenerated automatically when needed. Your project data,
+              media files, thumbnails, and proxies will not be affected.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 void handleClearCache();
               }}
             >
-              清除缓存
+              Clear Cache
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

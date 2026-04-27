@@ -52,6 +52,7 @@ export function CompositionsSection() {
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
   const selectedCompositionIds = useMediaLibraryStore((s) => s.selectedCompositionIds);
+  const isTranscriptionDialogOpen = useEditorStore((s) => s.transcriptionDialogDepth > 0);
   const selectedCompositionIdSet = useMemo(() => new Set(selectedCompositionIds), [selectedCompositionIds]);
   const [open, setOpen] = useState(true);
   const [deleteTarget, setDeleteTarget] = useState<SubComposition | null>(null);
@@ -200,6 +201,7 @@ export function CompositionsSection() {
                 composition={comp}
                 viewMode={viewMode}
                 selected={selectedCompositionIdSet.has(comp.id)}
+                isTranscriptionDialogOpen={isTranscriptionDialogOpen}
                 dragDisabled={wouldCreateCompositionCycle({
                   parentCompositionId: activeCompositionId,
                   insertedCompositionId: comp.id,
@@ -263,6 +265,7 @@ interface CompositionCardProps {
   composition: SubComposition;
   viewMode: 'grid' | 'list';
   selected: boolean;
+  isTranscriptionDialogOpen: boolean;
   dragDisabled: boolean;
   isEditing: boolean;
   editValue: string;
@@ -279,6 +282,7 @@ const CompositionCard = memo(function CompositionCard({
   composition,
   viewMode,
   selected,
+  isTranscriptionDialogOpen,
   dragDisabled,
   isEditing,
   editValue,
@@ -375,7 +379,7 @@ const CompositionCard = memo(function CompositionCard({
     [isEditing, onSelect]
   );
 
-  const canHoverPreview = composition.durationInFrames > 0;
+  const canHoverPreview = composition.durationInFrames > 0 && !isTranscriptionDialogOpen;
 
   const updateSkimPreview = useCallback((clientX: number) => {
     const thumbnailContainer = thumbnailContainerRef.current;

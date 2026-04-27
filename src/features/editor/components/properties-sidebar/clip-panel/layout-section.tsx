@@ -2,7 +2,8 @@ import { useCallback, useMemo, memo } from 'react';
 import { Move, RotateCcw, Link2, Link2Off } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
-import type { TimelineItem } from '@/types/timeline';
+import { Switch } from '@/components/ui/switch';
+import type { TimelineItem, VideoItem, CompositionItem } from '@/types/timeline';
 import type { TransformProperties, CanvasSettings } from '@/types/transform';
 import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import { useMediaLibraryStore } from '@/features/editor/deps/media-library';
@@ -26,6 +27,7 @@ import {
 
 interface LayoutSectionProps {
   items: TimelineItem[];
+  mediaTransformItems?: Array<VideoItem | CompositionItem>;
   canvas: CanvasSettings;
   onTransformChange: (ids: string[], updates: Partial<TransformProperties>) => void;
   aspectLocked: boolean;
@@ -40,6 +42,8 @@ type TransformValues = {
   y: number;
   width: number;
   height: number;
+  anchorX: number;
+  anchorY: number;
   rotation: number;
 };
 
@@ -49,12 +53,14 @@ type TransformValues = {
  */
 export const LayoutSection = memo(function LayoutSection({
   items,
+  mediaTransformItems = [],
   canvas,
   onTransformChange,
   aspectLocked,
   onAspectLockToggle,
 }: LayoutSectionProps) {
   const itemIds = useMemo(() => items.map((item) => item.id), [items]);
+  const mediaTransformItemIds = useMemo(() => mediaTransformItems.map((item) => item.id), [mediaTransformItems]);
   const itemIdSet = useMemo(() => new Set(itemIds), [itemIds]);
   const itemsById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
 
@@ -80,8 +86,14 @@ export const LayoutSection = memo(function LayoutSection({
   // Gizmo store for live preview (both for properties panel and gizmo drag sync)
   const setTransformPreview = useGizmoStore((s) => s.setTransformPreview);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
+  const clearInteraction = useGizmoStore((s) => s.clearInteraction);
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const previewTransform = useGizmoStore((s) => s.previewTransform);
+
+  const clearTransformUiState = useCallback(() => {
+    clearPreview();
+    clearInteraction();
+  }, [clearInteraction, clearPreview]);
 
   // Build gizmo preview context if gizmo is active for one of our items
   const gizmoPreview = useMemo(() => {
@@ -116,6 +128,8 @@ export const LayoutSection = memo(function LayoutSection({
         y: transform.y,
         width: transform.width,
         height: transform.height,
+        anchorX: transform.anchorX ?? (transform.width / 2),
+        anchorY: transform.anchorY ?? (transform.height / 2),
         rotation: transform.rotation,
       });
     }
@@ -151,6 +165,47 @@ export const LayoutSection = memo(function LayoutSection({
     };
   }, [items, resolvedTransformsByItem]);
 
+  const flipHorizontal = useMemo(() => {
+    if (mediaTransformItems.length === 0) return false as boolean | 'mixed';
+    const firstValue = mediaTransformItems[0]?.transform?.flipHorizontal ?? false;
+    return mediaTransformItems.every((item) => (item.transform?.flipHorizontal ?? false) === firstValue)
+      ? firstValue
+      : 'mixed';
+  }, [mediaTransformItems]);
+
+  const flipVertical = useMemo(() => {
+    if (mediaTransformItems.length === 0) return false as boolean | 'mixed';
+    const firstValue = mediaTransformItems[0]?.transform?.flipVertical ?? false;
+    return mediaTransformItems.every((item) => (item.transform?.flipVertical ?? false) === firstValue)
+      ? firstValue
+      : 'mixed';
+  }, [mediaTransformItems]);
+
+  const { mediaAnchorX, mediaAnchorY } = useMemo(() => {
+    if (mediaTransformItems.length === 0) {
+      return { mediaAnchorX: 0 as MixedValue, mediaAnchorY: 0 as MixedValue };
+    }
+
+    const resolvedValues = mediaTransformItems
+      .map((item) => resolvedTransformsByItem.get(item.id))
+      .filter((value): value is TransformValues => value !== undefined);
+
+    if (resolvedValues.length === 0) {
+      return { mediaAnchorX: 0 as MixedValue, mediaAnchorY: 0 as MixedValue };
+    }
+
+    const getValue = (getter: (resolved: TransformValues) => number): MixedValue => {
+      const values = resolvedValues.map(getter);
+      const firstValue = values[0]!;
+      return values.every((v) => Math.abs(v - firstValue) < 0.1) ? firstValue : 'mixed';
+    };
+
+    return {
+      mediaAnchorX: getValue((r) => r.anchorX),
+      mediaAnchorY: getValue((r) => r.anchorY),
+    };
+  }, [mediaTransformItems, resolvedTransformsByItem]);
+
   // Store current aspect ratio for linked dimensions
   const currentAspectRatio = useMemo(() => {
     if (width === 'mixed' || height === 'mixed') return 1;
@@ -165,7 +220,7 @@ export const LayoutSection = memo(function LayoutSection({
   const getAutoKeyframeOperation = useCallback(
     (
       itemId: string,
-      property: 'x' | 'y' | 'width' | 'height' | 'rotation' | 'opacity',
+      property: 'x' | 'y' | 'width' | 'height' | 'anchorX' | 'anchorY' | 'rotation' | 'opacity',
       value: number
     ): AutoKeyframeOperation | null => {
       const item = itemsById.get(itemId);
@@ -405,6 +460,66 @@ export const LayoutSection = memo(function LayoutSection({
     [itemIds, onTransformChange, clearPreview, getAutoKeyframeOperation, applyAutoKeyframeOperations]
   );
 
+  const handleAnchorXLiveChange = useCallback((value: number) => {
+    if (mediaTransformItems.length === 0) return;
+    const previews: Record<string, { anchorX: number }> = {};
+    mediaTransformItems.forEach((item) => {
+      previews[item.id] = { anchorX: value };
+    });
+    setTransformPreview(previews);
+  }, [mediaTransformItems, setTransformPreview]);
+
+  const handleAnchorXChange = useCallback((value: number) => {
+    if (mediaTransformItemIds.length === 0) return;
+    const autoOps: AutoKeyframeOperation[] = [];
+    const fallbackItemIds: string[] = [];
+    for (const itemId of mediaTransformItemIds) {
+      const operation = getAutoKeyframeOperation(itemId, 'anchorX', value);
+      if (operation) {
+        autoOps.push(operation);
+      } else {
+        fallbackItemIds.push(itemId);
+      }
+    }
+    if (autoOps.length > 0) {
+      applyAutoKeyframeOperations(autoOps);
+    }
+    if (fallbackItemIds.length > 0) {
+      onTransformChange(fallbackItemIds, { anchorX: value });
+    }
+    queueMicrotask(() => clearPreview());
+  }, [applyAutoKeyframeOperations, clearPreview, getAutoKeyframeOperation, mediaTransformItemIds, onTransformChange]);
+
+  const handleAnchorYLiveChange = useCallback((value: number) => {
+    if (mediaTransformItems.length === 0) return;
+    const previews: Record<string, { anchorY: number }> = {};
+    mediaTransformItems.forEach((item) => {
+      previews[item.id] = { anchorY: value };
+    });
+    setTransformPreview(previews);
+  }, [mediaTransformItems, setTransformPreview]);
+
+  const handleAnchorYChange = useCallback((value: number) => {
+    if (mediaTransformItemIds.length === 0) return;
+    const autoOps: AutoKeyframeOperation[] = [];
+    const fallbackItemIds: string[] = [];
+    for (const itemId of mediaTransformItemIds) {
+      const operation = getAutoKeyframeOperation(itemId, 'anchorY', value);
+      if (operation) {
+        autoOps.push(operation);
+      } else {
+        fallbackItemIds.push(itemId);
+      }
+    }
+    if (autoOps.length > 0) {
+      applyAutoKeyframeOperations(autoOps);
+    }
+    if (fallbackItemIds.length > 0) {
+      onTransformChange(fallbackItemIds, { anchorY: value });
+    }
+    queueMicrotask(() => clearPreview());
+  }, [applyAutoKeyframeOperations, clearPreview, getAutoKeyframeOperation, mediaTransformItemIds, onTransformChange]);
+
   // Get media items for fallback source dimensions lookup
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems);
 
@@ -464,7 +579,8 @@ export const LayoutSection = memo(function LayoutSection({
 
       onTransformChange([item.id], updates);
     });
-  }, [items, onTransformChange, mediaItems, canvas]);
+    queueMicrotask(clearTransformUiState);
+  }, [items, onTransformChange, mediaItems, canvas, clearTransformUiState]);
 
   // Reset position to center (x=0, y=0)
   const handleResetPosition = useCallback(() => {
@@ -480,7 +596,8 @@ export const LayoutSection = memo(function LayoutSection({
       if (Object.keys(updates).length === 0) return;
       onTransformChange([item.id], updates);
     });
-  }, [items, onTransformChange, canvas]);
+    queueMicrotask(clearTransformUiState);
+  }, [items, onTransformChange, canvas, clearTransformUiState]);
 
   // Reset rotation to 0°
   const handleResetRotation = useCallback(() => {
@@ -492,7 +609,32 @@ export const LayoutSection = memo(function LayoutSection({
       if (Math.abs(resolved.rotation) <= tolerance) return;
       onTransformChange([item.id], { rotation: 0 });
     });
-  }, [items, onTransformChange, canvas]);
+    queueMicrotask(clearTransformUiState);
+  }, [items, onTransformChange, canvas, clearTransformUiState]);
+
+  const handleFlipHorizontalChange = useCallback((checked: boolean) => {
+    if (mediaTransformItemIds.length === 0) return;
+    onTransformChange(mediaTransformItemIds, { flipHorizontal: checked });
+  }, [mediaTransformItemIds, onTransformChange]);
+
+  const handleFlipVerticalChange = useCallback((checked: boolean) => {
+    if (mediaTransformItemIds.length === 0) return;
+    onTransformChange(mediaTransformItemIds, { flipVertical: checked });
+  }, [mediaTransformItemIds, onTransformChange]);
+
+  const handleResetAnchor = useCallback(() => {
+    if (mediaTransformItems.length === 0) return;
+    const needsReset = mediaTransformItems.some((item) =>
+      item.transform?.anchorX !== undefined || item.transform?.anchorY !== undefined
+    );
+    if (needsReset) {
+      onTransformChange(mediaTransformItemIds, {
+        anchorX: undefined,
+        anchorY: undefined,
+      });
+    }
+    queueMicrotask(clearTransformUiState);
+  }, [clearTransformUiState, mediaTransformItemIds, mediaTransformItems, onTransformChange]);
 
   return (
     <PropertySection title="变换" icon={Move} defaultOpen={true}>
@@ -634,6 +776,81 @@ export const LayoutSection = memo(function LayoutSection({
           </Button>
         </div>
       </PropertyRow>
+
+      {mediaTransformItems.length > 0 && (
+        <PropertyRow label="Anchor">
+          <div className="flex items-center gap-1 w-full">
+            <div className="flex items-center gap-0.5 flex-1 min-w-0">
+              <NumberInput
+                value={mediaAnchorX}
+                onChange={handleAnchorXChange}
+                onLiveChange={handleAnchorXLiveChange}
+                label="X"
+                unit="px"
+                step={1}
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={mediaTransformItemIds}
+                property="anchorX"
+                currentValue={mediaAnchorX === 'mixed' ? 0 : mediaAnchorX}
+              />
+            </div>
+            <div className="flex items-center gap-0.5 flex-1 min-w-0">
+              <NumberInput
+                value={mediaAnchorY}
+                onChange={handleAnchorYChange}
+                onLiveChange={handleAnchorYLiveChange}
+                label="Y"
+                unit="px"
+                step={1}
+                className="flex-1 min-w-0"
+              />
+              <KeyframeToggle
+                itemIds={mediaTransformItemIds}
+                property="anchorY"
+                currentValue={mediaAnchorY === 'mixed' ? 0 : mediaAnchorY}
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetAnchor}
+              title="Reset anchor to center"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        </PropertyRow>
+      )}
+
+      {mediaTransformItems.length > 0 && (
+        <PropertyRow label="Flip">
+          <div className="flex items-center justify-between gap-3 w-full">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={flipHorizontal === 'mixed' ? false : flipHorizontal}
+                onCheckedChange={handleFlipHorizontalChange}
+                aria-label="Flip video horizontally"
+              />
+              <span>
+                Horizontal{flipHorizontal === 'mixed' ? ' (mixed)' : ''}
+              </span>
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Switch
+                checked={flipVertical === 'mixed' ? false : flipVertical}
+                onCheckedChange={handleFlipVerticalChange}
+                aria-label="Flip video vertically"
+              />
+              <span>
+                Vertical{flipVertical === 'mixed' ? ' (mixed)' : ''}
+              </span>
+            </label>
+          </div>
+        </PropertyRow>
+      )}
     </PropertySection>
   );
 });

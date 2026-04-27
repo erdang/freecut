@@ -18,11 +18,6 @@ import {
 import { useSelectionStore } from '@/shared/state/selection';
 import { PROPERTY_LABELS, type AnimatableProperty } from '@/types/keyframe';
 import type { PropertyKeyframes } from '@/types/keyframe';
-import type { MediaTranscriptModel } from '@/types/storage';
-import {
-  getMediaTranscriptionModelLabel,
-  getMediaTranscriptionModelOptions,
-} from '@/features/timeline/deps/media-transcription-service';
 import {
   getSceneVerificationModelOptions,
   type VerificationModel,
@@ -58,12 +53,12 @@ interface ItemContextMenuProps {
   /** Whether the playhead is within this item's bounds */
   playheadInBounds?: boolean;
   onFreezeFrame?: () => void;
-  canGenerateCaptions?: boolean;
-  canRegenerateCaptions?: boolean;
+  canManageCaptions?: boolean;
+  hasCaptions?: boolean;
+  hasTranscript?: boolean;
   isGeneratingCaptions?: boolean;
-  defaultCaptionModel?: MediaTranscriptModel;
-  onGenerateCaptions?: (model: MediaTranscriptModel) => void;
-  onRegenerateCaptions?: (model: MediaTranscriptModel) => void;
+  onOpenCaptionDialog?: () => void;
+  onApplyCaptionsFromTranscript?: () => void;
   /** Whether this item is a composition item (enables enter/dissolve options) */
   isCompositionItem?: boolean;
   onEnterComposition?: () => void;
@@ -113,12 +108,12 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
-  canGenerateCaptions,
-  canRegenerateCaptions,
+  canManageCaptions,
+  hasCaptions,
+  hasTranscript,
   isGeneratingCaptions,
-  defaultCaptionModel,
-  onGenerateCaptions,
-  onRegenerateCaptions,
+  onOpenCaptionDialog,
+  onApplyCaptionsFromTranscript,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -175,12 +170,12 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       isVideoItem={isVideoItem}
       playheadInBounds={playheadInBounds}
       onFreezeFrame={onFreezeFrame}
-      canGenerateCaptions={canGenerateCaptions}
-      canRegenerateCaptions={canRegenerateCaptions}
+      canManageCaptions={canManageCaptions}
+      hasCaptions={hasCaptions}
+      hasTranscript={hasTranscript}
       isGeneratingCaptions={isGeneratingCaptions}
-      defaultCaptionModel={defaultCaptionModel}
-      onGenerateCaptions={onGenerateCaptions}
-      onRegenerateCaptions={onRegenerateCaptions}
+      onOpenCaptionDialog={onOpenCaptionDialog}
+      onApplyCaptionsFromTranscript={onApplyCaptionsFromTranscript}
       isCompositionItem={isCompositionItem}
       onEnterComposition={onEnterComposition}
       onDissolveComposition={onDissolveComposition}
@@ -255,12 +250,12 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
-  canGenerateCaptions,
-  canRegenerateCaptions,
+  canManageCaptions,
+  hasCaptions,
+  hasTranscript,
   isGeneratingCaptions,
-  defaultCaptionModel,
-  onGenerateCaptions,
-  onRegenerateCaptions,
+  onOpenCaptionDialog,
+  onApplyCaptionsFromTranscript,
   isCompositionItem,
   onEnterComposition,
   onDissolveComposition,
@@ -286,18 +281,11 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
     if (!keyframedProperties) return [];
     return keyframedProperties.filter(p => p.keyframes.length > 0);
   }, [keyframedProperties]);
-  const transcriptionModelOptions = useMemo(
-    () => getMediaTranscriptionModelOptions(),
-    [],
-  );
-  const explicitCaptionModelOptions = useMemo(
-    () => transcriptionModelOptions.filter((option) => option.value !== defaultCaptionModel),
-    [defaultCaptionModel, transcriptionModelOptions],
-  );
   const sceneVerificationModelOptions = useMemo(
     () => getSceneVerificationModelOptions(),
     [],
   );
+  const captionActionLabel = hasCaptions ? 'Regenerate Captions' : 'Generate Captions';
 
   const hasKeyframes = propertiesWithKeyframes.length > 0;
 
@@ -331,19 +319,19 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
             <>
               {showJoinLeft && (
                 <ContextMenuItem onClick={onJoinLeft}>
-                  与前一个片段拼接
+                  Join with Previous
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
               {showJoinRight && (
                 <ContextMenuItem onClick={onJoinRight}>
-                  与后一个片段拼接
+                  Join with Next
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
               {canJoinSelected && (
                 <ContextMenuItem onClick={onJoinSelected}>
-                  拼接所选片段
+                  Join Selected
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
@@ -356,13 +344,13 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             {canLinkSelected && onLinkSelected && (
               <ContextMenuItem onClick={onLinkSelected}>
-                链接片段
+                Link Clips
                 <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.LINK_AUDIO_VIDEO)}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
             {canUnlinkSelected && onUnlinkSelected && (
               <ContextMenuItem onClick={onUnlinkSelected}>
-                取消链接片段
+                Unlink Clips
                 <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.UNLINK_AUDIO_VIDEO)}</ContextMenuShortcut>
               </ContextMenuItem>
             )}
@@ -374,10 +362,10 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {hasKeyframes && (
           <>
             <ContextMenuSub>
-              <ContextMenuSubTrigger>清除关键帧</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger>Clear Keyframes</ContextMenuSubTrigger>
               <ContextMenuSubContent className="w-48">
                 <ContextMenuItem onClick={onClearAllKeyframes}>
-                  清除全部
+                  Clear All
                   <ContextMenuShortcut>{formatHotkeyBinding(hotkeys.CLEAR_KEYFRAMES)}</ContextMenuShortcut>
                 </ContextMenuItem>
                 <ContextMenuSeparator />
@@ -399,7 +387,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {selectedCount >= 2 && onBentoLayout && (
           <>
             <ContextMenuItem onClick={onBentoLayout}>
-              拼贴布局...
+              Bento Layout...
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -409,7 +397,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {isVideoItem && playheadInBounds && onFreezeFrame && (
           <>
             <ContextMenuItem onClick={onFreezeFrame}>
-              插入冻结帧
+              Insert Freeze Frame
               <ContextMenuShortcut>Shift+F</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuSeparator />
@@ -420,21 +408,21 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             {isDetectingScenes ? (
               <ContextMenuItem disabled>
-                正在检测场景...
+                Detecting Scenes...
               </ContextMenuItem>
             ) : (
               <ContextMenuSub>
-                <ContextMenuSubTrigger>场景检测并切分</ContextMenuSubTrigger>
+                <ContextMenuSubTrigger>Detect Scenes &amp; Split</ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-48">
                   <ContextMenuItem onClick={() => onDetectScenes('histogram')}>
-                    快速（直方图）
+                    Fast (Histogram)
                   </ContextMenuItem>
                   {sceneVerificationModelOptions.map((option) => (
                     <ContextMenuItem
                       key={option.value}
                       onClick={() => onDetectScenes('optical-flow', option.value)}
                     >
-                      {`AI（${option.label}）`}
+                      {`AI (${option.label})`}
                     </ContextMenuItem>
                   ))}
                 </ContextMenuSubContent>
@@ -448,66 +436,34 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {isTextItem && onGenerateAudioFromText && (
           <>
             <ContextMenuItem onClick={onGenerateAudioFromText}>
-              从文本生成音频
+              Generate Audio from Text
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
 
-        {canGenerateCaptions && onGenerateCaptions && (
+        {canManageCaptions && onOpenCaptionDialog && (
           <>
             {isGeneratingCaptions ? (
               <ContextMenuItem disabled>
-                正在更新字幕...
+                Updating captions...
               </ContextMenuItem>
+            ) : hasTranscript && onApplyCaptionsFromTranscript ? (
+              <ContextMenuSub>
+                <ContextMenuSubTrigger>Captions</ContextMenuSubTrigger>
+                <ContextMenuSubContent className="w-56">
+                  <ContextMenuItem onClick={onApplyCaptionsFromTranscript}>
+                    Insert Existing Captions
+                  </ContextMenuItem>
+                  <ContextMenuItem onClick={onOpenCaptionDialog}>
+                    {captionActionLabel}
+                  </ContextMenuItem>
+                </ContextMenuSubContent>
+              </ContextMenuSub>
             ) : (
-              <>
-                <ContextMenuSub>
-                  <ContextMenuSubTrigger>为该片段生成字幕</ContextMenuSubTrigger>
-                  <ContextMenuSubContent className="w-48">
-                    {defaultCaptionModel && (
-                      <>
-                        <ContextMenuItem onClick={() => onGenerateCaptions(defaultCaptionModel)}>
-                          {`默认（${getMediaTranscriptionModelLabel(defaultCaptionModel)}）`}
-                        </ContextMenuItem>
-                        <ContextMenuSeparator />
-                      </>
-                    )}
-                    {explicitCaptionModelOptions.map((option) => (
-                      <ContextMenuItem
-                        key={option.value}
-                        onClick={() => onGenerateCaptions(option.value)}
-                      >
-                        {option.label}
-                      </ContextMenuItem>
-                    ))}
-                  </ContextMenuSubContent>
-                </ContextMenuSub>
-
-                {canRegenerateCaptions && onRegenerateCaptions && (
-                  <ContextMenuSub>
-                    <ContextMenuSubTrigger>重新为该片段生成字幕</ContextMenuSubTrigger>
-                    <ContextMenuSubContent className="w-48">
-                      {defaultCaptionModel && (
-                        <>
-                          <ContextMenuItem onClick={() => onRegenerateCaptions(defaultCaptionModel)}>
-                            {`默认（${getMediaTranscriptionModelLabel(defaultCaptionModel)}）`}
-                          </ContextMenuItem>
-                          <ContextMenuSeparator />
-                        </>
-                      )}
-                      {explicitCaptionModelOptions.map((option) => (
-                        <ContextMenuItem
-                          key={option.value}
-                          onClick={() => onRegenerateCaptions(option.value)}
-                        >
-                          {option.label}
-                        </ContextMenuItem>
-                      ))}
-                    </ContextMenuSubContent>
-                  </ContextMenuSub>
-                )}
-              </>
+              <ContextMenuItem onClick={onOpenCaptionDialog}>
+                {captionActionLabel}
+              </ContextMenuItem>
             )}
             <ContextMenuSeparator />
           </>
@@ -516,17 +472,17 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {/* Composition operations */}
         {isCompositionItem && onEnterComposition && (
           <ContextMenuItem onClick={onEnterComposition}>
-            打开复合片段
+            Open Compound Clip
           </ContextMenuItem>
         )}
         {isCompositionItem && onDissolveComposition && (
           <ContextMenuItem onClick={onDissolveComposition}>
-            解散复合片段
+            Dissolve Compound Clip
           </ContextMenuItem>
         )}
         {canCreatePreComp && onCreatePreComp && (
           <ContextMenuItem onClick={onCreatePreComp}>
-            创建复合片段
+            Create Compound Clip
           </ContextMenuItem>
         )}
         {((isCompositionItem && (onEnterComposition || onDissolveComposition)) || (canCreatePreComp && onCreatePreComp)) && (
@@ -538,7 +494,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           disabled={!isSelected}
           className="text-destructive focus:text-destructive"
         >
-          波纹删除
+          Ripple Delete
           <ContextMenuShortcut>Ctrl+Del</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem
@@ -546,7 +502,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           disabled={!isSelected}
           className="text-destructive focus:text-destructive"
         >
-          删除
+          Delete
           <ContextMenuShortcut>Del</ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>

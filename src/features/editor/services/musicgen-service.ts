@@ -183,16 +183,16 @@ class MusicgenService {
       const module = await this.getModule();
       const config = getMusicgenModelDefinition(model);
       const cached = await this.isModelCached(model);
-      const loadVerb = cached ? '正在加载' : '正在下载';
+      const loadVerb = cached ? 'Loading' : 'Downloading';
       const downloadCache = new Map<string, { loaded: number; total: number }>();
 
-      onProgress?.('正在加载 MusicGen 分词器...');
+      onProgress?.('Loading MusicGen tokenizer...');
       const tokenizer = await module.AutoTokenizer.from_pretrained(config.modelId);
 
       onProgress?.(
         cached
-          ? `正在从缓存加载 ${config.label}...`
-          : `正在下载 ${config.label}（${config.downloadLabel}）...`,
+          ? `Loading ${config.label} from cache...`
+          : `Downloading ${config.label} (${config.downloadLabel})...`,
       );
       const runtimeModel = await module.MusicgenForConditionalGeneration.from_pretrained(
         config.modelId,
@@ -222,7 +222,7 @@ class MusicgenService {
             if (totalExpected > 0) {
               const fraction = Math.min(0.99, totalLoaded / totalExpected);
               onProgress?.(
-                `${loadVerb} ${config.label}（${Math.round(fraction * 100)}%）...`,
+                `${loadVerb} ${config.label} (${Math.round(fraction * 100)}%)...`,
                 fraction,
               );
             }
@@ -310,15 +310,15 @@ class MusicgenService {
   }: GenerateMusicOptions): Promise<{ blob: Blob; file: File; duration: number }> {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt) {
-      throw new Error('请描述你想生成的音乐。');
+      throw new Error('Describe the music you want to generate.');
     }
 
     if (!this.isSupported()) {
-      throw new Error('当前浏览器不支持 WebGPU。');
+      throw new Error('WebGPU is not available in this browser.');
     }
 
     if (signal?.aborted) {
-      throw new DOMException('音乐生成已取消。', 'AbortError');
+      throw new DOMException('Music generation cancelled.', 'AbortError');
     }
 
     const config = getMusicgenModelDefinition(model);
@@ -334,24 +334,24 @@ class MusicgenService {
 
       try {
         if (signal?.aborted) {
-          throw new DOMException('音乐生成已取消。', 'AbortError');
+          throw new DOMException('Music generation cancelled.', 'AbortError');
         }
 
-        onProgress?.('正在准备提示词...');
+        onProgress?.('Preparing prompt...');
         const inputs = runtime.tokenizer(trimmedPrompt);
 
         const maxNewTokens = getMusicgenMaxNewTokens(model, clampedDuration);
         let tokenCount = 0;
 
-        onProgress?.('正在生成音乐...', 0);
+        onProgress?.('Generating music...', 0);
         const streamer = {
           put: () => {
             if (signal?.aborted) {
-              throw new DOMException('音乐生成已取消。', 'AbortError');
+              throw new DOMException('Music generation cancelled.', 'AbortError');
             }
             tokenCount++;
             const fraction = Math.min(tokenCount / maxNewTokens, 1);
-            onProgress?.(`正在生成音乐... ${Math.round(fraction * 100)}%`, fraction);
+            onProgress?.(`Generating music... ${Math.round(fraction * 100)}%`, fraction);
           },
           end: () => { /* done */ },
         };
@@ -360,12 +360,14 @@ class MusicgenService {
           max_new_tokens: maxNewTokens,
           do_sample: true,
           guidance_scale: guidanceScale,
-          streamer,
+          streamer: streamer as never,
         });
 
-        onProgress?.('正在编码 WAV...');
-        const sampleRate = runtime.model.config.audio_encoder.sampling_rate;
-        const audio = new module.RawAudio(audioValues.data, sampleRate);
+        onProgress?.('Encoding WAV...');
+        const sampleRate = (runtime.model.config as { audio_encoder?: { sampling_rate?: number } })
+          .audio_encoder?.sampling_rate ?? 32000;
+        const audioData = (audioValues as { data: Float32Array | Float32Array[] }).data;
+        const audio = new module.RawAudio(audioData, sampleRate);
         const blob = audio.toBlob();
         const file = new File([blob], createOutputFileName(trimmedPrompt, model), {
           type: 'audio/wav',

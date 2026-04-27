@@ -8,9 +8,10 @@ import {
 } from './composition-graph';
 
 function makeComposition(overrides: Partial<SubComposition> & Pick<SubComposition, 'id' | 'name'>): SubComposition {
+  const { id, name, ...rest } = overrides;
   return {
-    id: overrides.id,
-    name: overrides.name,
+    id,
+    name,
     items: [],
     tracks: [],
     transitions: [],
@@ -19,7 +20,7 @@ function makeComposition(overrides: Partial<SubComposition> & Pick<SubCompositio
     width: 1920,
     height: 1080,
     durationInFrames: 60,
-    ...overrides,
+    ...rest,
   };
 }
 

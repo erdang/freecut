@@ -21,6 +21,7 @@ import {
   WandSparkles,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/shared/ui/cn';
 import { useEditorStore } from '@/app/state/editor';
 import { useTimelineStore } from '@/features/editor/deps/timeline-store';
 import { usePlaybackStore } from '@/shared/state/playback';
@@ -36,7 +37,7 @@ import { TransitionsPanel } from './transitions-panel';
 import {
   createDefaultAdjustmentItem,
   createDefaultShapeItem,
-  createDefaultTextItem,
+  createTextTemplateItem,
   findCompatibleTrackForItemType,
   findNearestAvailableSpace,
   getDefaultGeneratedLayerDurationInFrames,
@@ -46,10 +47,15 @@ import { useMaskEditorStore } from '@/features/editor/deps/preview';
 import type { VisualEffect, GpuEffect } from '@/types/effects';
 import { EFFECT_PRESETS } from '@/types/effects';
 import { getGpuCategoriesWithEffects, getGpuEffectDefaultParams } from '@/infrastructure/gpu/effects';
-import { useEffectPreviews, tEffectCategory, tEffectText } from '@/features/editor/deps/effects-contract';
+import { useEffectPreviews } from '@/features/editor/deps/effects-contract';
 import { createLogger } from '@/shared/logging/logger';
 import { useSettingsStore } from '@/features/editor/deps/settings';
 import { AiPanel } from './ai-panel';
+import {
+  TEXT_STYLE_PRESETS,
+  type TextStylePresetLayout,
+  type TextStylePreset,
+} from '@/shared/typography/text-style-presets';
 import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
@@ -57,6 +63,219 @@ import {
 } from '@/app/editor-layout';
 
 const logger = createLogger('MediaSidebar');
+const TEXT_TEMPLATE_PREVIEW_SHELL = 'w-full aspect-video rounded-sm border border-border bg-slate-950';
+
+function renderTextTemplatePreview(preset?: TextStylePreset) {
+  if (!preset) {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex flex-col items-center justify-center gap-1`}>
+        <Type className="w-3.5 h-3.5 text-muted-foreground/80" />
+        <div className="text-[9px] leading-none tracking-wide text-muted-foreground/80 uppercase">
+          Text
+        </div>
+      </div>
+    );
+  }
+
+  const copy = preset.sample;
+
+  if (preset.previewKind === 'clean') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex items-center justify-center px-1.5`}>
+        <div className="text-[10px] font-bold tracking-[-0.05em] text-white uppercase leading-none">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'lower-third') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} relative overflow-hidden`}>
+        <div className="absolute inset-x-1.5 bottom-1.5 rounded-sm bg-slate-800/95 px-1.5 py-1 text-left">
+          <div className="text-[8px] font-semibold leading-none text-slate-50">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none text-slate-300">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'poster') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex items-center justify-center px-1.5`}>
+        <div className="text-[12px] tracking-[-0.05em] text-amber-100 uppercase leading-none [text-shadow:0_2px_10px_rgba(127,29,29,0.85)]">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'outline-pill') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex items-center justify-center px-1.5`}>
+        <div className="rounded-full border border-sky-400/70 bg-slate-900 px-2 py-1 text-[7px] font-bold tracking-[0.18em] text-slate-100 uppercase leading-none">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'cinematic') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex flex-col items-center justify-center px-1`}>
+        <div className="text-[11px] tracking-[0.28em] text-amber-100 uppercase leading-none [text-shadow:0_2px_8px_rgba(17,24,39,0.9)]">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'quote') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-slate-800 px-2 py-1.5 text-center">
+          <div className="text-[8px] italic leading-tight text-slate-50">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none tracking-[0.08em] text-slate-300">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'speaker') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} px-1.5 py-1 flex flex-col justify-end`}>
+        <div className="rounded-sm bg-slate-800/95 px-1.5 py-1">
+          <div className="text-[8px] font-bold leading-none text-slate-50">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none text-slate-300">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'neon') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-cyan-950 px-1.5 py-1.5 text-center">
+          <div className="text-[10px] font-semibold tracking-[0.16em] text-cyan-300 drop-shadow-[0_0_6px_rgba(34,211,238,0.85)] uppercase">
+            {copy.title}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'stacked') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex flex-col items-center justify-center px-1.5`}>
+        <div className="text-[6px] font-semibold tracking-[0.2em] text-amber-300 uppercase">
+          {copy.eyebrow}
+        </div>
+        <div className="mt-1 text-[10px] font-bold tracking-[-0.04em] text-white leading-none">
+          {copy.title}
+        </div>
+        <div className="mt-0.5 text-[7px] leading-none text-slate-300">
+          {copy.subtitle}
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'breaking') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-slate-900 px-1.5 py-1 text-left">
+          <div className="text-[6px] font-bold tracking-[0.18em] text-red-300 uppercase leading-none">
+            {copy.eyebrow}
+          </div>
+          <div className="mt-1 text-[9px] font-bold tracking-[-0.04em] text-slate-50 leading-none">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] font-semibold leading-none text-amber-200">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'launch') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm border border-blue-800/80 bg-slate-900 px-1.5 py-1 text-center">
+          <div className="text-[6px] font-bold tracking-[0.22em] text-cyan-300 uppercase">
+            {copy.eyebrow}
+          </div>
+          <div className="mt-1 text-[9px] font-bold tracking-[-0.04em] text-slate-50 leading-tight">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] leading-none text-blue-200">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'event') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} p-1.5 flex items-center justify-center`}>
+        <div className="w-full rounded-sm bg-slate-900 px-1.5 py-1 text-center">
+          <div className="text-[6px] font-bold tracking-[0.22em] text-rose-300 uppercase">
+            {copy.eyebrow}
+          </div>
+          <div className="mt-1 text-[9px] font-bold text-slate-50 leading-tight">
+            {copy.title}
+          </div>
+          <div className="mt-0.5 text-[7px] text-blue-200 leading-none uppercase">
+            {copy.subtitle}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (preset.previewKind === 'badge') {
+    return (
+      <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex items-center justify-center px-1.5`}>
+        <div className="rounded-full border border-slate-600 bg-slate-800 px-2 py-1 text-[7px] font-bold tracking-[0.18em] text-slate-50 uppercase leading-none">
+          {copy.title}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${TEXT_TEMPLATE_PREVIEW_SHELL} flex flex-col items-center justify-center px-1.5`}>
+      <div className="text-[10px] font-bold tracking-[-0.04em] text-white uppercase leading-none">
+        {copy.title}
+      </div>
+      <div className="mt-0.5 text-[7px] leading-none text-slate-300 uppercase">
+        {copy.subtitle}
+      </div>
+    </div>
+  );
+}
+
+const TEXT_TEMPLATE_GROUPS: ReadonlyArray<{
+  key: TextStylePresetLayout;
+  label: string;
+}> = [
+  { key: 'single', label: 'Single' },
+  { key: 'two', label: '2 Spans' },
+  { key: 'three', label: '3 Spans' },
+];
 
 export const MediaSidebar = memo(function MediaSidebar() {
   const editorDensity = useSettingsStore((s) => s.editorDensity);
@@ -141,7 +360,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Read from store directly in callbacks using getState()
 
   // Add text item to timeline at the best available position
-  const handleAddText = useCallback(() => {
+  const handleAddText = useCallback((presetId?: (typeof TEXT_STYLE_PRESETS)[number]['id']) => {
     // Read all needed state from stores directly to avoid subscriptions
     const { tracks, items, fps, addItem } = useTimelineStore.getState();
     const { activeTrackId, selectItems } = useSelectionStore.getState();
@@ -174,12 +393,20 @@ export const MediaSidebar = memo(function MediaSidebar() {
     const canvasWidth = currentProject?.metadata.width ?? 1920;
     const canvasHeight = currentProject?.metadata.height ?? 1080;
 
-    const textItem: TextItem = createDefaultTextItem({
-      trackId: targetTrack.id,
-      from: finalPosition,
-      durationInFrames,
-      canvasWidth,
-      canvasHeight,
+    const textStylePreset = presetId
+      ? TEXT_STYLE_PRESETS.find((preset) => preset.id === presetId)
+      : undefined;
+    const textItem: TextItem = createTextTemplateItem({
+      placement: {
+        trackId: targetTrack.id,
+        from: finalPosition,
+        durationInFrames,
+        canvasWidth,
+        canvasHeight,
+        fps,
+      },
+      label: textStylePreset?.label,
+      textStylePresetId: presetId,
     });
 
     addItem(textItem);
@@ -322,15 +549,28 @@ export const MediaSidebar = memo(function MediaSidebar() {
   );
   const presetIds = useMemo(() => EFFECT_PRESETS.map((p) => p.id), []);
   const { previews: effectPreviews, trigger: triggerPreviews } = useEffectPreviews(allEffectEntries, presetIds);
+  const textTemplatesByLayout = useMemo(() => {
+    const grouped = {
+      single: [] as TextStylePreset[],
+      two: [] as TextStylePreset[],
+      three: [] as TextStylePreset[],
+    };
+
+    for (const preset of TEXT_STYLE_PRESETS) {
+      grouped[preset.layout].push(preset);
+    }
+
+    return grouped;
+  }, []);
 
   // Category items for the vertical nav
   const categories = [
-    { id: 'media' as const, icon: Film, label: '媒体' },
-    { id: 'text' as const, icon: Type, label: '文字' },
-    { id: 'shapes' as const, icon: Pentagon, label: '图形' },
-    { id: 'effects' as const, icon: Layers, label: '效果' },
-    { id: 'transitions' as const, icon: Blend, label: '转场' },
-    { id: 'ai' as const, icon: WandSparkles, label: '智能' },
+    { id: 'media' as const, icon: Film, label: 'Media' },
+    { id: 'text' as const, icon: Type, label: 'Text' },
+    { id: 'shapes' as const, icon: Pentagon, label: 'Shapes' },
+    { id: 'effects' as const, icon: Layers, label: 'Effects' },
+    { id: 'transitions' as const, icon: Blend, label: 'Transitions' },
+    { id: 'ai' as const, icon: WandSparkles, label: 'AI' },
   ];
 
   const shouldSuppressGeneratedItemClick = useCallback(() => {
@@ -345,6 +585,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
   const handleTemplateDragStart = useCallback((payload: {
     itemType: 'text' | 'shape' | 'adjustment';
     label: string;
+    textStylePresetId?: (typeof TEXT_STYLE_PRESETS)[number]['id'];
     shapeType?: ShapeType;
     effects?: VisualEffect[];
   }) => (event: React.DragEvent<HTMLButtonElement>) => {
@@ -382,7 +623,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             onClick={toggleLeftSidebar}
             className="rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors"
             style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
-            data-tooltip={leftSidebarOpen ? '收起面板' : '展开面板'}
+            data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
             data-tooltip-side="right"
           >
             {leftSidebarOpen ? (
@@ -432,9 +673,9 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }
             `}
-            data-tooltip={keyframeEditorOpen ? '隐藏关键帧编辑器' : '关键帧编辑器'}
+            data-tooltip={keyframeEditorOpen ? 'Hide Keyframe Editor' : 'Keyframe Editor'}
             data-tooltip-side="right"
-            aria-label={keyframeEditorOpen ? '隐藏关键帧编辑器' : '显示关键帧编辑器'}
+            aria-label={keyframeEditorOpen ? 'Hide keyframe editor' : 'Show keyframe editor'}
           >
             <LineChart className="w-4 h-4" />
           </button>
@@ -472,7 +713,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               className="shrink-0"
               style={{ width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize, height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize }}
               onClick={toggleMediaFullColumn}
-              data-tooltip={mediaFullColumn ? '停靠到预览区' : '展开为完整列'}
+              data-tooltip={mediaFullColumn ? 'Dock to preview' : 'Expand full column'}
               data-tooltip-side="bottom"
             >
               {mediaFullColumn ? (
@@ -491,23 +732,72 @@ export const MediaSidebar = memo(function MediaSidebar() {
           {/* Text Tab */}
           <div className={`min-h-0 flex-1 overflow-y-auto p-3 ${activeTab === 'text' ? 'block' : 'hidden'}`}>
             <div className="space-y-3">
-              <button
-                draggable={true}
-                onDragStart={handleTemplateDragStart({ itemType: 'text', label: '文字' })}
-                onDragEnd={handleTemplateDragEnd}
-                onClick={() => {
-                  if (shouldSuppressGeneratedItemClick()) return;
-                  handleAddText();
-                }}
-                className="w-full flex items-center gap-3 p-3 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-              >
-                <div className="w-9 h-9 rounded-md bg-timeline-text/20 border border-timeline-text/50 flex items-center justify-center group-hover:bg-timeline-text/30 flex-shrink-0">
-                  <Type className="w-4 h-4 text-timeline-text" />
+              <div className="space-y-3">
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                  Templates
                 </div>
-                <span className="text-sm text-muted-foreground group-hover:text-foreground">
-                  添加文字
-                </span>
-              </button>
+                {TEXT_TEMPLATE_GROUPS.map((group) => {
+                  const presets = textTemplatesByLayout[group.key];
+                  const showAddText = group.key === 'single';
+
+                  if (!showAddText && presets.length === 0) {
+                    return null;
+                  }
+
+                  return (
+                    <div key={group.key} className="space-y-1.5">
+                      <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                        {group.label}
+                      </div>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {showAddText ? (
+                          <button
+                            draggable={true}
+                            onDragStart={handleTemplateDragStart({ itemType: 'text', label: 'Text' })}
+                            onDragEnd={handleTemplateDragEnd}
+                            onClick={() => {
+                              if (shouldSuppressGeneratedItemClick()) return;
+                              handleAddText();
+                            }}
+                            className="flex flex-col items-center gap-1 p-1.5 rounded-md border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
+                          >
+                            {renderTextTemplatePreview()}
+                            <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                              Add Text
+                            </span>
+                          </button>
+                        ) : null}
+                        {presets.map((preset) => (
+                          <button
+                            key={preset.id}
+                            draggable={true}
+                            onDragStart={handleTemplateDragStart({
+                              itemType: 'text',
+                              label: preset.label,
+                              textStylePresetId: preset.id,
+                            })}
+                            onDragEnd={handleTemplateDragEnd}
+                            onClick={() => {
+                              if (shouldSuppressGeneratedItemClick()) return;
+                              handleAddText(preset.id);
+                            }}
+                            className={cn(
+                              'flex flex-col items-center gap-1 p-1.5 rounded-md border border-border',
+                              'bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50',
+                              'transition-colors group'
+                            )}
+                          >
+                            {renderTextTemplatePreview(preset)}
+                            <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
+                              {preset.label}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -516,7 +806,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
             <div className="grid grid-cols-3 gap-1.5">
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '矩形', shapeType: 'rectangle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Rectangle', shapeType: 'rectangle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -528,13 +818,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Square className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      矩形
+                      Rectangle
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '圆形', shapeType: 'circle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Circle', shapeType: 'circle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -546,13 +836,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Circle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      圆形
+                      Circle
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '三角形', shapeType: 'triangle' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Triangle', shapeType: 'triangle' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -564,13 +854,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Triangle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      三角形
+                      Triangle
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '椭圆', shapeType: 'ellipse' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Ellipse', shapeType: 'ellipse' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -582,13 +872,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Circle className="w-3.5 h-2.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      椭圆
+                      Ellipse
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '星形', shapeType: 'star' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Star', shapeType: 'star' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -600,13 +890,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Star className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      星形
+                      Star
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '多边形', shapeType: 'polygon' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Polygon', shapeType: 'polygon' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -618,13 +908,13 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Hexagon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      多边形
+                      Polygon
                     </span>
                   </button>
 
                   <button
                     draggable={true}
-                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: '爱心', shapeType: 'heart' })}
+                    onDragStart={handleTemplateDragStart({ itemType: 'shape', label: 'Heart', shapeType: 'heart' })}
                     onDragEnd={handleTemplateDragEnd}
                     onClick={() => {
                       if (shouldSuppressGeneratedItemClick()) return;
@@ -636,20 +926,20 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       <Heart className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      爱心
+                      Heart
                     </span>
                   </button>
 
                   <button
                     onClick={() => useMaskEditorStore.getState().startShapePenMode()}
                     className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                    title="使用钢笔工具绘制自定义路径图形"
+                    title="Draw a custom path shape with the pen tool"
                   >
                     <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                       <Pen className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                     </div>
                     <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                      钢笔
+                      Pen
                     </span>
                   </button>
             </div>
@@ -661,7 +951,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {/* Blank Adjustment Layer */}
               <button
                 draggable={true}
-                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: '调整图层' })}
+                onDragStart={handleTemplateDragStart({ itemType: 'adjustment', label: 'Adjustment Layer' })}
                 onDragEnd={handleTemplateDragEnd}
                 onClick={() => {
                   if (shouldSuppressGeneratedItemClick()) return;
@@ -674,7 +964,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 </div>
                 <div className="text-left">
                   <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                    空白调整图层
+                    Blank Adjustment Layer
                   </div>
                 </div>
               </button>
@@ -682,7 +972,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {/* Presets */}
               <div>
                 <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                  预设
+                  Presets
                 </div>
                 <div className="grid grid-cols-3 gap-1.5">
                   {EFFECT_PRESETS.map((preset) => (
@@ -691,7 +981,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                       draggable={true}
                       onDragStart={handleTemplateDragStart({
                         itemType: 'adjustment',
-                        label: tEffectText(preset.name),
+                        label: preset.name,
                         effects: preset.effects,
                       })}
                       onDragEnd={handleTemplateDragEnd}
@@ -714,7 +1004,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                         </div>
                       )}
                       <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                        {tEffectText(preset.name)}
+                        {preset.name}
                       </span>
                     </button>
                   ))}
@@ -725,7 +1015,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               {gpuCategories.map(({ category, effects: catEffects }) => (
                 <div key={category}>
                   <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                    {tEffectCategory(category)}
+                    {category}
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
                     {catEffects.map((def) => (
@@ -734,7 +1024,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                         draggable={true}
                         onDragStart={handleTemplateDragStart({
                           itemType: 'adjustment',
-                          label: tEffectText(def.name),
+                          label: def.name,
                           effects: [{
                             type: 'gpu-effect',
                             gpuEffectType: def.id,
@@ -759,7 +1049,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                           <div className="w-full aspect-video rounded-sm bg-muted" />
                         )}
                         <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight truncate w-full">
-                          {tEffectText(def.name)}
+                          {def.name}
                         </span>
                       </button>
                     ))}

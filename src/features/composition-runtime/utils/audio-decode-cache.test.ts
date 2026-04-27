@@ -1,7 +1,7 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const decodedPreviewAudioMocks = vi.hoisted(() => ({
-  getDecodedPreviewAudio: vi.fn(async () => null),
+  getDecodedPreviewAudio: vi.fn<(_id?: string) => Promise<unknown | null>>(async () => null),
   saveDecodedPreviewAudio: vi.fn(async () => undefined),
   deleteDecodedPreviewAudio: vi.fn(async () => undefined),
 }));
@@ -184,10 +184,14 @@ describe('audio-decode-cache targeted slice reuse', () => {
   beforeAll(() => {
     class OfflineAudioContextMock {
       constructor(
-        private readonly channels: number,
-        private readonly length: number,
-        private readonly sampleRate: number,
-      ) {}
+        channels: number,
+        length: number,
+        sampleRate: number,
+      ) {
+        void channels;
+        void length;
+        void sampleRate;
+      }
 
       createBuffer(channels: number, length: number, sampleRate: number): AudioBuffer {
         const data = Array.from({ length: channels }, () => new Float32Array(length));
@@ -339,7 +343,7 @@ describe('audio-decode-cache targeted slice reuse', () => {
         createdAt: Date.now(),
       }],
     ]);
-    decodedPreviewAudioMocks.getDecodedPreviewAudio.mockImplementation(async (id: string) => records.get(id) ?? null);
+    decodedPreviewAudioMocks.getDecodedPreviewAudio.mockImplementation(async (id?: string) => (id ? records.get(id) ?? null : null));
 
     const slice = await getOrDecodeAudioSliceForPlayback('media-4', 'blob://audio', {
       minReadySeconds: 3,

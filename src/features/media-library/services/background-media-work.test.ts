@@ -80,7 +80,7 @@ describe('backgroundMediaWork', () => {
     await flushScheduledWork();
     expect(events).toEqual(['first-start']);
 
-    releaseFirst?.();
+    (releaseFirst as unknown as () => void)();
     await Promise.resolve();
     await flushScheduledWork();
     await flushScheduledWork();

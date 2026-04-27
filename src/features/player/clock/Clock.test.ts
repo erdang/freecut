@@ -37,7 +37,10 @@ describe('Clock hidden tab playback', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
-    delete (document as Document & { hidden?: boolean }).hidden;
+    Object.defineProperty(document, 'hidden', {
+      configurable: true,
+      value: false,
+    });
   });
 
   it('keeps advancing with elapsed time while the tab is hidden', () => {

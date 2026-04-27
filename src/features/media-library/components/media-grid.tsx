@@ -36,7 +36,7 @@ interface MediaGridProps {
 
 export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'grid', itemSize = 3, items }: MediaGridProps) {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [mediaIdToDelete, setMediaIdToDelete] = useState<string | null>(null);
+  const [mediaIdsToDelete, setMediaIdsToDelete] = useState<string[]>([]);
   const lastSelectedIdRef = useRef<string | null>(null);
 
   const allFilteredItems = useFilteredMediaItems();
@@ -46,6 +46,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
   const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds);
   const deleteMedia = useMediaLibraryStore((s) => s.deleteMedia);
+  const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const relinkMedia = useMediaLibraryStore((s) => s.relinkMedia);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
   const setSourcePreviewMediaId = useEditorStore((s) => s.setSourcePreviewMediaId);
@@ -57,10 +58,10 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   }, [filteredItems]);
 
   const affectedMediaImpact = useMemo(() => (
-    mediaIdToDelete
-      ? getMediaDeletionImpact([mediaIdToDelete])
+    mediaIdsToDelete.length > 0
+      ? getMediaDeletionImpact(mediaIdsToDelete)
       : { itemIds: [], rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 }
-  ), [mediaIdToDelete]);
+  ), [mediaIdsToDelete]);
 
   const handleCardSelect = useCallback((mediaId: string, event?: React.MouseEvent) => {
     const currentFilteredItems = filteredItemsRef.current;
@@ -98,14 +99,15 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
   }, [onMediaSelect]);
 
   // Show delete confirmation dialog (called from MediaCard)
-  const handleCardDelete = useCallback((mediaId: string) => {
-    setMediaIdToDelete(mediaId);
+  const handleCardDelete = useCallback((mediaIds: string[]) => {
+    if (mediaIds.length === 0) return;
+    setMediaIdsToDelete(mediaIds);
     setShowDeleteDialog(true);
   }, []);
 
   // Actually delete after confirmation
   const handleConfirmDelete = async () => {
-    if (!mediaIdToDelete) return;
+    if (mediaIdsToDelete.length === 0) return;
 
     setShowDeleteDialog(false);
     try {
@@ -115,18 +117,22 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       }
 
       // Then delete the media from the library
-      await deleteMedia(mediaIdToDelete);
+      if (mediaIdsToDelete.length === 1) {
+        await deleteMedia(mediaIdsToDelete[0]!);
+      } else {
+        await deleteMediaBatch(mediaIdsToDelete);
+      }
     } catch (error) {
       logger.error('Failed to delete media:', error);
       // Error is already set in store
     } finally {
-      setMediaIdToDelete(null);
+      setMediaIdsToDelete([]);
     }
   };
 
   const handleCancelDelete = useCallback(() => {
     setShowDeleteDialog(false);
-    setMediaIdToDelete(null);
+    setMediaIdsToDelete([]);
   }, []);
 
   // Handle relinking a broken media file
@@ -159,7 +165,7 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
     filteredItems.map((media) => [media.id, {
       onSelect: (event: React.MouseEvent) => handleCardSelect(media.id, event),
       onDoubleClick: () => setSourcePreviewMediaId(media.id),
-      onDelete: () => handleCardDelete(media.id),
+      onDelete: (mediaIds: string[]) => handleCardDelete(mediaIds),
       onRelink: () => {
         void handleRelink(media.id);
       },
@@ -178,8 +184,8 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
               <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-primary/20 animate-pulse" />
             </div>
             <div className="text-center">
-              <p className="text-sm font-mono text-foreground tracking-wider mb-1">正在加载媒体库</p>
-              <p className="text-xs text-muted-foreground font-mono">正在初始化存储...</p>
+              <p className="text-sm font-mono text-foreground tracking-wider mb-1">LOADING MEDIA LIBRARY</p>
+              <p className="text-xs text-muted-foreground font-mono">Initializing storage...</p>
             </div>
           </div>
         </div>
@@ -192,9 +198,9 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
             >
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
-            <p className="text-base font-bold text-foreground mb-2 tracking-wide">暂无媒体文件</p>
+            <p className="text-base font-bold text-foreground mb-2 tracking-wide">NO MEDIA FILES</p>
             <p className="text-sm text-muted-foreground font-light mb-3">
-              拖拽文件到此处，或点击浏览导入
+              Drag and drop files or click to browse
             </p>
             <div className="flex flex-wrap justify-center gap-2">
               <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>
@@ -237,20 +243,26 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
       <AlertDialog open={showDeleteDialog} onOpenChange={(open) => !open && handleCancelDelete()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除媒体文件？</AlertDialogTitle>
+            <AlertDialogTitle>
+              {mediaIdsToDelete.length > 1
+                ? `Delete ${mediaIdsToDelete.length} media files?`
+                : 'Delete media file?'}
+            </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  确认删除“{filteredItems.find(m => m.id === mediaIdToDelete)?.fileName}”？
-                  此操作不可撤销。
+                  {mediaIdsToDelete.length > 1
+                    ? `Are you sure you want to delete ${mediaIdsToDelete.length} selected media files? This action cannot be undone.`
+                    : `Are you sure you want to delete "${filteredItems.find(m => m.id === mediaIdsToDelete[0])?.fileName}"? This action cannot be undone.`
+                  }
                 </p>
                 {affectedMediaImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">时间线片段将被移除</p>
+                      <p className="font-medium">Timeline clips will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        时间线及嵌套复合片段中共有 {affectedMediaImpact.totalReferenceCount} 个片段引用此媒体，也会一并删除。
+                        {affectedMediaImpact.totalReferenceCount} clip{affectedMediaImpact.totalReferenceCount > 1 ? 's' : ''} across the timeline and nested compound clips reference this media and will also be deleted.
                       </p>
                     </div>
                   </div>
@@ -259,9 +271,9 @@ export const MediaGrid = memo(function MediaGrid({ onMediaSelect, viewMode = 'gr
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancelDelete}>取消</AlertDialogCancel>
+            <AlertDialogCancel onClick={handleCancelDelete}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              删除{affectedMediaImpact.totalReferenceCount > 0 ? `（含 ${affectedMediaImpact.totalReferenceCount} 个片段）` : ''}
+              Delete{affectedMediaImpact.totalReferenceCount > 0 ? ` & ${affectedMediaImpact.totalReferenceCount} clip${affectedMediaImpact.totalReferenceCount > 1 ? 's' : ''}` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

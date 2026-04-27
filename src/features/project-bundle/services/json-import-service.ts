@@ -79,7 +79,11 @@ export async function validateSnapshotData(
 
   if (validation.success) {
     try {
-      const migrationResult = migrateProject(validation.data.project as Project);
+      const validSnapshot = validation.data;
+      if (!validSnapshot) {
+        throw new Error('Validation succeeded without snapshot data');
+      }
+      const migrationResult = migrateProject(validSnapshot.project as Project);
       if (migrationResult.migrated) {
         const appliedRange = migrationResult.appliedMigrations.length > 0
           ? `v${migrationResult.fromVersion} to v${migrationResult.toVersion}`

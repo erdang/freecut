@@ -341,7 +341,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const codecOptions = useMemo<VideoCodecOption[]>(() => {
     return getCompatibleVideoCodecs(videoContainer).map((codec) => ({
       value: codec,
-      label: VIDEO_CODEC_LABELS[codec],
+      label: VIDEO_CODEC_LABELS[codec] ?? codec.toUpperCase(),
       supported: supportedVideoCodecs === null
         ? true
         : supportedVideoCodecs.includes(mapExportCodecToClientCodec(codec)),

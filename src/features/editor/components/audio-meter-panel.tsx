@@ -7,8 +7,9 @@ import {
   captureSnapshot,
   importWaveformCache,
 } from '@/features/editor/deps/timeline-store';
+import { useGizmoStore } from '@/features/editor/deps/preview';
 import { importMediaLibraryService } from '@/features/editor/deps/media-library';
-import { usePlaybackStore } from '@/shared/state/playback';
+import { getResolvedPlaybackFrame, usePlaybackStore } from '@/shared/state/playback';
 import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { useEditorStore } from '@/app/state/editor/store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
@@ -44,11 +45,27 @@ import { AudioEqPanelContent } from './properties-sidebar/clip-panel/audio-eq-pa
 import { type AudioEqPatch } from './properties-sidebar/clip-panel/audio-eq-curve-editor';
 import { getSparseAudioEqSettings } from '@/shared/utils/audio-eq';
 import { type AudioEqSettings } from '@/types/audio';
+import { clearMixerLiveGainLayer, setMixerLiveGainLayer } from '@/shared/state/mixer-live-gain';
 
 type PanelMode = 'meter' | 'mixer';
 type EqPanelTarget =
   | { kind: 'track'; trackId: string }
   | { kind: 'bus' };
+type EqPanelDescriptor =
+  | {
+      title: string;
+      targetLabel: string;
+      trackId: string;
+      trackEq: AudioEqSettings | undefined;
+      eqEnabled: boolean;
+    }
+  | {
+      title: string;
+      targetLabel: string;
+      busEq: AudioEqSettings | undefined;
+      eqEnabled: boolean;
+    };
+const MUTE_SOLO_LIVE_GAIN_LAYER_ID = 'track-mute-solo';
 
 function toWaveformSnapshot(
   waveform: { peaks: Float32Array; sampleRate: number; channels?: number; stereo?: boolean } | null | undefined,
@@ -174,7 +191,14 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     lastTimestamp: 0,
   });
 
-  const effectiveFrame = previewFrame ?? displayedFrame ?? currentFrame;
+  const effectiveFrame = useMemo(() => getResolvedPlaybackFrame({
+    currentFrame,
+    currentFrameEpoch: usePlaybackStore.getState().currentFrameEpoch,
+    previewFrame,
+    previewFrameEpoch: usePlaybackStore.getState().previewFrameEpoch,
+    isPlaying,
+    displayedFrame,
+  }), [currentFrame, displayedFrame, isPlaying, previewFrame]);
   const combinedTracks = useMemo(() => {
     return tracks
       .filter((track) => !track.isGroup)
@@ -463,7 +487,7 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
     });
   }, [combinedTracks, mixerFloating, mixerSourceTracks, panelMode, perTrackSources, waveformsByMediaId]);
 
-  const eqPanelDescriptor = useMemo(() => {
+  const eqPanelDescriptor = useMemo<EqPanelDescriptor | null>(() => {
     if (!eqPanelTarget) return null;
 
     if (eqPanelTarget.kind === 'track') {
@@ -555,6 +579,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         : track
     ));
     itemsState.setTracks(nextTracks);
+    const trackItemIds = (itemsState.itemsByTrackId[trackId] ?? []).map((item) => item.id);
+    if (trackItemIds.length > 0) {
+      useGizmoStore.getState().clearPreviewForItems(trackItemIds);
+    }
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_TRACK_EQ', payload: { id: trackId } },
@@ -579,6 +607,10 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
         : track
     ));
     itemsState.setTracks(nextTracks);
+    const trackItemIds = (itemsState.itemsByTrackId[trackId] ?? []).map((item) => item.id);
+    if (trackItemIds.length > 0) {
+      useGizmoStore.getState().clearPreviewForItems(trackItemIds);
+    }
     useTimelineStore.getState().markDirty();
     useTimelineCommandStore.getState().addUndoEntry(
       { type: 'UPDATE_TRACK_EQ_ENABLED', payload: { id: trackId } },
@@ -664,16 +696,24 @@ export const AudioMeterPanel = memo(function AudioMeterPanel() {
       }))
       .filter((track) => isAudioMixerTrack(track, currentTimelineItems));
     if (audioTracks.length === 0) {
+      clearMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID);
       return;
     }
     const anySoloed = audioTracks.some((t) => t.solo);
+    const liveGainEntries: Array<{ itemId: string; gain: number }> = [];
 
     for (const t of audioTracks) {
       const shouldMute = t.muted || (anySoloed && !t.solo);
       const gain = shouldMute ? 0 : 1;
       for (const itemId of getTrackItemIds(t.id)) {
-        usePlaybackStore.getState().setLiveItemGain(itemId, gain);
+        liveGainEntries.push({ itemId, gain });
       }
+    }
+
+    if (liveGainEntries.length > 0) {
+      setMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID, liveGainEntries);
+    } else {
+      clearMixerLiveGainLayer(MUTE_SOLO_LIVE_GAIN_LAYER_ID);
     }
   }, [getTrackItemIds]);
 

@@ -10,6 +10,7 @@ import {
 } from 'react';
 import {
   CheckCircle2,
+  ChevronDown,
   Download,
   Info,
   ListPlus,
@@ -21,6 +22,11 @@ import {
   X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -33,7 +39,15 @@ import {
 import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
 import { getMusicgenModelDefinition } from '@/shared/utils/musicgen-models';
+import {
+  getStoredTtsEngine,
+  getStoredTtsQuality,
+  setStoredTtsEngine,
+  setStoredTtsQuality,
+  type StoredTtsEngine,
+} from '@/shared/utils/tts-settings';
 import { SliderInput } from '@/shared/ui/property-controls';
+import { cn } from '@/shared/ui/cn';
 import {
   importMediaLibraryService,
   useMediaLibraryStore,
@@ -48,11 +62,20 @@ import { useSelectionStore } from '@/shared/state/selection';
 import type { AudioItem } from '@/types/timeline';
 import type { MediaMetadata } from '@/types/storage';
 import {
-  KITTEN_TTS_MODEL_OPTIONS,
-  KITTEN_TTS_VOICE_OPTIONS,
-  kittenTtsService,
-  type KittenTtsVoice,
-} from '../services/kitten-tts-service';
+  KOKORO_TTS_MODEL_OPTIONS,
+  KOKORO_TTS_VOICE_OPTIONS,
+  getKokoroTtsModelOption,
+  getKokoroTtsVoiceOption,
+  kokoroTtsService,
+  type KokoroTtsModel,
+  type KokoroTtsVoice,
+} from '../services/kokoro-tts-service';
+import {
+  MOSS_TTS_VOICE_OPTIONS,
+  getMossTtsVoiceOption,
+  mossTtsService,
+  type MossTtsVoice,
+} from '../services/moss-tts-service';
 import {
   DEFAULT_MUSICGEN_MODEL,
   MUSICGEN_MODEL_OPTIONS,
@@ -60,15 +83,15 @@ import {
   type MusicgenModelId,
 } from '../services/musicgen-service';
 
-const DEFAULT_PROMPT = '欢迎使用 FreeCut。这段语音由浏览器内 WebGPU 本地生成。';
+const DEFAULT_PROMPT = 'Welcome to freecut. This voice was generated locally in the browser.';
 
 const MUSIC_PROMPT_PRESETS = [
-  { label: 'Lo-fi 氛围', prompt: '温暖的 lo-fi 节拍，带有颗粒感鼓组、柔和贝斯和梦幻合成器主旋律' },
-  { label: '80 年代流行', prompt: '80 年代风格流行曲，厚重鼓点与复古合成器' },
-  { label: '90 年代摇滚', prompt: '90 年代摇滚，响亮电吉他与有力鼓组' },
-  { label: '活力 EDM', prompt: '轻快愉悦的 EDM，切分鼓点、空气感铺底，强烈情绪，BPM 130' },
-  { label: '乡村', prompt: '轻松愉快的乡村音乐，以木吉他为主' },
-  { label: 'Lo-fi 电子', prompt: '低速 BPM 的 lo-fi 电子氛围，带有自然采样质感' },
+  { label: 'Lo-fi Chill', prompt: 'Warm lo-fi beat with dusty drums, mellow bass, and a dreamy synth lead' },
+  { label: '80s Pop', prompt: '80s pop track with bassy drums and synth' },
+  { label: '90s Rock', prompt: '90s rock song with loud guitars and heavy drums' },
+  { label: 'Upbeat EDM', prompt: 'A light and cheery EDM track, with syncopated drums, airy pads, and strong emotions bpm: 130' },
+  { label: 'Country', prompt: 'A cheerful country song with acoustic guitars' },
+  { label: 'Lo-fi Electro', prompt: 'Lofi slow bpm electro chill with organic samples' },
 ];
 
 const DEFAULT_MUSIC_PROMPT = MUSIC_PROMPT_PRESETS[0]!.prompt;
@@ -172,7 +195,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         type="button"
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm glow-primary-sm transition-colors hover:bg-primary/90"
         onClick={togglePlay}
-        aria-label={isPlaying ? '暂停' : '播放'}
+        aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying
           ? <Pause className="h-3 w-3" />
@@ -188,7 +211,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         max={100}
         step={0.1}
         className="min-w-0 flex-1"
-        aria-label="进度"
+        aria-label="Seek"
       />
       <span className="shrink-0 select-none font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatTime(currentTime)}
@@ -256,14 +279,16 @@ export const AiPanel = memo(function AiPanel() {
   const showNotification = useMediaLibraryStore((state) => state.showNotification);
 
   const [ttsText, setTtsText] = useState(DEFAULT_PROMPT);
-  const [ttsVoice, setTtsVoice] = useState<KittenTtsVoice>('Bella');
-  const [ttsModel, setTtsModel] = useState<'nano' | 'micro' | 'mini'>('mini');
-  const [ttsSpeed, setTtsSpeed] = useState(1.25);
+  const [ttsEngine, setTtsEngine] = useState<StoredTtsEngine>(() => getStoredTtsEngine());
+  const [ttsKokoroVoice, setTtsKokoroVoice] = useState<KokoroTtsVoice>('af_heart');
+  const [ttsMossVoice, setTtsMossVoice] = useState<MossTtsVoice>('Xiaoyu');
+  const [ttsModel, setTtsModel] = useState<KokoroTtsModel>(() => getStoredTtsQuality());
+  const [ttsSpeed, setTtsSpeed] = useState(1);
   const [isTtsGenerating, setIsTtsGenerating] = useState(false);
   const [ttsProgress, setTtsProgress] = useState<string | null>(null);
   const [ttsError, setTtsError] = useState<string | null>(null);
   const [ttsGenerations, setTtsGenerations] = useState<AudioGeneration[]>([]);
-  const [ttsInfoOpen, setTtsInfoOpen] = useState(false);
+  const [ttsSectionOpen, setTtsSectionOpen] = useState(true);
 
   const [musicPrompt, setMusicPrompt] = useState(DEFAULT_MUSIC_PROMPT);
   const [musicModel] = useState<MusicgenModelId>(DEFAULT_MUSICGEN_MODEL);
@@ -275,6 +300,7 @@ export const AiPanel = memo(function AiPanel() {
   const [musicGenerations, setMusicGenerations] = useState<AudioGeneration[]>([]);
   const [musicProgressPct, setMusicProgressPct] = useState<number | null>(null);
   const [musicInfoOpen, setMusicInfoOpen] = useState(false);
+  const [musicSectionOpen, setMusicSectionOpen] = useState(true);
 
   const musicAbortRef = useRef<AbortController | null>(null);
   const generationUrlsRef = useRef<Set<string>>(new Set());
@@ -299,11 +325,22 @@ export const AiPanel = memo(function AiPanel() {
     };
   }, []);
 
-  const isTtsSupported = kittenTtsService.isSupported();
+  useEffect(() => {
+    setStoredTtsQuality(ttsModel);
+  }, [ttsModel]);
+
+  useEffect(() => {
+    setStoredTtsEngine(ttsEngine);
+  }, [ttsEngine]);
+
+  const isKokoroSupported = kokoroTtsService.isSupported();
+  const isMossSupported = mossTtsService.isSupported();
+  const supportsNativeTtsSpeed = ttsEngine === 'kokoro';
+  const effectiveTtsSpeed = supportsNativeTtsSpeed ? ttsSpeed : 1;
+  const isTtsSupported = ttsEngine === 'kokoro' ? isKokoroSupported : isMossSupported;
   const isMusicSupported = musicgenService.isSupported();
   const trimmedTtsText = ttsText.trim();
   const trimmedMusicPrompt = musicPrompt.trim();
-  const recommendedLength = trimmedTtsText.length <= 500;
 
   const totalTtsBytes = useMemo(
     () => ttsGenerations.reduce((sum, generation) => sum + generation.byteSize, 0),
@@ -321,8 +358,7 @@ export const AiPanel = memo(function AiPanel() {
   const setText = setTtsText;
   const model = ttsModel;
   const setModel = setTtsModel;
-  const voice = ttsVoice;
-  const setVoice = setTtsVoice;
+  const voice = ttsEngine === 'kokoro' ? ttsKokoroVoice : ttsMossVoice;
   const speed = ttsSpeed;
   const setSpeed = setTtsSpeed;
   const isGenerating = isTtsGenerating;
@@ -332,39 +368,73 @@ export const AiPanel = memo(function AiPanel() {
   const totalBytes = totalTtsBytes;
   const anySaving = anyTtsSaving;
   const trimmedText = trimmedTtsText;
-  const isWebGpuSupported = isTtsSupported;
+  const currentTtsBackendLabel = ttsEngine === 'kokoro' ? 'WebGPU' : 'CPU';
+  const currentTtsRuntimeLabel = ttsEngine === 'kokoro' ? 'Kokoro TTS' : 'MOSS Nano';
 
   // --- actions ---
 
   const handleTtsGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setTtsError('请先打开项目再生成音频。');
+      setTtsError('Open a project before generating audio.');
       return;
     }
     if (!trimmedTtsText) {
-      setTtsError('请输入要合成的文本。');
+      setTtsError('Enter some text to synthesize.');
       return;
     }
     if (!isTtsSupported) {
-      setTtsError('Kitten TTS 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。');
+      setTtsError(
+        ttsEngine === 'kokoro'
+          ? 'WebGPU is required for Kokoro TTS. Try Chrome 113+, Edge 113+, or Safari 26+.'
+          : 'Browser-managed storage is required for MOSS multilingual TTS. Try a recent Chromium browser.',
+      );
       return;
     }
 
     setTtsError(null);
     setIsTtsGenerating(true);
-    setTtsProgress('正在准备本地语音生成...');
+    setTtsProgress('Preparing local TTS...');
 
     try {
-      const { blob, file, duration } = await kittenTtsService.generateSpeechFile({
-        text: trimmedTtsText,
-        voice: ttsVoice,
-        speed: ttsSpeed,
-        model: ttsModel,
-        onProgress: setTtsProgress,
-      });
+      const result = ttsEngine === 'kokoro'
+        ? await kokoroTtsService.generateSpeechFile({
+          text: trimmedTtsText,
+          voice: ttsKokoroVoice,
+          speed: effectiveTtsSpeed,
+          model: ttsModel,
+          onProgress: setTtsProgress,
+        })
+        : await mossTtsService.generateSpeechFile({
+          text: trimmedTtsText,
+          voice: ttsMossVoice,
+          speed: effectiveTtsSpeed,
+          onProgress: setTtsProgress,
+        });
+
+      const { blob, file, duration } = result;
 
       const objectUrl = URL.createObjectURL(blob);
       generationUrlsRef.current.add(objectUrl);
+      const voiceLabel = ttsEngine === 'kokoro'
+        ? getKokoroTtsVoiceOption(ttsKokoroVoice).label
+        : getMossTtsVoiceOption(ttsMossVoice).label;
+      const modelLabel = ttsEngine === 'kokoro'
+        ? getKokoroTtsModelOption(ttsModel).label
+        : 'Multilingual Nano';
+      const engineTags = ttsEngine === 'kokoro'
+        ? [
+          'ai-generated',
+          'kokoro-tts',
+          'tts-engine:kokoro',
+          `kokoro-quality:${ttsModel}`,
+          `kokoro-voice:${ttsKokoroVoice}`,
+        ]
+        : [
+          'ai-generated',
+          'moss-tts',
+          'tts-engine:moss',
+          `moss-voice:${ttsMossVoice}`,
+        ];
 
       const generation: AudioGeneration = {
         id: crypto.randomUUID(),
@@ -373,16 +443,11 @@ export const AiPanel = memo(function AiPanel() {
         byteSize: blob.size,
         duration,
         textSnippet: trimmedTtsText,
-        voice: ttsVoice,
-        model: ttsModel,
+        voice: voiceLabel,
+        model: modelLabel,
         summary: trimmedTtsText,
-        details: `${ttsVoice} / ${ttsModel} / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
-        tags: [
-          'ai-generated',
-          'kitten-tts',
-          `kitten-model:${ttsModel}`,
-          `kitten-voice:${ttsVoice.toLowerCase()}`,
-        ],
+        details: `${voiceLabel} / ${modelLabel} / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        tags: engineTags,
         savedMediaId: null,
         saving: false,
       };
@@ -393,22 +458,22 @@ export const AiPanel = memo(function AiPanel() {
       setTtsError(
         generationError instanceof Error
           ? generationError.message
-          : '语音生成失败。'
+          : 'Failed to generate speech.'
       );
       setTtsProgress(null);
     } finally {
       setIsTtsGenerating(false);
     }
-  }, [currentProjectId, trimmedTtsText, isTtsSupported, ttsVoice, ttsSpeed, ttsModel]);
+  }, [currentProjectId, effectiveTtsSpeed, isTtsSupported, trimmedTtsText, ttsEngine, ttsKokoroVoice, ttsModel, ttsMossVoice]);
 
   const handleMusicGenerate = useCallback(async () => {
     if (!currentProjectId) return null;
     if (!trimmedMusicPrompt) {
-      setMusicError('请描述你想生成的音乐。');
+      setMusicError('Describe the music you want to generate.');
       return null;
     }
     if (!isMusicSupported) {
-      setMusicError('MusicGen 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。');
+      setMusicError('WebGPU is required for MusicGen. Try Chrome 113+, Edge 113+, or Safari 26+.');
       return null;
     }
 
@@ -417,7 +482,7 @@ export const AiPanel = memo(function AiPanel() {
 
     setMusicError(null);
     setIsMusicGenerating(true);
-    setMusicProgress('正在准备本地音乐生成...');
+    setMusicProgress('Preparing local music generation...');
     setMusicProgressPct(null);
 
     try {
@@ -444,9 +509,9 @@ export const AiPanel = memo(function AiPanel() {
         duration,
         textSnippet: trimmedMusicPrompt,
         voice: modelLabel,
-        model: `目标 ${musicDuration}s`,
+        model: `target ${musicDuration}s`,
         summary: trimmedMusicPrompt,
-        details: `${modelLabel} / 目标 ${musicDuration}s / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        details: `${modelLabel} / target ${musicDuration}s / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
         tags: [
           'ai-generated',
           'musicgen',
@@ -465,7 +530,7 @@ export const AiPanel = memo(function AiPanel() {
         setMusicError(
           generationError instanceof Error
             ? generationError.message
-            : '音乐生成失败。'
+            : 'Failed to generate music.'
         );
       }
     } finally {
@@ -515,7 +580,7 @@ export const AiPanel = memo(function AiPanel() {
       setError(
         saveError instanceof Error
           ? saveError.message
-          : '保存音频到媒体库失败。'
+          : 'Failed to save audio to the media library.'
       );
       updateGenerationInList(setGenerations, generation.id, { saving: false });
       return null;
@@ -531,7 +596,7 @@ export const AiPanel = memo(function AiPanel() {
     if (media) {
       showNotification({
         type: 'success',
-        message: `已将“${media.fileName}”保存到媒体库。`,
+        message: `Saved "${media.fileName}" to the media library.`,
       });
     }
   }, [saveGeneration, showNotification]);
@@ -548,8 +613,8 @@ export const AiPanel = memo(function AiPanel() {
     showNotification({
       type: inserted ? 'success' : 'warning',
       message: inserted
-        ? `已保存“${media.fileName}”并添加到时间线。`
-        : `已保存“${media.fileName}”，但当前没有可用音频轨道。`,
+        ? `Saved "${media.fileName}" and added to timeline.`
+        : `Saved "${media.fileName}" but no audio track is available.`,
     });
   }, [saveGeneration, showNotification]);
 
@@ -601,362 +666,366 @@ export const AiPanel = memo(function AiPanel() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto p-3">
-      <div className="space-y-4">
-        <div className="-mx-3 -mt-3 flex items-center gap-2 bg-secondary/50 px-3 py-2">
-          <h2 className="text-sm font-medium">文本转语音</h2>
-          <Popover open={ttsInfoOpen} onOpenChange={setTtsInfoOpen}>
-            <PopoverTrigger asChild>
+      <div className="space-y-3">
+        <Collapsible open={ttsSectionOpen} onOpenChange={setTtsSectionOpen}>
+          <div className="-mx-3 -mt-3 bg-secondary/50 px-3 py-2">
+            <CollapsibleTrigger asChild>
               <button
                 type="button"
-                className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
-                aria-label="文本转语音说明"
-                onMouseEnter={() => setTtsInfoOpen(true)}
-                onMouseLeave={() => setTtsInfoOpen(false)}
+                className="flex w-full items-center justify-between gap-2 text-left"
+                aria-label={ttsSectionOpen ? 'Collapse text to speech' : 'Expand text to speech'}
               >
-                <Info className="h-3.5 w-3.5" />
+                <h2 className="text-sm font-medium">Text to Speech</h2>
+                <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', ttsSectionOpen && 'rotate-180')} />
               </button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="bottom"
-              align="start"
-              className="w-64 space-y-2 p-3 text-xs"
-              onMouseEnter={() => setTtsInfoOpen(true)}
-              onMouseLeave={() => setTtsInfoOpen(false)}
-              onOpenAutoFocus={(e) => e.preventDefault()}
-            >
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  WebGPU
-                </span>
-                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  本地
-                </span>
-              </div>
-              <p className="leading-relaxed text-muted-foreground">
-                基于 WebGPU 在浏览器内本地运行 Kitten TTS，不会把数据发送到服务器。
-              </p>
-              <table className="w-full text-[11px]">
-                <tbody>
-                  {KITTEN_TTS_MODEL_OPTIONS.map((opt) => (
-                    <tr key={opt.value} className="border-t border-border/50">
-                      <td className="py-1 pr-2 font-medium text-foreground">{opt.label}</td>
-                      <td className="py-1 pr-2 text-muted-foreground">{opt.qualityLabel}</td>
-                      <td className="py-1 text-right text-muted-foreground">{opt.downloadLabel}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="leading-relaxed text-muted-foreground">
-                模型在首次下载后会缓存在本地。
-              </p>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        {!isTtsSupported && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-            当前浏览器不支持 WebGPU。Kitten TTS 需要 Chrome 113+、Edge 113+ 或 Safari 26+。
-          </div>
-        )}
-
-        {/* Text input */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="ai-tts-text">文本</Label>
-            <span className={`text-[11px] ${recommendedLength ? 'text-muted-foreground' : 'text-amber-400'}`}>
-              {trimmedText.length}/500（建议）
-            </span>
-          </div>
-          <Textarea
-            id="ai-tts-text"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="输入想要朗读的文本..."
-            className="min-h-24 resize-y bg-secondary/30 text-sm"
-            disabled={isGenerating}
-          />
-        </div>
-
-        {/* Model + Voice */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label>模型</Label>
-            <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {KITTEN_TTS_MODEL_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="text-xs">
-                    {option.label} ({option.downloadLabel})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            </CollapsibleTrigger>
           </div>
 
-          <div className="space-y-1.5">
-            <Label>音色</Label>
-            <Select value={voice} onValueChange={(value) => setVoice(value as KittenTtsVoice)} disabled={isGenerating}>
-              <SelectTrigger className="h-8 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {KITTEN_TTS_VOICE_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="text-xs">
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        {/* Speed + Generate */}
-        <div className="flex items-center gap-2">
-          <SliderInput
-            label="语速"
-            value={speed}
-            onChange={setSpeed}
-            min={0.5}
-            max={2}
-            step={0.05}
-            unit="x"
-            disabled={isGenerating}
-          />
-          <Button
-            size="sm"
-            onClick={() => { void handleGenerate(); }}
-            disabled={isGenerating || !trimmedText || !currentProjectId || !isWebGpuSupported}
-            className="h-7 shrink-0 gap-1.5"
-          >
-            {isGenerating
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <WandSparkles className="h-3.5 w-3.5" />}
-            {isGenerating ? '生成中...' : '生成'}
-          </Button>
-        </div>
-
-        {/* Progress */}
-        {progress && (
-          <div className="rounded-lg border border-border bg-secondary/20 p-3 text-xs text-muted-foreground">
-            {progress}
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-            {error}
-          </div>
-        )}
-
-        {/* Generation history */}
-        {generations.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">
-                历史记录 ({generations.length}) - {formatBytes(totalBytes)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
-                onClick={handleClearAll}
-                disabled={anySaving}
-              >
-                <Trash2 className="h-3 w-3" />
-                清空
-              </Button>
-            </div>
-
-            <div className="space-y-2">
-              {generations.map((gen) => (
-                <GenerationRow
-                  key={gen.id}
-                  generation={gen}
-                  onSave={handleSaveTtsGeneration}
-                  onSaveAndInsert={handleSaveAndInsertTtsGeneration}
-                  onRemove={handleRemoveGeneration}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        <div className="-mx-3 flex items-center gap-2 bg-secondary/50 px-3 py-2">
-          <h2 className="text-sm font-medium">音乐生成</h2>
-          <Popover open={musicInfoOpen} onOpenChange={setMusicInfoOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
-                aria-label="音乐生成说明"
-                onMouseEnter={() => setMusicInfoOpen(true)}
-                onMouseLeave={() => setMusicInfoOpen(false)}
-              >
-                <Info className="h-3.5 w-3.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent
-              side="bottom"
-              align="start"
-              className="w-72 space-y-2 p-3 text-xs"
-              onMouseEnter={() => setMusicInfoOpen(true)}
-              onMouseLeave={() => setMusicInfoOpen(false)}
-              onOpenAutoFocus={(e) => e.preventDefault()}
-            >
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  WebGPU
-                </span>
-                <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
-                  本地
-                </span>
-              </div>
-              <p className="leading-relaxed text-muted-foreground">
-                通过 Transformers.js 使用 Xenova 的浏览器端 MusicGen 模型。首次下载较大，之后会缓存在本地。
-              </p>
-              <table className="w-full text-[11px]">
-                <tbody>
-                  {MUSICGEN_MODEL_OPTIONS.map((option) => (
-                    <tr key={option.value} className="border-t border-border/50">
-                      <td className="py-1 pr-2 font-medium text-foreground">{option.label}</td>
-                      <td className="py-1 text-right text-muted-foreground">{option.downloadLabel}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <p className="leading-relaxed text-muted-foreground">
-                可从风格、情绪、速度与配器描述提示词。时长越短生成越快。
-              </p>
-            </PopoverContent>
-          </Popover>
-        </div>
-
-        {!isMusicSupported && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-            当前浏览器不支持 WebGPU。MusicGen 需要 Chrome 113+、Edge 113+ 或 Safari 26+。
-          </div>
-        )}
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="ai-music-prompt">提示词</Label>
-            <Select
-              value=""
-              onValueChange={(value) => setMusicPrompt(value)}
-              disabled={isMusicGenerating}
-            >
-              <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1.5 text-[11px] text-muted-foreground shadow-none hover:text-foreground">
-                <SelectValue placeholder="预设" />
-              </SelectTrigger>
-              <SelectContent align="end">
-                {MUSIC_PROMPT_PRESETS.map((preset) => (
-                  <SelectItem key={preset.label} value={preset.prompt} className="text-xs">
-                    {preset.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <Textarea
-            id="ai-music-prompt"
-            value={musicPrompt}
-            onChange={(event) => setMusicPrompt(event.target.value)}
-            placeholder="描述你想生成的音乐风格..."
-            className="min-h-24 resize-y bg-secondary/30 text-sm"
-            disabled={isMusicGenerating}
-          />
-        </div>
-
-        <SliderInput
-          label="时长"
-          value={musicDuration}
-          onChange={(value) => setMusicDuration(Math.round(value))}
-          min={currentMusicModel.minDurationSeconds}
-          max={currentMusicModel.maxDurationSeconds}
-          step={1}
-          unit="s"
-          disabled={isMusicGenerating}
-        />
-
-        <div className="flex items-center justify-end gap-2">
-          {isMusicGenerating && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleMusicCancel}
-              className="h-7 shrink-0 gap-1.5 text-muted-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
-              取消
-            </Button>
-          )}
-          <Button
-            size="sm"
-            onClick={() => { void handleMusicGenerate(); }}
-            disabled={isMusicGenerating || !trimmedMusicPrompt || !currentProjectId || !isMusicSupported}
-            className="h-7 shrink-0 gap-1.5"
-          >
-            {isMusicGenerating
-              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              : <WandSparkles className="h-3.5 w-3.5" />}
-            {isMusicGenerating ? '生成中...' : '生成音乐'}
-          </Button>
-        </div>
-
-        {musicProgress && (
-          <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-3">
-            <p className="text-xs text-muted-foreground">{musicProgress}</p>
-            {musicProgressPct != null && (
-              <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                <div
-                  className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear"
-                  style={{ width: `${Math.round(musicProgressPct * 100)}%` }}
-                />
+          <CollapsibleContent className="space-y-4 pt-3">
+            {!isTtsSupported && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                {ttsEngine === 'kokoro'
+                  ? 'WebGPU is not available in this browser. Kokoro TTS needs Chrome 113+, Edge 113+, or Safari 26+.'
+                  : 'Browser-managed storage is not available in this browser. MOSS multilingual TTS works best in a recent Chromium browser.'}
               </div>
             )}
-          </div>
-        )}
 
-        {musicError && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-            {musicError}
-          </div>
-        )}
+            <div className="space-y-2">
+              <Label htmlFor="ai-tts-text">Text</Label>
+              <Textarea
+                id="ai-tts-text"
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder="Enter the text you want to hear spoken..."
+                className="min-h-24 resize-y bg-secondary/30 text-sm"
+                disabled={isGenerating}
+              />
+            </div>
 
-        {musicGenerations.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">
-                音乐历史 ({musicGenerations.length}) - {formatBytes(totalMusicBytes)}
-              </span>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Engine</Label>
+                <Select value={ttsEngine} onValueChange={(value) => setTtsEngine(value as StoredTtsEngine)} disabled={isGenerating}>
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kokoro" className="text-xs">Kokoro (English, WebGPU)</SelectItem>
+                    <SelectItem value="moss" className="text-xs">MOSS Nano (20 languages, CPU)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className={`grid grid-cols-1 gap-3 ${ttsEngine === 'kokoro' ? 'md:grid-cols-2' : ''}`}>
+                {ttsEngine === 'kokoro' && (
+                  <div className="space-y-1.5">
+                    <Label>Quality</Label>
+                    <Select value={model} onValueChange={(value) => setModel(value as typeof model)} disabled={isGenerating}>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {KOKORO_TTS_MODEL_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value} className="text-xs">
+                            {option.label} ({option.downloadLabel})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label>Voice</Label>
+                  <Select
+                    value={voice}
+                    onValueChange={(value) => {
+                      if (ttsEngine === 'kokoro') {
+                        setTtsKokoroVoice(value as KokoroTtsVoice);
+                      } else {
+                        setTtsMossVoice(value as MossTtsVoice);
+                      }
+                    }}
+                    disabled={isGenerating}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {(ttsEngine === 'kokoro' ? KOKORO_TTS_VOICE_OPTIONS : MOSS_TTS_VOICE_OPTIONS).map((option) => (
+                        <SelectItem key={option.value} value={option.value} className="text-xs">
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {supportsNativeTtsSpeed && (
+                <SliderInput
+                  label="Speed"
+                  value={speed}
+                  onChange={setSpeed}
+                  min={0.5}
+                  max={2}
+                  step={0.05}
+                  unit="x"
+                  disabled={isGenerating}
+                />
+              )}
               <Button
-                variant="ghost"
                 size="sm"
-                className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
-                onClick={() => clearGenerationList(setMusicGenerations)}
-                disabled={anyMusicSaving}
+                onClick={() => { void handleGenerate(); }}
+                disabled={isGenerating || !trimmedText || !currentProjectId || !isTtsSupported}
+                className="h-7 shrink-0 gap-1.5"
               >
-                <Trash2 className="h-3 w-3" />
-                清空
+                {isGenerating
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <WandSparkles className="h-3.5 w-3.5" />}
+                {isGenerating ? 'Generating...' : 'Generate'}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {currentTtsRuntimeLabel} runs locally in the browser on {currentTtsBackendLabel}.
+            </p>
+
+            {progress && (
+              <div className="rounded-lg border border-border bg-secondary/20 p-3 text-xs text-muted-foreground">
+                {progress}
+              </div>
+            )}
+
+            {error && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                {error}
+              </div>
+            )}
+
+            {generations.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    History ({generations.length}) - {formatBytes(totalBytes)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+                    onClick={handleClearAll}
+                    disabled={anySaving}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear all
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {generations.map((gen) => (
+                    <GenerationRow
+                      key={gen.id}
+                      generation={gen}
+                      onSave={handleSaveTtsGeneration}
+                      onSaveAndInsert={handleSaveAndInsertTtsGeneration}
+                      onRemove={handleRemoveGeneration}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Collapsible open={musicSectionOpen} onOpenChange={setMusicSectionOpen}>
+          <div className="-mx-3 bg-secondary/50 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <CollapsibleTrigger asChild>
+                <button
+                  type="button"
+                  className="flex flex-1 items-center justify-between gap-2 text-left"
+                  aria-label={musicSectionOpen ? 'Collapse music generation' : 'Expand music generation'}
+                >
+                  <h2 className="text-sm font-medium">Music Generation</h2>
+                  <ChevronDown className={cn('h-4 w-4 text-muted-foreground transition-transform', musicSectionOpen && 'rotate-180')} />
+                </button>
+              </CollapsibleTrigger>
+              <Popover open={musicInfoOpen} onOpenChange={setMusicInfoOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
+                    aria-label="Music generation info"
+                    onMouseEnter={() => setMusicInfoOpen(true)}
+                    onMouseLeave={() => setMusicInfoOpen(false)}
+                  >
+                    <Info className="h-3.5 w-3.5" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent
+                  side="bottom"
+                  align="start"
+                  className="w-72 space-y-2 p-3 text-xs"
+                  onMouseEnter={() => setMusicInfoOpen(true)}
+                  onMouseLeave={() => setMusicInfoOpen(false)}
+                  onOpenAutoFocus={(e) => e.preventDefault()}
+                >
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      WebGPU
+                    </span>
+                    <span className="rounded-full border border-border bg-background px-2 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Local
+                    </span>
+                  </div>
+                  <p className="leading-relaxed text-muted-foreground">
+                    Uses Xenova&apos;s browser-ready MusicGen model through Transformers.js. The first download is large, then it stays cached locally.
+                  </p>
+                  <table className="w-full text-[11px]">
+                    <tbody>
+                      {MUSICGEN_MODEL_OPTIONS.map((option) => (
+                        <tr key={option.value} className="border-t border-border/50">
+                          <td className="py-1 pr-2 font-medium text-foreground">{option.label}</td>
+                          <td className="py-1 text-right text-muted-foreground">{option.downloadLabel}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="leading-relaxed text-muted-foreground">
+                    Prompt with genre, mood, tempo, and instrumentation. Shorter clips finish much faster.
+                  </p>
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+
+          <CollapsibleContent className="space-y-4 pt-3">
+            {!isMusicSupported && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+                WebGPU is not available in this browser. MusicGen needs Chrome 113+, Edge 113+, or Safari 26+.
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="ai-music-prompt">Prompt</Label>
+                <Select
+                  value=""
+                  onValueChange={(value) => setMusicPrompt(value)}
+                  disabled={isMusicGenerating}
+                >
+                  <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1.5 text-[11px] text-muted-foreground shadow-none hover:text-foreground">
+                    <SelectValue placeholder="Presets" />
+                  </SelectTrigger>
+                  <SelectContent align="end">
+                    {MUSIC_PROMPT_PRESETS.map((preset) => (
+                      <SelectItem key={preset.label} value={preset.prompt} className="text-xs">
+                        {preset.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <Textarea
+                id="ai-music-prompt"
+                value={musicPrompt}
+                onChange={(event) => setMusicPrompt(event.target.value)}
+                placeholder="Describe the kind of music you want to generate..."
+                className="min-h-24 resize-y bg-secondary/30 text-sm"
+                disabled={isMusicGenerating}
+              />
+            </div>
+
+            <SliderInput
+              label="Length"
+              value={musicDuration}
+              onChange={(value) => setMusicDuration(Math.round(value))}
+              min={currentMusicModel.minDurationSeconds}
+              max={currentMusicModel.maxDurationSeconds}
+              step={1}
+              unit="s"
+              disabled={isMusicGenerating}
+            />
+
+            <div className="flex items-center justify-end gap-2">
+              {isMusicGenerating && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleMusicCancel}
+                  className="h-7 shrink-0 gap-1.5 text-muted-foreground"
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Cancel
+                </Button>
+              )}
+              <Button
+                size="sm"
+                onClick={() => { void handleMusicGenerate(); }}
+                disabled={isMusicGenerating || !trimmedMusicPrompt || !currentProjectId || !isMusicSupported}
+                className="h-7 shrink-0 gap-1.5"
+              >
+                {isMusicGenerating
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <WandSparkles className="h-3.5 w-3.5" />}
+                {isMusicGenerating ? 'Generating...' : 'Generate Music'}
               </Button>
             </div>
 
-            <div className="space-y-2">
-              {musicGenerations.map((generation) => (
-                <GenerationRow
-                  key={generation.id}
-                  generation={generation}
-                  onSave={(entry) => handleSave(entry, setMusicGenerations, setMusicError)}
-                  onSaveAndInsert={(entry) => handleSaveAndInsert(entry, setMusicGenerations, setMusicError)}
-                  onRemove={(id) => removeGenerationFromList(setMusicGenerations, id)}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+            {musicProgress && (
+              <div className="space-y-2 rounded-lg border border-border bg-secondary/20 p-3">
+                <p className="text-xs text-muted-foreground">{musicProgress}</p>
+                {musicProgressPct != null && (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width] duration-300 ease-linear"
+                      style={{ width: `${Math.round(musicProgressPct * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {musicError && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+                {musicError}
+              </div>
+            )}
+
+            {musicGenerations.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Music History ({musicGenerations.length}) - {formatBytes(totalMusicBytes)}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+                    onClick={() => clearGenerationList(setMusicGenerations)}
+                    disabled={anyMusicSaving}
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Clear all
+                  </Button>
+                </div>
+
+                <div className="space-y-2">
+                  {musicGenerations.map((generation) => (
+                    <GenerationRow
+                      key={generation.id}
+                      generation={generation}
+                      onSave={(entry) => handleSave(entry, setMusicGenerations, setMusicError)}
+                      onSaveAndInsert={(entry) => handleSaveAndInsert(entry, setMusicGenerations, setMusicError)}
+                      onRemove={(id) => removeGenerationFromList(setMusicGenerations, id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     </div>
   );
@@ -998,7 +1067,7 @@ const GenerationRow = memo(function GenerationRow({
             type="button"
             className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
             onClick={() => onRemove(gen.id)}
-            aria-label="删除"
+            aria-label="Remove"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -1013,7 +1082,7 @@ const GenerationRow = memo(function GenerationRow({
         {saved ? (
           <span className="flex items-center gap-1 text-[11px] text-emerald-400">
             <CheckCircle2 className="h-3 w-3" />
-            已保存
+            Saved
           </span>
         ) : (
           <>
@@ -1027,7 +1096,7 @@ const GenerationRow = memo(function GenerationRow({
               {gen.saving
                 ? <Loader2 className="h-3 w-3 animate-spin" />
                 : <ListPlus className="h-3 w-3" />}
-              {gen.saving ? '保存中...' : '保存并插入'}
+              {gen.saving ? 'Saving...' : 'Save & Insert'}
             </Button>
             <Button
               variant="ghost"
@@ -1037,7 +1106,7 @@ const GenerationRow = memo(function GenerationRow({
               disabled={gen.saving}
             >
               <Download className="h-3 w-3" />
-              保存到媒体库
+              Save to Library
             </Button>
           </>
         )}

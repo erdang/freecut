@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useMemo, memo, useCallback } from 'react';
-import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload } from 'lucide-react';
+import { Search, Filter, SortAsc, Video, FileAudio, Image as ImageIcon, Trash2, Grid3x3, List, AlertTriangle, Info, X, FolderOpen, Link, Link2Off, ChevronRight, Film, ArrowLeft, Zap, Loader2, Copy, Check, Upload, Sparkles, FileText, ScanSearch } from 'lucide-react';
+import { SceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser';
 import { createLogger } from '@/shared/logging/logger';
 
 const logger = createLogger('MediaLibrary');
@@ -36,10 +37,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { MarqueeOverlay } from '@/components/marquee-overlay';
 import { cn } from '@/shared/ui/cn';
 import { MediaGrid } from './media-grid';
 import { CompositionsSection } from './compositions-section';
+import { BackgroundTaskProgress } from './background-task-progress';
 import { MissingMediaDialog } from './missing-media-dialog';
 import { OrphanedClipsDialog } from './orphaned-clips-dialog';
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog';
@@ -55,10 +63,16 @@ import {
 import { useProjectStore } from '@/features/media-library/deps/projects';
 import { proxyService } from '../services/proxy-service';
 import { mediaLibraryService } from '../services/media-library-service';
+import { mediaTranscriptionService } from '../services/media-transcription-service';
+import { mediaAnalysisService } from '../services/media-analysis-service';
 import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop';
 import { getSharedProxyKey } from '../utils/proxy-key';
 import { getMediaType } from '../utils/validation';
 import { getProjectBrokenMediaIds } from '@/features/media-library/utils/broken-media';
+import {
+  getTranscriptionOverallProgress,
+  getTranscriptionStageLabel,
+} from '@/shared/utils/transcription-progress';
 import type { MediaMetadata } from '@/types/storage';
 import { isMarqueeJustFinished, useMarqueeSelection, type MarqueeItem } from '@/hooks/use-marquee-selection';
 
@@ -73,10 +87,25 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
-      title="复制到剪贴板"
+      title="Copy to clipboard"
     >
       {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
     </button>
+  );
+}
+
+function HeaderActionTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="bottom">{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -86,18 +115,6 @@ const GROUP_ICONS = {
   image: ImageIcon,
   gif: Film,
 } as const;
-
-const FILTER_TYPE_LABELS: Record<'video' | 'audio' | 'image', string> = {
-  video: '视频',
-  audio: '音频',
-  image: '图片',
-};
-
-const SORT_LABELS: Record<'name' | 'date' | 'size', string> = {
-  name: '名称',
-  date: '日期',
-  size: '大小',
-};
 
 interface MediaTypeGroupProps {
   groupKey: string;
@@ -158,19 +175,19 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const isFocusedRef = useRef(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showImportUrlDialog, setShowImportUrlDialog] = useState(false);
   const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({ mediaIds: [], compositionIds: [] });
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => new Set(['video', 'audio', 'image', 'gif']));
   const [isDragging, setIsDragging] = useState(false);
+  const [showImportUrlDialog, setShowImportUrlDialog] = useState(false);
   const [importUrlValue, setImportUrlValue] = useState('');
-  const [isImportingFromUrl, setIsImportingFromUrl] = useState(false);
+  const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false);
 
   // Store selectors
   const currentProjectId = useMediaLibraryStore((s) => s.currentProjectId);
   const setCurrentProject = useMediaLibraryStore((s) => s.setCurrentProject);
   const loadMediaItems = useMediaLibraryStore((s) => s.loadMediaItems);
   const importMedia = useMediaLibraryStore((s) => s.importMedia);
-  const importFromUrl = useMediaLibraryStore((s) => s.importFromUrl);
+  const importMediaFromUrl = useMediaLibraryStore((s) => s.importMediaFromUrl);
   const importHandles = useMediaLibraryStore((s) => s.importHandles);
   const deleteMediaBatch = useMediaLibraryStore((s) => s.deleteMediaBatch);
   const showNotification = useMediaLibraryStore((s) => s.showNotification);
@@ -182,6 +199,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setSortBy = useMediaLibraryStore((s) => s.setSortBy);
   const viewMode = useMediaLibraryStore((s) => s.viewMode);
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode);
+  const sceneBrowserOpen = useSceneBrowserStore((s) => s.open);
+  const openSceneBrowser = useSceneBrowserStore((s) => s.openBrowser);
+  const closeSceneBrowser = useSceneBrowserStore((s) => s.closeBrowser);
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize);
   const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize);
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds);
@@ -199,6 +219,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null);
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus);
   const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress);
+  const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus);
+  const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress);
   const filteredMediaItems = useFilteredMediaItems();
   const mediaGroups = useMemo(() => {
     const groups: { key: string; label: string; icon: 'video' | 'audio' | 'image' | 'gif'; items: MediaMetadata[] }[] = [];
@@ -216,10 +238,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         else images.push(item);
       }
     }
-    if (videos.length > 0) groups.push({ key: 'video', label: '视频', icon: 'video', items: videos });
-    if (audio.length > 0) groups.push({ key: 'audio', label: '音频', icon: 'audio', items: audio });
-    if (images.length > 0) groups.push({ key: 'image', label: '图片', icon: 'image', items: images });
-    if (gifs.length > 0) groups.push({ key: 'gif', label: 'GIF', icon: 'gif', items: gifs });
+    if (videos.length > 0) groups.push({ key: 'video', label: 'Videos', icon: 'video', items: videos });
+    if (audio.length > 0) groups.push({ key: 'audio', label: 'Audio', icon: 'audio', items: audio });
+    if (images.length > 0) groups.push({ key: 'image', label: 'Images', icon: 'image', items: images });
+    if (gifs.length > 0) groups.push({ key: 'gif', label: 'GIFs', icon: 'gif', items: gifs });
     return groups;
   }, [filteredMediaItems]);
   const compositions = useCompositionsStore((s) => s.compositions);
@@ -337,7 +359,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     [compositions, filteredMediaItems]
   );
 
-  const { marqueeState } = useMarqueeSelection({
+  const { marquee } = useMarqueeSelection({
     containerRef: scrollContainerRef as React.RefObject<HTMLElement>,
     items: marqueeItems,
     enabled: marqueeItems.length > 0,
@@ -360,30 +382,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     },
   });
 
-  // Track focus and clear selection when clicking outside the media library
+  // Track focus scope for the Delete hotkey. Selection itself is only cleared
+  // by explicit user action (empty-area click or marquee), never by focus
+  // changes — otherwise selection leaks away when the user clicks the timeline
+  // or another panel.
   useEffect(() => {
     const handleMouseDown = (event: MouseEvent) => {
-      const isInside = containerRef.current?.contains(event.target as Node);
-
-      if (isInside) {
-        // Clicked inside - mark as focused
-        isFocusedRef.current = true;
-      } else {
-        // Clicked outside - clear focus and selection
-        isFocusedRef.current = false;
-        if (selectedAssetCount > 0) {
-          clearSelection();
-        }
-      }
+      isFocusedRef.current = !!containerRef.current?.contains(event.target as Node);
     };
 
-    // Use capture phase to catch events before they're stopped by other handlers
     document.addEventListener('mousedown', handleMouseDown, true);
-
     return () => {
       document.removeEventListener('mousedown', handleMouseDown, true);
     };
-  }, [selectedAssetCount, clearSelection]);
+  }, []);
 
   // Handle Delete key to delete selected items
   useEffect(() => {
@@ -431,43 +443,25 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
   };
 
-  const handleImportFromUrl = async () => {
-    const url = importUrlValue.trim();
-    if (!url) {
+  const handleImportUrl = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isImportUrlSubmitting) {
       return;
     }
 
-    setIsImportingFromUrl(true);
+    setIsImportUrlSubmitting(true);
     try {
-      const imported = await importFromUrl(url);
-      if (imported && !imported.isDuplicate) {
-        showNotification({ type: 'success', message: `已从 URL 导入“${imported.fileName}”` });
+      await importMediaFromUrl(importUrlValue);
+      if (!useMediaLibraryStore.getState().error) {
+        setShowImportUrlDialog(false);
+        setImportUrlValue('');
       }
-      setShowImportUrlDialog(false);
-      setImportUrlValue('');
     } catch (error) {
-      logger.error('URL import failed:', error);
+      logger.error('Import from URL failed:', error);
     } finally {
-      setIsImportingFromUrl(false);
+      setIsImportUrlSubmitting(false);
     }
-  };
-
-  const handleImportUrlDialogChange = useCallback((open: boolean) => {
-    if (isImportingFromUrl) {
-      return;
-    }
-    setShowImportUrlDialog(open);
-    if (!open) {
-      setImportUrlValue('');
-    }
-  }, [isImportingFromUrl]);
-
-  const handleImportUrlKeyDown = useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      void handleImportFromUrl();
-    }
-  }, [handleImportFromUrl]);
+  }, [importMediaFromUrl, importUrlValue, isImportUrlSubmitting]);
 
   // Import files from drag-drop handles - memoized to prevent MediaGrid re-renders
   const handleImportHandles = useCallback(async (handles: FileSystemFileHandle[]) => {
@@ -528,12 +522,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
     const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(e.dataTransfer);
     if (!supported) {
-      showNotification({ type: 'warning', message: '当前浏览器不支持拖拽导入，请使用支持该能力的现代浏览器。' });
+      showNotification({ type: 'warning', message: 'Drag-drop not supported in this browser. Use Chrome or Edge.' });
       return;
     }
 
     if (errors.length > 0) {
-      showNotification({ type: 'error', message: `以下文件未通过校验：${errors.join('，')}` });
+      showNotification({ type: 'error', message: `Some files were rejected: ${errors.join(', ')}` });
     }
     if (entries.length > 0) {
       await handleImportHandles(entries.map((entry) => entry.handle));
@@ -548,6 +542,19 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
     return count;
   }, [proxyStatus]);
+
+  const analysisProgress = useMediaLibraryStore((s) => s.analysisProgress);
+  const analysisPercent = analysisProgress && analysisProgress.total > 0
+    ? (analysisProgress.completed / analysisProgress.total) * 100
+    : 0;
+
+  const transcribingCount = useMemo(() => {
+    let count = 0;
+    for (const status of transcriptStatus.values()) {
+      if (status === 'queued' || status === 'transcribing') count++;
+    }
+    return count;
+  }, [transcriptStatus]);
 
   const currentProjectBrokenMediaIds = useMemo(
     () => getProjectBrokenMediaIds(brokenMediaIds, mediaById),
@@ -567,6 +574,31 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
     return count > 0 ? total / count : 0;
   }, [proxyStatus, proxyProgress, generatingCount]);
+
+  const transcribingAvgProgress = useMemo(() => {
+    if (transcribingCount === 0) return 0;
+    let total = 0;
+    let count = 0;
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id);
+        total += progress ? getTranscriptionOverallProgress(progress) : 0;
+        count++;
+      }
+    }
+    return count > 0 ? total / count : 0;
+  }, [transcriptStatus, transcriptProgress, transcribingCount]);
+
+  const singleTranscriptionStageLabel = useMemo(() => {
+    if (transcribingCount !== 1) return null;
+    for (const [id, status] of transcriptStatus.entries()) {
+      if (status === 'queued' || status === 'transcribing') {
+        const progress = transcriptProgress.get(id);
+        return progress ? getTranscriptionStageLabel(progress.stage) : null;
+      }
+    }
+    return null;
+  }, [transcriptStatus, transcriptProgress, transcribingCount]);
 
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
@@ -604,6 +636,16 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     }
   };
 
+  const handleCancelAllTranscriptions = () => {
+    for (const [mediaId, status] of transcriptStatus.entries()) {
+      if (status !== 'queued' && status !== 'transcribing') {
+        continue;
+      }
+
+      mediaTranscriptionService.cancelTranscription(mediaId);
+    }
+  };
+
   // Count selected items that are eligible for proxy generation
   const selectedProxyEligibleCount = useMemo(() => {
     return selectedMediaIds.filter((id) => {
@@ -618,12 +660,12 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const deleteSummary = useMemo(() => {
     const parts: string[] = [];
     if (pendingDeletion.mediaIds.length > 0) {
-      parts.push(`${pendingDeletion.mediaIds.length} 个媒体资源`);
+      parts.push(`${pendingDeletion.mediaIds.length} media item${pendingDeletion.mediaIds.length === 1 ? '' : 's'}`);
     }
     if (pendingDeletion.compositionIds.length > 0) {
-      parts.push(`${pendingDeletion.compositionIds.length} 个复合片段`);
+      parts.push(`${pendingDeletion.compositionIds.length} compound clip${pendingDeletion.compositionIds.length === 1 ? '' : 's'}`);
     }
-    return parts.join('、');
+    return parts.join(' and ');
   }, [pendingDeletion.compositionIds.length, pendingDeletion.mediaIds.length]);
 
   const affectedMediaImpact = useMemo(() => (
@@ -684,94 +726,169 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   return (
     <div ref={containerRef} className="h-full flex flex-col">
       {/* Header toolbar */}
-      <div className="px-3 py-2 border-b border-border flex-shrink-0">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          {/* Import action */}
-          <Button
-            onClick={handleImport}
-            disabled={!currentProjectId}
-            size="sm"
-            className="h-7 gap-1.5 px-2.5"
-            title="导入媒体文件"
-          >
-            <FolderOpen className="w-3.5 h-3.5" />
-            <span>导入</span>
-          </Button>
-
-          <Button
-            onClick={() => setShowImportUrlDialog(true)}
-            disabled={!currentProjectId}
-            variant="outline"
-            size="sm"
-            className="h-7 gap-1.5 border-border bg-background px-2.5 text-foreground hover:bg-accent"
-            title="从 URL 导入媒体"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>从 URL 导入</span>
-          </Button>
-
-          {/* Missing media indicator */}
-          {currentProjectBrokenMediaIds.length > 0 && (
-            <Button
-              onClick={openMissingMediaDialog}
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1.5 border-destructive/25 bg-destructive/10 px-2.5 text-destructive hover:border-destructive/40 hover:bg-destructive/20 hover:text-destructive"
-              title="查看缺失媒体文件"
-            >
-              <Link2Off className="w-3.5 h-3.5" />
-              <span>{currentProjectBrokenMediaIds.length} 个缺失</span>
-            </Button>
-          )}
-
-
-          {/* Selection indicator & actions */}
-          {selectedAssetCount > 0 && (
-            <>
-              <div className="h-4 w-px bg-border" />
-
-              {/* Selection badge */}
-              <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border">
-                <span className="tabular-nums">{selectedAssetCount}</span>
-                <span className="text-muted-foreground">已选</span>
-                <button
-                  onClick={clearSelection}
-                  className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors"
-                  title="清空选择"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Generate proxies for selection */}
-              {selectedProxyEligibleCount > 0 && (
-                <Button
-                  onClick={handleGenerateSelectedProxies}
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 gap-1 px-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"
-                  title="为已选资源生成代理"
-                >
-                  <Zap className="w-3 h-3" />
-                  <span>生成代理 ({selectedProxyEligibleCount})</span>
-                </Button>
-              )}
-
-              {/* Delete action */}
-              <Button
-                onClick={handleDeleteSelected}
-                variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-destructive/80 hover:bg-destructive/10 hover:text-destructive"
-                title="删除已选"
+      <div className="@container px-3 py-2 border-b border-border flex-shrink-0">
+        <TooltipProvider>
+          <div className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden">
+            {/* Import action */}
+            <HeaderActionTooltip label="Import media files">
+              <button
+                onClick={handleImport}
+                disabled={!currentProjectId}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                  bg-primary text-primary-foreground
+                  hover:bg-primary/90
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  transition-colors duration-150"
               >
-                <Trash2 className="w-3 h-3" />
-                <span>删除</span>
-              </Button>
-            </>
-          )}
-        </div>
+                <FolderOpen className="w-3.5 h-3.5" />
+                <span className="hidden @[260px]:inline">Import</span>
+              </button>
+            </HeaderActionTooltip>
+
+            <HeaderActionTooltip label="Import media from URL">
+              <button
+                onClick={() => setShowImportUrlDialog(true)}
+                disabled={!currentProjectId}
+                className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                  bg-secondary border-border text-muted-foreground
+                  hover:text-primary hover:bg-primary/10 hover:border-primary/40
+                  disabled:opacity-40 disabled:cursor-not-allowed
+                  transition-colors duration-150"
+              >
+                <Link className="w-3.5 h-3.5" />
+                <span className="hidden @[360px]:inline">URL</span>
+              </button>
+            </HeaderActionTooltip>
+
+            {/* Missing media indicator */}
+            {currentProjectBrokenMediaIds.length > 0 && (
+              <HeaderActionTooltip label={`View ${currentProjectBrokenMediaIds.length} missing media file${currentProjectBrokenMediaIds.length === 1 ? '' : 's'}`}>
+                <button
+                  onClick={openMissingMediaDialog}
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                    bg-destructive/10 border border-destructive/25 text-destructive
+                    hover:bg-destructive/20 hover:border-destructive/40
+                    transition-colors duration-150"
+                >
+                  <Link2Off className="w-3.5 h-3.5" />
+                  <span className="hidden @[340px]:inline">{currentProjectBrokenMediaIds.length} Missing</span>
+                </button>
+              </HeaderActionTooltip>
+            )}
+
+
+            {/* Selection indicator & actions */}
+            {selectedAssetCount > 0 && (
+              <>
+                <div className="h-4 w-px bg-border hidden @[300px]:block" />
+
+                {/* Selection badge */}
+                <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
+                  <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
+                  <span className="text-muted-foreground hidden @[360px]:inline">selected</span>
+                  <HeaderActionTooltip label="Clear selection">
+                    <button
+                      onClick={clearSelection}
+                      className="ml-0.5 p-1 rounded hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </HeaderActionTooltip>
+                </div>
+
+                {/* Generate proxies for selection */}
+                {selectedProxyEligibleCount > 0 && (
+                  <HeaderActionTooltip label={`Generate proxies for ${selectedProxyEligibleCount} selected item${selectedProxyEligibleCount === 1 ? '' : 's'}`}>
+                    <button
+                      onClick={handleGenerateSelectedProxies}
+                      className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                        bg-secondary border-border text-muted-foreground
+                        hover:text-primary hover:bg-primary/10 hover:border-primary/40
+                        transition-colors duration-150"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span className="hidden @[440px]:inline">Proxy ({selectedProxyEligibleCount})</span>
+                    </button>
+                  </HeaderActionTooltip>
+                )}
+
+                {/* Delete action */}
+                <HeaderActionTooltip label="Delete selected assets">
+                  <button
+                    onClick={handleDeleteSelected}
+                    className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
+                      bg-destructive/10 border border-destructive/25 text-destructive
+                      hover:bg-destructive/20 hover:border-destructive/40
+                      transition-colors duration-150"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span className="hidden @[400px]:inline">Delete</span>
+                  </button>
+                </HeaderActionTooltip>
+              </>
+            )}
+          </div>
+        </TooltipProvider>
       </div>
+
+      <Dialog
+        open={showImportUrlDialog}
+        onOpenChange={(open) => {
+          setShowImportUrlDialog(open);
+          if (!open && !isImportUrlSubmitting) {
+            setImportUrlValue('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Import From URL</DialogTitle>
+            <DialogDescription>
+              Paste a direct link to a media file. MP4, WebM, MOV, MP3, WAV, JPG, PNG, GIF, WebP, and SVG links work when the site allows browser downloads. YouTube and similar page URLs usually will not.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleImportUrl} className="space-y-4">
+            <div className="space-y-2">
+              <Input
+                autoFocus
+                type="url"
+                inputMode="url"
+                placeholder="https://example.com/video.mp4"
+                value={importUrlValue}
+                onChange={(event) => setImportUrlValue(event.target.value)}
+                disabled={isImportUrlSubmitting}
+              />
+              <p className="text-xs text-muted-foreground">
+                The file is downloaded into the current project and stored locally for editing.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  if (!isImportUrlSubmitting) {
+                    setShowImportUrlDialog(false);
+                    setImportUrlValue('');
+                  }
+                }}
+                disabled={isImportUrlSubmitting}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={!currentProjectId || importUrlValue.trim().length === 0 || isImportUrlSubmitting}
+              >
+                {isImportUrlSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                Import
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Error message */}
       {error && (
@@ -794,7 +911,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               onClick={clearError}
               className="h-6 px-2 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10"
             >
-              关闭
+              Dismiss
             </Button>
           </div>
         </div>
@@ -842,26 +959,77 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         </div>
       )}
 
-      {/* Search and filters */}
+      {/* Search + view toggle always render so the toggle stays reachable
+          in Scene mode. The search input and the filter row below only scope
+          the media-library grid, so they're hidden when the Scene browser is
+          mounted (it has its own search). */}
       <div className="px-4 pt-3 pb-2 space-y-2 flex-shrink-0">
-        {/* Search */}
-        <div className="relative group">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-          <Input
-            placeholder="搜索媒体..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-            >
-              <X className="w-3 h-3" />
-            </button>
+        {/* Search + Media/Scenes toggle group */}
+        <div className="@container flex items-center gap-2">
+          {!sceneBrowserOpen && (
+            <div className="relative group flex-1 min-w-0">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+              <Input
+                placeholder="Search media..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
           )}
+          {sceneBrowserOpen && <div className="flex-1 min-w-0" aria-hidden />}
+          <div
+            role="group"
+            aria-label="Library view"
+            className="inline-flex items-center h-7 rounded-md border border-border bg-secondary p-0.5 shrink-0"
+          >
+            <HeaderActionTooltip label="Show media library">
+              <button
+                onClick={() => {
+                  if (sceneBrowserOpen) closeSceneBrowser();
+                }}
+                aria-pressed={!sceneBrowserOpen}
+                className={cn(
+                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
+                  !sceneBrowserOpen
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Film className="w-3 h-3" />
+                <span className="hidden @[280px]:inline">Media</span>
+              </button>
+            </HeaderActionTooltip>
+            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
+              <button
+                onClick={() => {
+                  if (!sceneBrowserOpen) openSceneBrowser();
+                }}
+                aria-pressed={sceneBrowserOpen}
+                className={cn(
+                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
+                  sceneBrowserOpen
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <ScanSearch className="w-3 h-3" />
+                <span className="hidden @[280px]:inline">Scenes</span>
+              </button>
+            </HeaderActionTooltip>
+          </div>
         </div>
+
+        {!sceneBrowserOpen && (<>
+
 
         {/* Filters and sort */}
         <div className="@container flex items-center gap-1.5 min-w-0">
@@ -879,7 +1047,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               >
                 <Filter className="w-2.5 h-2.5" />
                 <span className="hidden @[280px]:inline ml-1">
-                  {filterByType ? FILTER_TYPE_LABELS[filterByType] : '全部'}
+                  {filterByType ? filterByType.toUpperCase() : 'ALL'}
                 </span>
               </Button>
             </DropdownMenuTrigger>
@@ -888,7 +1056,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 onClick={() => setFilterByType(null)}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                所有类型
+                All Types
               </DropdownMenuItem>
               <DropdownMenuSeparator className="bg-border" />
               <DropdownMenuItem
@@ -896,21 +1064,21 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
                 <Video className="w-3 h-3 mr-2" />
-                视频
+                Video
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setFilterByType('audio')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
                 <FileAudio className="w-3 h-3 mr-2" />
-                音频
+                Audio
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setFilterByType('image')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
                 <ImageIcon className="w-3 h-3 mr-2" />
-                图片
+                Image
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -925,7 +1093,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               >
                 <SortAsc className="w-2.5 h-2.5" />
                 <span className="hidden @[280px]:inline ml-1">
-                  {SORT_LABELS[sortBy]}
+                  {sortBy === 'name' ? 'NAME' : sortBy === 'date' ? 'DATE' : 'SIZE'}
                 </span>
               </Button>
             </DropdownMenuTrigger>
@@ -934,19 +1102,19 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 onClick={() => setSortBy('date')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                日期（最新）
+                Date (Newest)
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSortBy('name')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                名称（A-Z）
+                Name (A-Z)
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSortBy('size')}
                 className="text-xs hover:bg-accent hover:text-accent-foreground"
               >
-                大小（由大到小）
+                Size (Largest)
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -961,7 +1129,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 value={[mediaItemSize]}
                 onValueChange={([v]) => setMediaItemSize(v ?? 3)}
                 className="flex-1 min-w-6 max-w-24"
-                aria-label="网格项大小"
+                aria-label="Grid item size"
               />
             )}
             <div className="flex items-center border border-border rounded bg-secondary flex-shrink-0">
@@ -992,6 +1160,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </div>
           </div>
         </div>
+        </>)}
       </div>
 
       {/* Composition navigation banner — shown when inside a sub-composition */}
@@ -1002,7 +1171,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             className="flex items-center gap-1.5 text-xs text-violet-300 hover:text-violet-100 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>返回</span>
+            <span>Back</span>
           </button>
           <span className="text-xs text-violet-400/60">/</span>
           <span className="text-xs text-violet-300 font-medium truncate">{activeCompLabel}</span>
@@ -1011,16 +1180,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
+        {sceneBrowserOpen && <SceneBrowserPanel className="absolute inset-0 bg-background" />}
         <div
           ref={scrollContainerRef}
-          className="relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
+          className={cn(
+            'relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]',
+            sceneBrowserOpen && 'hidden',
+          )}
           onClick={handleScrollContentClick}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <MarqueeOverlay marqueeState={marqueeState} />
+          <MarqueeOverlay marquee={marquee} />
 
           {/* Compositions section — collapsible, auto-hidden when empty */}
           <CompositionsSection />
@@ -1067,7 +1240,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary/20 border-2 border-primary">
                 <Upload className="w-7 h-7 text-primary animate-bounce" />
               </div>
-              <p className="text-base font-bold tracking-wide text-primary">将文件拖到这里</p>
+              <p className="text-base font-bold tracking-wide text-primary">DROP FILES HERE</p>
               <div className="flex flex-wrap justify-center gap-2 mt-2">
                 <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">MP4</span>
                 <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">WebM</span>
@@ -1085,38 +1258,91 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         )}
       </div>
 
+      {/* Background AI analysis status */}
+      {analysisProgress && (
+        <BackgroundTaskProgress
+          icon={<Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />}
+          label={
+            analysisProgress.total > 1
+              ? `Analyzing ${Math.min(analysisProgress.completed + 1, analysisProgress.total)} of ${analysisProgress.total} with AI`
+              : 'Analyzing 1 item with AI'
+          }
+          progressAriaLabel="AI analysis progress"
+          progressPercent={analysisPercent}
+          meta={(
+            <>
+              <span className="tabular-nums">{Math.round(analysisPercent)}%</span>
+              {!analysisProgress.cancelRequested ? (
+                <button
+                  type="button"
+                  onClick={() => mediaAnalysisService.requestCancel()}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Cancel
+                </button>
+              ) : (
+                <span className="text-muted-foreground/80">Cancelling…</span>
+              )}
+            </>
+          )}
+          trailing={<Sparkles className="w-3.5 h-3.5 text-purple-400 flex-shrink-0" />}
+          fillClassName="bg-purple-500"
+        />
+      )}
+
+      {/* Transcript generation progress bar */}
+      {transcribingCount > 0 && (
+        <BackgroundTaskProgress
+          icon={<FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />}
+          label={`Generating ${transcribingCount} ${transcribingCount === 1 ? 'transcript' : 'transcripts'} in background`}
+          progressAriaLabel="Transcript generation progress"
+          progressPercent={transcribingAvgProgress * 100}
+          meta={(
+            <>
+              {singleTranscriptionStageLabel && (
+                <span className="hidden sm:inline truncate">
+                  {singleTranscriptionStageLabel}
+                </span>
+              )}
+              <span className="tabular-nums">
+                {Math.round(transcribingAvgProgress * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelAllTranscriptions}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel all
+              </button>
+            </>
+          )}
+          fillClassName="bg-blue-500"
+        />
+      )}
+
       {/* Proxy generation progress bar */}
       {generatingCount > 0 && (
-        <div className="px-3 py-2 border-t border-border flex-shrink-0 bg-panel-bg/50">
-          <div className="flex items-center gap-2 text-xs">
-            <Loader2 className="w-3.5 h-3.5 text-amber-500 animate-spin flex-shrink-0" />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-muted-foreground">
-                  正在后台生成 {generatingCount} 个代理文件
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground tabular-nums">
-                    {Math.round(generatingAvgProgress * 100)}%
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleCancelAllProxies}
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    全部取消
-                  </button>
-                </div>
-              </div>
-              <div className="h-1 bg-secondary rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-amber-500 rounded-full transition-all duration-300"
-                  style={{ width: `${Math.round(generatingAvgProgress * 100)}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
+        <BackgroundTaskProgress
+          icon={<Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />}
+          label={`Generating ${generatingCount} ${generatingCount === 1 ? 'proxy' : 'proxies'} in background`}
+          progressAriaLabel="Proxy generation progress"
+          progressPercent={generatingAvgProgress * 100}
+          meta={(
+            <>
+              <span className="tabular-nums">
+                {Math.round(generatingAvgProgress * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={handleCancelAllProxies}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Cancel all
+              </button>
+            </>
+          )}
+          fillClassName="bg-green-500"
+        />
       )}
 
       {/* Delete confirmation dialog */}
@@ -1131,20 +1357,20 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>删除已选资源？</AlertDialogTitle>
+            <AlertDialogTitle>Delete selected assets?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  确认删除 {deleteSummary || `${deleteAssetCount} 个已选资源`}？
-                  此操作不可撤销。
+                  Are you sure you want to delete {deleteSummary || `${deleteAssetCount} selected asset${deleteAssetCount === 1 ? '' : 's'}`}?
+                  This action cannot be undone.
                 </p>
                 {affectedAssetInstanceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">关联实例将一并移除</p>
+                      <p className="font-medium">Linked instances will be removed</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        时间线及嵌套复合片段中共有 {affectedAssetInstanceCount} 个片段引用了这些资源，也会被删除。
+                        {affectedAssetInstanceCount} clip{affectedAssetInstanceCount > 1 ? 's' : ''} across the timeline and nested compound clips reference these assets and will also be deleted.
                       </p>
                     </div>
                   </div>
@@ -1153,60 +1379,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-              删除{deleteSummary || `${deleteAssetCount} 个资源`}{affectedAssetInstanceCount > 0 ? `（含 ${affectedAssetInstanceCount} 个片段）` : ''}
+              Delete {deleteSummary || `${deleteAssetCount} asset${deleteAssetCount === 1 ? '' : 's'}`}{affectedAssetInstanceCount > 0 ? ` & ${affectedAssetInstanceCount} clip${affectedAssetInstanceCount > 1 ? 's' : ''}` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <Dialog open={showImportUrlDialog} onOpenChange={handleImportUrlDialogChange}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <Upload className="h-4 w-4" />
-              从 URL 导入
-            </DialogTitle>
-            <DialogDescription>
-              粘贴一个直接可访问的 `http` 或 `https` 媒体链接，文件会被导入到当前项目的媒体库。
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <Input
-              autoFocus
-              value={importUrlValue}
-              onChange={(event) => setImportUrlValue(event.target.value)}
-              onKeyDown={handleImportUrlKeyDown}
-              placeholder="https://example.com/video.mp4"
-              disabled={isImportingFromUrl}
-              className="h-9"
-            />
-            <p className="text-xs text-muted-foreground">
-              支持来源：通过 HTTP(S) 可直接访问的媒体文件。
-            </p>
-          </div>
-
-          <DialogFooter className="gap-2 sm:justify-end">
-            <Button
-              variant="outline"
-              onClick={() => handleImportUrlDialogChange(false)}
-              disabled={isImportingFromUrl}
-            >
-              取消
-            </Button>
-            <Button
-              onClick={() => void handleImportFromUrl()}
-              disabled={!importUrlValue.trim() || isImportingFromUrl}
-              className="gap-1.5"
-            >
-              {isImportingFromUrl ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              <span>{isImportingFromUrl ? '导入中...' : '导入'}</span>
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Missing Media Dialog */}
       <MissingMediaDialog />

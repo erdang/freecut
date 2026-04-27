@@ -172,6 +172,28 @@ export function toTrackFingerprint(tracks: CompositionInputProps['tracks']): str
   return parts.join('|');
 }
 
+/**
+ * Fingerprint only the stable renderer topology: track visibility/order and
+ * item identity/source membership. Timing trims and source-window shifts
+ * should invalidate frame ranges, not tear down the whole fast-scrub renderer.
+ */
+export function toTrackTopologyFingerprint(tracks: CompositionInputProps['tracks']): string {
+  const parts: string[] = [];
+  for (const track of tracks) {
+    parts.push(
+      `t:${track.id}:${track.order}:${track.visible ? 1 : 0}:${track.solo ? 1 : 0}:${track.muted ? 1 : 0}`
+    );
+    for (const item of track.items) {
+      const src = 'src' in item ? (item.src ?? '') : '';
+      const isMask = item.type === 'shape' ? (item.isMask ? 1 : 0) : 0;
+      parts.push(
+        `i:${item.id}:${item.type}:${item.mediaId ?? ''}:${src}:${item.trackId}:${isMask}`
+      );
+    }
+  }
+  return parts.join('|');
+}
+
 export function getPreloadBudget(mode: PreviewInteractionMode): number {
   if (mode === 'scrubbing') return PRELOAD_MAX_IDS_PER_TICK_SCRUB;
   if (mode === 'playing') return PRELOAD_MAX_IDS_PER_TICK_PLAYING;

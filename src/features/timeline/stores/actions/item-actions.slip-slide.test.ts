@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { VideoItem, TextItem } from '@/types/timeline';
 import { useItemsStore } from '../items-store';
 import { useTimelineSettingsStore } from '../timeline-settings-store';
+import { usePlaybackStore } from '@/shared/state/playback';
+import { usePreviewBridgeStore } from '@/shared/state/preview-bridge';
 import { slipItem, slideItem } from './item-actions';
 
 function makeVideoItem(overrides: Partial<VideoItem> = {}): VideoItem {
@@ -23,6 +25,20 @@ describe('slipItem', () => {
     useTimelineSettingsStore.setState({ fps: 30 });
     useItemsStore.getState().setItems([]);
     useItemsStore.getState().setTracks([]);
+    usePlaybackStore.setState({
+      currentFrame: 150,
+      currentFrameEpoch: 0,
+      previewFrame: null,
+      previewFrameEpoch: 0,
+      isPlaying: false,
+    });
+    usePreviewBridgeStore.setState({
+      displayedFrame: null,
+      captureFrame: null,
+      captureFrameImageData: null,
+      captureCanvasSource: null,
+      postEditWarmRequest: null,
+    });
   });
 
   it('shifts sourceStart and sourceEnd by slipDelta', () => {
@@ -369,6 +385,51 @@ describe('slideItem', () => {
     // Continuity at both edit points should remain intact.
     expect(updatedLeft.sourceEnd).toBe(updatedMiddle.sourceStart);
     expect(updatedMiddle.sourceEnd).toBe(updatedRight.sourceStart);
+  });
+
+  it('queues post-edit warm frames around the edited clip boundaries', () => {
+    const left = makeVideoItem({
+      id: 'left',
+      trackId: 'track-1',
+      from: 0,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 200,
+      sourceFps: 30,
+    });
+    const middle = makeVideoItem({
+      id: 'middle',
+      trackId: 'track-1',
+      from: 100,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 200,
+      sourceFps: 30,
+      mediaId: 'media-2',
+    });
+    const right = makeVideoItem({
+      id: 'right',
+      trackId: 'track-1',
+      from: 200,
+      durationInFrames: 100,
+      sourceStart: 0,
+      sourceEnd: 100,
+      sourceDuration: 200,
+      sourceFps: 30,
+      mediaId: 'media-3',
+    });
+
+    useItemsStore.getState().setItems([left, middle, right]);
+
+    slideItem('middle', 20, 'left', 'right');
+
+    expect(usePreviewBridgeStore.getState().postEditWarmRequest).toMatchObject({
+      frame: 150,
+      itemIds: ['middle', 'left', 'right'],
+      frames: expect.arrayContaining([150, 120, 121, 218, 219, 0, 1, 118, 119, 220, 221, 298, 299]),
+    });
   });
 
   it('keeps default slide semantics for non-split chains', () => {

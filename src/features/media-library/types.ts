@@ -11,7 +11,7 @@ export interface MediaLibrarySelection {
   compositionIds: string[];
 }
 
-export type MediaTranscriptStatus = 'idle' | 'transcribing' | 'ready' | 'error';
+export type MediaTranscriptStatus = 'idle' | 'queued' | 'transcribing' | 'ready' | 'error';
 
 export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
 
@@ -21,7 +21,7 @@ export type MediaTranscriptProgress = TranscriptionProgressSnapshot;
 export interface UnsupportedCodecFile {
   fileName: string;
   audioCodec: string;
-  handle: FileSystemFileHandle;
+  handle?: FileSystemFileHandle;
 }
 
 /**
@@ -94,6 +94,19 @@ export interface MediaLibraryState {
 
   // AI tagging
   taggingMediaIds: Set<string>;
+  /**
+   * Deterministic progress for the currently running AI analysis run (single
+   * item or batch). Null when no analysis is in flight. `completed` counts
+   * finished items (success or failure); the background progress bar reads
+   * `completed / total` to draw a real percentage instead of an indeterminate
+   * pulse. `cancelRequested` is a soft stop — the service finishes the
+   * current item then skips the rest.
+   */
+  analysisProgress: {
+    total: number;
+    completed: number;
+    cancelRequested: boolean;
+  } | null;
 }
 
 export interface MediaLibraryActions {
@@ -107,6 +120,11 @@ export interface MediaLibraryActions {
    * Uses FileSystemFileHandle to reference files directly on user's disk
    */
   importMedia: () => Promise<MediaMetadata[]>;
+  /**
+   * Import media from a direct URL into OPFS-backed storage.
+   * Best for CORS-enabled direct media files (mp4, mp3, png, etc.).
+   */
+  importMediaFromUrl: (url: string) => Promise<MediaMetadata[]>;
   /**
    * Import media from file handles (for drag-drop)
    * Uses FileSystemFileHandle directly without file picker
@@ -190,5 +208,14 @@ export interface MediaLibraryActions {
 
   // AI captioning
   setTaggingMedia: (mediaId: string, active: boolean) => void;
-  updateMediaCaptions: (mediaId: string, captions: Array<{ timeSec: number; text: string }>) => void;
+  updateMediaCaptions: (mediaId: string, captions: NonNullable<MediaMetadata['aiCaptions']>) => void;
+
+  /** Start (or merge into) an analysis run — adds `count` to `total`. */
+  beginAnalysisRun: (count: number) => void;
+  /** Increment the completed counter by one (or by `n`). */
+  incrementAnalysisCompleted: (n?: number) => void;
+  /** Ask the current run to stop after the in-flight item. */
+  requestAnalysisCancel: () => void;
+  /** Clear analysisProgress when the run is done. */
+  endAnalysisRun: () => void;
 }

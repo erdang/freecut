@@ -14,6 +14,7 @@ import { useCompositionsStore } from '../../stores/compositions-store';
 import { useKeyframeSelectionStore } from '../../stores/keyframe-selection-store';
 import { HOTKEY_OPTIONS } from '@/config/hotkeys';
 import type { Transition } from '@/types/transition';
+import type { TimelineItem } from '@/types/timeline';
 import { useResolvedHotkeys } from '@/features/timeline/deps/settings';
 import { isCompositionWrapperItem, wouldCreateCompositionCycle } from '../../utils/composition-graph';
 
@@ -161,10 +162,10 @@ export function useClipboardShortcuts() {
         const pasteItems = activeCompositionId === null
           ? itemsClipboard.items
           : itemsClipboard.items.filter((item) => (
-            !isCompositionWrapperItem(item)
+            !isCompositionWrapperItem(item as TimelineItem)
             || !wouldCreateCompositionCycle({
               parentCompositionId: activeCompositionId,
-              insertedCompositionId: item.compositionId,
+              insertedCompositionId: (item as { compositionId: string }).compositionId,
               compositionById,
             })
           ));

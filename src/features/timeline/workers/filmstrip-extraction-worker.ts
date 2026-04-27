@@ -1,23 +1,15 @@
 /**
  * Filmstrip Extraction Worker
  *
- * Extracts video frames using mediabunny's CanvasSink and saves
- * directly to OPFS. All heavy work happens in the worker.
- *
- * Storage structure:
- *   filmstrips/{mediaId}/
- *     meta.json - { width, height, isComplete, frameCount }
- *     0.jpg, 1.jpg, 2.jpg, ... (legacy caches may still include .webp)
+ * Extracts video frames using mediabunny's CanvasSink.
+ * All heavy decode and JPEG encode work happens in the worker; the
+ * main thread persists the resulting blobs into the workspace.
  */
 
 import { createMediabunnyInputSource } from '@/infrastructure/browser/mediabunny-input-source';
 import type { ObjectUrlSourceMetadata } from '@/infrastructure/browser/object-url-registry';
-import { safeWrite } from '../utils/opfs-safe-write';
-
-const FILMSTRIP_DIR = 'filmstrips';
 const IMAGE_FORMAT = 'image/jpeg';
 const IMAGE_QUALITY = 0.7; // JPEG is substantially faster to encode for tiny thumbnails
-const FRAME_FILE_EXT = 'jpg';
 const FRAME_RATE = 1; // 1fps for filmstrip thumbnails
 
 // Message types
@@ -39,7 +31,7 @@ export interface ExtractRequest {
   endIndex?: number; // End frame index (exclusive)
   totalFrames?: number; // Total frames across all workers (for progress)
   workerId?: number; // Worker identifier for debugging
-  maxParallelSaves?: number; // Optional memory-pressure throttle from main thread
+  maxParallelSaves?: number; // Reserved for future worker-local throttling
 }
 
 export interface AbortRequest {
@@ -93,37 +85,15 @@ function getRequestIdFromMessage(data: unknown): string {
 const loadMediabunny = () => import('mediabunny');
 
 /**
- * Get or create OPFS directory for filmstrip storage
- */
-async function getFilmstripDir(mediaId: string): Promise<FileSystemDirectoryHandle> {
-  const root = await navigator.storage.getDirectory();
-  const filmstripRoot = await root.getDirectoryHandle(FILMSTRIP_DIR, { create: true });
-  return filmstripRoot.getDirectoryHandle(mediaId, { create: true });
-}
-
-/**
- * Save a frame to OPFS
- */
-async function saveFrame(
-  dir: FileSystemDirectoryHandle,
-  index: number,
-  blob: Blob
-): Promise<void> {
-  const fileHandle = await dir.getFileHandle(`${index}.${FRAME_FILE_EXT}`, { create: true });
-  const writable = await fileHandle.createWritable();
-  await safeWrite(writable, blob);
-}
-
-/**
- * Extract frames and save directly to OPFS
+ * Extract frames and return encoded JPEG blobs to the main thread.
  */
 async function extractAndSave(
   request: ExtractRequest,
   state: { aborted: boolean }
 ): Promise<void> {
   const {
-    requestId, mediaId, blobUrl, blob, sourceMetadata, duration, width, height, skipIndices, priorityIndices, targetIndices,
-    startIndex, endIndex, totalFrames: totalFramesOverride, maxParallelSaves
+    requestId, blobUrl, blob, sourceMetadata, duration, width, height, skipIndices, priorityIndices, targetIndices,
+    startIndex, endIndex, totalFrames: totalFramesOverride
   } = request;
 
   // Calculate frame range - support both full extraction and chunked
@@ -183,9 +153,6 @@ async function extractAndSave(
     return;
   }
 
-  // Get OPFS directory
-  const dir = await getFilmstripDir(mediaId);
-
   // Load mediabunny
   const { Input, CanvasSink, ALL_FORMATS } = await loadMediabunny();
 
@@ -231,13 +198,11 @@ async function extractAndSave(
     }
 
     // Two parallel pipelines per frame:
-    // 1. FAST: createImageBitmap → transfer to main thread (instant display, no encode)
-    // 2. SLOW: convertToBlob (JPEG) → save to OPFS (persistence, runs in background)
+    // 1. FAST: createImageBitmap -> transfer to main thread (instant display, no encode)
+    // 2. SLOW: convertToBlob (JPEG) -> send blob to main thread for persistence
     //
     // Bitmaps are sent immediately on every decoded frame for instant UI updates.
-    // JPEG encode + OPFS save runs concurrently, blobs reported when ready.
-    const pendingSaves: Promise<void>[] = [];
-    const MAX_PARALLEL_SAVES = Math.max(1, Math.min(6, maxParallelSaves ?? 4));
+    // JPEG encode runs concurrently, with blobs reported as soon as they are ready.
     let pendingEncode: Promise<{ blob: Blob; frameIndex: number }> | null = null;
     let bitmapsSinceLastReport: Array<{ index: number; bitmap: ImageBitmap }> = [];
 
@@ -245,15 +210,7 @@ async function extractAndSave(
       if (!pendingEncode) return;
       const { blob, frameIndex } = await pendingEncode;
       pendingEncode = null;
-      const savePromise = saveFrame(dir, frameIndex, blob).then(() => {
-        const idx = pendingSaves.indexOf(savePromise);
-        if (idx > -1) pendingSaves.splice(idx, 1);
-        savedSinceLastReport.push({ index: frameIndex, blob });
-      });
-      pendingSaves.push(savePromise);
-      if (pendingSaves.length >= MAX_PARALLEL_SAVES) {
-        await Promise.race(pendingSaves);
-      }
+      savedSinceLastReport.push({ index: frameIndex, blob });
     };
 
     for await (const wrapped of sink.canvasesAtTimestamps(timestampGenerator())) {
@@ -281,7 +238,7 @@ async function extractAndSave(
       // Queue bitmap for immediate transfer to main thread (no JPEG encode needed)
       bitmapsSinceLastReport.push({ index: frameIndex, bitmap: displayBitmap });
 
-      // Flush prior encode, then start JPEG encode in background for OPFS persistence
+      // Flush prior encode, then start JPEG encode in background for workspace persistence
       await flushPendingEncode();
       const encodeCanvas = new OffscreenCanvas(encodeBitmap.width, encodeBitmap.height);
       const encodeCtx = encodeCanvas.getContext('2d')!;
@@ -296,7 +253,7 @@ async function extractAndSave(
       frameListIndex++;
 
       // Send progress with bitmaps on every frame for instant display.
-      // savedFrames/savedIndices lag behind as JPEG encode + OPFS write complete.
+      // savedFrames/savedIndices lag behind as JPEG encode completes.
       const shouldReport = extractedCount <= 3 || extractedCount % 10 === 0
         || bitmapsSinceLastReport.length > 0;
       if (shouldReport) {
@@ -324,11 +281,6 @@ async function extractAndSave(
 
     // Flush the last pipelined encode
     await flushPendingEncode();
-
-    // Wait for all pending saves to complete
-    if (pendingSaves.length > 0) {
-      await Promise.all(pendingSaves);
-    }
 
     // Emit any saved frames that completed after the final progress report.
     if (savedSinceLastReport.length > 0) {

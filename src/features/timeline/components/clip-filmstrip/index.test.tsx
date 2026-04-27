@@ -2,13 +2,32 @@ import { fireEvent, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClipFilmstrip } from './index';
 
-const useFilmstripMock = vi.hoisted(() => vi.fn(() => ({
+type FilmstripResult = {
+  frames: Array<{ index: number; timestamp: number; url: string }> | null;
+  isLoading: boolean;
+  isComplete: boolean;
+  progress: number;
+  error: string | null;
+};
+type FilmstripOptions = {
+  mediaId?: string;
+  blobUrl?: string;
+  enabled?: boolean;
+  targetFrameCount?: number;
+  targetFrameIndices?: number[];
+  priorityWindow?: { startTime: number; endTime: number };
+};
+
+const useFilmstripMock = vi.hoisted(() => vi.fn((_options: FilmstripOptions): FilmstripResult => {
+  void _options;
+  return {
   frames: null,
   isLoading: false,
   isComplete: false,
   progress: 0,
   error: null,
-})));
+  };
+}));
 
 const useMediaBlobUrlMock = vi.hoisted(() => vi.fn(() => ({
   blobUrl: 'blob:original',
@@ -19,7 +38,7 @@ const useMediaBlobUrlMock = vi.hoisted(() => vi.fn(() => ({
 
 const mediaResolverMocks = vi.hoisted(() => ({
   resolveMediaUrl: vi.fn(),
-  resolveProxyUrl: vi.fn(() => null),
+  resolveProxyUrl: vi.fn((): string | null => null),
 }));
 
 const useMediaLibraryStoreMock = vi.hoisted(() => vi.fn((selector: (state: {
@@ -148,12 +167,14 @@ describe('ClipFilmstrip', () => {
     );
 
     const latestCall = useFilmstripMock.mock.calls.at(-1)?.[0];
+    const priorityWindow = latestCall?.priorityWindow;
+    expect(priorityWindow).toBeDefined();
     expect(latestCall?.priorityWindow).toEqual(expect.objectContaining({
       startTime: expect.any(Number),
       endTime: expect.any(Number),
     }));
-    expect(latestCall?.priorityWindow.startTime).toBeGreaterThan(0);
-    expect(latestCall?.priorityWindow.endTime).toBeGreaterThan(latestCall?.priorityWindow.startTime);
+    expect(priorityWindow!.startTime).toBeGreaterThan(0);
+    expect(priorityWindow!.endTime).toBeGreaterThan(priorityWindow!.startTime);
     expect(latestCall?.targetFrameIndices).toEqual(expect.arrayContaining([expect.any(Number)]));
   });
 

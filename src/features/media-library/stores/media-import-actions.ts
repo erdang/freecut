@@ -65,6 +65,14 @@ function replaceImportPlaceholder(set: Set, tempId: string, metadata: MediaMetad
   }));
 }
 
+function prependImportedMedia(set: Set, metadata: MediaMetadata): void {
+  set((state) => ({
+    mediaItems: [metadata, ...state.mediaItems.filter((item) => item.id !== metadata.id)],
+    error: null,
+    errorLink: null,
+  }));
+}
+
 function setupImportedVideoProxy(metadata: MediaMetadata): void {
   if (!proxyService.canGenerateProxy(metadata.mimeType)) {
     return;
@@ -152,7 +160,7 @@ function showImportNotifications(
 export function createImportActions(
   set: Set,
   get: Get
-): Pick<MediaLibraryActions, 'importMedia' | 'importHandles' | 'importHandlesForPlacement' | 'importFromUrl'> {
+): Pick<MediaLibraryActions, 'importMedia' | 'importMediaFromUrl' | 'importHandles' | 'importHandlesForPlacement'> {
   const createOptimisticImportTasks = async (handles: FileSystemFileHandle[]): Promise<ImportTask[]> => {
     const importTasks: ImportTask[] = [];
 
@@ -293,70 +301,77 @@ export function createImportActions(
       }
     },
 
+    importMediaFromUrl: async (url: string) => {
+      const { currentProjectId } = get();
+      const trimmedUrl = url.trim();
+
+      if (!currentProjectId) {
+        set({ error: 'No project selected', errorLink: null });
+        return [];
+      }
+
+      if (trimmedUrl.length === 0) {
+        set({ error: 'Enter a media URL.', errorLink: null });
+        return [];
+      }
+
+      set({ error: null, errorLink: null });
+
+      const opId = createOperationId();
+      const event = logger.startEvent('import', opId);
+      event.set('source', 'url');
+      event.set('projectId', currentProjectId);
+
+      try {
+        const parsedUrl = new URL(trimmedUrl);
+        event.set('urlHost', parsedUrl.hostname);
+      } catch {
+        event.set('urlHost', 'invalid');
+      }
+
+      try {
+        const metadata = await mediaLibraryService.importMediaFromUrl(trimmedUrl, currentProjectId);
+
+        if (metadata.isDuplicate) {
+          showImportNotifications([metadata.fileName], [], get);
+          event.success({
+            imported: 0,
+            duplicates: 1,
+            failed: 0,
+            unsupportedCodecs: 0,
+          });
+          return [];
+        }
+
+        prependImportedMedia(set, metadata);
+        setupImportedVideoProxy(metadata);
+
+        const unsupportedCodecFiles =
+          metadata.hasUnsupportedCodec && metadata.audioCodec
+            ? [{ fileName: metadata.fileName, audioCodec: metadata.audioCodec }]
+            : [];
+        showImportNotifications([], unsupportedCodecFiles, get);
+
+        event.success({
+          imported: 1,
+          duplicates: 0,
+          failed: 0,
+          unsupportedCodecs: unsupportedCodecFiles.length,
+        });
+        return [metadata];
+      } catch (error) {
+        const importError = error instanceof Error ? error : new Error(String(error));
+        set({ error: importError.message, errorLink: null });
+        event.failure(importError);
+        return [];
+      }
+    },
+
     importHandles: async (handles: FileSystemFileHandle[]) => {
       return importHandlesInternal(handles);
     },
 
     importHandlesForPlacement: async (handles: FileSystemFileHandle[]) =>
       importHandlesInternal(handles, { includeDuplicatesInResults: true }),
-
-    importFromUrl: async (url: string) => {
-      const { currentProjectId } = get();
-
-      if (!currentProjectId) {
-        set({ error: 'No project selected' });
-        return null;
-      }
-
-      const normalizedUrl = url.trim();
-      if (!normalizedUrl) {
-        set({ error: 'URL is required' });
-        return null;
-      }
-
-      const opId = createOperationId();
-      const event = logger.startEvent('import', opId);
-      event.merge({
-        source: 'url',
-        projectId: currentProjectId,
-      });
-
-      try {
-        const metadata = await mediaLibraryService.importMediaFromUrl(normalizedUrl, currentProjectId);
-
-        if (metadata.isDuplicate) {
-          get().showNotification({ type: 'info', message: `"${metadata.fileName}" already exists in library` });
-          event.success({ imported: 0, duplicates: 1, failed: 0, unsupportedCodecs: 0 });
-          return metadata;
-        }
-
-        set((state) => ({
-          mediaItems: [metadata, ...state.mediaItems],
-          error: null,
-        }));
-
-        setupImportedVideoProxy(metadata);
-
-        if (metadata.hasUnsupportedCodec && metadata.audioCodec) {
-          get().showNotification({
-            type: 'warning',
-            message: `Imported "${metadata.fileName}" with unsupported audio codec (${metadata.audioCodec}). Waveforms may not be available.`,
-          });
-        }
-
-        event.success({
-          imported: 1,
-          duplicates: 0,
-          failed: 0,
-          unsupportedCodecs: metadata.hasUnsupportedCodec ? 1 : 0,
-        });
-        return metadata;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        set({ error: message });
-        event.failure(error);
-        return null;
-      }
-    },
   };
 }

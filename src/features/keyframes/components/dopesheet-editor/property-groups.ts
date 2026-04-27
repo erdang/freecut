@@ -1,4 +1,4 @@
-import type { AnimatableProperty } from '@/types/keyframe';
+import { isEffectAnimatableProperty, type AnimatableProperty } from '@/types/keyframe';
 
 export interface PropertyAccordionGroup {
   id: string;
@@ -13,12 +13,17 @@ const PROPERTY_GROUP_DEFINITIONS: Array<{
 }> = [
   {
     id: 'transform',
-    label: '变换',
-    properties: ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'cornerRadius'],
+    label: 'Transform',
+    properties: ['x', 'y', 'width', 'height', 'anchorX', 'anchorY', 'rotation', 'opacity', 'cornerRadius'],
+  },
+  {
+    id: 'crop',
+    label: 'Crop',
+    properties: ['cropLeft', 'cropRight', 'cropTop', 'cropBottom', 'cropSoftness'],
   },
   {
     id: 'audio',
-    label: '音频',
+    label: 'Audio',
     properties: ['volume'],
   },
 ];
@@ -45,11 +50,21 @@ export function getPropertyAccordionGroups(
   }
 
   const otherProperties = properties.filter((property) => remaining.has(property));
-  if (otherProperties.length > 0) {
+  const effectProperties = otherProperties.filter((property) => isEffectAnimatableProperty(property));
+  if (effectProperties.length > 0) {
+    groups.push({
+      id: 'effects',
+      label: 'Effects',
+      properties: effectProperties,
+    });
+  }
+
+  const ungroupedProperties = otherProperties.filter((property) => !isEffectAnimatableProperty(property));
+  if (ungroupedProperties.length > 0) {
     groups.push({
       id: 'other',
-      label: '其他',
-      properties: otherProperties,
+      label: 'Other',
+      properties: ungroupedProperties,
     });
   }
 

@@ -25,7 +25,7 @@ import {
   readWorkspaceBlob,
   removeWorkspaceCacheEntry,
 } from '@/infrastructure/storage/workspace-fs/cache-mirror';
-import { proxyFilePath, proxyMetaPath, WORKSPACE_PROXIES_DIR } from '@/infrastructure/storage/workspace-fs/paths';
+import { proxyDir, proxyFilePath, proxyMetaPath } from '@/infrastructure/storage/workspace-fs/paths';
 import { PROXY_DIR, PROXY_SCHEMA_VERSION } from '../proxy-constants';
 import type {
   ProxyWorkerRequest,
@@ -346,8 +346,8 @@ class ProxyService {
       // Directory may not exist
     }
 
-    // Mirror deletion to workspace cache (best-effort, no-op when absent).
-    void removeWorkspaceCacheEntry([WORKSPACE_PROXIES_DIR, resolvedProxyKey], {
+    // Mirror deletion to workspace cache before reporting completion.
+    await removeWorkspaceCacheEntry(proxyDir(resolvedProxyKey), {
       recursive: true,
     });
   }
@@ -360,12 +360,11 @@ class ProxyService {
     const staleProxyIds: string[] = [];
     try {
       const root = await navigator.storage.getDirectory();
-      let proxyRoot: FileSystemDirectoryHandle;
-      try {
-        proxyRoot = await root.getDirectoryHandle(PROXY_DIR);
-      } catch {
-        return staleProxyIds; // No proxies directory yet
-      }
+      // Create the dir if missing — on a fresh origin OPFS has no `proxies/`
+      // yet, but the workspace fallback below still needs a handle to back-fill
+      // into. Without `create: true` we'd bail before hydrating from the
+      // workspace folder and never show cross-origin-reused proxies.
+      const proxyRoot = await root.getDirectoryHandle(PROXY_DIR, { create: true });
 
       const requestedProxyKeys = new Set<string>();
       for (const mediaId of mediaIds) {

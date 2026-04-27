@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -97,10 +97,8 @@ export function MediaPickerDialog({
   onClose,
   onSelect,
   filterType,
-  title = '选择媒体',
+  title = 'Select Media',
 }: MediaPickerDialogProps) {
-  const filterTypeLabel = filterType === 'video' ? '视频' : filterType === 'audio' ? '音频' : filterType === 'image' ? '图片' : '媒体';
-
   const handleSelect = (mediaId: string) => {
     onSelect(mediaId);
     onClose();
@@ -112,7 +110,7 @@ export function MediaPickerDialog({
         <DialogHeader>
           <DialogTitle className="pr-8 leading-snug break-words">{title}</DialogTitle>
           <DialogDescription>
-            从媒体库中选择一个{filterTypeLabel}文件。
+            Choose a {filterType || 'media'} file from your library.
           </DialogDescription>
         </DialogHeader>
         <MediaPickerDialogBody
@@ -157,7 +155,7 @@ function MediaPickerDialogBody({
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="搜索媒体..."
+          placeholder="Search media..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="pl-9"
@@ -172,10 +170,10 @@ function MediaPickerDialogBody({
         ) : filteredItems.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             {searchQuery
-              ? '没有找到匹配的媒体。'
+              ? 'No media found matching your search.'
               : filterType
-              ? `媒体库中没有${filterType === 'video' ? '视频' : filterType === 'audio' ? '音频' : '图片'}文件。`
-              : '媒体库中还没有媒体文件。'}
+              ? `No ${filterType} files in library.`
+              : 'No media in library.'}
           </div>
         ) : (
           filteredItems.map((media) => (

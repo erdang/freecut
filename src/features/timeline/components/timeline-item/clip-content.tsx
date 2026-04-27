@@ -12,13 +12,105 @@ import { useItemsStore } from '../../stores/items-store';
 import { useClipVisibility } from '../../hooks/use-clip-visibility';
 import { useZoomStore } from '../../stores/zoom-store';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
-import { summarizeCompositionClipContent } from '../../utils/composition-clip-summary';
+import { getTextItemPlainText } from '@/shared/utils/text-item-spans';
+import {
+  getCompositionVisualSegments,
+  summarizeCompositionClipContent,
+  type CompositionVisualSegment,
+} from '../../utils/composition-clip-summary';
 import { hasLinkedAudioCompanion } from '@/shared/utils/linked-media';
 import { formatSignedFrameDelta } from '@/shared/utils/time-utils';
 import { isGifUrl, isWebpUrl } from '@/shared/utils/media-utils';
 
 const EMPTY_COMPOSITION_LOOKUP: Record<string, never> = {};
 const FILMSTRIP_MIN_WIDTH_PX = 5;
+
+interface CompositionFilmstripSegmentProps {
+  segment: CompositionVisualSegment;
+  wrapperDurationFrames: number;
+  wrapperClipWidthPx: number;
+  wrapperRenderWidthPx: number;
+  wrapperVisibleStartRatio: number;
+  wrapperVisibleEndRatio: number;
+  wrapperIsVisible: boolean;
+  fps: number;
+  pixelsPerSecond: number;
+  preferImmediateRendering: boolean;
+}
+
+function CompositionFilmstripSegment({
+  segment,
+  wrapperDurationFrames,
+  wrapperClipWidthPx,
+  wrapperRenderWidthPx,
+  wrapperVisibleStartRatio,
+  wrapperVisibleEndRatio,
+  wrapperIsVisible,
+  fps,
+  pixelsPerSecond,
+  preferImmediateRendering,
+}: CompositionFilmstripSegmentProps) {
+  const mediaId = segment.mediaId;
+  const mediaFps = useMediaLibraryStore(
+    useCallback((s) => s.mediaById[mediaId]?.fps || segment.sourceFps, [mediaId, segment.sourceFps]),
+  );
+  const mediaDuration = useMediaLibraryStore(
+    useCallback((s) => s.mediaById[mediaId]?.duration || 0, [mediaId]),
+  );
+
+  const wrapperSpan = Math.max(1, wrapperDurationFrames);
+  const widthFraction = Math.min(1, segment.durationInFrames / wrapperSpan);
+  const leftFraction = Math.max(0, segment.from / wrapperSpan);
+  const segmentClipWidth = Math.max(0, widthFraction * wrapperClipWidthPx);
+  const segmentRenderWidth = Math.max(0, widthFraction * wrapperRenderWidthPx);
+
+  const sourceDurationSeconds = mediaDuration > 0
+    ? mediaDuration
+    : segment.sourceDurationFrames / Math.max(1, mediaFps);
+  const sourceStartSeconds = mediaDuration > 0 && segment.sourceDurationFrames > 0
+    ? (segment.sourceStart / segment.sourceDurationFrames) * mediaDuration
+    : segment.sourceStart / Math.max(1, mediaFps);
+
+  const segmentEndFraction = leftFraction + widthFraction;
+  const overlapStart = Math.max(wrapperVisibleStartRatio, leftFraction);
+  const overlapEnd = Math.min(wrapperVisibleEndRatio, segmentEndFraction);
+  const hasOverlap = overlapEnd > overlapStart && widthFraction > 0;
+  const segmentVisibleStartRatio = hasOverlap
+    ? Math.max(0, Math.min(1, (overlapStart - leftFraction) / widthFraction))
+    : 0;
+  const segmentVisibleEndRatio = hasOverlap
+    ? Math.max(0, Math.min(1, (overlapEnd - leftFraction) / widthFraction))
+    : 0;
+  const segmentIsVisible = wrapperIsVisible && hasOverlap;
+
+  if (segmentClipWidth < FILMSTRIP_MIN_WIDTH_PX) return null;
+
+  return (
+    <div
+      className="absolute inset-y-0 overflow-hidden"
+      style={{
+        left: `${leftFraction * 100}%`,
+        width: `${widthFraction * 100}%`,
+      }}
+    >
+      <ClipFilmstrip
+        mediaId={mediaId}
+        clipWidth={segmentClipWidth}
+        renderWidth={segmentRenderWidth}
+        sourceStart={sourceStartSeconds}
+        sourceDuration={sourceDurationSeconds}
+        trimStart={0}
+        speed={segment.speed}
+        fps={fps}
+        isVisible={segmentIsVisible}
+        visibleStartRatio={segmentVisibleStartRatio}
+        visibleEndRatio={segmentVisibleEndRatio}
+        pixelsPerSecond={pixelsPerSecond}
+        preferImmediateRendering={preferImmediateRendering}
+      />
+    </div>
+  );
+}
 
 /**
  * Small render buffer: filmstrip/waveform are rendered slightly wider than the
@@ -110,8 +202,15 @@ export const ClipContent = memo(function ClipContent({
       compositionById,
       });
   }, [composition, compositionById]);
-  const compositionVisualSource = compositionSummary.visualSource;
-  const compositionVisualMediaId = compositionVisualSource?.mediaId ?? null;
+  const compositionVisualMediaId = compositionSummary.visualSource?.mediaId ?? null;
+  const visualSegments = useMemo<CompositionVisualSegment[]>(() => {
+    if (item.type !== 'composition' || !composition) return [];
+    return getCompositionVisualSegments({
+      wrapper: item,
+      parentFps: fps,
+      compositionById,
+    });
+  }, [item, fps, composition, compositionById]);
   const showCompositionWaveform = showWaveforms && compositionSummary.hasOwnedAudio && !hasCompositionAudioCompanion;
   const linkedSyncOffsetLabel = linkedSyncOffsetFrames === null
     ? null
@@ -170,7 +269,7 @@ export const ClipContent = memo(function ClipContent({
   const compositionSourceDurationFrames = Math.max(
     1,
     item.type === 'composition' || isCompositionAudioWrapper
-      ? (item.sourceDuration ?? composition?.durationInFrames ?? item.durationInFrames)
+      ? (composition?.durationInFrames ?? item.sourceDuration ?? item.durationInFrames)
       : sourceDurationFrames
   );
   const compositionSourceStartFrames = Math.max(
@@ -189,25 +288,6 @@ export const ClipContent = memo(function ClipContent({
 
   const trimStart = (item.trimStart ?? 0) / fps;
   const speed = item.speed ?? 1;
-  const compositionVisualSourceFps = useMediaLibraryStore(
-    useCallback((s) => {
-      if (!compositionVisualMediaId) return fps;
-      return s.mediaById[compositionVisualMediaId]?.fps || fps;
-    }, [compositionVisualMediaId, fps])
-  );
-  const compositionVisualMediaDuration = useMediaLibraryStore(
-    useCallback((s) => {
-      if (!compositionVisualMediaId) return 0;
-      return s.mediaById[compositionVisualMediaId]?.duration || 0;
-    }, [compositionVisualMediaId])
-  );
-  const compositionVisualSourceDuration = compositionVisualMediaDuration > 0
-    ? compositionVisualMediaDuration
-    : ((compositionVisualSource?.sourceDuration ?? compositionSourceDurationFrames) / compositionVisualSourceFps);
-  const compositionVisualSourceStart = compositionVisualMediaDuration > 0
-    ? ((compositionVisualSource?.sourceStart ?? compositionSourceStartFrames) / Math.max(1, compositionVisualSource?.sourceDuration ?? compositionSourceDurationFrames)) * compositionVisualMediaDuration
-    : ((compositionVisualSource?.sourceStart ?? compositionSourceStartFrames) / compositionVisualSourceFps);
-  const compositionVisualSpeed = compositionVisualSource?.speed ?? 1;
   const compoundClipTimelineFps = composition?.fps ?? fps;
   const compoundClipSourceDuration = compositionSourceDurationFrames / compoundClipTimelineFps;
   const compoundClipSourceStart = compositionSourceStartFrames / compoundClipTimelineFps;
@@ -319,7 +399,7 @@ export const ClipContent = memo(function ClipContent({
   if (isCompositionAudioWrapper && composition) {
     return (
       <div className="absolute inset-0 flex flex-col">
-        {renderCompoundClipLabel(item.label || '复合片段')}
+        {renderCompoundClipLabel(item.label || 'Compound Clip')}
         {showVisualContent && showWaveforms && (
           <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
             <CompoundClipWaveform
@@ -343,41 +423,39 @@ export const ClipContent = memo(function ClipContent({
   if (item.type === 'text') {
     return (
       <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
-        <div className="text-[10px] text-muted-foreground truncate">文本</div>
+        <div className="text-[10px] text-muted-foreground truncate">Text</div>
         <div className="text-xs font-medium truncate flex-1">
-          {item.text || '空文本'}
+          {getTextItemPlainText(item) || 'Empty text'}
         </div>
       </div>
     );
   }
 
-  // Composition item - filmstrip from topmost video in sub-comp, or label fallback
+  // Composition item - multi-segment filmstrip from visible sub-comp videos, or label fallback
   if (item.type === 'composition') {
-    if (compositionVisualMediaId) {
+    if (visualSegments.length > 0) {
       return (
         <div className="absolute inset-0 flex flex-col">
-          {renderCompoundClipLabel(item.label || '复合片段')}
+          {renderCompoundClipLabel(item.label || 'Compound Clip')}
           {showVisualContent && (
             <>
-              {/* Row 2: Filmstrip - flex-1 */}
+              {/* Row 2: Filmstrip stack - flex-1 */}
               <div className="relative overflow-hidden flex-1 min-h-0">
-                {showFilmstrips && (
-                  <ClipFilmstrip
-                    mediaId={compositionVisualMediaId}
-                    clipWidth={clipWidth}
-                    renderWidth={renderWidth}
-                    sourceStart={compositionVisualSourceStart}
-                    sourceDuration={compositionVisualSourceDuration}
-                    trimStart={0}
-                    speed={compositionVisualSpeed}
+                {showFilmstrips && visualSegments.map((segment) => (
+                  <CompositionFilmstripSegment
+                    key={segment.itemId}
+                    segment={segment}
+                    wrapperDurationFrames={item.durationInFrames}
+                    wrapperClipWidthPx={clipWidth}
+                    wrapperRenderWidthPx={renderWidth}
+                    wrapperVisibleStartRatio={clipVisibility.visibleStartRatio}
+                    wrapperVisibleEndRatio={clipVisibility.visibleEndRatio}
+                    wrapperIsVisible={clipVisibility.isVisible}
                     fps={fps}
-                    isVisible={clipVisibility.isVisible}
-                    visibleStartRatio={clipVisibility.visibleStartRatio}
-                    visibleEndRatio={clipVisibility.visibleEndRatio}
                     pixelsPerSecond={pixelsPerSecond}
                     preferImmediateRendering={preferImmediateRendering}
                   />
-                )}
+                ))}
               </div>
               {/* Row 3: Waveform */}
               {showCompositionWaveform && composition && (
@@ -406,7 +484,7 @@ export const ClipContent = memo(function ClipContent({
     if (compositionSummary.hasOwnedAudio && composition && !hasCompositionAudioCompanion) {
       return (
         <div className="absolute inset-0 flex flex-col">
-          {renderCompoundClipLabel(item.label || '复合片段')}
+          {renderCompoundClipLabel(item.label || 'Compound Clip')}
           {showVisualContent && showWaveforms && (
             <div className="relative overflow-hidden bg-waveform-gradient flex-1 min-h-0">
               <CompoundClipWaveform
@@ -427,7 +505,7 @@ export const ClipContent = memo(function ClipContent({
     }
     return (
       <div className="absolute inset-0 flex flex-col overflow-hidden">
-        {renderCompoundClipLabel(item.label || '复合片段')}
+        {renderCompoundClipLabel(item.label || 'Compound Clip')}
       </div>
     );
   }
@@ -437,11 +515,11 @@ export const ClipContent = memo(function ClipContent({
     const enabledEffectsCount = item.effects?.filter(e => e.enabled).length ?? 0;
     return (
       <div className="absolute inset-0 flex flex-col px-2 py-1 overflow-hidden">
-        <div className="text-[10px] text-muted-foreground truncate">调整图层</div>
+        <div className="text-[10px] text-muted-foreground truncate">Adjustment Layer</div>
         <div className="text-xs font-medium truncate flex-1">
           {enabledEffectsCount > 0
-            ? `${enabledEffectsCount} 个效果`
-            : '无效果'}
+            ? `${enabledEffectsCount} effect${enabledEffectsCount > 1 ? 's' : ''}`
+            : 'No effects'}
         </div>
       </div>
     );

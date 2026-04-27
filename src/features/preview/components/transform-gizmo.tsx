@@ -5,7 +5,7 @@ import { useGizmoStore } from '../stores/gizmo-store';
 import { useAnimatedTransform } from '@/features/preview/deps/keyframes';
 import { useEscapeCancel } from '../hooks/use-drag-interaction';
 import { GizmoHandles } from './gizmo-handles';
-import { transformToScreenBounds, screenToCanvas, getScaleCursor } from '../utils/coordinate-transform';
+import { transformToScreenBounds, screenToCanvas, getScaleCursor, getScreenTransformOrigin } from '../utils/coordinate-transform';
 import { expandTextTransformForPreview } from '../utils/text-layout';
 
 interface TransformGizmoProps {
@@ -28,7 +28,6 @@ export function TransformGizmo({
   onTransformEnd,
   isPlaying = false,
 }: TransformGizmoProps) {
-  // Gizmo store - using unified preview system
   const activeGizmo = useGizmoStore((s) => s.activeGizmo);
   const previewTransform = useGizmoStore((s) => s.previewTransform);
   const itemPreview = useGizmoStore(
@@ -59,15 +58,22 @@ export function TransformGizmo({
       y: animatedTransform.y,
       width: animatedTransform.width,
       height: animatedTransform.height,
+      anchorX: animatedTransform.anchorX,
+      anchorY: animatedTransform.anchorY,
       rotation: animatedTransform.rotation,
       opacity: animatedTransform.opacity,
       cornerRadius: animatedTransform.cornerRadius,
     };
 
-    if (item.type === 'text') {
+    if (item.type === 'text' && itemPreview?.properties) {
       baseTransform = expandTextTransformForPreview(
         item,
-        baseTransform,
+        {
+          ...baseTransform,
+          anchorX: baseTransform.anchorX ?? baseTransform.width / 2,
+          anchorY: baseTransform.anchorY ?? baseTransform.height / 2,
+          cornerRadius: baseTransform.cornerRadius ?? 0,
+        },
         itemPreview?.properties
       );
     }
@@ -106,6 +112,10 @@ export function TransformGizmo({
 
     return bounds;
   }, [currentTransform, coordParams, item, itemPreview]);
+
+  const transformOrigin = useMemo(() => {
+    return getScreenTransformOrigin(currentTransform, coordParams);
+  }, [coordParams, currentTransform.anchorX, currentTransform.anchorY, currentTransform.height, currentTransform.width]);
 
   // Helper to convert screen position to canvas position
   const toCanvasPoint = useCallback(
@@ -268,7 +278,7 @@ export function TransformGizmo({
         width: screenBounds.width,
         height: screenBounds.height,
         transform: `rotate(${currentTransform.rotation}deg)`,
-        transformOrigin: 'center center',
+        transformOrigin,
         opacity: isPlaying ? 0 : 1,
         // High z-index to ensure gizmo is always above SelectableItems
         zIndex: 100,

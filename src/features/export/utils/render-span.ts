@@ -81,7 +81,7 @@ export function applyRenderTimelineSpan<TItem extends TimelineItem>(
 
 function resolveTransitionParticipantFrameWindow<TItem extends TimelineItem>(
   clip: TItem,
-  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
+  activeTransition: Pick<ActiveTransition, 'transitionStart' | 'transitionEnd'>,
 ): TransitionParticipantFrameWindow {
   const beforeFrames = Math.max(0, clip.from - activeTransition.transitionStart);
   const clipEnd = clip.from + clip.durationInFrames;
@@ -116,7 +116,7 @@ function getTransitionParticipantSourceStart<TItem extends TimelineItem>(
 
 export function resolveTransitionRenderTimelineSpan<TItem extends TimelineItem>(
   clip: TItem,
-  activeTransition: Pick<ActiveTransition<TItem>, 'transitionStart' | 'transitionEnd'>,
+  activeTransition: Pick<ActiveTransition, 'transitionStart' | 'transitionEnd'>,
   fps: number,
 ): RenderTimelineSpan {
   const transitionWindow = resolveTransitionParticipantFrameWindow(clip, activeTransition);

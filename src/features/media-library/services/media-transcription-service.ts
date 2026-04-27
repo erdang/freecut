@@ -9,7 +9,7 @@ import { useSelectionStore } from '@/shared/state/selection';
 import { createLogger } from '@/shared/logging/logger';
 import type { MediaTranscript, MediaTranscriptModel } from '@/types/storage';
 import type { AudioItem, TextItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
-import type { TranscribeOptions } from '../transcription/types';
+import type { TranscriptSegment, TranscribeOptions } from '../transcription/types';
 import {
   getDefaultMediaTranscriptionAdapter,
   getMediaTranscriptionModelLabel,
@@ -17,9 +17,10 @@ import {
 import { mediaLibraryService } from './media-library-service';
 import {
   buildCaptionTextItems,
-  buildCaptionTrack,
+  buildCaptionTrackAbove,
   findReplaceableCaptionItemsForClip,
   findCompatibleCaptionTrackForRanges,
+  isCaptionTrackCandidate,
   getCaptionTextItemTemplate,
   getCaptionRangeForClip,
 } from '../utils/caption-items';
@@ -27,10 +28,16 @@ import { useProjectStore } from '@/features/media-library/deps/projects';
 import { useTimelineStore } from '@/features/media-library/deps/timeline-stores';
 import { useSettingsStore } from '@/features/media-library/deps/settings-contract';
 import {
+  needsCustomAudioDecoder,
+  resolvePreviewAudioConformUrl,
+  startPreviewAudioConform,
+} from '@/features/media-library/deps/composition-runtime-contract';
+import {
   DEFAULT_WHISPER_MODEL,
   DEFAULT_WHISPER_QUANTIZATION,
   normalizeWhisperLanguage,
 } from '@/shared/utils/whisper-settings';
+import { TRANSCRIPTION_CANCELLED_MESSAGE } from '@/shared/utils/transcription-cancellation';
 
 const logger = createLogger('MediaTranscriptionService');
 const DEFAULT_MODEL: MediaTranscriptModel = DEFAULT_WHISPER_MODEL;
@@ -47,61 +54,269 @@ interface InsertTranscriptAsCaptionsResult {
   removedItemCount: number;
 }
 
+type QueueState = 'queued' | 'running';
+
+interface TranscriptionRequestOptions {
+  language?: string;
+  model?: MediaTranscriptModel;
+  quantization?: TranscribeOptions['quantization'];
+  onProgress?: TranscribeOptions['onProgress'];
+  onQueueStatusChange?: (state: QueueState) => void;
+}
+
+interface QueuedTranscriptionListener {
+  onProgress?: TranscribeOptions['onProgress'];
+  onQueueStatusChange?: (state: QueueState) => void;
+}
+
+interface QueuedTranscriptionJob {
+  mediaId: string;
+  requestKey: string;
+  model: MediaTranscriptModel;
+  quantization: NonNullable<TranscribeOptions['quantization']>;
+  language?: string;
+  listeners: QueuedTranscriptionListener[];
+  promise: Promise<MediaTranscript>;
+  resolve: (value: MediaTranscript) => void;
+  reject: (reason?: unknown) => void;
+  state: QueueState;
+  stream: { collect(): Promise<TranscriptSegment[]>; cancel(message?: string): void } | null;
+  cancelled: boolean;
+  cancelMessage: string;
+}
+
 class MediaTranscriptionService {
   private readonly adapter = getDefaultMediaTranscriptionAdapter();
   private readonly transcriber = this.adapter.createTranscriber({
     model: DEFAULT_MODEL,
     quantization: DEFAULT_QUANTIZATION,
   });
+  private activeJob: QueuedTranscriptionJob | null = null;
+  private queue: QueuedTranscriptionJob[] = [];
 
   getTranscript = getTranscript;
   getTranscriptMediaIds = getTranscriptMediaIds;
-  deleteTranscript = deleteTranscript;
+
+  async deleteTranscript(mediaId: string): Promise<void> {
+    await deleteTranscript(mediaId);
+  }
 
   async transcribeMedia(
     mediaId: string,
-    options: Pick<TranscribeOptions, 'language' | 'model' | 'quantization' | 'onProgress'> = {},
+    options: TranscriptionRequestOptions = {},
   ): Promise<MediaTranscript> {
-    const media = await mediaLibraryService.getMedia(mediaId);
-    if (!media) {
-      throw new Error(`Media not found: ${mediaId}`);
-    }
-
-    if (!media.mimeType.startsWith('audio/') && !media.mimeType.startsWith('video/')) {
-      throw new Error('Only audio and video files can be transcribed');
-    }
-
-    const blob = await mediaLibraryService.getMediaFile(mediaId);
-    if (!blob) {
-      throw new Error(`Could not load media file: ${media.fileName}`);
-    }
-
-    const file = blob instanceof File
-      ? blob
-      : new File([blob], media.fileName, {
-          type: media.mimeType,
-          lastModified: media.fileLastModified ?? Date.now(),
-        });
-
     const settings = useSettingsStore.getState();
     const model = options.model ?? settings.defaultWhisperModel ?? DEFAULT_MODEL;
     const quantization =
       options.quantization ?? settings.defaultWhisperQuantization ?? DEFAULT_QUANTIZATION;
     const language = normalizeWhisperLanguage(options.language ?? settings.defaultWhisperLanguage);
-    const stream = this.transcriber.transcribe(file, {
-      model,
-      language,
-      quantization,
+    const requestKey = `${mediaId}:${model}:${quantization}:${language ?? 'auto'}`;
+    const listener: QueuedTranscriptionListener = {
       onProgress: options.onProgress,
+      onQueueStatusChange: options.onQueueStatusChange,
+    };
+    const existingJob = this.findJobByKey(requestKey);
+
+    if (existingJob) {
+      this.attachListener(existingJob, listener);
+      return existingJob.promise;
+    }
+
+    const job = this.createJob({
+      mediaId,
+      requestKey,
+      model,
+      quantization,
+      language,
+      listener,
     });
+
+    if (this.activeJob) {
+      this.queue.push(job);
+      this.setJobState(job, 'queued');
+    } else {
+      this.startJob(job);
+    }
+
+    return job.promise;
+  }
+
+  cancelTranscription(mediaId: string, message = TRANSCRIPTION_CANCELLED_MESSAGE): boolean {
+    let cancelled = false;
+
+    this.queue = this.queue.filter((job) => {
+      if (job.mediaId !== mediaId) {
+        return true;
+      }
+
+      cancelled = true;
+      this.cancelJob(job, message);
+      return false;
+    });
+
+    if (this.activeJob?.mediaId === mediaId) {
+      cancelled = true;
+      this.cancelJob(this.activeJob, message);
+    }
+
+    return cancelled;
+  }
+
+  private findJobByKey(requestKey: string): QueuedTranscriptionJob | null {
+    if (this.activeJob?.requestKey === requestKey) {
+      return this.activeJob;
+    }
+
+    return this.queue.find((job) => job.requestKey === requestKey) ?? null;
+  }
+
+  private createJob({
+    mediaId,
+    requestKey,
+    model,
+    quantization,
+    language,
+    listener,
+  }: {
+    mediaId: string;
+    requestKey: string;
+    model: MediaTranscriptModel;
+    quantization: NonNullable<TranscribeOptions['quantization']>;
+    language?: string;
+    listener: QueuedTranscriptionListener;
+  }): QueuedTranscriptionJob {
+    let resolve!: (value: MediaTranscript) => void;
+    let reject!: (reason?: unknown) => void;
+    const promise = new Promise<MediaTranscript>((resolvePromise, rejectPromise) => {
+      resolve = resolvePromise;
+      reject = rejectPromise;
+    });
+
+    return {
+      mediaId,
+      requestKey,
+      model,
+      quantization,
+      language,
+      listeners: [listener],
+      promise,
+      resolve,
+      reject,
+      state: 'queued',
+      stream: null,
+      cancelled: false,
+      cancelMessage: TRANSCRIPTION_CANCELLED_MESSAGE,
+    };
+  }
+
+  private attachListener(job: QueuedTranscriptionJob, listener: QueuedTranscriptionListener): void {
+    job.listeners.push(listener);
+    listener.onQueueStatusChange?.(job.state);
+  }
+
+  private setJobState(job: QueuedTranscriptionJob, state: QueueState): void {
+    job.state = state;
+    for (const listener of job.listeners) {
+      listener.onQueueStatusChange?.(state);
+    }
+  }
+
+  private cancelJob(job: QueuedTranscriptionJob, message: string): void {
+    job.cancelled = true;
+    job.cancelMessage = message;
+
+    if (job.state === 'queued') {
+      job.reject(new Error(message));
+      return;
+    }
+
+    job.stream?.cancel(message);
+  }
+
+  private startJob(job: QueuedTranscriptionJob): void {
+    this.activeJob = job;
+    this.setJobState(job, 'running');
+
+    void (async () => {
+      try {
+        const transcript = await this.executeTranscriptionJob(job);
+        job.resolve(transcript);
+      } catch (error) {
+        job.reject(error);
+      } finally {
+        if (this.activeJob === job) {
+          this.activeJob = null;
+        }
+        this.processNextJob();
+      }
+    })();
+  }
+
+  private processNextJob(): void {
+    if (this.activeJob) {
+      return;
+    }
+
+    const nextJob = this.queue.shift();
+    if (nextJob) {
+      this.startJob(nextJob);
+    }
+  }
+
+  private throwIfCancelled(job: QueuedTranscriptionJob): void {
+    if (job.cancelled) {
+      throw new Error(job.cancelMessage);
+    }
+  }
+
+  private async executeTranscriptionJob(job: QueuedTranscriptionJob): Promise<MediaTranscript> {
+    const mediaId = job.mediaId;
+    const media = await mediaLibraryService.getMedia(mediaId);
+    if (!media) {
+      throw new Error(`Media not found: ${mediaId}`);
+    }
+    this.throwIfCancelled(job);
+
+    if (!media.mimeType.startsWith('audio/') && !media.mimeType.startsWith('video/')) {
+      throw new Error('Only audio and video files can be transcribed');
+    }
+
+    const sourceBlob = await mediaLibraryService.getMediaFile(mediaId);
+    if (!sourceBlob) {
+      throw new Error(`Could not load media file: ${media.fileName}`);
+    }
+    this.throwIfCancelled(job);
+
+    const transcriptionBlob = await this.resolveTranscriptionBlob(media, sourceBlob);
+    this.throwIfCancelled(job);
+
+    const file = transcriptionBlob instanceof File
+      ? transcriptionBlob
+      : new File([transcriptionBlob], media.fileName, {
+          type: transcriptionBlob.type || media.mimeType,
+          lastModified: media.fileLastModified ?? Date.now(),
+        });
+
+    const stream = this.transcriber.transcribe(file, {
+      model: job.model,
+      language: job.language,
+      quantization: job.quantization,
+      onProgress: (progress) => {
+        for (const listener of job.listeners) {
+          listener.onProgress?.(progress);
+        }
+      },
+    });
+    job.stream = stream;
     const segments = await stream.collect();
+    this.throwIfCancelled(job);
 
     const transcript: MediaTranscript = {
       id: mediaId,
       mediaId,
-      model,
-      language,
-      quantization,
+      model: job.model,
+      language: job.language,
+      quantization: job.quantization,
       text: segments.map((segment) => segment.text.trim()).filter(Boolean).join(' ').trim(),
       segments: segments.map((segment) => ({
         text: segment.text.trim(),
@@ -119,6 +334,33 @@ class MediaTranscriptionService {
       model: getMediaTranscriptionModelLabel(transcript.model),
     });
     return transcript;
+  }
+
+  private async resolveTranscriptionBlob(media: { id: string; fileName: string; mimeType: string; codec: string; audioCodec?: string }, sourceBlob: Blob): Promise<Blob> {
+    const transcriptionCodec = media.mimeType.startsWith('audio/')
+      ? media.codec
+      : (media.audioCodec ?? media.codec);
+
+    if (!needsCustomAudioDecoder(transcriptionCodec)) {
+      return sourceBlob;
+    }
+
+    let conformedUrl = await resolvePreviewAudioConformUrl(media.id);
+    if (!conformedUrl) {
+      await startPreviewAudioConform(media.id, sourceBlob);
+      conformedUrl = await resolvePreviewAudioConformUrl(media.id);
+    }
+
+    if (!conformedUrl) {
+      throw new Error(`Failed to prepare ${transcriptionCodec || 'custom'} audio for transcription`);
+    }
+
+    const response = await fetch(conformedUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to load conformed audio for transcription (${response.status})`);
+    }
+
+    return await response.blob();
   }
 
   async insertTranscriptAsCaptions(
@@ -143,7 +385,7 @@ class MediaTranscriptionService {
     const generatedCaptionIdsToRemove = options.replaceExisting
       ? new Set(
           targetClips.flatMap((clip) =>
-            findReplaceableCaptionItemsForClip(timeline.items, clip).map((item) => item.id)
+            findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript').map((item) => item.id)
           )
         )
       : new Set<string>();
@@ -157,7 +399,7 @@ class MediaTranscriptionService {
       }
 
       const existingGeneratedCaptions = options.replaceExisting
-        ? findReplaceableCaptionItemsForClip(timeline.items, clip)
+        ? findReplaceableCaptionItemsForClip(timeline.items, clip, 'transcript')
         : [];
       const preferredTrackId = this.resolvePreferredCaptionTrackId(
         newTracks,
@@ -175,7 +417,10 @@ class MediaTranscriptionService {
           );
 
       if (!targetTrack) {
-        targetTrack = buildCaptionTrack(newTracks);
+        const clipTrack = newTracks.find((track) => track.id === clip.trackId);
+        targetTrack = clipTrack
+          ? buildCaptionTrackAbove(newTracks, clipTrack.order)
+          : buildCaptionTrackAbove(newTracks, 0);
         newTracks.push(targetTrack);
         newTracks.sort((a, b) => a.order - b.order);
       }
@@ -283,7 +528,7 @@ class MediaTranscriptionService {
     }
 
     const preferredTrack = tracks.find((track) => track.id === trackIds[0]);
-    if (!preferredTrack || preferredTrack.visible === false || preferredTrack.locked || preferredTrack.isGroup) {
+    if (!preferredTrack || !isCaptionTrackCandidate(preferredTrack, items)) {
       return null;
     }
 

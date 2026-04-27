@@ -1,6 +1,7 @@
 ﻿import { create } from 'zustand';
 import { createLogger } from '@/shared/logging/logger';
 import type { AudioItem, TextItem, TimelineItem, TimelineTrack, VideoItem } from '@/types/timeline';
+import { getTextItemPlainText } from '@/shared/utils/text-item-spans';
 import type { TransformProperties } from '@/types/transform';
 import type { VisualEffect, ItemEffect } from '@/types/effects';
 import { clampTrimAmount, clampToAdjacentItems, calculateTrimSourceUpdate } from '../utils/trim-utils';
@@ -49,6 +50,7 @@ import {
   getEffectiveTimelineMaxFrame,
   sanitizeInOutPoints,
 } from '../utils/in-out-points';
+import { resolveCornerPinTargetRect } from '@/features/timeline/deps/composition-runtime';
 
 function getLog() { return createLogger('ItemsStore'); }
 
@@ -155,6 +157,31 @@ function normalizeFrameFields<T extends TimelineItem>(item: T): T {
       ? undefined
       : clampAudioEqCutSlopeDbPerOct(item.audioEqHighCutSlopeDbPerOct),
   };
+
+  if (normalized.cornerPin) {
+    const cornerPinTargetRect = resolveCornerPinTargetRect(
+      normalized.transform?.width ?? 0,
+      normalized.transform?.height ?? 0,
+      normalized.type === 'video' || normalized.type === 'image'
+        ? {
+          sourceWidth: normalized.sourceWidth,
+          sourceHeight: normalized.sourceHeight,
+          crop: normalized.crop,
+        }
+        : undefined,
+    );
+    normalized.cornerPin = {
+      ...normalized.cornerPin,
+      referenceWidth: normalized.cornerPin.referenceWidth
+        ?? (cornerPinTargetRect.width > 0
+          ? cornerPinTargetRect.width
+          : undefined),
+      referenceHeight: normalized.cornerPin.referenceHeight
+        ?? (cornerPinTargetRect.height > 0
+          ? cornerPinTargetRect.height
+          : undefined),
+    };
+  }
 
   // Legacy split clips can have sourceEnd without sourceStart.
   // Treat them as explicitly bounded from 0 to sourceEnd so rate stretch
@@ -416,12 +443,13 @@ function isCaptionableClip(item: TimelineItem): item is AudioItem | VideoItem {
 }
 
 function isLegacyGeneratedCaptionItem(item: TimelineItem): item is TextItem {
+  const plainText = item.type === 'text' ? getTextItemPlainText(item) : '';
   return item.type === 'text'
     && !item.captionSource
     && typeof item.mediaId === 'string'
     && item.mediaId.length > 0
-    && item.text.trim().length > 0
-    && item.label === item.text.slice(0, 48);
+    && plainText.trim().length > 0
+    && item.label === plainText.slice(0, 48);
 }
 
 function buildReplaceableCaptionClipIds(items: TimelineItem[]): Set<string> {

@@ -1,16 +1,21 @@
 import type { TextItem } from '@/types/timeline';
 import type { ResolvedTransform } from '@/types/transform';
 import { FONT_WEIGHT_MAP } from '@/shared/typography/fonts';
+import { getTextItemSpans } from '@/shared/utils/text-item-spans';
 
 export interface TextLayoutPreviewProperties {
+  text?: string;
+  textSpans?: TextItem['textSpans'];
   fontSize?: number;
   letterSpacing?: number;
   lineHeight?: number;
+  textPadding?: number;
+  backgroundRadius?: number;
   textShadow?: TextItem['textShadow'];
   stroke?: TextItem['stroke'];
 }
 
-const TEXT_PADDING = 16;
+const DEFAULT_TEXT_PADDING = 16;
 
 type TextMeasureContext = Pick<CanvasRenderingContext2D, 'font' | 'measureText'>
   | Pick<OffscreenCanvasRenderingContext2D, 'font' | 'measureText'>;
@@ -142,20 +147,30 @@ function getTextRequiredHeight(
 ): number {
   const fontSize = previewProperties?.fontSize ?? item.fontSize ?? 60;
   const lineHeight = previewProperties?.lineHeight ?? item.lineHeight ?? 1.2;
-  const letterSpacing = previewProperties?.letterSpacing ?? item.letterSpacing ?? 0;
-  const fontFamily = item.fontFamily ?? 'Inter';
-  const fontStyle = item.fontStyle ?? 'normal';
-  const fontWeight = FONT_WEIGHT_MAP[item.fontWeight ?? 'normal'] ?? 400;
-  const availableWidth = Math.max(1, width - TEXT_PADDING * 2);
+  const textPadding = Math.max(0, previewProperties?.textPadding ?? item.textPadding ?? DEFAULT_TEXT_PADDING);
+  const availableWidth = Math.max(1, width - textPadding * 2);
 
   const ctx = getMeasureContext();
-  if (ctx) {
-    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${fontFamily}", sans-serif`;
-  }
+  const previewTextItem = {
+    ...item,
+    text: previewProperties?.text ?? item.text,
+    textSpans: previewProperties?.textSpans ?? item.textSpans,
+  };
+  const spans = getTextItemSpans(previewTextItem);
+  let contentHeight = 0;
 
-  const lines = wrapTextLines(ctx, item.text ?? '', availableWidth, letterSpacing, fontSize);
-  const lineHeightPx = fontSize * lineHeight;
-  const contentHeight = lines.length * lineHeightPx;
+  for (const span of spans) {
+    const spanFontSize = span.fontSize ?? fontSize;
+    const spanLetterSpacing = span.letterSpacing ?? previewProperties?.letterSpacing ?? item.letterSpacing ?? 0;
+    const spanFontFamily = span.fontFamily ?? item.fontFamily ?? 'Inter';
+    const spanFontStyle = span.fontStyle ?? item.fontStyle ?? 'normal';
+    const spanFontWeight = FONT_WEIGHT_MAP[span.fontWeight ?? item.fontWeight ?? 'normal'] ?? 400;
+    if (ctx) {
+      ctx.font = `${spanFontStyle} ${spanFontWeight} ${spanFontSize}px "${spanFontFamily}", sans-serif`;
+    }
+    const lines = wrapTextLines(ctx, span.text ?? '', availableWidth, spanLetterSpacing, spanFontSize);
+    contentHeight += lines.length * (spanFontSize * lineHeight);
+  }
 
   const hasPreviewStroke = previewProperties
     ? Object.prototype.hasOwnProperty.call(previewProperties, 'stroke')
@@ -171,7 +186,7 @@ function getTextRequiredHeight(
     ? Math.abs(textShadow.offsetY) + textShadow.blur
     : 0;
 
-  return contentHeight + TEXT_PADDING * 2 + strokePad + shadowPad * 2;
+  return contentHeight + textPadding * 2 + strokePad + shadowPad * 2;
 }
 
 /**

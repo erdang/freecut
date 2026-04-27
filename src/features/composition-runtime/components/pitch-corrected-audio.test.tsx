@@ -14,7 +14,7 @@ const playbackStateMocks = vi.hoisted(() => ({
     playing: false,
     resolvedVolume: 1,
     resolvedPitchShiftSemitones: 0,
-    resolvedAudioEqStages: [],
+    resolvedAudioEqStages: [] as typeof DEFAULT_AUDIO_EQ_SETTINGS[],
   },
 }));
 

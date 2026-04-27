@@ -175,6 +175,35 @@ function createMockCanvasContext(): CanvasRenderingContext2D {
   } as unknown as CanvasRenderingContext2D;
 }
 
+function createRendererDouble(overrides: Partial<{
+  preload: ReturnType<typeof vi.fn>;
+  renderFrame: ReturnType<typeof vi.fn>;
+  prewarmFrame: ReturnType<typeof vi.fn>;
+  prewarmFrames: ReturnType<typeof vi.fn>;
+  invalidateFrameCache: ReturnType<typeof vi.fn>;
+  setDomVideoElementProvider: ReturnType<typeof vi.fn>;
+  getScrubbingCache: () => null;
+  dispose: ReturnType<typeof vi.fn>;
+}> = {}) {
+  const prewarmFrame = overrides.prewarmFrame ?? vi.fn(async (_frame: number) => {
+    void _frame;
+  });
+  return {
+    preload: overrides.preload ?? vi.fn(async () => {}),
+    renderFrame: overrides.renderFrame ?? vi.fn(async () => {}),
+    prewarmFrame,
+    prewarmFrames: overrides.prewarmFrames ?? vi.fn(async (frames: number[]) => {
+      for (const frame of frames) {
+        await (prewarmFrame as (frame: number) => Promise<void>)(frame);
+      }
+    }),
+    invalidateFrameCache: overrides.invalidateFrameCache ?? vi.fn(),
+    setDomVideoElementProvider: overrides.setDomVideoElementProvider ?? vi.fn(),
+    getScrubbingCache: overrides.getScrubbingCache ?? (() => null),
+    dispose: overrides.dispose ?? vi.fn(),
+  };
+}
+
 class ResizeObserverMock {
   observe() {}
   unobserve() {}
@@ -270,7 +299,7 @@ vi.mock('@/features/preview/deps/player-core', async () => {
             const resolvedFrame = frameOverride ?? nextFrame;
             mockedPlayerFrame = resolvedFrame;
             setRenderTick((value) => value + 1);
-            onFrameChangeRef.current?.(resolvedFrame);
+            (onFrameChangeRef.current as ((frame: number) => void) | undefined)?.(resolvedFrame);
             if (resolvedFrame === nextFrame) {
               completeDeferredPlayerSeek = null;
             }
@@ -279,7 +308,7 @@ vi.mock('@/features/preview/deps/player-core', async () => {
         }
         mockedPlayerFrame = nextFrame;
         setRenderTick((value) => value + 1);
-        onFrameChangeRef.current?.(nextFrame);
+        (onFrameChangeRef.current as ((frame: number) => void) | undefined)?.(nextFrame);
       },
       play: () => {
         mockedPlayerIsPlaying = true;
@@ -303,7 +332,7 @@ vi.mock('@/features/preview/deps/player-core', async () => {
       );
     });
 
-    return <div data-testid="mock-player">{syncedChildren}</div>;
+    return <div data-testid="mock-player">{syncedChildren as React.ReactNode}</div>;
   });
   MockPlayer.displayName = 'MockPlayer';
 
@@ -444,7 +473,10 @@ describe('VideoPreview sync behavior', () => {
     createCompositionRendererMock.mockClear();
     rendererMockState.instances.length = 0;
     canvasGetContextSpy?.mockRestore();
-    canvasGetContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation((contextId) => {
+    canvasGetContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext');
+    (canvasGetContextSpy as unknown as {
+      mockImplementation: (implementation: (contextId: string) => CanvasRenderingContext2D | null) => void;
+    }).mockImplementation((contextId) => {
       if (contextId === '2d') {
         return createMockCanvasContext();
       }
@@ -527,6 +559,7 @@ describe('VideoPreview sync behavior', () => {
           currentPoint: { x: 0, y: 0 },
           shiftKey: false,
           ctrlKey: false,
+          altKey: false,
           itemId: 'item-1',
         },
       });
@@ -566,7 +599,7 @@ describe('VideoPreview sync behavior', () => {
             effect: { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.5 } },
           },
         ],
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
 
     render(
@@ -711,6 +744,143 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('rebuilds and immediately rerenders the fast-scrub overlay when a shape toggles into mask mode', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'shape-1',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 0,
+        durationInFrames: 120,
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+        isMask: false,
+      } as unknown as TimelineItem,
+      {
+        id: 'item-1',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-1',
+            enabled: true,
+            effect: { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.5 } },
+          },
+        ],
+      } as unknown as TimelineItem,
+    ]);
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+    });
+
+    const initialRendererCount = rendererMockState.instances.length;
+    const initialRenderer = rendererMockState.instances[initialRendererCount - 1]!;
+
+    await waitFor(() => {
+      expect(initialRenderer.renderFrame).toHaveBeenCalledWith(0);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(getDisplayedFrame()).toBe(0);
+    });
+
+    let resolveRebuiltRender: (() => void) | null = null;
+    createCompositionRendererMock.mockImplementationOnce(async () => {
+      const renderFrame = vi.fn(() => new Promise<void>((resolve) => {
+        resolveRebuiltRender = resolve;
+      }));
+      const renderer = createRendererDouble({ renderFrame });
+      rendererMockState.instances.push(renderer);
+      return renderer;
+    });
+
+    act(() => {
+      useItemsStore.getState().setItems([
+        {
+          id: 'shape-1',
+          type: 'shape',
+          trackId: 'track-mask',
+          from: 0,
+          durationInFrames: 120,
+          shapeType: 'rectangle',
+          fillColor: '#ffffff',
+          isMask: true,
+        } as unknown as TimelineItem,
+        {
+          id: 'item-1',
+          type: 'video',
+          trackId: 'track-video',
+          from: 0,
+          durationInFrames: 120,
+          src: 'blob:mock-video',
+          effects: [
+            {
+              id: 'effect-1',
+              enabled: true,
+              effect: { type: 'gpu-effect', gpuEffectType: 'gpu-sepia', params: { amount: 0.5 } },
+            },
+          ],
+        } as unknown as TimelineItem,
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(rendererMockState.instances.length).toBeGreaterThan(initialRendererCount);
+    });
+
+    const rebuiltRenderer = rendererMockState.instances[rendererMockState.instances.length - 1]!;
+    await waitFor(() => {
+      expect(rebuiltRenderer.renderFrame).toHaveBeenCalledWith(0);
+    });
+
+    expect(scrubCanvas.style.visibility).toBe('visible');
+    expect(getDisplayedFrame()).toBe(0);
+
+    act(() => {
+      resolveRebuiltRender?.();
+    });
+
+    await waitFor(() => {
+      expect(scrubCanvas.style.visibility).toBe('visible');
+      expect(getDisplayedFrame()).toBe(0);
+    });
+  });
+
   it('reuses the active fast-scrub renderer for committed transform updates on gpu-effect clips', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -765,7 +935,7 @@ describe('VideoPreview sync behavior', () => {
             },
           },
         ],
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
 
     render(
@@ -839,7 +1009,7 @@ describe('VideoPreview sync behavior', () => {
               },
             },
           ],
-        } as TimelineItem,
+        } as unknown as TimelineItem,
       ]);
     });
 
@@ -877,7 +1047,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 120,
         src: 'blob:mock-video',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(24);
@@ -933,7 +1103,7 @@ describe('VideoPreview sync behavior', () => {
               },
             },
           ],
-        } as TimelineItem,
+        } as unknown as TimelineItem,
       ]);
     });
 
@@ -941,6 +1111,221 @@ describe('VideoPreview sync behavior', () => {
       expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
       expect(rendererMockState.instances.length).toBe(1);
       return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('re-renders the paused currentFrame when committed gpu effect params change', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-effected',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.5 },
+            },
+          },
+        ],
+      } as unknown as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    renderer.invalidateFrameCache.mockClear();
+    renderer.renderFrame.mockClear();
+
+    act(() => {
+      useItemsStore.getState().setItems([
+        {
+          id: 'item-effected',
+          type: 'video',
+          trackId: 'track-video',
+          from: 0,
+          durationInFrames: 120,
+          src: 'blob:mock-video',
+          effects: [
+            {
+              id: 'effect-sepia',
+              enabled: true,
+              effect: {
+                type: 'gpu-effect',
+                gpuEffectType: 'gpu-sepia',
+                params: { amount: 0.8 },
+              },
+            },
+          ],
+        } as unknown as TimelineItem,
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({
+        ranges: [{ startFrame: 0, endFrame: 120 }],
+      });
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
+  it('re-renders the paused currentFrame after media resolution finishes on refresh', async () => {
+    const mediaId = 'media-effected';
+    setMockBlobUrl(mediaId, 'blob:effected-video');
+
+    const media = {
+      id: mediaId,
+      projectId: 'project-1',
+      storageType: 'handle',
+      fileName: 'effected.mp4',
+      fileSize: 1024,
+      mimeType: 'video/mp4',
+      width: 1920,
+      height: 1080,
+      duration: 4,
+      fps: 30,
+      codec: 'h264',
+      bitrate: 1,
+      tags: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as ReturnType<typeof useMediaLibraryStore.getState>['mediaItems'][number];
+
+    useMediaLibraryStore.setState({
+      mediaItems: [media],
+      mediaById: {
+        [mediaId]: media,
+      },
+      brokenMediaIds: [],
+    });
+
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-mask',
+        name: 'Mask',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 1,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'mask-shape',
+        type: 'shape',
+        trackId: 'track-mask',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Mask',
+        shapeType: 'rectangle',
+        fillColor: '#ffffff',
+        isMask: true,
+        maskType: 'clip',
+      } as unknown as TimelineItem,
+      {
+        id: 'item-effected',
+        type: 'video',
+        trackId: 'track-video',
+        mediaId,
+        from: 0,
+        durationInFrames: 120,
+        src: '',
+        effects: [
+          {
+            id: 'effect-sepia',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.5 },
+            },
+          },
+        ],
+      } as unknown as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(24);
+    });
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalled();
+      expect(rendererMockState.instances.length).toBeGreaterThan(0);
+      return rendererMockState.instances[rendererMockState.instances.length - 1]!;
     });
 
     await waitFor(() => {
@@ -972,7 +1357,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 120,
         src: 'blob:mock-video',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(24);
@@ -1024,6 +1409,110 @@ describe('VideoPreview sync behavior', () => {
     });
   });
 
+  it('re-renders the paused currentFrame when a live gpu effect preview is committed', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-video',
+        name: 'Video',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'item-previewed',
+        type: 'video',
+        trackId: 'track-video',
+        from: 0,
+        durationInFrames: 120,
+        src: 'blob:mock-video',
+        effects: [
+          {
+            id: 'effect-preview',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.5 },
+            },
+          },
+        ],
+      } as unknown as TimelineItem,
+    ]);
+    act(() => {
+      usePlaybackStore.getState().setCurrentFrame(24);
+    });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    const renderer = await waitFor(() => {
+      expect(createCompositionRendererMock).toHaveBeenCalledTimes(1);
+      expect(rendererMockState.instances.length).toBe(1);
+      return rendererMockState.instances[0]!;
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+
+    act(() => {
+      useGizmoStore.getState().setEffectsPreviewNew({
+        'item-previewed': [
+          {
+            id: 'effect-preview',
+            enabled: true,
+            effect: {
+              type: 'gpu-effect',
+              gpuEffectType: 'gpu-sepia',
+              params: { amount: 0.8 },
+            },
+          },
+        ],
+      });
+    });
+
+    await waitFor(() => {
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+    });
+
+    renderer.invalidateFrameCache.mockClear();
+    renderer.renderFrame.mockClear();
+
+    act(() => {
+      useTimelineStore.getState().updateEffect('item-previewed', 'effect-preview', {
+        effect: {
+          type: 'gpu-effect',
+          gpuEffectType: 'gpu-sepia',
+          params: { amount: 0.8 },
+        },
+      });
+      useGizmoStore.getState().clearPreview();
+    });
+
+    await waitFor(() => {
+      expect(renderer.invalidateFrameCache).toHaveBeenCalledWith({
+        ranges: [{ startFrame: 0, endFrame: 120 }],
+      });
+      expect(renderer.renderFrame).toHaveBeenCalledWith(24);
+      expect(getDisplayedFrame()).toBe(24);
+      expect(scrubCanvas.style.visibility).toBe('visible');
+    });
+  });
+
   it('keeps the fast-scrub overlay visible when playback pauses on a gpu-effect clip', async () => {
     useItemsStore.getState().setTracks([
       {
@@ -1057,7 +1546,7 @@ describe('VideoPreview sync behavior', () => {
             },
           },
         ],
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     act(() => {
       usePlaybackStore.getState().setCurrentFrame(24);
@@ -1132,7 +1621,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 20,
         src: 'blob:plain-video',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'item-effected',
         type: 'video',
@@ -1151,7 +1640,7 @@ describe('VideoPreview sync behavior', () => {
             },
           },
         ],
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
 
     const { container } = render(
@@ -1219,7 +1708,7 @@ describe('VideoPreview sync behavior', () => {
             },
           },
         ],
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
 
     const { container } = render(
@@ -1428,7 +1917,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 60,
         src: 'blob:left',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -1437,7 +1926,7 @@ describe('VideoPreview sync behavior', () => {
         from: 40,
         durationInFrames: 60,
         src: 'blob:right',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     useTransitionsStore.getState().setTransitions([
       {
@@ -1526,7 +2015,7 @@ describe('VideoPreview sync behavior', () => {
             },
           },
         ],
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-plain',
         label: 'Plain',
@@ -1535,7 +2024,7 @@ describe('VideoPreview sync behavior', () => {
         from: 60,
         durationInFrames: 60,
         src: 'blob:plain',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
 
     const { container } = render(
@@ -1608,7 +2097,7 @@ describe('VideoPreview sync behavior', () => {
           blur: 18,
           color: '#00ffff',
         },
-      } as unknown as (typeof useItemsStore.getState)['items'][number],
+      } as unknown as ReturnType<typeof useItemsStore.getState>['items'][number],
     ]);
     useTimelineStore.setState({
       keyframes: [
@@ -1626,6 +2115,65 @@ describe('VideoPreview sync behavior', () => {
         },
       ],
     });
+
+    const { container } = render(
+      <VideoPreview
+        project={{ width: 1920, height: 1080, backgroundColor: '#000000' }}
+        containerSize={{ width: 1280, height: 720 }}
+      />
+    );
+
+    const scrubCanvas = container.querySelectorAll('canvas')[0] as HTMLCanvasElement;
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalled();
+    });
+    seekToMock.mockClear();
+
+    act(() => {
+      usePlaybackStore.getState().setScrubFrame(48);
+    });
+
+    await waitFor(() => {
+      expect(seekToMock).toHaveBeenCalledWith(48);
+    });
+
+    expect(scrubCanvas.style.visibility).toBe('hidden');
+    expect(getDisplayedFrame()).toBeNull();
+  });
+
+  it('prefers the Player path for generated caption scrubs', async () => {
+    useItemsStore.getState().setTracks([
+      {
+        id: 'track-caption',
+        name: 'V2',
+        height: 60,
+        locked: false,
+        visible: true,
+        muted: false,
+        solo: false,
+        order: 0,
+        items: [],
+      },
+    ]);
+    useItemsStore.getState().setItems([
+      {
+        id: 'caption-1',
+        type: 'text',
+        trackId: 'track-caption',
+        from: 0,
+        durationInFrames: 120,
+        label: 'Caption',
+        text: 'Caption line',
+        textRole: 'caption',
+        captionSource: {
+          type: 'transcript',
+          clipId: 'video-1',
+          mediaId: 'media-1',
+        },
+      } as unknown as ReturnType<typeof useItemsStore.getState>['items'][number],
+    ]);
+    useTimelineStore.setState({ keyframes: [] });
 
     const { container } = render(
       <VideoPreview
@@ -1765,7 +2313,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 60,
         src: 'blob:left',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -1774,7 +2322,7 @@ describe('VideoPreview sync behavior', () => {
         from: 40,
         durationInFrames: 60,
         src: 'blob:right',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     useTransitionsStore.getState().setTransitions([
       {
@@ -1853,7 +2401,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 60,
         src: 'blob:left',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -1862,7 +2410,7 @@ describe('VideoPreview sync behavior', () => {
         from: 40,
         durationInFrames: 60,
         src: 'blob:right',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     useTransitionsStore.getState().setTransitions([
       {
@@ -1951,7 +2499,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 60,
         src: 'blob:left',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -1960,7 +2508,7 @@ describe('VideoPreview sync behavior', () => {
         from: 40,
         durationInFrames: 60,
         src: 'blob:right',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
 
     render(
@@ -2038,7 +2586,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 60,
         src: 'blob:left',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -2047,7 +2595,7 @@ describe('VideoPreview sync behavior', () => {
         from: 40,
         durationInFrames: 60,
         src: 'blob:right',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     useTransitionsStore.getState().setTransitions([
       {
@@ -2135,7 +2683,7 @@ describe('VideoPreview sync behavior', () => {
         durationInFrames: 60,
         src: 'blob:shared',
         originId: 'origin-a',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -2145,7 +2693,7 @@ describe('VideoPreview sync behavior', () => {
         durationInFrames: 60,
         src: 'blob:shared',
         originId: 'origin-a',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     useTransitionsStore.getState().setTransitions([
       {
@@ -2227,7 +2775,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 60,
         src: 'blob:left',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
       {
         id: 'clip-right',
         label: 'Right',
@@ -2236,7 +2784,7 @@ describe('VideoPreview sync behavior', () => {
         from: 40,
         durationInFrames: 60,
         src: 'blob:right',
-      } as TimelineItem,
+      } as unknown as TimelineItem,
     ]);
     useTransitionsStore.getState().setTransitions([
       {
@@ -2395,7 +2943,7 @@ describe('VideoPreview sync behavior', () => {
         from: 0,
         durationInFrames: 120,
         transform: { x: 0, y: 0, width: 100, height: 60, rotation: 0, opacity: 1 },
-      } as unknown as (typeof useItemsStore.getState)['items'][number],
+      } as unknown as ReturnType<typeof useItemsStore.getState>['items'][number],
     ]);
     useTimelineStore.setState({
       keyframes: [
@@ -2495,15 +3043,20 @@ describe('VideoPreview sync behavior', () => {
     const media = {
       id: mediaId,
       projectId: 'project-1',
+      storageType: 'handle',
       fileName: 'clip.mp4',
       fileSize: 1024,
       mimeType: 'video/mp4',
       width: 1920,
       height: 1080,
       duration: 4,
+      fps: 30,
+      codec: 'h264',
+      bitrate: 1,
+      tags: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
-    } as (typeof useMediaLibraryStore.getState)['mediaItems'][number];
+    } as ReturnType<typeof useMediaLibraryStore.getState>['mediaItems'][number];
 
     useMediaLibraryStore.setState({
       mediaItems: [media],
@@ -2533,7 +3086,7 @@ describe('VideoPreview sync behavior', () => {
         mediaId,
         from: 0,
         durationInFrames: 120,
-      } as unknown as (typeof useItemsStore.getState)['items'][number],
+      } as unknown as ReturnType<typeof useItemsStore.getState>['items'][number],
     ]);
 
     render(

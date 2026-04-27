@@ -1,11 +1,27 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { Crop, RotateCcw, Video } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import { Button } from '@/components/ui/button';
 import type { TimelineItem, VideoItem, AudioItem } from '@/types/timeline';
-import { useTimelineStore } from '@/features/editor/deps/timeline-store';
-import { useGizmoStore } from '@/features/editor/deps/preview';
+import type { CropSettings } from '@/types/transform';
+import type { ItemKeyframes } from '@/types/keyframe';
+import {
+  captureSnapshot,
+  rateStretchItemWithoutHistory,
+  useKeyframesStore,
+  useTimelineCommandStore,
+  useTimelineStore,
+} from '@/features/editor/deps/timeline-store';
+import { useGizmoStore, useThrottledFrame } from '@/features/editor/deps/preview';
 import type { TimelineState, TimelineActions } from '@/features/editor/deps/timeline-store';
 import { timelineToSourceFrames, sourceToTimelineFrames } from '@/features/editor/deps/timeline-utils';
+import {
+  getAutoKeyframeOperation,
+  getCropPropertyValue,
+  type AutoKeyframeOperation,
+  KeyframeToggle,
+  resolveAnimatedCrop,
+} from '@/features/editor/deps/keyframes';
 import {
   PropertySection,
   PropertyRow,
@@ -15,13 +31,10 @@ import { getMixedValue } from '../utils';
 import {
   cropPixelsToRatio,
   cropSignedPixelsToRatio,
-  cropSignedRatioToPixels,
-  cropRatioToPixels,
   getCropSoftnessReferenceDimension,
   normalizeCropSettings,
 } from '@/shared/utils/media-crop';
 
-// Speed limits (matching rate-stretch)
 const MIN_SPEED = 0.1;
 const MAX_SPEED = 10.0;
 const CROP_STEP = 0.1;
@@ -32,49 +45,83 @@ interface VideoSectionProps {
 }
 
 type CropEdge = 'left' | 'right' | 'top' | 'bottom';
+type CropProperty = 'cropLeft' | 'cropRight' | 'cropTop' | 'cropBottom' | 'cropSoftness';
+type CropDimensions = { width: number; height: number };
+type ResolvedCropState = {
+  crop: CropSettings | undefined;
+  dimensions: CropDimensions;
+};
 
-function getSourceWidth(item: VideoItem): number {
-  return Math.max(1, item.sourceWidth ?? item.transform?.width ?? 1920);
+const CROP_EDGE_PROPERTY: Record<CropEdge, Exclude<CropProperty, 'cropSoftness'>> = {
+  left: 'cropLeft',
+  right: 'cropRight',
+  top: 'cropTop',
+  bottom: 'cropBottom',
+};
+
+function getCropDimensions(item: VideoItem): CropDimensions {
+  return {
+    width: Math.max(1, item.sourceWidth ?? item.transform?.width ?? 1920),
+    height: Math.max(1, item.sourceHeight ?? item.transform?.height ?? 1080),
+  };
 }
 
-function getSourceHeight(item: VideoItem): number {
-  return Math.max(1, item.sourceHeight ?? item.transform?.height ?? 1080);
-}
-
-function getCropPixels(item: VideoItem, edge: CropEdge): number {
+function buildCropUpdate(
+  crop: CropSettings | undefined,
+  edge: CropEdge,
+  pixels: number,
+  dimensions: CropDimensions,
+): CropSettings | undefined {
   const dimension = edge === 'left' || edge === 'right'
-    ? getSourceWidth(item)
-    : getSourceHeight(item);
-  return cropRatioToPixels(item.crop?.[edge], dimension);
-}
-
-function getCropSoftnessDimension(item: VideoItem): number {
-  return Math.max(1, getCropSoftnessReferenceDimension(getSourceWidth(item), getSourceHeight(item)));
-}
-
-function getCropSoftnessPixels(item: VideoItem): number {
-  return cropSignedRatioToPixels(item.crop?.softness, getCropSoftnessDimension(item));
-}
-
-function buildCropUpdate(item: VideoItem, edge: CropEdge, pixels: number) {
-  const dimension = edge === 'left' || edge === 'right'
-    ? getSourceWidth(item)
-    : getSourceHeight(item);
+    ? dimensions.width
+    : dimensions.height;
   return normalizeCropSettings({
-    ...item.crop,
+    ...crop,
     [edge]: cropPixelsToRatio(pixels, dimension),
   });
 }
 
-function buildCropSoftnessUpdate(item: VideoItem, pixels: number) {
+function buildCropSoftnessUpdate(
+  crop: CropSettings | undefined,
+  pixels: number,
+  dimensions: CropDimensions,
+): CropSettings | undefined {
   return normalizeCropSettings({
-    ...item.crop,
-    softness: cropSignedPixelsToRatio(pixels, getCropSoftnessDimension(item)),
+    ...crop,
+    softness: cropSignedPixelsToRatio(
+      pixels,
+      Math.max(1, getCropSoftnessReferenceDimension(dimensions.width, dimensions.height)),
+    ),
   });
+}
+
+function getResolvedCropState(
+  item: VideoItem,
+  currentFrame: number,
+  itemKeyframes: ItemKeyframes | null | undefined,
+): ResolvedCropState {
+  const dimensions = getCropDimensions(item);
+  return {
+    dimensions,
+    crop: resolveAnimatedCrop(
+      item.crop,
+      itemKeyframes ?? undefined,
+      currentFrame - item.from,
+      dimensions,
+    ),
+  };
 }
 
 function formatCropValue(value: number): string {
   return value.toFixed(3);
+}
+
+function getResolvedCropPropertyValue(
+  state: ResolvedCropState | undefined,
+  property: CropProperty,
+): number | undefined {
+  if (!state) return undefined;
+  return getCropPropertyValue(state.crop, property, state.dimensions);
 }
 
 /**
@@ -85,10 +132,10 @@ function formatCropValue(value: number): string {
  * - Slower speed = longer clip (same content plays slower)
  */
 export function VideoSection({ items }: VideoSectionProps) {
-  const rateStretchItem = useTimelineStore((s: TimelineState & TimelineActions) => s.rateStretchItem);
   const updateItem = useTimelineStore((s: TimelineState & TimelineActions) => s.updateItem);
+  const applyAutoKeyframeOperations = useTimelineStore((s) => s.applyAutoKeyframeOperations);
+  const currentFrame = useThrottledFrame();
 
-  // Gizmo store for live previews
   const setPropertiesPreviewNew = useGizmoStore((s) => s.setPropertiesPreviewNew);
   const clearPreview = useGizmoStore((s) => s.clearPreview);
 
@@ -97,11 +144,8 @@ export function VideoSection({ items }: VideoSectionProps) {
     [items]
   );
 
-  // Memoize video item IDs for fade/crop controls (video-only)
   const itemIds = useMemo(() => videoItems.map((item) => item.id), [videoItems]);
 
-  // Memoize IDs for rate-stretch: includes audio items too so detached audio tracks
-  // stay in sync when speed is changed via the properties panel.
   const rateStretchableIds = useMemo(
     () => items
       .filter((item): item is VideoItem | AudioItem => item.type === 'video' || item.type === 'audio')
@@ -109,36 +153,85 @@ export function VideoSection({ items }: VideoSectionProps) {
     [items]
   );
 
-  // Get current values (speed defaults to 1, fades default to 0)
+  const itemKeyframes = useKeyframesStore(
+    useShallow(
+      useCallback(
+        (s) => itemIds.map((itemId) => s.keyframesByItemId[itemId] ?? null),
+        [itemIds]
+      )
+    )
+  );
+  const keyframesByItemId = useMemo(() => {
+    const map = new Map<string, (typeof itemKeyframes)[number]>();
+    for (const [index, itemId] of itemIds.entries()) {
+      map.set(itemId, itemKeyframes[index] ?? null);
+    }
+    return map;
+  }, [itemIds, itemKeyframes]);
+
+  const resolvedCropStatesByItem = useMemo(() => {
+    const map = new Map<string, ResolvedCropState>();
+    for (const item of videoItems) {
+      map.set(
+        item.id,
+        getResolvedCropState(item, currentFrame, keyframesByItemId.get(item.id))
+      );
+    }
+    return map;
+  }, [currentFrame, keyframesByItemId, videoItems]);
+
   const speed = getMixedValue(videoItems, (item) => item.speed, 1);
   const fadeIn = getMixedValue(videoItems, (item) => item.fadeIn, 0);
   const fadeOut = getMixedValue(videoItems, (item) => item.fadeOut, 0);
-  const cropLeft = getMixedValue(videoItems, (item) => getCropPixels(item, 'left'), 0);
-  const cropRight = getMixedValue(videoItems, (item) => getCropPixels(item, 'right'), 0);
-  const cropTop = getMixedValue(videoItems, (item) => getCropPixels(item, 'top'), 0);
-  const cropBottom = getMixedValue(videoItems, (item) => getCropPixels(item, 'bottom'), 0);
-  const cropSoftness = getMixedValue(videoItems, getCropSoftnessPixels, 0);
+  const cropLeft = getMixedValue(
+    videoItems,
+    (item) => getResolvedCropPropertyValue(resolvedCropStatesByItem.get(item.id), 'cropLeft'),
+    0
+  );
+  const cropRight = getMixedValue(
+    videoItems,
+    (item) => getResolvedCropPropertyValue(resolvedCropStatesByItem.get(item.id), 'cropRight'),
+    0
+  );
+  const cropTop = getMixedValue(
+    videoItems,
+    (item) => getResolvedCropPropertyValue(resolvedCropStatesByItem.get(item.id), 'cropTop'),
+    0
+  );
+  const cropBottom = getMixedValue(
+    videoItems,
+    (item) => getResolvedCropPropertyValue(resolvedCropStatesByItem.get(item.id), 'cropBottom'),
+    0
+  );
+  const cropSoftness = getMixedValue(
+    videoItems,
+    (item) => getResolvedCropPropertyValue(resolvedCropStatesByItem.get(item.id), 'cropSoftness'),
+    0
+  );
 
   const maxSourceWidth = useMemo(
-    () => Math.max(1, ...videoItems.map(getSourceWidth)),
+    () => Math.max(1, ...videoItems.map((item) => getCropDimensions(item).width)),
     [videoItems]
   );
   const maxSourceHeight = useMemo(
-    () => Math.max(1, ...videoItems.map(getSourceHeight)),
+    () => Math.max(1, ...videoItems.map((item) => getCropDimensions(item).height)),
     [videoItems]
   );
   const maxCropSoftness = useMemo(
-    () => Math.max(1, ...videoItems.map(getCropSoftnessDimension)),
+    () => Math.max(
+      1,
+      ...videoItems.map((item) => {
+        const dimensions = getCropDimensions(item);
+        return Math.max(1, getCropSoftnessReferenceDimension(dimensions.width, dimensions.height));
+      })
+    ),
     [videoItems]
   );
+  const speedDragSnapshotRef = useRef<ReturnType<typeof captureSnapshot> | null>(null);
 
-  // Handle speed change - uses rate stretch to adjust duration
-  // Read current values from store to avoid depending on videoItems
-  const handleSpeedChange = useCallback(
+  const applySpeedChangeWithoutHistory = useCallback(
     (newSpeed: number) => {
-      // Round to 2 decimal places to match clip label precision and avoid floating point drift
       const roundedSpeed = Math.round(newSpeed * 100) / 100;
-      // Clamp speed to valid range
       const clampedSpeed = Math.max(MIN_SPEED, Math.min(MAX_SPEED, roundedSpeed));
 
       const { items: currentItems, fps } = useTimelineStore.getState();
@@ -148,27 +241,49 @@ export function VideoSection({ items }: VideoSectionProps) {
         .forEach((item: VideoItem | AudioItem) => {
           const currentSpeed = item.speed || 1;
           const sourceFps = item.sourceFps ?? fps;
-          // For split clips with explicit source bounds, use the actual source span.
-          // This is more accurate than durationInFrames * currentSpeed, which can
-          // drift with rounding across multiple speed changes or mismatched FPS.
           const effectiveSourceFrames =
             item.sourceEnd !== undefined && item.sourceStart !== undefined
               ? item.sourceEnd - item.sourceStart
               : timelineToSourceFrames(item.durationInFrames, currentSpeed, fps, sourceFps);
-          // Calculate new duration based on new speed using FPS-aware conversion.
           const newDuration = Math.max(1, sourceToTimelineFrames(effectiveSourceFrames, clampedSpeed, sourceFps, fps));
-          // Keep start position the same (stretch from end)
-          rateStretchItem(item.id, item.from, newDuration, clampedSpeed);
+          rateStretchItemWithoutHistory(item.id, item.from, newDuration, clampedSpeed);
         });
+
+      return clampedSpeed;
     },
-    [rateStretchableIds, rateStretchItem]
+    [rateStretchableIds]
+  );
+
+  const commitSpeedChange = useCallback(
+    (newSpeed: number) => {
+      const beforeSnapshot = speedDragSnapshotRef.current ?? captureSnapshot();
+      const clampedSpeed = applySpeedChangeWithoutHistory(newSpeed);
+      useTimelineCommandStore.getState().addUndoEntry(
+        {
+          type: 'RATE_STRETCH_ITEM',
+          payload: { ids: rateStretchableIds, newSpeed: clampedSpeed },
+        },
+        beforeSnapshot
+      );
+      speedDragSnapshotRef.current = null;
+    },
+    [applySpeedChangeWithoutHistory, rateStretchableIds]
+  );
+
+  const handleSpeedLiveChange = useCallback(
+    (newSpeed: number) => {
+      if (!speedDragSnapshotRef.current) {
+        speedDragSnapshotRef.current = captureSnapshot();
+      }
+      applySpeedChangeWithoutHistory(newSpeed);
+    },
+    [applySpeedChangeWithoutHistory]
   );
 
   const commitPreviewClear = useCallback(() => {
     queueMicrotask(() => clearPreview());
   }, [clearPreview]);
 
-  // Live preview for fade in (during drag)
   const handleFadeInLiveChange = useCallback(
     (value: number) => {
       const previews: Record<string, { fadeIn: number }> = {};
@@ -180,7 +295,6 @@ export function VideoSection({ items }: VideoSectionProps) {
     [itemIds, setPropertiesPreviewNew]
   );
 
-  // Commit fade in (on mouse up)
   const handleFadeInChange = useCallback(
     (value: number) => {
       itemIds.forEach((id) => updateItem(id, { fadeIn: value }));
@@ -189,7 +303,6 @@ export function VideoSection({ items }: VideoSectionProps) {
     [itemIds, updateItem, commitPreviewClear]
   );
 
-  // Live preview for fade out (during drag)
   const handleFadeOutLiveChange = useCallback(
     (value: number) => {
       const previews: Record<string, { fadeOut: number }> = {};
@@ -201,7 +314,6 @@ export function VideoSection({ items }: VideoSectionProps) {
     [itemIds, setPropertiesPreviewNew]
   );
 
-  // Commit fade out (on mouse up)
   const handleFadeOutChange = useCallback(
     (value: number) => {
       itemIds.forEach((id) => updateItem(id, { fadeOut: value }));
@@ -214,90 +326,122 @@ export function VideoSection({ items }: VideoSectionProps) {
     (edge: CropEdge, pixels: number) => {
       const previews: Record<string, { crop: VideoItem['crop'] }> = {};
       videoItems.forEach((item) => {
+        const cropState = resolvedCropStatesByItem.get(item.id);
+        if (!cropState) return;
         previews[item.id] = {
-          crop: buildCropUpdate(item, edge, pixels),
+          crop: buildCropUpdate(cropState.crop, edge, pixels, cropState.dimensions),
         };
       });
       setPropertiesPreviewNew(previews);
     },
-    [setPropertiesPreviewNew, videoItems]
+    [resolvedCropStatesByItem, setPropertiesPreviewNew, videoItems]
   );
 
   const commitCropEdge = useCallback(
     (edge: CropEdge, pixels: number) => {
+      const property = CROP_EDGE_PROPERTY[edge];
+      const autoOps: AutoKeyframeOperation[] = [];
+
       videoItems.forEach((item) => {
+        const operation = getAutoKeyframeOperation(
+          item,
+          keyframesByItemId.get(item.id) ?? undefined,
+          property,
+          pixels,
+          currentFrame
+        );
+        if (operation) {
+          autoOps.push(operation);
+          return;
+        }
+
         updateItem(item.id, {
-          crop: buildCropUpdate(item, edge, pixels),
+          crop: buildCropUpdate(item.crop, edge, pixels, getCropDimensions(item)),
         });
       });
+
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
+      }
+
       commitPreviewClear();
     },
-    [videoItems, updateItem, commitPreviewClear]
+    [applyAutoKeyframeOperations, commitPreviewClear, currentFrame, keyframesByItemId, updateItem, videoItems]
   );
 
   const previewCropSoftness = useCallback(
     (pixels: number) => {
       const previews: Record<string, { crop: VideoItem['crop'] }> = {};
       videoItems.forEach((item) => {
+        const cropState = resolvedCropStatesByItem.get(item.id);
+        if (!cropState) return;
         previews[item.id] = {
-          crop: buildCropSoftnessUpdate(item, pixels),
+          crop: buildCropSoftnessUpdate(cropState.crop, pixels, cropState.dimensions),
         };
       });
       setPropertiesPreviewNew(previews);
     },
-    [setPropertiesPreviewNew, videoItems]
+    [resolvedCropStatesByItem, setPropertiesPreviewNew, videoItems]
   );
 
   const commitCropSoftness = useCallback(
     (pixels: number) => {
+      const autoOps: AutoKeyframeOperation[] = [];
+
       videoItems.forEach((item) => {
+        const operation = getAutoKeyframeOperation(
+          item,
+          keyframesByItemId.get(item.id) ?? undefined,
+          'cropSoftness',
+          pixels,
+          currentFrame
+        );
+        if (operation) {
+          autoOps.push(operation);
+          return;
+        }
+
         updateItem(item.id, {
-          crop: buildCropSoftnessUpdate(item, pixels),
+          crop: buildCropSoftnessUpdate(item.crop, pixels, getCropDimensions(item)),
         });
       });
+
+      if (autoOps.length > 0) {
+        applyAutoKeyframeOperations(autoOps);
+      }
+
       commitPreviewClear();
     },
-    [videoItems, updateItem, commitPreviewClear]
+    [applyAutoKeyframeOperations, commitPreviewClear, currentFrame, keyframesByItemId, updateItem, videoItems]
   );
 
   const resetCropEdge = useCallback(
     (edge: CropEdge) => {
-      const needsUpdate = videoItems.some((item) => getCropPixels(item, edge) > CROP_TOLERANCE);
-      if (!needsUpdate) return;
-
-      videoItems.forEach((item) => {
-        updateItem(item.id, {
-          crop: normalizeCropSettings({
-            ...item.crop,
-            [edge]: 0,
-          }),
-        });
+      const property = CROP_EDGE_PROPERTY[edge];
+      const needsUpdate = videoItems.some((item) => {
+        const cropState = resolvedCropStatesByItem.get(item.id);
+        return Math.abs(getResolvedCropPropertyValue(cropState, property) ?? 0) > CROP_TOLERANCE;
       });
+      if (!needsUpdate) return;
+      commitCropEdge(edge, 0);
     },
-    [updateItem, videoItems]
+    [commitCropEdge, resolvedCropStatesByItem, videoItems]
   );
 
   const resetCropSoftness = useCallback(() => {
-    const needsUpdate = videoItems.some((item) => Math.abs(getCropSoftnessPixels(item)) > CROP_TOLERANCE);
-    if (!needsUpdate) return;
-
-    videoItems.forEach((item) => {
-      updateItem(item.id, {
-        crop: normalizeCropSettings({
-          ...item.crop,
-          softness: 0,
-        }),
-      });
+    const needsUpdate = videoItems.some((item) => {
+      const cropState = resolvedCropStatesByItem.get(item.id);
+      return Math.abs(getResolvedCropPropertyValue(cropState, 'cropSoftness') ?? 0) > CROP_TOLERANCE;
     });
-  }, [updateItem, videoItems]);
+    if (!needsUpdate) return;
+    commitCropSoftness(0);
+  }, [commitCropSoftness, resolvedCropStatesByItem, videoItems]);
 
-  // Reset speed to 1x - pushes subsequent clips right to avoid overlaps
   const resetSpeedWithRipple = useTimelineStore((s: TimelineState & TimelineActions) => s.resetSpeedWithRipple);
   const handleResetSpeed = useCallback(() => {
     resetSpeedWithRipple(rateStretchableIds);
   }, [rateStretchableIds, resetSpeedWithRipple]);
 
-  // Reset fade in to 0
   const handleResetFadeIn = useCallback(() => {
     const tolerance = 0.01;
     const currentItems = useTimelineStore.getState().items;
@@ -309,7 +453,6 @@ export function VideoSection({ items }: VideoSectionProps) {
     }
   }, [itemIds, updateItem]);
 
-  // Reset fade out to 0
   const handleResetFadeOut = useCallback(() => {
     const tolerance = 0.01;
     const currentItems = useTimelineStore.getState().items;
@@ -325,13 +468,13 @@ export function VideoSection({ items }: VideoSectionProps) {
 
   return (
     <>
-      <PropertySection title="播放" icon={Video} defaultOpen={true}>
-        {/* Playback Rate - affects clip duration */}
-        <PropertyRow label="速度">
+      <PropertySection title="Playback" icon={Video} defaultOpen={true}>
+        <PropertyRow label="Speed">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={speed}
-              onChange={handleSpeedChange}
+              onChange={commitSpeedChange}
+              onLiveChange={handleSpeedLiveChange}
               min={MIN_SPEED}
               max={MAX_SPEED}
               step={0.01}
@@ -339,19 +482,18 @@ export function VideoSection({ items }: VideoSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetSpeed}
-            title="重置为 1 倍"
-          >
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetSpeed}
+              title="Reset to 1x"
+            >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        {/* Video Fades */}
-        <PropertyRow label="淡入">
+        <PropertyRow label="Fade In">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={fadeIn}
@@ -364,18 +506,18 @@ export function VideoSection({ items }: VideoSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetFadeIn}
-            title="重置为 0"
-          >
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetFadeIn}
+              title="Reset to 0"
+            >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="淡出">
+        <PropertyRow label="Fade Out">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={fadeOut}
@@ -388,20 +530,20 @@ export function VideoSection({ items }: VideoSectionProps) {
               className="flex-1 min-w-0"
             />
             <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 flex-shrink-0"
-            onClick={handleResetFadeOut}
-            title="重置为 0"
-          >
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 flex-shrink-0"
+              onClick={handleResetFadeOut}
+              title="Reset to 0"
+            >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
       </PropertySection>
 
-      <PropertySection title="裁剪" icon={Crop} defaultOpen={true}>
-        <PropertyRow label="左">
+      <PropertySection title="Cropping" icon={Crop} defaultOpen={true}>
+        <PropertyRow label="Left">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropLeft}
@@ -415,19 +557,24 @@ export function VideoSection({ items }: VideoSectionProps) {
               formatInputValue={formatCropValue}
               className="flex-1 min-w-0"
             />
+            <KeyframeToggle
+              itemIds={itemIds}
+              property="cropLeft"
+              currentValue={cropLeft === 'mixed' ? 0 : cropLeft}
+            />
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('left')}
-              title="重置左侧裁剪"
+              title="Reset left crop"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="右">
+        <PropertyRow label="Right">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropRight}
@@ -441,19 +588,24 @@ export function VideoSection({ items }: VideoSectionProps) {
               formatInputValue={formatCropValue}
               className="flex-1 min-w-0"
             />
+            <KeyframeToggle
+              itemIds={itemIds}
+              property="cropRight"
+              currentValue={cropRight === 'mixed' ? 0 : cropRight}
+            />
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('right')}
-              title="重置右侧裁剪"
+              title="Reset right crop"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="上">
+        <PropertyRow label="Top">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropTop}
@@ -467,19 +619,24 @@ export function VideoSection({ items }: VideoSectionProps) {
               formatInputValue={formatCropValue}
               className="flex-1 min-w-0"
             />
+            <KeyframeToggle
+              itemIds={itemIds}
+              property="cropTop"
+              currentValue={cropTop === 'mixed' ? 0 : cropTop}
+            />
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('top')}
-              title="重置上侧裁剪"
+              title="Reset top crop"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="下">
+        <PropertyRow label="Bottom">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropBottom}
@@ -493,19 +650,24 @@ export function VideoSection({ items }: VideoSectionProps) {
               formatInputValue={formatCropValue}
               className="flex-1 min-w-0"
             />
+            <KeyframeToggle
+              itemIds={itemIds}
+              property="cropBottom"
+              currentValue={cropBottom === 'mixed' ? 0 : cropBottom}
+            />
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('bottom')}
-              title="重置下侧裁剪"
+              title="Reset bottom crop"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="柔化">
+        <PropertyRow label="Softness">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropSoftness}
@@ -519,12 +681,17 @@ export function VideoSection({ items }: VideoSectionProps) {
               formatInputValue={formatCropValue}
               className="flex-1 min-w-0"
             />
+            <KeyframeToggle
+              itemIds={itemIds}
+              property="cropSoftness"
+              currentValue={cropSoftness === 'mixed' ? 0 : cropSoftness}
+            />
             <Button
               variant="ghost"
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={resetCropSoftness}
-              title="重置裁剪柔化"
+              title="Reset crop softness"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>

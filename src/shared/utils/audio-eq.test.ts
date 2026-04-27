@@ -218,4 +218,34 @@ describe('audio-eq', () => {
     expect(rms(airCut) / rms(airTone)).toBeLessThan(0.5);
     expect(rms(outputBoosted) / rms(midTone)).toBeGreaterThan(1.9);
   });
+
+  it('keeps the telephone preset present while staying band-limited', () => {
+    const telephonePreset = getAudioEqPresetById('telephone');
+    const radioPreset = getAudioEqPresetById('radio');
+
+    expect(telephonePreset).toBeDefined();
+    expect(radioPreset).toBeDefined();
+
+    const presenceTone = makeSineWave(AUDIO_EQ_HIGH_MID_FREQUENCY_HZ);
+    const lowTone = makeSineWave(AUDIO_EQ_LOW_FREQUENCY_HZ);
+    const highTone = makeSineWave(6000);
+
+    const telephonePresence = applyAudioEqStages([presenceTone], 48000, [
+      telephonePreset!.settings,
+    ])[0]!;
+    const radioPresence = applyAudioEqStages([presenceTone], 48000, [
+      radioPreset!.settings,
+    ])[0]!;
+    const telephoneLow = applyAudioEqStages([lowTone], 48000, [
+      telephonePreset!.settings,
+    ])[0]!;
+    const telephoneHigh = applyAudioEqStages([highTone], 48000, [
+      telephonePreset!.settings,
+    ])[0]!;
+
+    expect(rms(telephonePresence) / rms(presenceTone)).toBeGreaterThan(1);
+    expect(rms(telephonePresence) / rms(radioPresence)).toBeGreaterThan(0.9);
+    expect(rms(telephoneLow) / rms(lowTone)).toBeLessThan(0.25);
+    expect(rms(telephoneHigh) / rms(highTone)).toBeLessThan(0.2);
+  });
 });

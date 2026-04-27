@@ -747,8 +747,8 @@ function definePreset(
 }
 
 export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.freeze([
-  definePreset('flat', '平坦', {}),
-  definePreset('voice-clarity', '人声清晰', {
+  definePreset('flat', 'Flat', {}),
+  definePreset('voice-clarity', 'Voice Clarity', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 80,
     lowCutSlopeDbPerOct: 12,
@@ -763,7 +763,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 2,
     highFrequencyHz: 7200,
   }),
-  definePreset('podcast', '播客', {
+  definePreset('podcast', 'Podcast', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 70,
     lowCutSlopeDbPerOct: 12,
@@ -778,7 +778,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 2.5,
     highFrequencyHz: 9000,
   }),
-  definePreset('warmth', '温暖', {
+  definePreset('warmth', 'Warmth', {
     lowGainDb: 4,
     lowFrequencyHz: 110,
     lowMidGainDb: 2,
@@ -790,7 +790,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: -2.5,
     highFrequencyHz: 6500,
   }),
-  definePreset('bass-boost', '低频增强', {
+  definePreset('bass-boost', 'Bass Boost', {
     lowGainDb: 7,
     lowFrequencyHz: 90,
     lowMidGainDb: 2.5,
@@ -802,7 +802,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 0.5,
     highFrequencyHz: 7000,
   }),
-  definePreset('de-mud', '去浑浊', {
+  definePreset('de-mud', 'De-Mud', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 55,
     lowCutSlopeDbPerOct: 12,
@@ -817,7 +817,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 1,
     highFrequencyHz: 7000,
   }),
-  definePreset('smile', '微笑曲线', {
+  definePreset('smile', 'Smile', {
     lowGainDb: 3.5,
     lowFrequencyHz: 95,
     lowMidGainDb: -2,
@@ -829,7 +829,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 4.5,
     highFrequencyHz: 9500,
   }),
-  definePreset('sparkle', '明亮', {
+  definePreset('sparkle', 'Sparkle', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 60,
     lowCutSlopeDbPerOct: 6,
@@ -844,7 +844,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 6,
     highFrequencyHz: 9500,
   }),
-  definePreset('air', '空气感', {
+  definePreset('air', 'Air', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 75,
     lowCutSlopeDbPerOct: 12,
@@ -859,7 +859,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 7,
     highFrequencyHz: 11000,
   }),
-  definePreset('soften', '柔和', {
+  definePreset('soften', 'Soften', {
     lowGainDb: 1.5,
     lowFrequencyHz: 120,
     lowMidGainDb: 1,
@@ -874,7 +874,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highCutFrequencyHz: 14000,
     highCutSlopeDbPerOct: 12,
   }),
-  definePreset('radio', '广播', {
+  definePreset('radio', 'Radio', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 220,
     lowCutSlopeDbPerOct: 18,
@@ -892,25 +892,26 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highCutFrequencyHz: 4200,
     highCutSlopeDbPerOct: 18,
   }),
-  definePreset('telephone', '电话', {
+  definePreset('telephone', 'Telephone', {
+    outputGainDb: 5,
     lowCutEnabled: true,
-    lowCutFrequencyHz: 399,
+    lowCutFrequencyHz: 320,
     lowCutSlopeDbPerOct: 24,
-    lowGainDb: -18,
-    lowFrequencyHz: 395,
-    lowMidGainDb: -15,
-    lowMidFrequencyHz: 657,
-    lowMidQ: 1.4,
-    highMidGainDb: -14,
-    highMidFrequencyHz: 1600,
-    highMidQ: 1.25,
-    highGainDb: -18,
-    highFrequencyHz: 2800,
+    lowGainDb: -8,
+    lowFrequencyHz: 240,
+    lowMidGainDb: -3.5,
+    lowMidFrequencyHz: 520,
+    lowMidQ: 1.15,
+    highMidGainDb: 4.5,
+    highMidFrequencyHz: 1700,
+    highMidQ: 1.05,
+    highGainDb: -9,
+    highFrequencyHz: 3600,
     highCutEnabled: true,
-    highCutFrequencyHz: 2000,
+    highCutFrequencyHz: 3200,
     highCutSlopeDbPerOct: 24,
   }),
-  definePreset('dialog-lift', '对白提升', {
+  definePreset('dialog-lift', 'Dialog Lift', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 75,
     lowCutSlopeDbPerOct: 12,
@@ -925,7 +926,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     highGainDb: 1.5,
     highFrequencyHz: 7000,
   }),
-  definePreset('rumble-cut', '轰鸣削减', {
+  definePreset('rumble-cut', 'Rumble Cut', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 100,
     lowCutSlopeDbPerOct: 18,
@@ -935,7 +936,7 @@ export const AUDIO_EQ_PRESETS: ReadonlyArray<AudioEqPresetDefinition> = Object.f
     lowMidFrequencyHz: 250,
     lowMidQ: 1,
   }),
-  definePreset('brighten', '提亮', {
+  definePreset('brighten', 'Brighten', {
     lowCutEnabled: true,
     lowCutFrequencyHz: 50,
     lowCutSlopeDbPerOct: 6,

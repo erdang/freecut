@@ -1,11 +1,5 @@
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { CompositionInputProps } from '@/types/export';
-import {
-  PlayerEmitterProvider,
-  ClockBridgeProvider,
-  VideoConfigProvider,
-  useClock,
-} from '@/features/preview/deps/player-context';
 import { usePlaybackStore } from '@/shared/state/playback';
 import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
 import {
@@ -14,9 +8,14 @@ import {
   useCompositionsStore,
 } from '@/features/preview/deps/timeline-contract';
 import { resolveMediaUrl, resolveMediaUrls } from '@/features/preview/deps/media-library-contract';
-import {
-  MainComposition,
-} from '@/features/preview/deps/composition-runtime-contract';
+import { createCompositionRenderer } from '@/features/preview/deps/export';
+import { createLogger } from '@/shared/logging/logger';
+
+type CompositionRendererInstance = Awaited<ReturnType<typeof createCompositionRenderer>>;
+
+function getLogger() {
+  return createLogger('InlineCompositionPreview');
+}
 
 interface InlineCompositionPreviewProps {
   compositionId: string;
@@ -25,16 +24,6 @@ interface InlineCompositionPreviewProps {
     width: number;
     height: number;
   };
-}
-
-function InlineCompositionPreviewClockSync({ frame }: { frame: number | null }) {
-  const clock = useClock();
-
-  useEffect(() => {
-    clock.seekToFrame(frame ?? 0);
-  }, [clock, frame]);
-
-  return null;
 }
 
 export const InlineCompositionPreview = memo(function InlineCompositionPreview({
@@ -139,21 +128,133 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
     return playerSize.width > containerSize.width || playerSize.height > containerSize.height;
   }, [containerSize.height, containerSize.width, playerSize.height, playerSize.width, zoom]);
 
+  const displayCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const rendererRef = useRef<CompositionRendererInstance | null>(null);
+  const offscreenRef = useRef<OffscreenCanvas | null>(null);
+  const [rendererReady, setRendererReady] = useState(false);
+
+  const rendererInput = useMemo<CompositionInputProps | null>(() => {
+    if (!compositionInput || !resolvedTracks) return null;
+    return { ...compositionInput, tracks: resolvedTracks };
+  }, [compositionInput, resolvedTracks]);
+
+  useEffect(() => {
+    if (!rendererInput) {
+      setRendererReady(false);
+      return;
+    }
+    if (typeof OffscreenCanvas === 'undefined') {
+      setRendererReady(false);
+      return;
+    }
+
+    let cancelled = false;
+    let createdRenderer: CompositionRendererInstance | null = null;
+    setRendererReady(false);
+
+    const offscreen = new OffscreenCanvas(compositionWidth, compositionHeight);
+    const ctx = offscreen.getContext('2d');
+    if (!ctx) {
+      return;
+    }
+
+    const boot = async () => {
+      try {
+        const renderer = await createCompositionRenderer(rendererInput, offscreen, ctx, {
+          mode: 'preview',
+        });
+        if (cancelled) {
+          renderer.dispose();
+          return;
+        }
+        createdRenderer = renderer;
+        rendererRef.current = renderer;
+        offscreenRef.current = offscreen;
+
+        if ('warmGpuPipeline' in renderer) {
+          void renderer.warmGpuPipeline();
+        }
+
+        await renderer.preload({ priorityFrame: clampedSeekFrame });
+        if (cancelled) return;
+
+        setRendererReady(true);
+      } catch (error) {
+        if (!cancelled) {
+          getLogger().warn('Failed to initialize inline composition renderer', { error });
+        }
+      }
+    };
+
+    void boot();
+
+    return () => {
+      cancelled = true;
+      if (createdRenderer) {
+        try {
+          createdRenderer.dispose();
+        } catch (error) {
+          getLogger().warn('Failed to dispose inline composition renderer', { error });
+        }
+      }
+      if (rendererRef.current === createdRenderer) {
+        rendererRef.current = null;
+        offscreenRef.current = null;
+      }
+    };
+  }, [rendererInput, compositionWidth, compositionHeight]);
+
+  useEffect(() => {
+    if (!rendererReady) return;
+    const renderer = rendererRef.current;
+    const offscreen = offscreenRef.current;
+    const display = displayCanvasRef.current;
+    if (!renderer || !offscreen || !display) return;
+
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        await renderer.renderFrame(clampedSeekFrame);
+        if (cancelled) return;
+        if (rendererRef.current !== renderer) return;
+        const displayCtx = display.getContext('2d');
+        if (!displayCtx) return;
+        if (display.width !== offscreen.width || display.height !== offscreen.height) {
+          display.width = offscreen.width;
+          display.height = offscreen.height;
+        }
+        displayCtx.clearRect(0, 0, display.width, display.height);
+        displayCtx.drawImage(offscreen, 0, 0, display.width, display.height);
+      } catch (error) {
+        if (!cancelled) {
+          getLogger().debug('Inline composition frame render failed', { error, frame: clampedSeekFrame });
+        }
+      }
+    };
+
+    void run();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clampedSeekFrame, rendererReady]);
+
   if (!composition || !compositionInput) {
     return (
       <div className="w-full h-full bg-video-preview-background flex items-center justify-center text-sm text-muted-foreground">
-        正在加载复合片段...
+        Loading compound clip...
       </div>
     );
   }
 
-  const durationInFrames = Math.max(1, composition.durationInFrames);
+  const showLoading = !resolvedTracks || !rendererReady;
 
   return (
     <div
       className="w-full h-full bg-video-preview-background relative"
       style={{ overflow: needsOverflow ? 'auto' : 'visible' }}
-      aria-label="内联复合片段预览"
+      aria-label="Inline compound clip preview"
     >
       <div
         className="min-w-full min-h-full grid place-items-center"
@@ -161,7 +262,7 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
       >
         <div className="relative">
           <div
-            className="relative shadow-2xl overflow-hidden"
+            className="relative shadow-2xl overflow-hidden bg-black"
             style={{
               width: `${playerSize.width}px`,
               height: `${playerSize.height}px`,
@@ -169,32 +270,15 @@ const InlineCompositionPreviewContent = memo(function InlineCompositionPreviewCo
               outlineOffset: 0,
             }}
           >
-            {resolvedTracks ? (
-              <PlayerEmitterProvider>
-                <ClockBridgeProvider
-                  fps={composition.fps}
-                  durationInFrames={durationInFrames}
-                  initialFrame={clampedSeekFrame}
-                  onVolumeChange={() => {}}
-                >
-                  <VideoConfigProvider
-                    fps={composition.fps}
-                    width={composition.width}
-                    height={composition.height}
-                    durationInFrames={durationInFrames}
-                  >
-                    <InlineCompositionPreviewClockSync frame={clampedSeekFrame} />
-                    <MainComposition
-                      {...compositionInput}
-                      tracks={resolvedTracks}
-                      useProxyMedia={useProxy}
-                    />
-                  </VideoConfigProvider>
-                </ClockBridgeProvider>
-              </PlayerEmitterProvider>
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-sm text-muted-foreground">
-                正在加载复合片段...
+            <canvas
+              ref={displayCanvasRef}
+              width={compositionWidth}
+              height={compositionHeight}
+              style={{ width: '100%', height: '100%', display: 'block' }}
+            />
+            {showLoading && (
+              <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground bg-black/30">
+                Loading compound clip...
               </div>
             )}
           </div>
