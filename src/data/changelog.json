@@ -105,6 +105,12 @@
         {
           "title": "add AI caption generation with timeline insertion",
           "scope": "captions"
+        },
+        {
+          "title": "expand glyph atlas text rendering"
+        },
+        {
+          "title": "enable GPU transition compositing"
         }
       ],
       "fixed": [
@@ -276,6 +282,49 @@
         },
         {
           "title": "prefer Player path for generated caption scrubs"
+        },
+        {
+          "title": "harden text atlas, transition cache, and compositor buffer pool",
+          "scope": "gpu"
+        },
+        {
+          "title": "update commit message generation"
+        },
+        {
+          "title": "preserve mask coverage in GPU blend transitions"
+        },
+        {
+          "title": "preserve GPU layer uniforms per pass"
+        },
+        {
+          "title": "skip occluded sub-comp tracks in export rendering"
+        },
+        {
+          "title": "handle commit message generation request"
+        },
+        {
+          "title": "flatten curved GPU shape paths"
+        },
+        {
+          "title": "generate single-line commit message"
+        },
+        {
+          "title": "keep GPU shape effects on texture path"
+        },
+        {
+          "title": "share transition participant rendering"
+        },
+        {
+          "title": "route audio time stretch through infrastructure"
+        },
+        {
+          "title": "keep generated reports parseable in checks"
+        },
+        {
+          "title": "keep runtime hooks in sync with latest refs"
+        },
+        {
+          "title": "tighten memo deps in preview and timeline hooks"
         }
       ],
       "improved": [

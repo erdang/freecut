@@ -1,31 +1,31 @@
-import { memo, type MouseEventHandler, type ReactNode, type RefObject } from 'react';
-import { Player, type PlayerRef } from '@/features/preview/deps/player-core';
-import { MainComposition } from '@/features/preview/deps/composition-runtime';
-import type { CompositionInputProps } from '@/types/export';
-import { usePlaybackStore } from '@/shared/state/playback';
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout';
-import { FAST_SCRUB_RENDERER_ENABLED } from '../utils/preview-constants';
+import { memo, type MouseEventHandler, type ReactNode, type RefObject } from 'react'
+import { Player, type PlayerRef } from '@/features/preview/deps/player-core'
+import { MainComposition } from '@/features/preview/deps/composition-runtime'
+import type { CompositionInputProps } from '@/types/export'
+import { usePlaybackStore } from '@/shared/state/playback'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { FAST_SCRUB_RENDERER_ENABLED } from '../utils/preview-constants'
 
 interface PreviewStageProps {
-  backgroundRef: RefObject<HTMLDivElement | null>;
-  playerRef: RefObject<PlayerRef | null>;
-  scrubCanvasRef: RefObject<HTMLCanvasElement | null>;
-  gpuEffectsCanvasRef: RefObject<HTMLCanvasElement | null>;
-  needsOverflow: boolean;
-  playerSize: { width: number; height: number };
-  playerRenderSize: { width: number; height: number };
-  totalFrames: number;
-  fps: number;
-  isResolving: boolean;
-  isRenderedOverlayVisible: boolean;
-  inputProps: CompositionInputProps;
-  onBackgroundClick: MouseEventHandler<HTMLDivElement>;
-  onFrameChange: (frame: number) => void;
-  onPlayStateChange: (playing: boolean) => void;
-  setPlayerContainerRefCallback: (el: HTMLDivElement | null) => void;
-  perfPanel?: ReactNode;
-  comparisonOverlay?: ReactNode;
-  overlayControls?: ReactNode;
+  backgroundRef: RefObject<HTMLDivElement | null>
+  playerRef: RefObject<PlayerRef | null>
+  scrubCanvasRef: RefObject<HTMLCanvasElement | null>
+  gpuEffectsCanvasRef: RefObject<HTMLCanvasElement | null>
+  needsOverflow: boolean
+  playerSize: { width: number; height: number }
+  playerRenderSize: { width: number; height: number }
+  totalFrames: number
+  fps: number
+  isResolving: boolean
+  isRenderedOverlayVisible: boolean
+  inputProps: CompositionInputProps
+  onBackgroundClick: MouseEventHandler<HTMLDivElement>
+  onFrameChange: (frame: number) => void
+  onPlayStateChange: (playing: boolean) => void
+  setPlayerContainerRefCallback: (el: HTMLDivElement | null) => void
+  perfPanel?: ReactNode
+  comparisonOverlay?: ReactNode
+  overlayControls?: ReactNode
 }
 
 export const PreviewStage = memo(function PreviewStage({
@@ -49,7 +49,7 @@ export const PreviewStage = memo(function PreviewStage({
   comparisonOverlay,
   overlayControls,
 }: PreviewStageProps) {
-  const useProxy = usePlaybackStore((s) => s.useProxy);
+  const useProxy = usePlaybackStore((s) => s.useProxy)
 
   return (
     <div
@@ -135,5 +135,5 @@ export const PreviewStage = memo(function PreviewStage({
         </div>
       </div>
     </div>
-  );
-});
+  )
+})

@@ -21,10 +21,14 @@ import {
   Sparkles,
   Zap,
   Sun,
+  Waves,
+  ScanSearch,
+  Flame,
+  Film,
   type LucideIcon,
-} from 'lucide-react';
-import { transitionRegistry } from '@/core/timeline/transitions';
-import type { PresentationConfig, TransitionCategory } from '@/types/transition';
+} from 'lucide-react'
+import { transitionRegistry } from '@/core/timeline/transitions'
+import type { PresentationConfig, TransitionCategory } from '@/types/transition'
 
 /** Lucide icon lookup by name string */
 export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
@@ -46,7 +50,11 @@ export const TRANSITION_ICON_MAP: Record<string, LucideIcon> = {
   Sparkles,
   Zap,
   Sun,
-};
+  Waves,
+  ScanSearch,
+  Flame,
+  Film,
+}
 
 /** Display labels for transition categories */
 export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
@@ -58,12 +66,19 @@ export const TRANSITION_CATEGORY_INFO: Record<string, { title: string }> = {
   light: { title: 'Light' },
   chromatic: { title: 'Chromatic' },
   custom: { title: 'Custom' },
-};
+}
 
 /** Ordered list of categories for UI rendering */
 export const TRANSITION_CATEGORY_ORDER: TransitionCategory[] = [
-  'basic', 'wipe', 'slide', 'flip', 'mask', 'light', 'chromatic', 'custom',
-];
+  'basic',
+  'wipe',
+  'slide',
+  'flip',
+  'mask',
+  'light',
+  'chromatic',
+  'custom',
+]
 
 /** Direction string â†’ display label + icon name */
 const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
@@ -71,12 +86,14 @@ const DIRECTION_LABELS: Record<string, { label: string; icon: string }> = {
   'from-right': { label: 'Right', icon: 'ArrowLeft' },
   'from-top': { label: 'Top', icon: 'ArrowDown' },
   'from-bottom': { label: 'Bottom', icon: 'ArrowUp' },
-};
+}
 
-function createConfigsForDefinition(def: ReturnType<typeof transitionRegistry.getDefinitions>[number]): PresentationConfig[] {
+function createConfigsForDefinition(
+  def: ReturnType<typeof transitionRegistry.getDefinitions>[number],
+): PresentationConfig[] {
   if (def.hasDirection && def.directions && def.directions.length > 0) {
     return def.directions.map((dir) => {
-      const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon };
+      const dirInfo = DIRECTION_LABELS[dir] || { label: dir, icon: def.icon }
       return {
         id: def.id,
         label: dirInfo.label,
@@ -84,17 +101,19 @@ function createConfigsForDefinition(def: ReturnType<typeof transitionRegistry.ge
         icon: dirInfo.icon,
         category: def.category,
         direction: dir,
-      };
-    });
+      }
+    })
   }
 
-  return [{
-    id: def.id,
-    label: def.label,
-    description: def.description,
-    icon: def.icon,
-    category: def.category,
-  }];
+  return [
+    {
+      id: def.id,
+      label: def.label,
+      description: def.description,
+      icon: def.icon,
+      category: def.category,
+    },
+  ]
 }
 
 /**
@@ -104,69 +123,69 @@ function createConfigsForDefinition(def: ReturnType<typeof transitionRegistry.ge
  * category-based index math stays stable.
  */
 function generateConfigsFromRegistry(): PresentationConfig[] {
-  const groupedConfigs = new Map<string, PresentationConfig[]>();
-  const uncategorizedConfigs: PresentationConfig[] = [];
-  const categoryOrder = new Set<string>(TRANSITION_CATEGORY_ORDER);
+  const groupedConfigs = new Map<string, PresentationConfig[]>()
+  const uncategorizedConfigs: PresentationConfig[] = []
+  const categoryOrder = new Set<string>(TRANSITION_CATEGORY_ORDER)
 
   for (const def of transitionRegistry.getDefinitions()) {
-    const configs = createConfigsForDefinition(def);
+    const configs = createConfigsForDefinition(def)
     if (!categoryOrder.has(def.category)) {
-      uncategorizedConfigs.push(...configs);
-      continue;
+      uncategorizedConfigs.push(...configs)
+      continue
     }
 
-    const existing = groupedConfigs.get(def.category) ?? [];
-    existing.push(...configs);
-    groupedConfigs.set(def.category, existing);
+    const existing = groupedConfigs.get(def.category) ?? []
+    existing.push(...configs)
+    groupedConfigs.set(def.category, existing)
   }
 
   return [
     ...TRANSITION_CATEGORY_ORDER.flatMap((category) => groupedConfigs.get(category) ?? []),
     ...uncategorizedConfigs,
-  ];
+  ]
 }
 
 // Lazy-initialized caches — avoids TDZ when bundler orders this module
 // before the transition registry is populated (see CLAUDE.md gotchas).
-let _presentationConfigs: PresentationConfig[] | null = null;
-let _configsByCategory: Record<string, PresentationConfig[]> | null = null;
-let _categoryStartIndices: Record<string, number> | null = null;
+let _presentationConfigs: PresentationConfig[] | null = null
+let _configsByCategory: Record<string, PresentationConfig[]> | null = null
+let _categoryStartIndices: Record<string, number> | null = null
 
 function ensureInitialized(): void {
-  if (_presentationConfigs) return;
+  if (_presentationConfigs) return
 
-  _presentationConfigs = generateConfigsFromRegistry();
-  _configsByCategory = {};
-  _categoryStartIndices = {};
+  _presentationConfigs = generateConfigsFromRegistry()
+  _configsByCategory = {}
+  _categoryStartIndices = {}
 
   for (const config of _presentationConfigs) {
     if (!_configsByCategory[config.category]) {
-      _configsByCategory[config.category] = [];
+      _configsByCategory[config.category] = []
     }
-    _configsByCategory[config.category]!.push(config);
+    _configsByCategory[config.category]!.push(config)
   }
 
-  let running = 0;
+  let running = 0
   for (const category of TRANSITION_CATEGORY_ORDER) {
-    _categoryStartIndices[category] = running;
-    running += (_configsByCategory[category]?.length || 0);
+    _categoryStartIndices[category] = running
+    running += _configsByCategory[category]?.length || 0
   }
 }
 
 /** All presentation configs, generated once from the registry */
 export function getTransitionPresentationConfigs(): PresentationConfig[] {
-  ensureInitialized();
-  return _presentationConfigs!;
+  ensureInitialized()
+  return _presentationConfigs!
 }
 
 /** Configs grouped by category (for picker UIs) */
 export function getTransitionConfigsByCategory(): Record<string, PresentationConfig[]> {
-  ensureInitialized();
-  return _configsByCategory!;
+  ensureInitialized()
+  return _configsByCategory!
 }
 
 /** Start indices per category (for flat-list indexing) */
 export function getTransitionCategoryStartIndices(): Record<string, number> {
-  ensureInitialized();
-  return _categoryStartIndices!;
+  ensureInitialized()
+  return _categoryStartIndices!
 }

@@ -1,4 +1,4 @@
-import type { GpuTransitionDefinition } from '../types';
+import type { GpuTransitionDefinition } from '../types'
 
 export const lightLeak: GpuTransitionDefinition = {
   id: 'lightLeak',
@@ -74,12 +74,9 @@ fn lightLeakFragment(input: VertexOutput) -> @location(0) vec4f {
   return vec4f(compressed, base.a);
 }`,
   packUniforms: (progress, width, height, direction, properties) => {
-    const intensity = (properties?.intensity as number) ?? 1.5;
-    const spread = (properties?.spread as number) ?? 1.0;
-    const warmth = (properties?.warmth as number) ?? 0.5;
-    return new Float32Array([
-      progress, width, height, direction,
-      intensity, spread, warmth, 0,
-    ]);
+    const intensity = (properties?.intensity as number) ?? 1.5
+    const spread = (properties?.spread as number) ?? 1.0
+    const warmth = (properties?.warmth as number) ?? 0.5
+    return new Float32Array([progress, width, height, direction, intensity, spread, warmth, 0])
   },
-};
+}

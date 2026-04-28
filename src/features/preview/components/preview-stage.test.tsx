@@ -1,32 +1,32 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import type { ReactNode, RefObject } from 'react';
-import type { CompositionInputProps } from '@/types/export';
+import { describe, expect, it, vi } from 'vite-plus/test'
+import { render, screen } from '@testing-library/react'
+import type { ReactNode, RefObject } from 'react'
+import type { CompositionInputProps } from '@/types/export'
 
 const playbackState = vi.hoisted(() => ({
   useProxy: true,
-}));
+}))
 
 vi.mock('@/shared/state/playback', () => {
   const usePlaybackStore = Object.assign(
     (selector: (state: typeof playbackState) => unknown) => selector(playbackState),
     { getState: () => playbackState },
-  );
+  )
 
-  return { usePlaybackStore };
-});
+  return { usePlaybackStore }
+})
 
 vi.mock('@/features/preview/deps/player-core', () => ({
   Player: ({ children }: { children: ReactNode }) => <div data-testid="player">{children}</div>,
-}));
+}))
 
 vi.mock('@/features/preview/deps/composition-runtime', () => ({
   MainComposition: ({ useProxyMedia }: { useProxyMedia?: boolean }) => (
     <div data-testid="main-composition" data-use-proxy-media={useProxyMedia ? 'true' : 'false'} />
   ),
-}));
+}))
 
-import { PreviewStage } from './preview-stage';
+import { PreviewStage } from './preview-stage'
 
 function createInputProps(): CompositionInputProps {
   return {
@@ -38,16 +38,16 @@ function createInputProps(): CompositionInputProps {
     transitions: [],
     keyframes: [],
     backgroundColor: '#000000',
-  };
+  }
 }
 
 function createRef<T>(): RefObject<T | null> {
-  return { current: null };
+  return { current: null }
 }
 
 describe('PreviewStage', () => {
   it('passes proxy playback mode down to nested composition rendering', () => {
-    playbackState.useProxy = true;
+    playbackState.useProxy = true
 
     render(
       <PreviewStage
@@ -67,9 +67,9 @@ describe('PreviewStage', () => {
         onFrameChange={() => {}}
         onPlayStateChange={() => {}}
         setPlayerContainerRefCallback={() => {}}
-      />
-    );
+      />,
+    )
 
-    expect(screen.getByTestId('main-composition')).toHaveAttribute('data-use-proxy-media', 'true');
-  });
-});
+    expect(screen.getByTestId('main-composition')).toHaveAttribute('data-use-proxy-media', 'true')
+  })
+})

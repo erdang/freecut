@@ -1,30 +1,24 @@
 export interface FrameRenderOptimizationInput {
-  activeMaskCount: number;
-  activeTransitionCount: number;
-  hasGpuEffects: boolean;
-  renderTaskCount: number;
+  activeMaskCount: number
+  activeTransitionCount: number
+  hasGpuEffects: boolean
+  renderTaskCount: number
 }
 
 export interface FrameRenderOptimization {
-  shouldDirectRenderSingleTask: boolean;
-  shouldUseDeferredGpuBatch: boolean;
+  shouldDirectRenderSingleTask: boolean
+  shouldUseDeferredGpuBatch: boolean
 }
 
 export function resolveFrameRenderOptimization(
   input: FrameRenderOptimizationInput,
 ): FrameRenderOptimization {
-  const shouldDirectRenderSingleTask = (
-    input.activeMaskCount === 0
-    && input.activeTransitionCount === 0
-    && input.renderTaskCount === 1
-  );
+  const shouldDirectRenderSingleTask =
+    input.activeMaskCount === 0 && input.activeTransitionCount === 0 && input.renderTaskCount === 1
 
   return {
     shouldDirectRenderSingleTask,
-    shouldUseDeferredGpuBatch: (
-      input.hasGpuEffects
-      && input.renderTaskCount > 1
-      && !shouldDirectRenderSingleTask
-    ),
-  };
+    shouldUseDeferredGpuBatch:
+      input.hasGpuEffects && input.renderTaskCount > 1 && !shouldDirectRenderSingleTask,
+  }
 }

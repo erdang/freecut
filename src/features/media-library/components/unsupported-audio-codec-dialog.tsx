@@ -7,19 +7,19 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Volume2, VolumeX } from 'lucide-react';
+} from '@/components/ui/alert-dialog'
+import { Volume2, VolumeX } from 'lucide-react'
 
 interface UnsupportedCodecFile {
-  fileName: string;
-  audioCodec: string;
+  fileName: string
+  audioCodec: string
 }
 
 interface UnsupportedAudioCodecDialogProps {
-  open: boolean;
-  files: UnsupportedCodecFile[];
-  onConfirm: () => void;
-  onCancel: () => void;
+  open: boolean
+  files: UnsupportedCodecFile[]
+  onConfirm: () => void
+  onCancel: () => void
 }
 
 /**
@@ -43,11 +43,9 @@ export function UnsupportedAudioCodecDialog({
           <AlertDialogDescription asChild>
             <div className="space-y-3">
               <p>
-                {files.length === 1
-                  ? 'This file uses'
-                  : `${files.length} files use`}{' '}
-                an audio codec that cannot be decoded in the browser. Audio
-                waveform visualization will not be available.
+                {files.length === 1 ? 'This file uses' : `${files.length} files use`} an audio codec
+                that cannot be decoded in the browser. Audio waveform visualization will not be
+                available.
               </p>
 
               <div className="max-h-[200px] overflow-y-auto overflow-x-hidden space-y-2">
@@ -57,7 +55,9 @@ export function UnsupportedAudioCodecDialog({
                     className="grid grid-cols-[auto_1fr_auto] items-center gap-2 p-2 bg-secondary/50 rounded text-sm"
                   >
                     <Volume2 className="w-4 h-4 text-muted-foreground" />
-                    <span className="truncate" title={file.fileName}>{file.fileName}</span>
+                    <span className="truncate" title={file.fileName}>
+                      {file.fileName}
+                    </span>
                     <span className="text-xs text-muted-foreground px-1.5 py-0.5 bg-secondary rounded uppercase whitespace-nowrap">
                       {file.audioCodec}
                     </span>
@@ -66,19 +66,17 @@ export function UnsupportedAudioCodecDialog({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Video playback and editing will work normally. Only audio
-                waveform display is affected.
+                Video playback and editing will work normally. Only audio waveform display is
+                affected.
               </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onCancel}>Cancel Import</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>
-            Import Anyway
-          </AlertDialogAction>
+          <AlertDialogAction onClick={onConfirm}>Import Anyway</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  );
+  )
 }
