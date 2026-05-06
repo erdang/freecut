@@ -43,6 +43,7 @@ import {
 import { ProjectUpgradeDialog } from './project-upgrade-dialog'
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog'
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog'
+import { useThirdPartyTtsGenerateDialogStore } from '@/app/state/third-party-tts-generate-dialog'
 import { useProjectMediaMatchDialogStore } from '@/app/state/project-media-match-dialog'
 import {
   importEmbeddedSubtitleTrackPickerHost,
@@ -70,6 +71,11 @@ const LazyClearKeyframesDialog = lazy(() =>
 const LazyTtsGenerateDialog = lazy(() =>
   import('@/features/editor/components/tts-generate-dialog').then((module) => ({
     default: module.TtsGenerateDialog,
+  })),
+)
+const LazyThirdPartyTtsGenerateDialog = lazy(() =>
+  import('@/features/editor/components/third-party-tts-generate-dialog').then((module) => ({
+    default: module.ThirdPartyTtsGenerateDialog,
   })),
 )
 const LazyProjectMediaMatchDialog = lazy(() =>
@@ -182,6 +188,7 @@ export const Editor = memo(function Editor({ projectId, project, migration }: Ed
 const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { projectId: string }) {
   const clearKeyframesDialogOpen = useClearKeyframesDialogStore((s) => s.isOpen)
   const ttsGenerateDialogOpen = useTtsGenerateDialogStore((s) => s.isOpen)
+  const thirdPartyTtsGenerateDialogOpen = useThirdPartyTtsGenerateDialogStore((s) => s.isOpen)
   const projectMediaMatchDialogOpen = useProjectMediaMatchDialogStore(
     (s) => s.isOpen && s.projectId === projectId,
   )
@@ -203,6 +210,11 @@ const EditorDialogHost = memo(function EditorDialogHost({ projectId }: { project
       {ttsGenerateDialogOpen && (
         <Suspense fallback={null}>
           <LazyTtsGenerateDialog />
+        </Suspense>
+      )}
+      {thirdPartyTtsGenerateDialogOpen && (
+        <Suspense fallback={null}>
+          <LazyThirdPartyTtsGenerateDialog />
         </Suspense>
       )}
       {embeddedSubtitlePickerOpen && (

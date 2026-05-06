@@ -7,6 +7,7 @@ import { useSelectionStore } from '@/shared/state/selection'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useClearKeyframesDialogStore } from '@/app/state/clear-keyframes-dialog'
 import { useTtsGenerateDialogStore } from '@/app/state/tts-generate-dialog'
+import { useThirdPartyTtsGenerateDialogStore } from '@/app/state/third-party-tts-generate-dialog'
 import { getTextItemPlainText } from '@/shared/utils/text-item-spans'
 import { scheduleAfterPaint } from '@/shared/utils/schedule-after-paint'
 import {
@@ -199,6 +200,13 @@ export function useTimelineItemActions({
       return
     }
     useTtsGenerateDialogStore.getState().open(textContent, item.id)
+  }, [hasSpeakableText, item.id, textContent])
+
+  const handleGenerateAudioFromTextByThirdParty = useCallback(() => {
+    if (!hasSpeakableText) {
+      return
+    }
+    useThirdPartyTtsGenerateDialogStore.getState().open(textContent, item.id)
   }, [hasSpeakableText, item.id, textContent])
 
   const handleCaptionGeneration = useCallback(
@@ -684,6 +692,7 @@ export function useTimelineItemActions({
     handleBentoLayout,
     handleFreezeFrame,
     handleGenerateAudioFromText,
+    handleGenerateAudioFromTextByThirdParty,
     handleCaptionsFromDialog,
     handleApplyCaptionsFromTranscript,
     handleCreatePreComp,

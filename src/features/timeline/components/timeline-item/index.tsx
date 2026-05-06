@@ -1523,7 +1523,10 @@ export const TimelineItem = memo(
               transitions,
               visibleTrackIds,
             )
-            snapTargets.push({ frame: Math.round(currentFrame), type: 'playhead' })
+            snapTargets.push({
+              frame: Math.round(currentFrame),
+              type: 'playhead',
+            })
             for (const marker of useMarkersStore.getState().markers) {
               snapTargets.push({ frame: marker.frame, type: 'marker' })
             }
@@ -1897,6 +1900,7 @@ export const TimelineItem = memo(
       handleBentoLayout,
       handleFreezeFrame,
       handleGenerateAudioFromText,
+      handleGenerateAudioFromTextByThirdParty,
       handleCaptionsFromDialog,
       handleApplyCaptionsFromTranscript,
       handleCreatePreComp,
@@ -2898,7 +2902,10 @@ export const TimelineItem = memo(
             Math.abs(item.audioFadeInCurve ?? 0) > AUDIO_FADE_EPSILON ||
             Math.abs((item.audioFadeInCurveX ?? 0.52) - 0.52) > AUDIO_FADE_EPSILON
           ) {
-            updateTimelineItem(item.id, { audioFadeInCurve: 0, audioFadeInCurveX: 0.52 })
+            updateTimelineItem(item.id, {
+              audioFadeInCurve: 0,
+              audioFadeInCurveX: 0.52,
+            })
           }
           return
         }
@@ -2907,7 +2914,10 @@ export const TimelineItem = memo(
           Math.abs(item.audioFadeOutCurve ?? 0) > AUDIO_FADE_EPSILON ||
           Math.abs((item.audioFadeOutCurveX ?? 0.52) - 0.52) > AUDIO_FADE_EPSILON
         ) {
-          updateTimelineItem(item.id, { audioFadeOutCurve: 0, audioFadeOutCurveX: 0.52 })
+          updateTimelineItem(item.id, {
+            audioFadeOutCurve: 0,
+            audioFadeOutCurveX: 0.52,
+          })
         }
       },
       [item, trackLocked, updateTimelineItem],
@@ -3247,6 +3257,7 @@ export const TimelineItem = memo(
           onFreezeFrame={handleFreezeFrame}
           isTextItem={item.type === 'text' && hasSpeakableText}
           onGenerateAudioFromText={handleGenerateAudioFromText}
+          onGenerateAudioFromTextByThirdParty={handleGenerateAudioFromTextByThirdParty}
           canManageCaptions={canManageCaptions}
           hasCaptions={hasGeneratedCaptions}
           hasTranscript={mediaHasTranscript}
@@ -3367,7 +3378,9 @@ export const TimelineItem = memo(
                     <div
                       ref={videoControlsRef}
                       className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
-                      style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+                      style={{
+                        top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+                      }}
                     >
                       <svg
                         className="absolute inset-0 h-full w-full"
@@ -3388,7 +3401,9 @@ export const TimelineItem = memo(
                     <div
                       ref={audioControlsRef}
                       className="absolute inset-x-0 bottom-0 pointer-events-none z-10"
-                      style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+                      style={{
+                        top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+                      }}
                     >
                       <div
                         ref={volumeLineRef}
@@ -3446,7 +3461,9 @@ export const TimelineItem = memo(
             {!useCompactClipShell && isVisualFadeItem && (
               <div
                 className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
-                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+                style={{
+                  top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+                }}
               >
                 <VideoFadeHandles
                   trackLocked={trackLocked}
@@ -3469,7 +3486,9 @@ export const TimelineItem = memo(
             {!useCompactClipShell && item.type === 'audio' && (
               <div
                 className="absolute inset-x-0 bottom-0 z-30 pointer-events-none"
-                style={{ top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight }}
+                style={{
+                  top: EDITOR_LAYOUT_CSS_VALUES.timelineClipLabelRowHeight,
+                }}
               >
                 <AudioFadeHandles
                   trackLocked={trackLocked}
@@ -3670,7 +3689,11 @@ export const TimelineItem = memo(
                   <>
                     <div
                       className="absolute inset-y-0 left-0"
-                      style={{ width: '2px', background: colors.edge, boxShadow: colors.glow }}
+                      style={{
+                        width: '2px',
+                        background: colors.edge,
+                        boxShadow: colors.glow,
+                      }}
                     />
                     <div
                       className="absolute inset-y-0"
@@ -3692,7 +3715,11 @@ export const TimelineItem = memo(
                   <>
                     <div
                       className="absolute inset-y-0 right-0"
-                      style={{ width: '2px', background: colors.edge, boxShadow: colors.glow }}
+                      style={{
+                        width: '2px',
+                        background: colors.edge,
+                        boxShadow: colors.glow,
+                      }}
                     />
                     <div
                       className="absolute inset-y-0"

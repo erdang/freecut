@@ -18,7 +18,7 @@ import {
   Sparkles,
   Blend,
   Pen,
-  WandSparkles,
+  Mic,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/shared/ui/cn'
@@ -53,7 +53,7 @@ import {
 import { useEffectPreviews } from '@/features/editor/deps/effects-contract'
 import { createLogger } from '@/shared/logging/logger'
 import { useSettingsStore } from '@/features/editor/deps/settings'
-import { AiPanel } from './ai-panel'
+import { ThirdPartyTtsPanel } from './third-party-tts-panel'
 import {
   TEXT_STYLE_PRESETS,
   type TextStylePresetLayout,
@@ -568,8 +568,14 @@ export const MediaSidebar = memo(function MediaSidebar() {
     { id: 'shapes' as const, icon: Pentagon, label: 'Shapes' },
     { id: 'effects' as const, icon: Layers, label: 'Effects' },
     { id: 'transitions' as const, icon: Blend, label: 'Transitions' },
-    { id: 'ai' as const, icon: WandSparkles, label: 'AI' },
+    { id: 'tts-api' as const, icon: Mic, label: 'TTS API' },
   ]
+
+  useEffect(() => {
+    if (activeTab === 'ai') {
+      setActiveTab('tts-api')
+    }
+  }, [activeTab, setActiveTab])
 
   const shouldSuppressGeneratedItemClick = useCallback(() => {
     if (!suppressGeneratedItemClickRef.current) {
@@ -1124,11 +1130,11 @@ export const MediaSidebar = memo(function MediaSidebar() {
               <TransitionsPanel />
             </div>
 
-            {/* AI Tab */}
+            {/* Third-Party TTS Tab */}
             <div
-              className={`min-h-0 flex-1 overflow-hidden ${activeTab === 'ai' ? 'block' : 'hidden'}`}
+              className={`min-h-0 flex-1 overflow-y-auto ${activeTab === 'tts-api' ? 'block' : 'hidden'}`}
             >
-              <AiPanel />
+              <ThirdPartyTtsPanel />
             </div>
           </div>
         </Activity>

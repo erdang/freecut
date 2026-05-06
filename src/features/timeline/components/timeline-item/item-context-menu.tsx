@@ -75,6 +75,7 @@ interface ItemContextMenuProps {
   /** Whether this item is a text item (enables generate audio option) */
   isTextItem?: boolean
   onGenerateAudioFromText?: () => void
+  onGenerateAudioFromTextByThirdParty?: () => void
   /** Whether scene detection is available for this item */
   canDetectScenes?: boolean
   isDetectingScenes?: boolean
@@ -143,6 +144,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   onCreatePreComp,
   isTextItem,
   onGenerateAudioFromText,
+  onGenerateAudioFromTextByThirdParty,
   canDetectScenes,
   isDetectingScenes,
   onDetectScenes,
@@ -218,6 +220,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       onCreatePreComp={onCreatePreComp}
       isTextItem={isTextItem}
       onGenerateAudioFromText={onGenerateAudioFromText}
+      onGenerateAudioFromTextByThirdParty={onGenerateAudioFromTextByThirdParty}
       canDetectScenes={canDetectScenes}
       isDetectingScenes={isDetectingScenes}
       onDetectScenes={onDetectScenes}
@@ -311,6 +314,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   onCreatePreComp,
   isTextItem,
   onGenerateAudioFromText,
+  onGenerateAudioFromTextByThirdParty,
   canDetectScenes,
   isDetectingScenes,
   onDetectScenes,
@@ -337,6 +341,10 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   }, [keyframedProperties])
   const sceneVerificationModelOptions = useMemo(() => getSceneVerificationModelOptions(), [])
   const captionActionLabel = hasCaptions ? 'Regenerate Captions' : 'Generate Captions'
+  const generateAudioHandler = onGenerateAudioFromTextByThirdParty ?? onGenerateAudioFromText
+  const generateAudioLabel = onGenerateAudioFromTextByThirdParty
+    ? 'Generate Audio from Text (Third-Party API)'
+    : 'Generate Audio from Text'
 
   const hasKeyframes = propertiesWithKeyframes.length > 0
 
@@ -514,11 +522,9 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         )}
 
         {/* Generate Audio from Text - only show for text items */}
-        {isTextItem && onGenerateAudioFromText && (
+        {isTextItem && generateAudioHandler && (
           <>
-            <ContextMenuItem onClick={onGenerateAudioFromText}>
-              Generate Audio from Text
-            </ContextMenuItem>
+            <ContextMenuItem onClick={generateAudioHandler}>{generateAudioLabel}</ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
