@@ -1,6 +1,7 @@
 ﻿import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -23,6 +24,14 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -50,13 +59,13 @@ import {
   THIRD_PARTY_TTS_DEFAULT_EMOTION_VECTOR_VALUES,
   THIRD_PARTY_TTS_EMOTION_VECTOR_OPTIONS,
   THIRD_PARTY_TTS_EMO_CONTROL_METHOD_OPTIONS,
-  THIRD_PARTY_TTS_VOICE_OPTIONS,
   THIRD_PARTY_TTS_VOICEPRINT_TYPE_OPTIONS,
   thirdPartyTtsService,
   type ThirdPartyTtsEmotionVectorKey,
   type ThirdPartyTtsEmotionVectorValues,
   type ThirdPartyTtsEmoControlMethod,
   type ThirdPartyTtsVoice,
+  type ThirdPartyTtsVoiceOption,
   type ThirdPartyTtsVoiceprintType,
 } from '../services/third-party-tts-service'
 
@@ -231,7 +240,7 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
   const showNotification = useMediaLibraryStore((state) => state.showNotification)
 
   const [text, setText] = useState(DEFAULT_PROMPT)
-  const [voice, setVoice] = useState<ThirdPartyTtsVoice>('Bella')
+  const [voice, setVoice] = useState<ThirdPartyTtsVoice>('')
   const [voiceprintType, setVoiceprintType] = useState<ThirdPartyTtsVoiceprintType>('1')
   const [emoControlMethod, setEmoControlMethod] = useState<ThirdPartyTtsEmoControlMethod>('1')
   const [emoWeight, setEmoWeight] = useState(0.65)
@@ -240,15 +249,27 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
   })
   const [voiceprintFile, setVoiceprintFile] = useState<File | null>(null)
   const [emoRefFile, setEmoRefFile] = useState<File | null>(null)
+  const [voiceOptions, setVoiceOptions] = useState<ThirdPartyTtsVoiceOption[]>([])
+  const [isAddVoiceprintDialogOpen, setIsAddVoiceprintDialogOpen] = useState(false)
+  const [isDeleteVoiceprintDialogOpen, setIsDeleteVoiceprintDialogOpen] = useState(false)
+  const [newVoiceprintName, setNewVoiceprintName] = useState('')
+  const [newVoiceprintFile, setNewVoiceprintFile] = useState<File | null>(null)
+  const [voiceprintToDelete, setVoiceprintToDelete] = useState('')
   const [speed, setSpeed] = useState(1.25)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isLoadingVoiceOptions, setIsLoadingVoiceOptions] = useState(false)
+  const [isAddingVoiceprint, setIsAddingVoiceprint] = useState(false)
+  const [isDeletingVoiceprint, setIsDeletingVoiceprint] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [addVoiceprintError, setAddVoiceprintError] = useState<string | null>(null)
+  const [deleteVoiceprintError, setDeleteVoiceprintError] = useState<string | null>(null)
   const [generations, setGenerations] = useState<AudioGeneration[]>([])
 
   const generationUrlsRef = useRef<Set<string>>(new Set())
   const voiceprintInputRef = useRef<HTMLInputElement | null>(null)
   const emoRefInputRef = useRef<HTMLInputElement | null>(null)
+  const addVoiceprintInputRef = useRef<HTMLInputElement | null>(null)
 
   const trimmedText = text.trim()
   const isTtsSupported = thirdPartyTtsService.isSupported()
@@ -258,6 +279,116 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
     [generations],
   )
   const anySaving = generations.some((generation) => generation.saving)
+
+  const loadVoiceOptionsFromApi = useCallback(async () => {
+    setIsLoadingVoiceOptions(true)
+    try {
+      const options = await thirdPartyTtsService.getReferenceVoiceprintOptions()
+      setVoiceOptions(options)
+    } finally {
+      setIsLoadingVoiceOptions(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadVoiceOptionsFromApi()
+  }, [loadVoiceOptionsFromApi])
+
+  useEffect(() => {
+    if (!voice.trim()) return
+    if (voiceOptions.some((option) => option.value === voice)) return
+    setVoice('')
+  }, [voice, voiceOptions])
+
+  const resetAddVoiceprintForm = useCallback(() => {
+    setNewVoiceprintName('')
+    setNewVoiceprintFile(null)
+    setAddVoiceprintError(null)
+    if (addVoiceprintInputRef.current) {
+      addVoiceprintInputRef.current.value = ''
+    }
+  }, [])
+
+  const resetDeleteVoiceprintForm = useCallback(() => {
+    setVoiceprintToDelete('')
+    setDeleteVoiceprintError(null)
+  }, [])
+
+  const handleAddVoiceprintSubmit = useCallback(async () => {
+    const trimmedName = newVoiceprintName.trim()
+    if (!trimmedName) {
+      setAddVoiceprintError('Please provide a voiceprint name.')
+      return
+    }
+    if (!newVoiceprintFile) {
+      setAddVoiceprintError('Please upload a voiceprint audio file.')
+      return
+    }
+
+    setAddVoiceprintError(null)
+    setIsAddingVoiceprint(true)
+    try {
+      await thirdPartyTtsService.addReferenceVoiceprint({
+        name: trimmedName,
+        promptVoice: newVoiceprintFile,
+      })
+      await loadVoiceOptionsFromApi()
+      setIsAddVoiceprintDialogOpen(false)
+      resetAddVoiceprintForm()
+      showNotification({
+        type: 'success',
+        message: `Voiceprint "${trimmedName}" added.`,
+      })
+    } catch (addError) {
+      setAddVoiceprintError(
+        addError instanceof Error ? addError.message : 'Failed to add voiceprint.',
+      )
+    } finally {
+      setIsAddingVoiceprint(false)
+    }
+  }, [
+    loadVoiceOptionsFromApi,
+    newVoiceprintFile,
+    newVoiceprintName,
+    resetAddVoiceprintForm,
+    showNotification,
+  ])
+
+  const handleDeleteVoiceprintSubmit = useCallback(async () => {
+    const trimmed = voiceprintToDelete.trim()
+    if (!trimmed) {
+      setDeleteVoiceprintError('Please select a voiceprint to delete.')
+      return
+    }
+    setDeleteVoiceprintError(null)
+    setIsDeletingVoiceprint(true)
+    try {
+      await thirdPartyTtsService.deleteReferenceVoiceprint({ name: trimmed })
+      await loadVoiceOptionsFromApi()
+      if (voice === trimmed) {
+        setVoice('')
+      }
+      setIsDeleteVoiceprintDialogOpen(false)
+      resetDeleteVoiceprintForm()
+      showNotification({
+        type: 'success',
+        message: `Voiceprint "${trimmed}" deleted.`,
+      })
+    } catch (deleteError) {
+      setDeleteVoiceprintError(
+        deleteError instanceof Error ? deleteError.message : 'Failed to delete voiceprint.',
+      )
+    } finally {
+      setIsDeletingVoiceprint(false)
+    }
+  }, [
+    loadVoiceOptionsFromApi,
+    resetDeleteVoiceprintForm,
+    showNotification,
+    voice,
+    voiceprintToDelete,
+  ])
+
   const handleEmotionVectorValueChange = useCallback(
     (key: ThirdPartyTtsEmotionVectorKey, value: number) => {
       setEmotionVectorValues((prev) => ({
@@ -279,6 +410,16 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
     }
     if (!isTtsSupported) {
       setError('Network requests are not supported in this environment.')
+      return
+    }
+    if (voiceprintType === '1' && voiceOptions.length === 0) {
+      setError(
+        'No reference voiceprint options are available. Please configure thirdPartyTtsVoiceprintListUrl.',
+      )
+      return
+    }
+    if (voiceprintType === '1' && !voice.trim()) {
+      setError('Please select a reference voiceprint.')
       return
     }
     if (voiceprintType === '2' && !voiceprintFile) {
@@ -358,6 +499,7 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
     voice,
     voiceprintFile,
     voiceprintType,
+    voiceOptions.length,
     emoControlMethod,
     emoWeight,
     emotionVectorValues,
@@ -469,408 +611,588 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
   }, [])
 
   return (
-    <div className="h-full overflow-y-auto p-3">
-      <div className="space-y-4">
-        <div className="rounded-md border border-border/80 bg-secondary/20 p-2 text-[11px] text-muted-foreground">
-          API URL is read from <code>public/runtime-config.json</code> using key{' '}
-          <code>thirdPartyTtsApiUrl</code>. You can modify this file after build/deploy.
-        </div>
-
-        {!isTtsSupported && (
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-            Network requests are not supported in this environment.
+    <>
+      <div className="h-full overflow-y-auto p-3">
+        <div className="space-y-4">
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5"
+              onClick={() => {
+                setIsDeleteVoiceprintDialogOpen(true)
+                setDeleteVoiceprintError(null)
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              删除声纹
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5"
+              onClick={() => {
+                setIsAddVoiceprintDialogOpen(true)
+                setAddVoiceprintError(null)
+              }}
+            >
+              <ListPlus className="h-3.5 w-3.5" />
+              添加声纹
+            </Button>
           </div>
-        )}
+          <div className="rounded-md border border-border/80 bg-secondary/20 p-2 text-[11px] text-muted-foreground">
+            API URL is read from <code>public/runtime-config.json</code> using key{' '}
+            <code>thirdPartyTtsApiUrl</code>. Reference Voiceprint list can be configured via{' '}
+            <code>thirdPartyTtsVoiceprintListUrl</code>, and add-voiceprint API uses{' '}
+            <code>thirdPartyTtsVoiceprintCreateUrl</code>, delete-voiceprint API uses{' '}
+            <code>thirdPartyTtsVoiceprintDeleteUrl</code>.
+          </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="third-party-tts-text">Text</Label>
-          <Textarea
-            id="third-party-tts-text"
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder="Enter the text you want to hear spoken..."
-            className="min-h-24 resize-y bg-secondary/30 text-sm"
-            disabled={isGenerating}
-          />
-        </div>
+          {!isTtsSupported && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
+              Network requests are not supported in this environment.
+            </div>
+          )}
 
-        {voiceprintType === '1' ? (
+          <div className="space-y-2">
+            <Label htmlFor="third-party-tts-text">Text</Label>
+            <Textarea
+              id="third-party-tts-text"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              placeholder="Enter the text you want to hear spoken..."
+              className="min-h-24 resize-y bg-secondary/30 text-sm"
+              disabled={isGenerating}
+            />
+          </div>
+
+          {voiceprintType === '1' ? (
+            <div className="space-y-1.5">
+              <Label>Reference Voiceprint</Label>
+              <Select
+                value={voice}
+                onValueChange={(value) => setVoice(value as ThirdPartyTtsVoice)}
+                disabled={isGenerating || isLoadingVoiceOptions}
+              >
+                <SelectTrigger className="h-8 text-xs focus:ring-inset">
+                  <SelectValue placeholder="Select reference voiceprint" />
+                </SelectTrigger>
+                <SelectContent>
+                  {voiceOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="third-party-tts-voiceprint-upload">Upload Voiceprint</Label>
+              <Input
+                ref={voiceprintInputRef}
+                id="third-party-tts-voiceprint-upload"
+                type="file"
+                accept="audio/*,.wav,.mp3,.m4a,.ogg"
+                className="sr-only"
+                disabled={isGenerating}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  setVoiceprintFile(file)
+                }}
+              />
+              <label
+                htmlFor="third-party-tts-voiceprint-upload"
+                className={`group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-3 py-2.5 transition-colors ${
+                  isGenerating
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'hover:border-primary/50 hover:bg-secondary/40'
+                }`}
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/40">
+                  <Upload className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </span>
+                <span className="min-w-0">
+                  <p className="truncate text-xs font-medium">
+                    {voiceprintFile ? 'Replace uploaded voiceprint' : 'Click to upload voiceprint'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">Supported: WAV, MP3, M4A, OGG</p>
+                </span>
+              </label>
+              <div className="flex items-center justify-between rounded-md border border-border bg-secondary/20 px-2.5 py-2">
+                <span className="min-w-0 flex items-center gap-2">
+                  <FileAudio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-xs text-foreground/90">
+                    {voiceprintFile
+                      ? `${voiceprintFile.name} (${formatBytes(voiceprintFile.size)})`
+                      : 'No file selected'}
+                  </span>
+                </span>
+                {voiceprintFile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-[11px]"
+                    disabled={isGenerating}
+                    onClick={() => {
+                      setVoiceprintFile(null)
+                      if (voiceprintInputRef.current) {
+                        voiceprintInputRef.current.value = ''
+                      }
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                    Clear
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5">
-            <Label>Reference Voiceprint</Label>
+            <Label>Voiceprint Source</Label>
             <Select
-              value={voice}
-              onValueChange={(value) => setVoice(value as ThirdPartyTtsVoice)}
+              value={voiceprintType}
+              onValueChange={(value) => {
+                setVoiceprintType(value as ThirdPartyTtsVoiceprintType)
+                setVoiceprintFile(null)
+                if (voiceprintInputRef.current) {
+                  voiceprintInputRef.current.value = ''
+                }
+              }}
               disabled={isGenerating}
             >
               <SelectTrigger className="h-8 text-xs focus:ring-inset">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {THIRD_PARTY_TTS_VOICE_OPTIONS.map((option) => (
+                {THIRD_PARTY_TTS_VOICEPRINT_TYPE_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value} className="text-xs">
-                    {option.label}
+                    {option.label} ({option.value})
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-        ) : (
-          <div className="space-y-2">
-            <Label htmlFor="third-party-tts-voiceprint-upload">Upload Voiceprint</Label>
-            <Input
-              ref={voiceprintInputRef}
-              id="third-party-tts-voiceprint-upload"
-              type="file"
-              accept="audio/*,.wav,.mp3,.m4a,.ogg"
-              className="sr-only"
-              disabled={isGenerating}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null
-                setVoiceprintFile(file)
+
+          <div className="space-y-1.5">
+            <Label>Emotion Control Method</Label>
+            <Select
+              value={emoControlMethod}
+              onValueChange={(value) => {
+                setEmoControlMethod(value as ThirdPartyTtsEmoControlMethod)
+                setEmoRefFile(null)
+                if (emoRefInputRef.current) {
+                  emoRefInputRef.current.value = ''
+                }
               }}
-            />
-            <label
-              htmlFor="third-party-tts-voiceprint-upload"
-              className={`group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-3 py-2.5 transition-colors ${
-                isGenerating
-                  ? 'cursor-not-allowed opacity-60'
-                  : 'hover:border-primary/50 hover:bg-secondary/40'
-              }`}
-            >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/40">
-                <Upload className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </span>
-              <span className="min-w-0">
-                <p className="truncate text-xs font-medium">
-                  {voiceprintFile ? 'Replace uploaded voiceprint' : 'Click to upload voiceprint'}
-                </p>
-                <p className="text-[11px] text-muted-foreground">Supported: WAV, MP3, M4A, OGG</p>
-              </span>
-            </label>
-            <div className="flex items-center justify-between rounded-md border border-border bg-secondary/20 px-2.5 py-2">
-              <span className="min-w-0 flex items-center gap-2">
-                <FileAudio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate text-xs text-foreground/90">
-                  {voiceprintFile
-                    ? `${voiceprintFile.name} (${formatBytes(voiceprintFile.size)})`
-                    : 'No file selected'}
-                </span>
-              </span>
-              {voiceprintFile && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-2 text-[11px]"
-                  disabled={isGenerating}
-                  onClick={() => {
-                    setVoiceprintFile(null)
-                    if (voiceprintInputRef.current) {
-                      voiceprintInputRef.current.value = ''
-                    }
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                  Clear
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-1.5">
-          <Label>Voiceprint Source</Label>
-          <Select
-            value={voiceprintType}
-            onValueChange={(value) => {
-              setVoiceprintType(value as ThirdPartyTtsVoiceprintType)
-              setVoiceprintFile(null)
-              if (voiceprintInputRef.current) {
-                voiceprintInputRef.current.value = ''
-              }
-            }}
-            disabled={isGenerating}
-          >
-            <SelectTrigger className="h-8 text-xs focus:ring-inset">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {THIRD_PARTY_TTS_VOICEPRINT_TYPE_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-xs">
-                  {option.label} ({option.value})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label>Emotion Control Method</Label>
-          <Select
-            value={emoControlMethod}
-            onValueChange={(value) => {
-              setEmoControlMethod(value as ThirdPartyTtsEmoControlMethod)
-              setEmoRefFile(null)
-              if (emoRefInputRef.current) {
-                emoRefInputRef.current.value = ''
-              }
-            }}
-            disabled={isGenerating}
-          >
-            <SelectTrigger className="h-8 text-xs focus:ring-inset">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {THIRD_PARTY_TTS_EMO_CONTROL_METHOD_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value} className="text-xs">
-                  {option.value}: {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        {emoControlMethod === '2' && (
-          <div className="space-y-2">
-            <Label htmlFor="third-party-tts-emo-ref-upload">Upload Emotion Reference Audio</Label>
-            <Input
-              ref={emoRefInputRef}
-              id="third-party-tts-emo-ref-upload"
-              type="file"
-              accept="audio/*,.wav,.mp3,.m4a,.ogg"
-              className="sr-only"
               disabled={isGenerating}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null
-                setEmoRefFile(file)
-              }}
-            />
-            <label
-              htmlFor="third-party-tts-emo-ref-upload"
-              className={`group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-3 py-2.5 transition-colors ${
-                isGenerating
-                  ? 'cursor-not-allowed opacity-60'
-                  : 'hover:border-primary/50 hover:bg-secondary/40'
-              }`}
             >
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/40">
-                <Upload className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </span>
-              <span className="min-w-0">
-                <p className="truncate text-xs font-medium">
-                  {emoRefFile
-                    ? 'Replace emotion reference audio'
-                    : 'Click to upload emotion reference audio'}
-                </p>
-                <p className="text-[11px] text-muted-foreground">Supported: WAV, MP3, M4A, OGG</p>
-              </span>
-            </label>
-            <div className="flex items-center justify-between rounded-md border border-border bg-secondary/20 px-2.5 py-2">
-              <span className="min-w-0 flex items-center gap-2">
-                <FileAudio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                <span className="truncate text-xs text-foreground/90">
-                  {emoRefFile
-                    ? `${emoRefFile.name} (${formatBytes(emoRefFile.size)})`
-                    : 'No file selected'}
-                </span>
-              </span>
-              {emoRefFile && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-6 gap-1 px-2 text-[11px]"
-                  disabled={isGenerating}
-                  onClick={() => {
-                    setEmoRefFile(null)
-                    if (emoRefInputRef.current) {
-                      emoRefInputRef.current.value = ''
-                    }
-                  }}
-                >
-                  <X className="h-3 w-3" />
-                  Clear
-                </Button>
-              )}
-            </div>
+              <SelectTrigger className="h-8 text-xs focus:ring-inset">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {THIRD_PARTY_TTS_EMO_CONTROL_METHOD_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value} className="text-xs">
+                    {option.value}: {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
 
-        {emoControlMethod === '3' && (
-          <div className="space-y-2">
-            <Label>Emotion Vector</Label>
-            <div className="space-y-2 rounded-lg border border-border bg-secondary/10 p-2">
-              {THIRD_PARTY_TTS_EMOTION_VECTOR_OPTIONS.map((option) => (
-                <SliderInput
-                  key={option.key}
-                  label={option.label}
-                  value={emotionVectorValues[option.key]}
-                  onChange={(value) => handleEmotionVectorValueChange(option.key, value)}
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  disabled={isGenerating}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        <SliderInput
-          label="Speed"
-          value={speed}
-          onChange={setSpeed}
-          min={0.5}
-          max={2}
-          step={0.05}
-          unit="x"
-          disabled={isGenerating}
-        />
-
-        <SliderInput
-          label="Emo Weight"
-          value={emoWeight}
-          onChange={setEmoWeight}
-          min={0}
-          max={1}
-          step={0.01}
-          disabled={isGenerating}
-        />
-
-        <div className="flex items-center">
-          <Button
-            size="sm"
-            onClick={() => {
-              void handleGenerate()
-            }}
-            disabled={
-              isGenerating ||
-              !trimmedText ||
-              !currentProjectId ||
-              !isTtsSupported ||
-              (voiceprintType === '2' && !voiceprintFile) ||
-              (emoControlMethod === '2' && !emoRefFile)
-            }
-            className="h-7 shrink-0 gap-1.5"
-          >
-            {isGenerating ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <WandSparkles className="h-3.5 w-3.5" />
-            )}
-            {isGenerating ? 'Generating...' : 'Generate'}
-          </Button>
-        </div>
-
-        {progress && (
-          <div className="rounded-lg border border-border bg-secondary/20 p-3 text-xs text-muted-foreground">
-            {progress}
-          </div>
-        )}
-
-        {error && (
-          <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
-            {error}
-          </div>
-        )}
-
-        {generations.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-muted-foreground">
-                History ({generations.length}) - {formatBytes(totalBytes)}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
-                onClick={handleClearAll}
-                disabled={anySaving}
-              >
-                <Trash2 className="h-3 w-3" />
-                Clear all
-              </Button>
-            </div>
-
+          {emoControlMethod === '2' && (
             <div className="space-y-2">
-              {generations.map((generation) => (
-                <div
-                  key={generation.id}
-                  className={`rounded-lg border p-3 space-y-2 ${
-                    generation.savedMediaId
-                      ? 'border-emerald-500/25 bg-emerald-500/5'
-                      : 'border-border bg-secondary/20'
-                  }`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 space-y-0.5">
-                      <p
-                        className="line-clamp-3 text-xs leading-relaxed"
-                        title={generation.textSnippet}
-                      >
-                        {generation.textSnippet}
-                      </p>
-                      <p className="text-[11px] text-muted-foreground">{generation.details}</p>
-                    </div>
-                    {!generation.saving && (
-                      <button
-                        type="button"
-                        className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
-                        onClick={() => handleRemoveGeneration(generation.id)}
-                        aria-label="Remove"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  <MiniAudioPlayer src={generation.objectUrl} />
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {generation.savedMediaId ? (
-                      <span className="flex items-center gap-1 text-[11px] text-emerald-400">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Saved
-                      </span>
-                    ) : (
-                      <>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-[11px]"
-                          onClick={() => {
-                            void handleSaveAndInsert(generation)
-                          }}
-                          disabled={generation.saving}
-                        >
-                          {generation.saving ? (
-                            <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <ListPlus className="h-3 w-3" />
-                          )}
-                          {generation.saving ? 'Saving...' : 'Save & Insert'}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 gap-1 px-2 text-[11px]"
-                          onClick={() => {
-                            void handleSave(generation)
-                          }}
-                          disabled={generation.saving}
-                        >
-                          <Download className="h-3 w-3" />
-                          Save to Library
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <Label htmlFor="third-party-tts-emo-ref-upload">Upload Emotion Reference Audio</Label>
+              <Input
+                ref={emoRefInputRef}
+                id="third-party-tts-emo-ref-upload"
+                type="file"
+                accept="audio/*,.wav,.mp3,.m4a,.ogg"
+                className="sr-only"
+                disabled={isGenerating}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  setEmoRefFile(file)
+                }}
+              />
+              <label
+                htmlFor="third-party-tts-emo-ref-upload"
+                className={`group flex cursor-pointer items-center gap-3 rounded-lg border border-dashed px-3 py-2.5 transition-colors ${
+                  isGenerating
+                    ? 'cursor-not-allowed opacity-60'
+                    : 'hover:border-primary/50 hover:bg-secondary/40'
+                }`}
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-secondary/40">
+                  <Upload className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </span>
+                <span className="min-w-0">
+                  <p className="truncate text-xs font-medium">
+                    {emoRefFile
+                      ? 'Replace emotion reference audio'
+                      : 'Click to upload emotion reference audio'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">Supported: WAV, MP3, M4A, OGG</p>
+                </span>
+              </label>
+              <div className="flex items-center justify-between rounded-md border border-border bg-secondary/20 px-2.5 py-2">
+                <span className="min-w-0 flex items-center gap-2">
+                  <FileAudio className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-xs text-foreground/90">
+                    {emoRefFile
+                      ? `${emoRefFile.name} (${formatBytes(emoRefFile.size)})`
+                      : 'No file selected'}
+                  </span>
+                </span>
+                {emoRefFile && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-[11px]"
+                    disabled={isGenerating}
+                    onClick={() => {
+                      setEmoRefFile(null)
+                      if (emoRefInputRef.current) {
+                        emoRefInputRef.current.value = ''
+                      }
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                    Clear
+                  </Button>
+                )}
+              </div>
             </div>
+          )}
+
+          {emoControlMethod === '3' && (
+            <div className="space-y-2">
+              <Label>Emotion Vector</Label>
+              <div className="space-y-2 rounded-lg border border-border bg-secondary/10 p-2">
+                {THIRD_PARTY_TTS_EMOTION_VECTOR_OPTIONS.map((option) => (
+                  <SliderInput
+                    key={option.key}
+                    label={option.label}
+                    value={emotionVectorValues[option.key]}
+                    onChange={(value) => handleEmotionVectorValueChange(option.key, value)}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    disabled={isGenerating}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <SliderInput
+            label="Speed"
+            value={speed}
+            onChange={setSpeed}
+            min={0.5}
+            max={2}
+            step={0.05}
+            unit="x"
+            disabled={isGenerating}
+          />
+
+          <SliderInput
+            label="Emo Weight"
+            value={emoWeight}
+            onChange={setEmoWeight}
+            min={0}
+            max={1}
+            step={0.01}
+            disabled={isGenerating}
+          />
+
+          <div className="flex items-center">
+            <Button
+              size="sm"
+              onClick={() => {
+                void handleGenerate()
+              }}
+              disabled={
+                isGenerating ||
+                !trimmedText ||
+                !currentProjectId ||
+                !isTtsSupported ||
+                (voiceprintType === '1' && voiceOptions.length === 0) ||
+                (voiceprintType === '1' && !voice.trim()) ||
+                (voiceprintType === '2' && !voiceprintFile) ||
+                (emoControlMethod === '2' && !emoRefFile)
+              }
+              className="h-7 shrink-0 gap-1.5"
+            >
+              {isGenerating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <WandSparkles className="h-3.5 w-3.5" />
+              )}
+              {isGenerating ? 'Generating...' : 'Generate'}
+            </Button>
           </div>
-        )}
+
+          {progress && (
+            <div className="rounded-lg border border-border bg-secondary/20 p-3 text-xs text-muted-foreground">
+              {progress}
+            </div>
+          )}
+
+          {error && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">
+              {error}
+            </div>
+          )}
+
+          {generations.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-muted-foreground">
+                  History ({generations.length}) - {formatBytes(totalBytes)}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-[11px] text-muted-foreground"
+                  onClick={handleClearAll}
+                  disabled={anySaving}
+                >
+                  <Trash2 className="h-3 w-3" />
+                  Clear all
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {generations.map((generation) => (
+                  <div
+                    key={generation.id}
+                    className={`rounded-lg border p-3 space-y-2 ${
+                      generation.savedMediaId
+                        ? 'border-emerald-500/25 bg-emerald-500/5'
+                        : 'border-border bg-secondary/20'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 space-y-0.5">
+                        <p
+                          className="line-clamp-3 text-xs leading-relaxed"
+                          title={generation.textSnippet}
+                        >
+                          {generation.textSnippet}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground">{generation.details}</p>
+                      </div>
+                      {!generation.saving && (
+                        <button
+                          type="button"
+                          className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                          onClick={() => handleRemoveGeneration(generation.id)}
+                          aria-label="Remove"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+
+                    <MiniAudioPlayer src={generation.objectUrl} />
+
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {generation.savedMediaId ? (
+                        <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+                          <CheckCircle2 className="h-3 w-3" />
+                          Saved
+                        </span>
+                      ) : (
+                        <>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-[11px]"
+                            onClick={() => {
+                              void handleSaveAndInsert(generation)
+                            }}
+                            disabled={generation.saving}
+                          >
+                            {generation.saving ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <ListPlus className="h-3 w-3" />
+                            )}
+                            {generation.saving ? 'Saving...' : 'Save & Insert'}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 gap-1 px-2 text-[11px]"
+                            onClick={() => {
+                              void handleSave(generation)
+                            }}
+                            disabled={generation.saving}
+                          >
+                            <Download className="h-3 w-3" />
+                            Save to Library
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      <Dialog
+        open={isAddVoiceprintDialogOpen}
+        onOpenChange={(next) => {
+          setIsAddVoiceprintDialogOpen(next)
+          if (!next) {
+            resetAddVoiceprintForm()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>添加声纹</DialogTitle>
+            <DialogDescription>填写声纹名称并上传声纹音频文件。</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="third-party-tts-add-voiceprint-name">name</Label>
+              <Input
+                id="third-party-tts-add-voiceprint-name"
+                value={newVoiceprintName}
+                onChange={(event) => setNewVoiceprintName(event.target.value)}
+                placeholder="请输入声纹名称"
+                disabled={isAddingVoiceprint}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="third-party-tts-add-voiceprint-file">prompt_voice</Label>
+              <Input
+                ref={addVoiceprintInputRef}
+                id="third-party-tts-add-voiceprint-file"
+                type="file"
+                accept="audio/*,.wav,.mp3,.m4a,.ogg"
+                disabled={isAddingVoiceprint}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null
+                  setNewVoiceprintFile(file)
+                }}
+              />
+              {newVoiceprintFile && (
+                <p className="text-xs text-muted-foreground">
+                  {newVoiceprintFile.name} ({formatBytes(newVoiceprintFile.size)})
+                </p>
+              )}
+            </div>
+
+            {addVoiceprintError && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {addVoiceprintError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsAddVoiceprintDialogOpen(false)}
+              disabled={isAddingVoiceprint}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleAddVoiceprintSubmit()}
+              disabled={isAddingVoiceprint}
+            >
+              {isAddingVoiceprint ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {isAddingVoiceprint ? '提交中...' : '提交'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isDeleteVoiceprintDialogOpen}
+        onOpenChange={(next) => {
+          setIsDeleteVoiceprintDialogOpen(next)
+          if (!next) {
+            resetDeleteVoiceprintForm()
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>删除声纹</DialogTitle>
+            <DialogDescription>从当前声纹列表中选择一个声纹并删除。</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>当前声纹列表</Label>
+              <Select
+                value={voiceprintToDelete}
+                onValueChange={setVoiceprintToDelete}
+                disabled={
+                  isDeletingVoiceprint || isLoadingVoiceOptions || voiceOptions.length === 0
+                }
+              >
+                <SelectTrigger className="h-8 text-xs focus:ring-inset">
+                  <SelectValue placeholder="请选择要删除的声纹" />
+                </SelectTrigger>
+                <SelectContent>
+                  {voiceOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value} className="text-xs">
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {voiceOptions.length === 0 && !isLoadingVoiceOptions && (
+                <p className="text-xs text-muted-foreground">当前没有可删除的声纹。</p>
+              )}
+            </div>
+
+            {deleteVoiceprintError && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {deleteVoiceprintError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeleteVoiceprintDialogOpen(false)}
+              disabled={isDeletingVoiceprint}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => void handleDeleteVoiceprintSubmit()}
+              disabled={isDeletingVoiceprint || !voiceprintToDelete.trim()}
+            >
+              {isDeletingVoiceprint ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              {isDeletingVoiceprint ? '删除中...' : '删除'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 })

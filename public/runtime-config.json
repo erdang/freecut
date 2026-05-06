@@ -1,3 +1,6 @@
 {
-  "thirdPartyTtsApiUrl": "http://192.168.0.15:9930/generate"
+  "thirdPartyTtsApiUrl": "http://192.168.0.15:9930/generate",
+  "thirdPartyTtsVoiceprintListUrl": "http://192.168.0.15:9930/voices",
+  "thirdPartyTtsVoiceprintCreateUrl": "http://192.168.0.15:9930/voices",
+  "thirdPartyTtsVoiceprintDeleteUrl": "http://192.168.0.15:9930/voices"
 }

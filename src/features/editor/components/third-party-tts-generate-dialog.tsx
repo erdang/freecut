@@ -46,13 +46,13 @@ import {
   THIRD_PARTY_TTS_DEFAULT_EMOTION_VECTOR_VALUES,
   THIRD_PARTY_TTS_EMOTION_VECTOR_OPTIONS,
   THIRD_PARTY_TTS_EMO_CONTROL_METHOD_OPTIONS,
-  THIRD_PARTY_TTS_VOICE_OPTIONS,
   THIRD_PARTY_TTS_VOICEPRINT_TYPE_OPTIONS,
   thirdPartyTtsService,
   type ThirdPartyTtsEmotionVectorKey,
   type ThirdPartyTtsEmotionVectorValues,
   type ThirdPartyTtsEmoControlMethod,
   type ThirdPartyTtsVoice,
+  type ThirdPartyTtsVoiceOption,
   type ThirdPartyTtsVoiceprintType,
 } from '@/features/editor/services/third-party-tts-service'
 
@@ -239,7 +239,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
   const showNotification = useMediaLibraryStore((state) => state.showNotification)
 
   const [text, setText] = useState('')
-  const [voice, setVoice] = useState<ThirdPartyTtsVoice>('Bella')
+  const [voice, setVoice] = useState<ThirdPartyTtsVoice>('')
   const [voiceprintType, setVoiceprintType] = useState<ThirdPartyTtsVoiceprintType>('1')
   const [emoControlMethod, setEmoControlMethod] = useState<ThirdPartyTtsEmoControlMethod>('1')
   const [emoWeight, setEmoWeight] = useState(0.65)
@@ -248,9 +248,11 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
   })
   const [voiceprintFile, setVoiceprintFile] = useState<File | null>(null)
   const [emoRefFile, setEmoRefFile] = useState<File | null>(null)
+  const [voiceOptions, setVoiceOptions] = useState<ThirdPartyTtsVoiceOption[]>([])
   const [speed, setSpeed] = useState(1.25)
   const [isGenerating, setIsGenerating] = useState(false)
   const [isInserting, setIsInserting] = useState(false)
+  const [isLoadingVoiceOptions, setIsLoadingVoiceOptions] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<GenerationResult | null>(null)
@@ -293,6 +295,27 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
     }
   }, [isOpen, inserted])
 
+  useEffect(() => {
+    let cancelled = false
+    setIsLoadingVoiceOptions(true)
+    void thirdPartyTtsService
+      .getReferenceVoiceprintOptions()
+      .then((options) => {
+        if (!cancelled) {
+          setVoiceOptions(options)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoadingVoiceOptions(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const isNetworkSupported = thirdPartyTtsService.isSupported()
   const trimmedText = text.trim()
   const handleEmotionVectorValueChange = useCallback(
@@ -316,6 +339,16 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
     }
     if (!isNetworkSupported) {
       setError('Network requests are not supported in this environment.')
+      return
+    }
+    if (voiceprintType === '1' && voiceOptions.length === 0) {
+      setError(
+        'No reference voiceprint options are available. Please configure thirdPartyTtsVoiceprintListUrl.',
+      )
+      return
+    }
+    if (voiceprintType === '1' && !voice.trim()) {
+      setError('Please select a reference voiceprint.')
       return
     }
     if (voiceprintType === '2' && !voiceprintFile) {
@@ -394,6 +427,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
     voice,
     voiceprintFile,
     voiceprintType,
+    voiceOptions.length,
     emoControlMethod,
     emoWeight,
     emotionVectorValues,
@@ -455,6 +489,9 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
     !!trimmedText &&
     !!currentProjectId &&
     isNetworkSupported &&
+    (!isLoadingVoiceOptions || voiceprintType !== '1') &&
+    (voiceprintType !== '1' || voiceOptions.length > 0) &&
+    (voiceprintType !== '1' || !!voice.trim()) &&
     (voiceprintType === '1' || !!voiceprintFile) &&
     (emoControlMethod !== '2' || !!emoRefFile)
 
@@ -495,13 +532,13 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
               <Select
                 value={voice}
                 onValueChange={(value) => setVoice(value as ThirdPartyTtsVoice)}
-                disabled={isGenerating || isInserting}
+                disabled={isGenerating || isInserting || isLoadingVoiceOptions}
               >
                 <SelectTrigger className="h-8 text-xs focus:ring-inset">
-                  <SelectValue />
+                  <SelectValue placeholder="Select reference voiceprint" />
                 </SelectTrigger>
                 <SelectContent className="[&_[data-radix-select-viewport]]:p-0">
-                  {THIRD_PARTY_TTS_VOICE_OPTIONS.map((option) => (
+                  {voiceOptions.map((option) => (
                     <SelectItem
                       key={option.value}
                       value={option.value}

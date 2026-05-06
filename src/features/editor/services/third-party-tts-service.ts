@@ -5,17 +5,12 @@ const RUNTIME_CONFIG_URL = `${import.meta.env.BASE_URL}runtime-config.json`
 
 interface RuntimeConfig {
   thirdPartyTtsApiUrl?: string
+  thirdPartyTtsVoiceprintListUrl?: string
+  thirdPartyTtsVoiceprintCreateUrl?: string
+  thirdPartyTtsVoiceprintDeleteUrl?: string
 }
 
-export type ThirdPartyTtsVoice =
-  | 'Bella'
-  | 'Luna'
-  | 'Rosie'
-  | 'Kiki'
-  | 'Jasper'
-  | 'Bruno'
-  | 'Hugo'
-  | 'Leo'
+export type ThirdPartyTtsVoice = string
 
 export type ThirdPartyTtsVoiceprintType = '1' | '2'
 export type ThirdPartyTtsEmoControlMethod = '1' | '2' | '3'
@@ -30,19 +25,12 @@ export type ThirdPartyTtsEmotionVectorKey =
   | 'vec8'
 export type ThirdPartyTtsEmotionVectorValues = Record<ThirdPartyTtsEmotionVectorKey, number>
 
-export const THIRD_PARTY_TTS_VOICE_OPTIONS: Array<{
+export interface ThirdPartyTtsVoiceOption {
   value: ThirdPartyTtsVoice
   label: string
-}> = [
-  { value: 'Bella', label: 'Bella' },
-  { value: 'Luna', label: 'Luna' },
-  { value: 'Rosie', label: 'Rosie' },
-  { value: 'Kiki', label: 'Kiki' },
-  { value: 'Jasper', label: 'Jasper' },
-  { value: 'Bruno', label: 'Bruno' },
-  { value: 'Hugo', label: 'Hugo' },
-  { value: 'Leo', label: 'Leo' },
-]
+}
+
+export const THIRD_PARTY_TTS_VOICE_OPTIONS: ThirdPartyTtsVoiceOption[] = []
 
 export const THIRD_PARTY_TTS_VOICEPRINT_TYPE_OPTIONS: Array<{
   value: ThirdPartyTtsVoiceprintType
@@ -131,11 +119,143 @@ async function loadRuntimeConfig(): Promise<RuntimeConfig> {
       ? {
           thirdPartyTtsApiUrl:
             readString(payload, ['thirdPartyTtsApiUrl', 'third_party_tts_api_url']) ?? '',
+          thirdPartyTtsVoiceprintListUrl:
+            readString(payload, [
+              'thirdPartyTtsVoiceprintListUrl',
+              'third_party_tts_voiceprint_list_url',
+              'thirdPartyTtsVoiceprintUrl',
+              'third_party_tts_voiceprint_url',
+            ]) ?? '',
+          thirdPartyTtsVoiceprintCreateUrl:
+            readString(payload, [
+              'thirdPartyTtsVoiceprintCreateUrl',
+              'third_party_tts_voiceprint_create_url',
+              'thirdPartyTtsVoiceprintAddUrl',
+              'third_party_tts_voiceprint_add_url',
+            ]) ?? '',
+          thirdPartyTtsVoiceprintDeleteUrl:
+            readString(payload, [
+              'thirdPartyTtsVoiceprintDeleteUrl',
+              'third_party_tts_voiceprint_delete_url',
+              'thirdPartyTtsVoiceprintRemoveUrl',
+              'third_party_tts_voiceprint_remove_url',
+            ]) ?? '',
         }
       : {}
   } catch {
     return {}
   }
+}
+
+function normalizeVoiceOption(value: unknown): ThirdPartyTtsVoiceOption | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    return { value: trimmed, label: trimmed }
+  }
+
+  const record = asRecord(value)
+  if (!record) return null
+
+  const optionValue = readString(record, [
+    'value',
+    'voice',
+    'voiceprint',
+    'voice_name',
+    'name',
+    'id',
+    'prompt_name',
+  ])
+  if (!optionValue) return null
+
+  const label =
+    readString(record, ['label', 'displayName', 'display_name', 'title', 'name']) ?? optionValue
+
+  return {
+    value: optionValue,
+    label,
+  }
+}
+
+function collectVoiceOptionsFromArray(values: unknown[]): ThirdPartyTtsVoiceOption[] {
+  const normalized = values
+    .map((entry) => normalizeVoiceOption(entry))
+    .filter((entry): entry is ThirdPartyTtsVoiceOption => !!entry)
+
+  const deduped: ThirdPartyTtsVoiceOption[] = []
+  const seen = new Set<string>()
+  for (const option of normalized) {
+    if (seen.has(option.value)) continue
+    seen.add(option.value)
+    deduped.push(option)
+  }
+  return deduped
+}
+
+function parseVoiceOptionsPayload(payload: unknown): ThirdPartyTtsVoiceOption[] {
+  if (Array.isArray(payload)) {
+    return collectVoiceOptionsFromArray(payload)
+  }
+
+  const root = asRecord(payload)
+  if (!root) return []
+
+  const rootData = asRecord(root.data)
+  const candidateArrays: unknown[][] = []
+
+  const addArray = (value: unknown) => {
+    if (Array.isArray(value)) {
+      candidateArrays.push(value)
+    }
+  }
+
+  addArray(root.options)
+  addArray(root.voices)
+  addArray(root.voiceprints)
+  addArray(root.items)
+  addArray(root.list)
+  addArray(root.data)
+
+  if (rootData) {
+    addArray(rootData.options)
+    addArray(rootData.voices)
+    addArray(rootData.voiceprints)
+    addArray(rootData.items)
+    addArray(rootData.list)
+    addArray(rootData.data)
+  }
+
+  for (const candidate of candidateArrays) {
+    const parsed = collectVoiceOptionsFromArray(candidate)
+    if (parsed.length > 0) {
+      return parsed
+    }
+  }
+
+  return []
+}
+
+function parseVoiceOptionsTextPayload(payload: string): ThirdPartyTtsVoiceOption[] {
+  const lines = payload
+    .split(/\r?\n|,/g)
+    .map((line) => line.trim())
+    .filter(Boolean)
+  return collectVoiceOptionsFromArray(lines)
+}
+
+function parseVoiceOptionsLooseJsonLikeText(payload: string): ThirdPartyTtsVoiceOption[] {
+  const dataArrayMatch = payload.match(/data\s*:\s*\[([\s\S]*?)\]/i)
+  if (!dataArrayMatch) return []
+  const inner = dataArrayMatch[1] ?? ''
+  const extracted: string[] = []
+  const regex = /'([^']+)'|"([^"]+)"/g
+  let match: RegExpExecArray | null = regex.exec(inner)
+  while (match) {
+    const value = (match[1] ?? match[2] ?? '').trim()
+    if (value) extracted.push(value)
+    match = regex.exec(inner)
+  }
+  return collectVoiceOptionsFromArray(extracted)
 }
 
 function makeSafeFileNameSegment(text: string): string {
@@ -159,7 +279,8 @@ function getFileExtensionFromMimeType(mimeType: string): string {
 
 function createOutputFileName(text: string, voice: ThirdPartyTtsVoice, extension: string): string {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-  return `ai-tts-${makeSafeFileNameSegment(text)}-${voice.toLowerCase()}-${timestamp}.${extension}`
+  const voiceSegment = voice.trim().toLowerCase() || 'voice'
+  return `ai-tts-${makeSafeFileNameSegment(text)}-${voiceSegment}-${timestamp}.${extension}`
 }
 
 function decodeBase64Audio(base64Value: string): Blob {
@@ -338,6 +459,168 @@ class ThirdPartyTtsService {
     return typeof fetch === 'function'
   }
 
+  async getReferenceVoiceprintOptions(customUrl?: string): Promise<ThirdPartyTtsVoiceOption[]> {
+    const runtimeConfig = await loadRuntimeConfig()
+    const endpoint = (customUrl ?? runtimeConfig.thirdPartyTtsVoiceprintListUrl ?? '').trim()
+    if (!endpoint || !this.isSupported()) {
+      return []
+    }
+
+    try {
+      const response = await fetch(endpoint, {
+        cache: 'no-store',
+        headers: {
+          Accept: 'application/json,text/plain',
+        },
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+      const rawText = await response.text()
+      let parsed: ThirdPartyTtsVoiceOption[] = []
+      if (contentType.includes('json')) {
+        try {
+          parsed = parseVoiceOptionsPayload(JSON.parse(rawText))
+        } catch {
+          parsed = parseVoiceOptionsLooseJsonLikeText(rawText)
+        }
+      } else {
+        parsed = parseVoiceOptionsTextPayload(rawText)
+      }
+
+      return parsed
+    } catch (error) {
+      logger.warn('Failed to load third-party voiceprint options', error)
+      return []
+    }
+  }
+
+  async addReferenceVoiceprint({
+    name,
+    promptVoice,
+    apiUrl,
+  }: {
+    name: string
+    promptVoice: File
+    apiUrl?: string
+  }): Promise<void> {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      throw new Error('Please provide a voiceprint name')
+    }
+    if (!promptVoice) {
+      throw new Error('Please upload a voiceprint audio file')
+    }
+
+    const runtimeConfig = await loadRuntimeConfig()
+    const endpoint = (apiUrl ?? runtimeConfig.thirdPartyTtsVoiceprintCreateUrl ?? '').trim()
+    if (!endpoint) {
+      throw new Error(
+        'Please configure thirdPartyTtsVoiceprintCreateUrl in public/runtime-config.json',
+      )
+    }
+    if (!this.isSupported()) {
+      throw new Error('Network requests are not supported in this environment')
+    }
+
+    const formData = new FormData()
+    formData.append('name', trimmedName)
+    formData.append('prompt_voice', promptVoice, promptVoice.name)
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json,text/plain,*/*',
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      throw new Error(await readResponseError(response))
+    }
+
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+    if (!contentType.includes('json')) {
+      return
+    }
+
+    try {
+      const payload = asRecord(await response.json())
+      if (!payload) return
+      const code = payload.code
+      if (typeof code === 'number' && code !== 200) {
+        const message = readString(payload, ['msg', 'message', 'error', 'detail'])
+        throw new Error(message || `Add voiceprint failed (code ${code})`)
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error
+      }
+    }
+  }
+
+  async deleteReferenceVoiceprint({
+    name,
+    apiUrl,
+  }: {
+    name: string
+    apiUrl?: string
+  }): Promise<void> {
+    const trimmedName = name.trim()
+    if (!trimmedName) {
+      throw new Error('Please select a voiceprint to delete')
+    }
+
+    const runtimeConfig = await loadRuntimeConfig()
+    const endpoint = (apiUrl ?? runtimeConfig.thirdPartyTtsVoiceprintDeleteUrl ?? '').trim()
+    if (!endpoint) {
+      throw new Error(
+        'Please configure thirdPartyTtsVoiceprintDeleteUrl in public/runtime-config.json',
+      )
+    }
+    if (!this.isSupported()) {
+      throw new Error('Network requests are not supported in this environment')
+    }
+
+    const encodedName = encodeURIComponent(trimmedName)
+    const resolvedEndpoint = endpoint.includes('{name}')
+      ? endpoint.replace('{name}', encodedName)
+      : `${endpoint.replace(/\/+$/, '')}/${encodedName}`
+
+    const response = await fetch(resolvedEndpoint, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json,text/plain,*/*',
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error(await readResponseError(response))
+    }
+
+    const contentType = (response.headers.get('content-type') ?? '').toLowerCase()
+    if (!contentType.includes('json')) {
+      return
+    }
+
+    try {
+      const payload = asRecord(await response.json())
+      if (!payload) return
+      const code = payload.code
+      if (typeof code === 'number' && code !== 200) {
+        const message = readString(payload, ['msg', 'message', 'error', 'detail'])
+        throw new Error(message || `Delete voiceprint failed (code ${code})`)
+      }
+    } catch (error) {
+      if (error instanceof Error) {
+        throw error
+      }
+    }
+  }
+
   async generateSpeechFile({
     text,
     voice,
@@ -380,7 +663,11 @@ class ThirdPartyTtsService {
     formData.append('emo_weight', String(emoWeight))
 
     if (voiceprintType === '1') {
-      formData.append('prompt_name', voice)
+      const selectedVoice = voice.trim()
+      if (!selectedVoice) {
+        throw new Error('Please select a reference voiceprint')
+      }
+      formData.append('prompt_name', selectedVoice)
     } else {
       if (!voiceprintFile) {
         throw new Error('Please upload a voiceprint file')
