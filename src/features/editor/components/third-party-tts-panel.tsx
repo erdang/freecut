@@ -1066,7 +1066,7 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
 
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label htmlFor="third-party-tts-add-voiceprint-name">name</Label>
+              <Label htmlFor="third-party-tts-add-voiceprint-name">声纹名称</Label>
               <Input
                 id="third-party-tts-add-voiceprint-name"
                 value={newVoiceprintName}
@@ -1077,7 +1077,7 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="third-party-tts-add-voiceprint-file">prompt_voice</Label>
+              <Label htmlFor="third-party-tts-add-voiceprint-file">声纹音频</Label>
               <Input
                 ref={addVoiceprintInputRef}
                 id="third-party-tts-add-voiceprint-file"
