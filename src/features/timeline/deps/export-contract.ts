@@ -6,4 +6,5 @@
 export { renderSingleFrame } from '@/features/export/utils/client-render-engine'
 export { renderComposition } from '@/features/export/utils/canvas-render-orchestrator'
 export { convertTimelineToComposition } from '@/features/export/utils/timeline-to-composition'
+export { createOutputFormat } from '@/features/export/utils/client-renderer'
 export type { ClientExportSettings, RenderProgress } from '@/features/export/utils/client-renderer'

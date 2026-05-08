@@ -345,7 +345,7 @@ async function createTrimmedUploadFile(
   const { Input, Output, BufferTarget, Conversion, ALL_FORMATS } = mb
 
   const container = inferVideoContainerFromFile(file)
-  const { createOutputFormat } = await import('@/features/export/utils/client-renderer')
+  const { createOutputFormat } = await import('@/features/timeline/deps/export-contract')
   const format = await createOutputFormat(container, { fastStart: true })
 
   const input = new Input({
