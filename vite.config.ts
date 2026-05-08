@@ -6,6 +6,11 @@ import { fileURLToPath } from 'node:url'
 
 const oxlintConfig = JSON.parse(readFileSync(new URL('./.oxlintrc.json', import.meta.url), 'utf8'))
 const oxfmtConfig = JSON.parse(readFileSync(new URL('./.oxfmtrc.json', import.meta.url), 'utf8'))
+const dewatermarkProxyTarget =
+  process.env.VITE_DEWATERMARK_PROXY_TARGET ?? 'http://192.168.0.15:4000'
+const dewatermarkPreviewProxyTarget =
+  process.env.VITE_DEWATERMARK_PREVIEW_PROXY_TARGET ?? 'http://192.168.0.15:8000'
+const ttsProxyTarget = process.env.VITE_TTS_PROXY_TARGET ?? 'http://192.168.0.15:9930'
 const toolIgnorePatterns = [
   'dist/**',
   'coverage/**',
@@ -55,6 +60,26 @@ export default defineConfig({
     headers: {
       'Cross-Origin-Embedder-Policy': 'require-corp',
       'Cross-Origin-Opener-Policy': 'same-origin',
+    },
+    proxy: {
+      '/dewatermark-proxy': {
+        target: dewatermarkProxyTarget,
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/dewatermark-proxy/, ''),
+      },
+      '/dewatermark-preview-proxy': {
+        target: dewatermarkPreviewProxyTarget,
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/dewatermark-preview-proxy/, ''),
+      },
+      '/tts-proxy': {
+        target: ttsProxyTarget,
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/tts-proxy/, ''),
+      },
     },
   },
   preview: {

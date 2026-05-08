@@ -922,6 +922,7 @@ interface ItemsActions {
   _addItem: (item: TimelineItem) => void
   _addItems: (items: TimelineItem[]) => void
   _updateItem: (id: string, updates: Partial<TimelineItem>) => void
+  _updateItems: (updates: Array<{ id: string; updates: Partial<TimelineItem> }>) => void
   _removeItems: (ids: string[]) => void
 
   // Specialized item operations
@@ -1011,6 +1012,24 @@ export const useItemsStore = create<ItemsState & ItemsActions>()((set, get) => (
       const nextItems = state.items.map((i) =>
         i.id === id ? normalizeFrameFields({ ...i, ...normalizedUpdates } as typeof i) : i,
       )
+      return withItemIndexes(nextItems, state)
+    })
+  },
+
+  _updateItems: (updates) => {
+    if (updates.length === 0) return
+    return set((state) => {
+      const updateMap = new Map(
+        updates.map((entry) => [entry.id, normalizeItemUpdates(entry.updates)] as const),
+      )
+      const nextItems = state.items.map((item) => {
+        const normalizedUpdates = updateMap.get(item.id)
+        if (!normalizedUpdates) return item
+        return normalizeFrameFields({
+          ...item,
+          ...normalizedUpdates,
+        } as typeof item)
+      })
       return withItemIndexes(nextItems, state)
     })
   },

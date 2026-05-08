@@ -53,6 +53,7 @@ interface ItemContextMenuProps {
   /** Whether the playhead is within this item's bounds */
   playheadInBounds?: boolean
   onFreezeFrame?: () => void
+  onDewatermark?: () => void
   canManageCaptions?: boolean
   hasCaptions?: boolean
   hasTranscript?: boolean
@@ -127,6 +128,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
+  onDewatermark,
   canManageCaptions,
   hasCaptions,
   hasTranscript,
@@ -203,6 +205,7 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       isVideoItem={isVideoItem}
       playheadInBounds={playheadInBounds}
       onFreezeFrame={onFreezeFrame}
+      onDewatermark={onDewatermark}
       canManageCaptions={canManageCaptions}
       hasCaptions={hasCaptions}
       hasTranscript={hasTranscript}
@@ -297,6 +300,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   isVideoItem,
   playheadInBounds,
   onFreezeFrame,
+  onDewatermark,
   canManageCaptions,
   hasCaptions,
   hasTranscript,
@@ -473,6 +477,13 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
               Insert Freeze Frame
               <ContextMenuShortcut>Shift+F</ContextMenuShortcut>
             </ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {isVideoItem && onDewatermark && (
+          <>
+            <ContextMenuItem onClick={onDewatermark}>去水印</ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}

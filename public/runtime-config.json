@@ -1,6 +1,9 @@
-{
-  "thirdPartyTtsApiUrl": "http://192.168.0.15:9930/generate",
-  "thirdPartyTtsVoiceprintListUrl": "http://192.168.0.15:9930/voices",
-  "thirdPartyTtsVoiceprintCreateUrl": "http://192.168.0.15:9930/voices",
-  "thirdPartyTtsVoiceprintDeleteUrl": "http://192.168.0.15:9930/voices"
+﻿{
+  "thirdPartyTtsApiUrl": "/tts-proxy/generate",
+  "thirdPartyTtsVoiceprintListUrl": "/tts-proxy/voices",
+  "thirdPartyTtsVoiceprintCreateUrl": "/tts-proxy/voices",
+  "thirdPartyTtsVoiceprintDeleteUrl": "/tts-proxy/voices",
+  "thirdPartyDewatermarkApiUrl": "/dewatermark-proxy/api/process",
+  "thirdPartyDewatermarkResultBaseUrl": "/dewatermark-proxy",
+  "thirdPartyDewatermarkPreviewBaseUrl": "/dewatermark-preview-proxy"
 }

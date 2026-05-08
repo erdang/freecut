@@ -1,6 +1,7 @@
-import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react'
+﻿import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TimelineItem as TimelineItemType } from '@/types/timeline'
+import type { MediaMetadata } from '@/types/storage'
 import { useShallow } from 'zustand/react/shallow'
 import {
   setMixerLiveGains,
@@ -24,8 +25,19 @@ import { useSourcePlayerStore } from '@/shared/state/source-player'
 import { usePlaybackStore } from '@/shared/state/playback'
 import { useTransitionDragStore } from '@/shared/state/transition-drag'
 import { TRANSITION_CONFIGS } from '@/types/transition'
+import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useMediaLibraryStore } from '@/features/timeline/deps/media-library-store'
+import { useProjectStore } from '@/features/timeline/deps/projects'
 import { mediaTranscriptionService } from '@/features/timeline/deps/media-transcription-service'
+import { resolveMediaUrl } from '@/features/timeline/deps/media-library-resolver'
 import {
   mediaLibraryService as mediaLibraryServiceForSubtitles,
   useEmbeddedSubtitlePickerStore,
@@ -61,6 +73,7 @@ import {
 } from '../../hooks/use-timeline-drag'
 import { useTimelineTrim } from '../../hooks/use-timeline-trim'
 import { useTrackPush } from '../../hooks/use-track-push'
+import { updateItems as updateTimelineItems } from '../../stores/actions/item-actions'
 import { isRateStretchableItem, useRateStretch } from '../../hooks/use-rate-stretch'
 import { useTimelineSlipSlide } from '../../hooks/use-timeline-slip-slide'
 import { DRAG_OPACITY } from '../../constants'
@@ -127,6 +140,12 @@ import { useTimelineItemOverlayStore } from '../../stores/timeline-item-overlay-
 import { useRollHoverStore } from '../../stores/roll-hover-store'
 import { useZoomStore } from '../../stores/zoom-store'
 import { timelineToSourceFrames } from '../../utils/source-calculations'
+import { computeInitialTransform } from '../../utils/transform-init'
+import {
+  thirdPartyDewatermarkService,
+  type DewatermarkCompletionResponse,
+  type DewatermarkTaskResponse,
+} from '../../services/third-party-dewatermark-service'
 import { computeSlideContinuitySourceDelta } from '../../utils/slide-utils'
 import { getTransitionBridgeBounds } from '../../utils/transition-preview-geometry'
 import {
@@ -177,6 +196,13 @@ const SPEED_BADGE_EPSILON = 0.005
 const TRANSITION_DROP_HIT_MIN_WIDTH_PX = 72
 const TRANSITION_DROP_HIT_MAX_WIDTH_PX = 240
 
+interface DewatermarkSelectionRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 function getPixelsPerSecondNow(): number {
   return useZoomStore.getState().pixelsPerSecond
 }
@@ -210,6 +236,86 @@ const AUDIO_ENVELOPE_VIEWBOX_HEIGHT = 100
 const FADE_VIEWBOX_WIDTH = 1000
 const AUDIO_VOLUME_DRAG_ACTIVATION_DELAY_MS = 120
 const AUDIO_VOLUME_DRAG_ACTIVATION_DISTANCE_PX = 4
+
+async function replaceVideoSegmentMedia(
+  itemId: string,
+  media: MediaMetadata,
+): Promise<{ replacedIds: string[] }> {
+  const sourceUrl = await resolveMediaUrl(media.id)
+  if (!sourceUrl) {
+    return { replacedIds: [] }
+  }
+
+  const itemsStore = useItemsStore.getState()
+  const mediaStore = useMediaLibraryStore.getState()
+  const projectStore = useProjectStore.getState()
+  const selected = itemsStore.itemById[itemId]
+  if (!selected || selected.type !== 'video') {
+    return { replacedIds: [] }
+  }
+
+  const timelineFps = Math.max(1, useTimelineStore.getState().fps)
+  const sourceFps =
+    selected.sourceFps && Number.isFinite(selected.sourceFps) && selected.sourceFps > 0
+      ? selected.sourceFps
+      : media.fps && media.fps > 0
+        ? media.fps
+        : timelineFps
+  const clipSpeed =
+    Number.isFinite(selected.speed) && selected.speed && selected.speed > 0 ? selected.speed : 1
+  const selectedSourceStart = Math.max(0, Math.round(selected.sourceStart ?? 0))
+  const sourceSpanFrames =
+    selected.sourceEnd !== undefined && Number.isFinite(selected.sourceEnd)
+      ? Math.max(1, Math.round(selected.sourceEnd - selectedSourceStart))
+      : Math.max(
+          1,
+          Math.round(
+            timelineToSourceFrames(selected.durationInFrames, clipSpeed, timelineFps, sourceFps),
+          ),
+        )
+  const mediaDurationFrames = Math.max(1, Math.round(Math.max(0, media.duration) * sourceFps))
+
+  const originalMedia = selected.mediaId ? mediaStore.mediaById[selected.mediaId] : undefined
+  const canvasWidth = projectStore.currentProject?.metadata.width ?? 1920
+  const canvasHeight = projectStore.currentProject?.metadata.height ?? 1080
+  const sourceWidth =
+    selected.sourceWidth ??
+    (originalMedia && originalMedia.width > 0 ? originalMedia.width : undefined) ??
+    (media.width > 0 ? media.width : undefined) ??
+    canvasWidth
+  const sourceHeight =
+    selected.sourceHeight ??
+    (originalMedia && originalMedia.height > 0 ? originalMedia.height : undefined) ??
+    (media.height > 0 ? media.height : undefined) ??
+    canvasHeight
+  const lockedTransform =
+    selected.transform ??
+    computeInitialTransform(sourceWidth, sourceHeight, canvasWidth, canvasHeight)
+
+  // Dewatermark service receives an already-trimmed upload range, so replacement media
+  // should map from frame 0..span to keep playback seam aligned with this segment.
+  const updates: Record<string, unknown> = {
+    mediaId: media.id,
+    label: media.fileName,
+    src: sourceUrl,
+    sourceStart: 0,
+    sourceEnd: sourceSpanFrames,
+    sourceDuration: Math.max(mediaDurationFrames, sourceSpanFrames),
+    sourceFps,
+    sourceWidth,
+    sourceHeight,
+    transform: lockedTransform,
+    thumbnailUrl: undefined,
+  }
+
+  const batchUpdates: Array<{ id: string; updates: Partial<TimelineItemType> }> = [
+    { id: itemId, updates: updates as Partial<TimelineItemType> },
+  ]
+  const replacedIds: string[] = [itemId]
+
+  updateTimelineItems(batchUpdates)
+  return { replacedIds }
+}
 
 function TrimInfoOverlay({
   anchorRef,
@@ -337,6 +443,41 @@ export const TimelineItem = memo(
     )
     const [captionDialogOpen, setCaptionDialogOpen] = useState(false)
     const [captionDialogError, setCaptionDialogError] = useState<string | null>(null)
+    const [dewatermarkDialogOpen, setDewatermarkDialogOpen] = useState(false)
+    const [dewatermarkFrameLoading, setDewatermarkFrameLoading] = useState(false)
+    const [dewatermarkFrameError, setDewatermarkFrameError] = useState<string | null>(null)
+    const [dewatermarkSelectionRect, setDewatermarkSelectionRect] =
+      useState<DewatermarkSelectionRect | null>(null)
+    const [dewatermarkDraftRect, setDewatermarkDraftRect] =
+      useState<DewatermarkSelectionRect | null>(null)
+    const [dewatermarkFrameInfo, setDewatermarkFrameInfo] = useState<{
+      sourceFrame: number
+      timelineFrame: number
+      sourceFps: number
+      width: number
+      height: number
+    } | null>(null)
+    const [dewatermarkSubmitting, setDewatermarkSubmitting] = useState(false)
+    const [dewatermarkSubmitError, setDewatermarkSubmitError] = useState<string | null>(null)
+    const [dewatermarkTaskResult, setDewatermarkTaskResult] =
+      useState<DewatermarkTaskResponse | null>(null)
+    const [dewatermarkCompletion, setDewatermarkCompletion] =
+      useState<DewatermarkCompletionResponse | null>(null)
+    const [dewatermarkPolling, setDewatermarkPolling] = useState(false)
+    const [dewatermarkPreviewUrl, setDewatermarkPreviewUrl] = useState<string | null>(null)
+    const [dewatermarkPreviewPlaybackUrl, setDewatermarkPreviewPlaybackUrl] = useState<
+      string | null
+    >(null)
+    const [dewatermarkAddingToTimeline, setDewatermarkAddingToTimeline] = useState(false)
+    const [dewatermarkDownloading, setDewatermarkDownloading] = useState(false)
+    const [dewatermarkRefreshToken, setDewatermarkRefreshToken] = useState(0)
+    const dewatermarkTimelineFps = useTimelineStore((s) => s.fps)
+    const dewatermarkCanvasRef = useRef<HTMLCanvasElement | null>(null)
+    const dewatermarkDragRef = useRef<{
+      pointerId: number
+      startX: number
+      startY: number
+    } | null>(null)
     const mediaHasTranscript = transcriptStatus === 'ready'
     const captionStartedRef = useRef(false)
     const captionStopRequestedRef = useRef(false)
@@ -352,6 +493,570 @@ export const TimelineItem = memo(
         })
       }
     }, [captionIsActive, captionDialogError])
+
+    useEffect(() => {
+      if (!dewatermarkDialogOpen) return
+      if (item.type !== 'video' || !item.mediaId) {
+        setDewatermarkFrameError('Current clip is not a video or has no media source.')
+        return
+      }
+      const mediaId = item.mediaId
+
+      let disposed = false
+
+      const run = async () => {
+        setDewatermarkFrameLoading(true)
+        setDewatermarkFrameError(null)
+        setDewatermarkSelectionRect(null)
+        setDewatermarkDraftRect(null)
+        setDewatermarkSubmitError(null)
+        setDewatermarkTaskResult(null)
+        setDewatermarkCompletion(null)
+        setDewatermarkPreviewUrl(null)
+        setDewatermarkPreviewPlaybackUrl(null)
+        setDewatermarkAddingToTimeline(false)
+        setDewatermarkDownloading(false)
+        setDewatermarkPolling(false)
+
+        try {
+          const canvas = await new Promise<HTMLCanvasElement | null>((resolve) => {
+            const tryResolve = (retry: number) => {
+              if (disposed) {
+                resolve(null)
+                return
+              }
+              const found = dewatermarkCanvasRef.current
+              if (found) {
+                resolve(found)
+                return
+              }
+              if (retry >= 8) {
+                resolve(null)
+                return
+              }
+              window.requestAnimationFrame(() => tryResolve(retry + 1))
+            }
+            tryResolve(0)
+          })
+          if (!canvas) {
+            throw new Error('Canvas is not ready.')
+          }
+
+          const preferredUrl = item.type === 'video' ? item.src : ''
+          const resolvedUrl = await resolveMediaUrl(mediaId)
+          const mediaUrl = preferredUrl || resolvedUrl
+          if (!mediaUrl) {
+            throw new Error('无法解析视频源地址。')
+          }
+          if (disposed) return
+
+          const video = document.createElement('video')
+          video.preload = 'auto'
+          video.muted = true
+          video.playsInline = true
+          video.src = mediaUrl
+          video.load()
+
+          await new Promise<void>((resolve, reject) => {
+            if (video.readyState >= 1) {
+              resolve()
+              return
+            }
+            const cleanup = () => {
+              video.removeEventListener('loadedmetadata', onLoaded)
+              video.removeEventListener('error', onError)
+            }
+            const onLoaded = () => {
+              cleanup()
+              resolve()
+            }
+            const onError = () => {
+              cleanup()
+              reject(new Error('Failed to load video metadata.'))
+            }
+            video.addEventListener('loadedmetadata', onLoaded)
+            video.addEventListener('error', onError)
+          })
+          if (disposed) return
+
+          const sourceFps =
+            item.sourceFps && Number.isFinite(item.sourceFps) && item.sourceFps > 0
+              ? item.sourceFps
+              : dewatermarkTimelineFps
+          const sourceStart = item.sourceStart ?? 0
+          const sourceEnd = item.sourceEnd
+          const timelineFrame = usePlaybackStore.getState().currentFrame
+          const clampedTimelineFrame = Math.min(
+            item.from + item.durationInFrames - 1,
+            Math.max(item.from, timelineFrame),
+          )
+          const localTimelineFrames = Math.max(0, clampedTimelineFrame - item.from)
+          const sourceOffset = timelineToSourceFrames(
+            localTimelineFrames,
+            item.speed ?? 1,
+            dewatermarkTimelineFps,
+            sourceFps,
+          )
+          let sourceFrame =
+            item.isReversed === true && sourceEnd !== undefined
+              ? sourceEnd - sourceOffset
+              : sourceStart + sourceOffset
+          if (sourceEnd !== undefined) {
+            sourceFrame = Math.min(sourceEnd - 1, sourceFrame)
+          }
+          sourceFrame = Math.max(0, sourceFrame)
+
+          const requestedTime = sourceFrame / sourceFps
+          const targetTime = Math.min(
+            Math.max(0, requestedTime),
+            Number.isFinite(video.duration) && video.duration > 0
+              ? Math.max(0, video.duration - 1 / Math.max(sourceFps, 1))
+              : requestedTime,
+          )
+
+          await new Promise<void>((resolve, reject) => {
+            let done = false
+            const finish = (cb: () => void) => {
+              if (done) return
+              done = true
+              video.removeEventListener('seeked', onSeeked)
+              video.removeEventListener('loadeddata', onLoadedData)
+              video.removeEventListener('canplay', onCanPlay)
+              video.removeEventListener('error', onSeekError)
+              window.clearTimeout(timeoutId)
+              cb()
+            }
+            const finishIfReady = () => {
+              if (video.readyState >= 2) {
+                finish(resolve)
+              }
+            }
+            const onSeeked = () => finishIfReady()
+            const onLoadedData = () => finishIfReady()
+            const onCanPlay = () => finishIfReady()
+            const onSeekError = () => finish(() => reject(new Error('无法定位到当前帧，请重试。')))
+            video.addEventListener('seeked', onSeeked)
+            video.addEventListener('loadeddata', onLoadedData)
+            video.addEventListener('canplay', onCanPlay)
+            video.addEventListener('error', onSeekError)
+            const timeoutId = window.setTimeout(
+              () => finish(() => reject(new Error('关键帧加载超时，请稍后重试。'))),
+              2500,
+            )
+
+            if (Math.abs(video.currentTime - targetTime) < 0.001) {
+              finishIfReady()
+              return
+            }
+            video.currentTime = targetTime
+          })
+          if (disposed) return
+
+          const width = Math.max(1, Math.round(video.videoWidth))
+          const height = Math.max(1, Math.round(video.videoHeight))
+          canvas.width = width
+          canvas.height = height
+          const ctx = canvas.getContext('2d')
+          if (!ctx) throw new Error('Failed to create canvas context.')
+          ctx.clearRect(0, 0, width, height)
+          ctx.drawImage(video, 0, 0, width, height)
+
+          setDewatermarkFrameInfo({
+            sourceFrame,
+            timelineFrame: clampedTimelineFrame,
+            sourceFps,
+            width,
+            height,
+          })
+        } catch (error) {
+          setDewatermarkFrameError(
+            error instanceof Error ? error.message : 'Failed to load frame preview.',
+          )
+        } finally {
+          if (!disposed) {
+            setDewatermarkFrameLoading(false)
+          }
+        }
+      }
+
+      void run()
+
+      return () => {
+        disposed = true
+        dewatermarkDragRef.current = null
+      }
+    }, [
+      dewatermarkDialogOpen,
+      dewatermarkTimelineFps,
+      item.durationInFrames,
+      item.from,
+      item.isReversed,
+      item.mediaId,
+      item.sourceEnd,
+      item.sourceFps,
+      item.sourceStart,
+      item.speed,
+      item.type,
+      dewatermarkRefreshToken,
+    ])
+
+    const getDewatermarkPoint = useCallback((clientX: number, clientY: number) => {
+      const canvas = dewatermarkCanvasRef.current
+      if (!canvas) return null
+      const rect = canvas.getBoundingClientRect()
+      if (rect.width <= 0 || rect.height <= 0) return null
+      const x = Math.max(0, Math.min(rect.width, clientX - rect.left))
+      const y = Math.max(0, Math.min(rect.height, clientY - rect.top))
+      return { x, y }
+    }, [])
+
+    const handleDewatermarkPointerDown = useCallback(
+      (event: React.PointerEvent<HTMLDivElement>) => {
+        const point = getDewatermarkPoint(event.clientX, event.clientY)
+        if (!point) return
+        event.preventDefault()
+        event.currentTarget.setPointerCapture(event.pointerId)
+        dewatermarkDragRef.current = {
+          pointerId: event.pointerId,
+          startX: point.x,
+          startY: point.y,
+        }
+        setDewatermarkSelectionRect(null)
+        setDewatermarkDraftRect({
+          x: point.x,
+          y: point.y,
+          width: 0,
+          height: 0,
+        })
+      },
+      [getDewatermarkPoint],
+    )
+
+    const handleDewatermarkPointerMove = useCallback(
+      (event: React.PointerEvent<HTMLDivElement>) => {
+        const drag = dewatermarkDragRef.current
+        if (!drag || drag.pointerId !== event.pointerId) return
+        const point = getDewatermarkPoint(event.clientX, event.clientY)
+        if (!point) return
+        const left = Math.min(drag.startX, point.x)
+        const top = Math.min(drag.startY, point.y)
+        const width = Math.abs(point.x - drag.startX)
+        const height = Math.abs(point.y - drag.startY)
+        setDewatermarkDraftRect({ x: left, y: top, width, height })
+      },
+      [getDewatermarkPoint],
+    )
+
+    const handleDewatermarkPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+      const drag = dewatermarkDragRef.current
+      if (!drag || drag.pointerId !== event.pointerId) return
+      dewatermarkDragRef.current = null
+      event.currentTarget.releasePointerCapture(event.pointerId)
+      setDewatermarkDraftRect((draft) => {
+        if (!draft || draft.width < 2 || draft.height < 2) {
+          setDewatermarkSelectionRect(null)
+          return null
+        }
+        setDewatermarkSelectionRect(draft)
+        return null
+      })
+    }, [])
+
+    const activeDewatermarkRect = dewatermarkDraftRect ?? dewatermarkSelectionRect
+    const dewatermarkSelectionPixels = useMemo(() => {
+      const rect = activeDewatermarkRect
+      const canvas = dewatermarkCanvasRef.current
+      if (!rect || !canvas || canvas.clientWidth <= 0 || canvas.clientHeight <= 0) {
+        return null
+      }
+      const scaleX = canvas.width / canvas.clientWidth
+      const scaleY = canvas.height / canvas.clientHeight
+      return {
+        x: Math.round(rect.x * scaleX),
+        y: Math.round(rect.y * scaleY),
+        width: Math.round(rect.width * scaleX),
+        height: Math.round(rect.height * scaleY),
+      }
+    }, [activeDewatermarkRect, dewatermarkDialogOpen])
+
+    const handleSubmitDewatermarkTask = useCallback(async () => {
+      if (item.type !== 'video' || !item.mediaId) {
+        setDewatermarkSubmitError('当前片段不是视频，无法去水印。')
+        return
+      }
+      if (
+        !dewatermarkSelectionPixels ||
+        dewatermarkSelectionPixels.width < 1 ||
+        dewatermarkSelectionPixels.height < 1
+      ) {
+        setDewatermarkSubmitError('请先框选水印区域。')
+        return
+      }
+
+      setDewatermarkSubmitting(true)
+      setDewatermarkSubmitError(null)
+      setDewatermarkTaskResult(null)
+      setDewatermarkCompletion(null)
+      setDewatermarkPreviewUrl(null)
+      setDewatermarkAddingToTimeline(false)
+      setDewatermarkDownloading(false)
+      setDewatermarkPolling(false)
+
+      try {
+        const blob = await mediaLibraryServiceForSubtitles.getMediaFile(item.mediaId)
+        if (!blob) {
+          throw new Error('无法读取视频源文件。')
+        }
+
+        const file =
+          blob instanceof File
+            ? blob
+            : new File([blob], mediaFileName || `${item.label || 'clip'}.mp4`, {
+                type: blob.type || 'video/mp4',
+                lastModified: Date.now(),
+              })
+
+        const sourceFps =
+          item.sourceFps && Number.isFinite(item.sourceFps) && item.sourceFps > 0
+            ? item.sourceFps
+            : dewatermarkTimelineFps
+        const timelineFps = Math.max(1, dewatermarkTimelineFps)
+        const clipSpeed =
+          Number.isFinite(item.speed) && item.speed && item.speed > 0 ? item.speed : 1
+        const sourceStartFrames = Math.max(0, item.sourceStart ?? 0)
+        const sourceStartSeconds = sourceStartFrames / Math.max(1, sourceFps)
+        const timelineDurationSeconds = item.durationInFrames / timelineFps
+        const clipSourceDurationSeconds = Math.max(0, timelineDurationSeconds * clipSpeed)
+        let sourceEndSeconds = sourceStartSeconds + clipSourceDurationSeconds
+
+        if (item.sourceEnd !== undefined && Number.isFinite(item.sourceEnd) && item.sourceEnd > 0) {
+          sourceEndSeconds = Math.min(sourceEndSeconds, item.sourceEnd / Math.max(1, sourceFps))
+        }
+
+        const clipTrimRange =
+          sourceEndSeconds > sourceStartSeconds + 0.001
+            ? {
+                startSeconds: sourceStartSeconds,
+                endSeconds: sourceEndSeconds,
+              }
+            : null
+        const xMin = dewatermarkSelectionPixels.x
+        const xMax = dewatermarkSelectionPixels.x + dewatermarkSelectionPixels.width
+        const yMin = dewatermarkSelectionPixels.y
+        const yMax = dewatermarkSelectionPixels.y + dewatermarkSelectionPixels.height
+
+        const result = await thirdPartyDewatermarkService.createTask({
+          file,
+          sub_area: [yMin, yMax, xMin, xMax],
+          clipTrimRange,
+        })
+        setDewatermarkTaskResult(result)
+      } catch (error) {
+        setDewatermarkSubmitError(error instanceof Error ? error.message : '提交去水印任务失败。')
+      } finally {
+        setDewatermarkSubmitting(false)
+      }
+    }, [
+      dewatermarkSelectionPixels,
+      item.label,
+      item.mediaId,
+      item.sourceEnd,
+      item.sourceFps,
+      item.sourceStart,
+      item.speed,
+      item.durationInFrames,
+      item.type,
+      mediaFileName,
+      dewatermarkTimelineFps,
+    ])
+
+    useEffect(() => {
+      if (!dewatermarkDialogOpen) return
+      const completionUrl =
+        dewatermarkTaskResult?.completion_url ||
+        dewatermarkTaskResult?.status_url ||
+        dewatermarkTaskResult?.progress_url
+      if (!completionUrl) return
+
+      let disposed = false
+      let timeoutId: number | null = null
+
+      const poll = async () => {
+        setDewatermarkPolling(true)
+
+        while (!disposed) {
+          try {
+            const completion = await thirdPartyDewatermarkService.getCompletionStatus({
+              completionUrl,
+            })
+            if (disposed) return
+
+            setDewatermarkCompletion(completion)
+
+            if (completion.is_failed) {
+              setDewatermarkSubmitError(completion.message || '去水印任务失败。')
+              setDewatermarkPolling(false)
+              return
+            }
+
+            if (completion.is_completed) {
+              setDewatermarkPolling(false)
+              if (completion.output_url) {
+                setDewatermarkPreviewUrl(completion.output_url)
+              } else if (completion.download_url) {
+                setDewatermarkPreviewUrl(completion.download_url)
+              }
+              return
+            }
+          } catch (error) {
+            if (disposed) return
+            setDewatermarkSubmitError(
+              error instanceof Error ? error.message : '获取去水印进度失败。',
+            )
+            setDewatermarkPolling(false)
+            return
+          }
+
+          await new Promise<void>((resolve) => {
+            timeoutId = window.setTimeout(resolve, 1500)
+          })
+        }
+
+        setDewatermarkPolling(false)
+      }
+
+      void poll()
+
+      return () => {
+        disposed = true
+        if (timeoutId !== null) {
+          window.clearTimeout(timeoutId)
+        }
+        setDewatermarkPolling(false)
+      }
+    }, [dewatermarkDialogOpen, dewatermarkTaskResult?.completion_url])
+
+    useEffect(() => {
+      let disposed = false
+      let currentObjectUrl: string | null = null
+
+      const loadPreview = async () => {
+        if (!dewatermarkPreviewUrl) {
+          setDewatermarkPreviewPlaybackUrl(null)
+          return
+        }
+
+        try {
+          const response = await fetch(dewatermarkPreviewUrl)
+          if (!response.ok) {
+            throw new Error(`预览视频加载失败 (${response.status})`)
+          }
+          const blob = await response.blob()
+          if (disposed) return
+
+          currentObjectUrl = URL.createObjectURL(blob)
+          setDewatermarkPreviewPlaybackUrl((previous) => {
+            if (previous && previous.startsWith('blob:')) {
+              URL.revokeObjectURL(previous)
+            }
+            return currentObjectUrl
+          })
+        } catch {
+          if (disposed) return
+          setDewatermarkPreviewPlaybackUrl(dewatermarkPreviewUrl)
+        }
+      }
+
+      void loadPreview()
+
+      return () => {
+        disposed = true
+        if (currentObjectUrl) {
+          URL.revokeObjectURL(currentObjectUrl)
+        }
+      }
+    }, [dewatermarkPreviewUrl])
+
+    const dewatermarkFinalVideoUrl =
+      dewatermarkPreviewUrl ||
+      dewatermarkCompletion?.output_url ||
+      dewatermarkCompletion?.download_url ||
+      dewatermarkTaskResult?.download_url ||
+      null
+
+    const handleAddDewatermarkToTimeline = useCallback(async () => {
+      if (!dewatermarkFinalVideoUrl) {
+        setDewatermarkSubmitError('处理结果视频地址不存在。')
+        return
+      }
+
+      setDewatermarkAddingToTimeline(true)
+      setDewatermarkSubmitError(null)
+
+      try {
+        const imported = await useMediaLibraryStore
+          .getState()
+          .importMediaFromUrl(dewatermarkFinalVideoUrl)
+        const media = imported[0]
+        if (!media) {
+          throw new Error('导入处理后视频失败。')
+        }
+
+        const { replacedIds } = await replaceVideoSegmentMedia(item.id, media)
+        useMediaLibraryStore.getState().selectMedia([media.id])
+        useMediaLibraryStore.getState().showNotification({
+          type: replacedIds.length > 0 ? 'success' : 'warning',
+          message:
+            replacedIds.length > 0
+              ? `已替换当前片段为 "${media.fileName}"。`
+              : `已导入 "${media.fileName}"，但未找到可替换的片段。`,
+        })
+      } catch (error) {
+        setDewatermarkSubmitError(error instanceof Error ? error.message : '替换片段失败。')
+      } finally {
+        setDewatermarkAddingToTimeline(false)
+      }
+    }, [dewatermarkFinalVideoUrl, item.id])
+
+    const handleDownloadDewatermarkVideo = useCallback(async () => {
+      if (!dewatermarkFinalVideoUrl) {
+        setDewatermarkSubmitError('处理结果视频地址不存在。')
+        return
+      }
+
+      setDewatermarkDownloading(true)
+      setDewatermarkSubmitError(null)
+
+      try {
+        const response = await fetch(dewatermarkFinalVideoUrl)
+        if (!response.ok) {
+          throw new Error(`下载失败 (${response.status})`)
+        }
+
+        const blob = await response.blob()
+        const contentDisposition = response.headers.get('content-disposition') ?? ''
+        const nameMatch = contentDisposition.match(
+          /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+        )
+        const decodedName = nameMatch?.[1] ? decodeURIComponent(nameMatch[1]) : nameMatch?.[2]
+        const fallbackName = `${(item.label || 'dewatermark').replace(/[^a-zA-Z0-9._-]+/g, '_')}-dewatermarked.mp4`
+        const fileName = (decodedName && decodedName.trim()) || fallbackName
+
+        const objectUrl = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = objectUrl
+        anchor.download = fileName
+        anchor.style.display = 'none'
+        document.body.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0)
+      } catch (error) {
+        setDewatermarkSubmitError(error instanceof Error ? error.message : '下载去水印视频失败。')
+      } finally {
+        setDewatermarkDownloading(false)
+      }
+    }, [dewatermarkFinalVideoUrl, item.label])
     // O(1) index lookup that preserves both explicit captionSource links and
     // legacy generated-caption detection.
     const hasGeneratedCaptions = useItemsStore(
@@ -463,7 +1168,7 @@ export const TimelineItem = memo(
       }
     }, [mediaForItem])
 
-    // Per-cue caption consolidation — only meaningful when this clip has at
+    // Per-cue caption consolidation 鈥?only meaningful when this clip has at
     // least one generated caption text item linked to it.
     const hasConsolidatablePerCueCaptions = useTimelineStore(
       useCallback(
@@ -1139,7 +1844,7 @@ export const TimelineItem = memo(
       }
 
       // Composition wrappers clip their inner segments by sourceEnd, so live
-      // end-trim needs sourceEnd bumped alongside durationInFrames — otherwise
+      // end-trim needs sourceEnd bumped alongside durationInFrames 鈥?otherwise
       // the filmstrip stops at the stale committed value while the clip grows.
       if (isCompositionWrapper && previewEndTrimDelta !== 0 && nextItem.sourceEnd !== undefined) {
         const endSourceFramesDelta = timelineToSourceFrames(
@@ -1267,7 +1972,7 @@ export const TimelineItem = memo(
       ),
     )
     const transitionDropHalfHitWidth = transitionDropHitWidth / 2
-    // Early width check ââ‚¬” used to short-circuit expensive computations below.
+    // Early width check 芒芒鈥毬€?used to short-circuit expensive computations below.
     // The full useCompactClipShell (which also checks interaction/badge state) is computed later for JSX gating.
     const isCompactWidth = visualWidth > 0 && visualWidth <= COMPACT_CLIP_MAX_WIDTH_PX
 
@@ -3255,6 +3960,7 @@ export const TimelineItem = memo(
             return frame > item.from && frame < item.from + item.durationInFrames
           })()}
           onFreezeFrame={handleFreezeFrame}
+          onDewatermark={item.type === 'video' ? () => setDewatermarkDialogOpen(true) : undefined}
           isTextItem={item.type === 'text' && hasSpeakableText}
           onGenerateAudioFromText={handleGenerateAudioFromText}
           onGenerateAudioFromTextByThirdParty={handleGenerateAudioFromTextByThirdParty}
@@ -3595,7 +4301,7 @@ export const TimelineItem = memo(
               />
             )}
 
-            {/* Join indicators ââ‚¬” hide globally below a zoom threshold so they're always consistent between neighbors */}
+            {/* Join indicators 芒芒鈥毬€?hide globally below a zoom threshold so they're always consistent between neighbors */}
             {showJoinIndicators && (
               <JoinIndicators
                 hasJoinableLeft={hasJoinableLeft}
@@ -3810,6 +4516,200 @@ export const TimelineItem = memo(
             }}
           />
         )}
+
+        <Dialog open={dewatermarkDialogOpen} onOpenChange={setDewatermarkDialogOpen}>
+          <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>去水印</DialogTitle>
+              <DialogDescription>
+                已按当前播放帧抓取画面。请在图片上拖拽框选需要去水印的区域。
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
+              <div className="text-xs text-muted-foreground">
+                {dewatermarkFrameInfo
+                  ? `Timeline frame: ${dewatermarkFrameInfo.timelineFrame} | Source frame: ${dewatermarkFrameInfo.sourceFrame} @ ${dewatermarkFrameInfo.sourceFps.toFixed(2)}fps`
+                  : 'Frame info unavailable'}
+              </div>
+
+              <div className="relative mx-auto w-full overflow-hidden rounded-md border border-border bg-black/40">
+                <canvas
+                  ref={dewatermarkCanvasRef}
+                  className="block h-auto max-h-[60vh] w-full select-none"
+                />
+                <div
+                  className="absolute inset-0 cursor-crosshair"
+                  onPointerDown={handleDewatermarkPointerDown}
+                  onPointerMove={handleDewatermarkPointerMove}
+                  onPointerUp={handleDewatermarkPointerUp}
+                />
+                {activeDewatermarkRect && (
+                  <div
+                    className="pointer-events-none absolute border-2 border-orange-500 bg-orange-500/15"
+                    style={{
+                      left: activeDewatermarkRect.x,
+                      top: activeDewatermarkRect.y,
+                      width: activeDewatermarkRect.width,
+                      height: activeDewatermarkRect.height,
+                    }}
+                  />
+                )}
+              </div>
+
+              {dewatermarkSelectionPixels && (
+                <div className="rounded-md border border-border bg-secondary/20 px-3 py-2 text-xs text-muted-foreground">
+                  Selection px: x={dewatermarkSelectionPixels.x}, y=
+                  {dewatermarkSelectionPixels.y}, w=
+                  {dewatermarkSelectionPixels.width}, h=
+                  {dewatermarkSelectionPixels.height}
+                </div>
+              )}
+
+              {dewatermarkFrameLoading && (
+                <div className="text-xs text-muted-foreground">Loading frame preview...</div>
+              )}
+              {dewatermarkFrameError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {dewatermarkFrameError}
+                </div>
+              )}
+
+              {dewatermarkSubmitError && (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  {dewatermarkSubmitError}
+                </div>
+              )}
+
+              {dewatermarkTaskResult && (
+                <div className="space-y-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                  <div>任务已提交：{dewatermarkTaskResult.task_id ?? '-'}</div>
+                  {dewatermarkTaskResult.message && <div>{dewatermarkTaskResult.message}</div>}
+                  {dewatermarkTaskResult.status_url && (
+                    <div className="break-all">status_url: {dewatermarkTaskResult.status_url}</div>
+                  )}
+                  {dewatermarkTaskResult.progress_url && (
+                    <div className="break-all">
+                      progress_url: {dewatermarkTaskResult.progress_url}
+                    </div>
+                  )}
+                  {dewatermarkTaskResult.completion_url && (
+                    <div className="break-all">
+                      completion_url: {dewatermarkTaskResult.completion_url}
+                    </div>
+                  )}
+                  {dewatermarkTaskResult.download_url && (
+                    <div className="break-all">
+                      download_url: {dewatermarkTaskResult.download_url}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {dewatermarkCompletion && (
+                <div className="space-y-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
+                  <div>
+                    状态：
+                    {dewatermarkCompletion.status ?? (dewatermarkPolling ? 'processing' : '-')}
+                  </div>
+                  <div>
+                    进度：
+                    {dewatermarkCompletion.message ?? (dewatermarkPolling ? '处理中...' : '等待中')}
+                  </div>
+                  {dewatermarkPolling && <div>任务处理中，请稍候...</div>}
+                  {dewatermarkCompletion.download_url && (
+                    <div className="break-all">
+                      download_url: {dewatermarkCompletion.download_url}
+                    </div>
+                  )}
+                  {dewatermarkCompletion.output_path && (
+                    <div className="break-all">
+                      output_path: {dewatermarkCompletion.output_path}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {dewatermarkPreviewUrl && (
+                <div className="space-y-2">
+                  <div className="text-xs text-muted-foreground">处理后预览</div>
+                  <video
+                    src={dewatermarkPreviewPlaybackUrl || dewatermarkPreviewUrl}
+                    controls
+                    preload="metadata"
+                    className="w-full rounded-md border border-border bg-black"
+                  />
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="shrink-0">
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  void handleAddDewatermarkToTimeline()
+                }}
+                disabled={
+                  !dewatermarkFinalVideoUrl ||
+                  dewatermarkPolling ||
+                  dewatermarkSubmitting ||
+                  dewatermarkAddingToTimeline ||
+                  dewatermarkDownloading
+                }
+              >
+                {dewatermarkAddingToTimeline ? '替换中...' : '替换当前片段'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  void handleDownloadDewatermarkVideo()
+                }}
+                disabled={
+                  !dewatermarkFinalVideoUrl ||
+                  dewatermarkPolling ||
+                  dewatermarkSubmitting ||
+                  dewatermarkAddingToTimeline ||
+                  dewatermarkDownloading
+                }
+              >
+                {dewatermarkDownloading ? '下载中...' : '下载视频'}
+              </Button>
+              <Button
+                onClick={() => {
+                  void handleSubmitDewatermarkTask()
+                }}
+                disabled={
+                  dewatermarkSubmitting ||
+                  dewatermarkPolling ||
+                  dewatermarkFrameLoading ||
+                  !dewatermarkSelectionPixels ||
+                  dewatermarkSelectionPixels.width < 1 ||
+                  dewatermarkSelectionPixels.height < 1
+                }
+              >
+                {dewatermarkSubmitting ? '提交中...' : '开始去水印'}
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={() => setDewatermarkRefreshToken((value) => value + 1)}
+                disabled={dewatermarkSubmitting || dewatermarkPolling}
+              >
+                刷新当前帧
+              </Button>
+              <Button
+                onClick={() => setDewatermarkDialogOpen(false)}
+                disabled={
+                  dewatermarkSubmitting ||
+                  dewatermarkPolling ||
+                  dewatermarkAddingToTimeline ||
+                  dewatermarkDownloading
+                }
+              >
+                关闭
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </>
     )
   },

@@ -88,6 +88,71 @@ interface GenerateSpeechOptions {
   onProgress?: (stage: string) => void
 }
 
+function normalizeHttpUrl(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (trimmed.startsWith('//')) return `http:${trimmed}`
+  if (trimmed.startsWith('/') || trimmed.startsWith('./') || trimmed.startsWith('../')) {
+    return trimmed
+  }
+  return `http://${trimmed}`
+}
+
+function toAbsoluteBaseUrl(baseEndpoint: string): string {
+  const normalized = normalizeHttpUrl(baseEndpoint)
+  if (!normalized) return ''
+  if (/^https?:\/\//i.test(normalized)) return normalized
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return new URL(normalized, window.location.origin).toString()
+  }
+  return normalized
+}
+
+function resolveProxyRoot(baseEndpoint: string): string | null {
+  const normalized = normalizeHttpUrl(baseEndpoint)
+  if (!normalized) return null
+
+  const knownProxyPrefixes = ['/tts-proxy']
+
+  if (/^https?:\/\//i.test(normalized)) {
+    try {
+      const parsed = new URL(normalized)
+      const matched = knownProxyPrefixes.find((prefix) => parsed.pathname.startsWith(prefix))
+      if (!matched) return null
+      return `${parsed.origin}${matched}`
+    } catch {
+      return null
+    }
+  }
+
+  const matched = knownProxyPrefixes.find((prefix) => normalized.startsWith(prefix))
+  if (!matched) return null
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return `${window.location.origin}${matched}`
+  }
+  return matched
+}
+
+function resolveUrlByBase(url: string, baseEndpoint: string): string {
+  const trimmed = url.trim()
+  if (!trimmed) return trimmed
+  if (/^https?:\/\//i.test(trimmed)) return trimmed
+  if (trimmed.startsWith('/')) {
+    const proxyRoot = resolveProxyRoot(baseEndpoint)
+    if (proxyRoot) {
+      return `${proxyRoot}${trimmed}`
+    }
+  }
+  try {
+    const absoluteBase = toAbsoluteBaseUrl(baseEndpoint)
+    if (!absoluteBase) return trimmed
+    return new URL(trimmed, absoluteBase).toString()
+  } catch {
+    return trimmed
+  }
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
@@ -283,6 +348,12 @@ function createOutputFileName(text: string, voice: ThirdPartyTtsVoice, extension
   return `ai-tts-${makeSafeFileNameSegment(text)}-${voiceSegment}-${timestamp}.${extension}`
 }
 
+function stripFileSuffix(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed) return ''
+  return trimmed.replace(/\.[a-z0-9]{1,8}$/i, '')
+}
+
 function decodeBase64Audio(base64Value: string): Blob {
   const dataUrlMatch = base64Value.match(/^data:(audio\/[^;]+);base64,(.+)$/i)
   const mimeType = dataUrlMatch?.[1] ?? 'audio/wav'
@@ -325,11 +396,19 @@ async function readResponseError(response: Response): Promise<string> {
 }
 
 async function fetchAudioByUrl(url: string, apiUrl: string): Promise<Blob> {
-  const resolvedUrl = new URL(url, apiUrl).toString()
+  const resolvedUrl = resolveUrlByBase(url, apiUrl)
   const response = await fetch(resolvedUrl)
 
   if (!response.ok) {
-    throw new Error(`Failed to download TTS audio (${response.status})`)
+    let detail = ''
+    try {
+      detail = (await response.text()).slice(0, 240).trim()
+    } catch {
+      // ignore
+    }
+    throw new Error(
+      `Failed to download TTS audio (${response.status}) from ${resolvedUrl}${detail ? `: ${detail}` : ''}`,
+    )
   }
 
   return response.blob()
@@ -461,7 +540,9 @@ class ThirdPartyTtsService {
 
   async getReferenceVoiceprintOptions(customUrl?: string): Promise<ThirdPartyTtsVoiceOption[]> {
     const runtimeConfig = await loadRuntimeConfig()
-    const endpoint = (customUrl ?? runtimeConfig.thirdPartyTtsVoiceprintListUrl ?? '').trim()
+    const endpoint = normalizeHttpUrl(
+      customUrl ?? runtimeConfig.thirdPartyTtsVoiceprintListUrl ?? '',
+    )
     if (!endpoint || !this.isSupported()) {
       return []
     }
@@ -516,7 +597,9 @@ class ThirdPartyTtsService {
     }
 
     const runtimeConfig = await loadRuntimeConfig()
-    const endpoint = (apiUrl ?? runtimeConfig.thirdPartyTtsVoiceprintCreateUrl ?? '').trim()
+    const endpoint = normalizeHttpUrl(
+      apiUrl ?? runtimeConfig.thirdPartyTtsVoiceprintCreateUrl ?? '',
+    )
     if (!endpoint) {
       throw new Error(
         'Please configure thirdPartyTtsVoiceprintCreateUrl in public/runtime-config.json',
@@ -575,7 +658,9 @@ class ThirdPartyTtsService {
     }
 
     const runtimeConfig = await loadRuntimeConfig()
-    const endpoint = (apiUrl ?? runtimeConfig.thirdPartyTtsVoiceprintDeleteUrl ?? '').trim()
+    const endpoint = normalizeHttpUrl(
+      apiUrl ?? runtimeConfig.thirdPartyTtsVoiceprintDeleteUrl ?? '',
+    )
     if (!endpoint) {
       throw new Error(
         'Please configure thirdPartyTtsVoiceprintDeleteUrl in public/runtime-config.json',
@@ -644,7 +729,7 @@ class ThirdPartyTtsService {
     }
 
     const runtimeConfig = await loadRuntimeConfig()
-    const endpoint = (apiUrl ?? runtimeConfig.thirdPartyTtsApiUrl ?? '').trim()
+    const endpoint = normalizeHttpUrl(apiUrl ?? runtimeConfig.thirdPartyTtsApiUrl ?? '')
     if (!endpoint) {
       throw new Error('Please configure thirdPartyTtsApiUrl in public/runtime-config.json')
     }
@@ -667,7 +752,7 @@ class ThirdPartyTtsService {
       if (!selectedVoice) {
         throw new Error('Please select a reference voiceprint')
       }
-      formData.append('prompt_name', selectedVoice)
+      formData.append('prompt_name', stripFileSuffix(selectedVoice) || selectedVoice)
     } else {
       if (!voiceprintFile) {
         throw new Error('Please upload a voiceprint file')

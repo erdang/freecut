@@ -113,6 +113,31 @@ export function updateItem(id: string, updates: Partial<TimelineItem>): void {
   )
 }
 
+export function updateItems(updates: Array<{ id: string; updates: Partial<TimelineItem> }>): void {
+  if (updates.length === 0) return
+
+  execute(
+    'UPDATE_ITEMS',
+    () => {
+      useItemsStore.getState()._updateItems(updates)
+
+      const changedItemIds = updates.map((entry) => entry.id)
+      const positionChanged = updates.some(
+        (entry) =>
+          'from' in entry.updates ||
+          'durationInFrames' in entry.updates ||
+          'trackId' in entry.updates,
+      )
+      if (positionChanged) {
+        applyTransitionRepairs(changedItemIds)
+      }
+
+      useTimelineSettingsStore.getState().markDirty()
+    },
+    { count: updates.length },
+  )
+}
+
 export function unlinkItems(ids: string[]): void {
   const items = useItemsStore.getState().items
   const unlinkIds = new Set<string>()
