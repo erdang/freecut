@@ -148,7 +148,7 @@ function TrackGapContextMenu({
         />
       </ContextMenuTrigger>
       <ContextMenuContent>
-        <ContextMenuItem onClick={onCloseGap}>Ripple Delete</ContextMenuItem>
+        <ContextMenuItem onClick={onCloseGap}>波纹删除</ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
   )
@@ -506,7 +506,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         {
           left: frameToPixelsNow(finalPosition),
           width: frameToPixelsNow(placeholderDuration),
-          label: itemCount > 1 ? `${itemCount} files` : 'Drop media',
+          label: itemCount > 1 ? `${itemCount} 个文件` : '拖放媒体',
           type: 'external-file',
           targetTrackId: track.id,
         },
@@ -1164,7 +1164,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         if (isTimelineTemplateDragData(data)) {
           const templateItem = buildTimelineTemplateItem(data, dropFrame)
           if (!templateItem) {
-            toast.error('Unable to add dropped timeline item')
+            toast.error('无法添加拖入的时间线项目')
             return
           }
 
@@ -1185,9 +1185,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
           addItems,
           currentTracks: useTimelineStore.getState().tracks,
           dropResult,
-          emptyMessage: 'Unable to add dropped media items',
+          emptyMessage: '无法添加拖入的媒体资源',
           notify: toast,
-          partialFailureLabel: 'dropped media items',
+          partialFailureLabel: '拖入的媒体资源',
           requestedCount: entries.length,
           setTracks: useTimelineStore.getState().setTracks,
         })
@@ -1217,9 +1217,9 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
       addItems,
       currentTracks: useTimelineStore.getState().tracks,
       dropResult,
-      emptyMessage: 'Unable to add dropped files to the timeline',
+      emptyMessage: '无法将拖入文件添加到时间线',
       notify: toast,
-      partialFailureLabel: 'dropped files',
+      partialFailureLabel: '拖入的文件',
       requestedCount: droppedEntries.length,
       setTracks: useTimelineStore.getState().setTracks,
     })
@@ -1269,7 +1269,7 @@ export const TimelineTrack = memo(function TimelineTrack({ track }: TimelineTrac
         {/* Locked track overlay indicator */}
         {isTrackLocked && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            <div className="text-xs text-muted-foreground/50 font-mono">LOCKED</div>
+            <div className="text-xs text-muted-foreground/50 font-mono">已锁定</div>
           </div>
         )}
       </div>

@@ -25,9 +25,7 @@ import {
   Upload,
   Sparkles,
   FileText,
-  ScanSearch,
 } from 'lucide-react'
-import { SceneBrowserPanel, useSceneBrowserStore } from '../deps/scene-browser'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaLibrary')
@@ -109,7 +107,7 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className="inline-flex items-center justify-center h-5 w-5 rounded hover:bg-muted transition-colors"
-      title="Copy to clipboard"
+      title="复制到剪贴板"
     >
       {copied ? (
         <Check className="h-3 w-3 text-green-500" />
@@ -229,9 +227,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const setSortBy = useMediaLibraryStore((s) => s.setSortBy)
   const viewMode = useMediaLibraryStore((s) => s.viewMode)
   const setViewMode = useMediaLibraryStore((s) => s.setViewMode)
-  const sceneBrowserOpen = useSceneBrowserStore((s) => s.open)
-  const openSceneBrowser = useSceneBrowserStore((s) => s.openBrowser)
-  const closeSceneBrowser = useSceneBrowserStore((s) => s.closeBrowser)
   const mediaItemSize = useMediaLibraryStore((s) => s.mediaItemSize)
   const setMediaItemSize = useMediaLibraryStore((s) => s.setMediaItemSize)
   const selectedMediaIds = useMediaLibraryStore((s) => s.selectedMediaIds)
@@ -274,11 +269,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       }
     }
     if (videos.length > 0)
-      groups.push({ key: 'video', label: 'Videos', icon: 'video', items: videos })
-    if (audio.length > 0) groups.push({ key: 'audio', label: 'Audio', icon: 'audio', items: audio })
+      groups.push({ key: 'video', label: '视频', icon: 'video', items: videos })
+    if (audio.length > 0) groups.push({ key: 'audio', label: '音频', icon: 'audio', items: audio })
     if (images.length > 0)
-      groups.push({ key: 'image', label: 'Images', icon: 'image', items: images })
-    if (gifs.length > 0) groups.push({ key: 'gif', label: 'GIFs', icon: 'gif', items: gifs })
+      groups.push({ key: 'image', label: '图片', icon: 'image', items: images })
+    if (gifs.length > 0) groups.push({ key: 'gif', label: 'GIF 动图', icon: 'gif', items: gifs })
     return groups
   }, [filteredMediaItems])
   const compositions = useCompositionsStore((s) => s.compositions)
@@ -576,7 +571,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       if (!supported) {
         showNotification({
           type: 'warning',
-          message: 'Drag-drop not supported in this browser. Use Chrome or Edge.',
+          message: '当前浏览器不支持拖放导入，请使用 Chrome 或 Edge。',
         })
         return
       }
@@ -584,7 +579,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       if (errors.length > 0) {
         showNotification({
           type: 'error',
-          message: `Some files were rejected: ${errors.join(', ')}`,
+          message: `以下文件已被拒绝：${errors.join(', ')}`,
         })
       }
       if (entries.length > 0) {
@@ -806,7 +801,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
         <TooltipProvider>
           <div className="flex flex-nowrap items-center gap-2 text-xs min-w-0 overflow-hidden">
             {/* Import action */}
-            <HeaderActionTooltip label="Import media files">
+            <HeaderActionTooltip label="导入媒体文件">
               <button
                 onClick={handleImport}
                 disabled={!currentProjectId}
@@ -817,11 +812,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   transition-colors duration-150"
               >
                 <FolderOpen className="w-3.5 h-3.5" />
-                <span className="hidden @[260px]:inline">Import</span>
+                <span className="hidden @[260px]:inline">导入</span>
               </button>
             </HeaderActionTooltip>
 
-            <HeaderActionTooltip label="Import media from URL">
+            <HeaderActionTooltip label="通过 URL 导入媒体">
               <button
                 onClick={() => setShowImportUrlDialog(true)}
                 disabled={!currentProjectId}
@@ -832,14 +827,14 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   transition-colors duration-150"
               >
                 <Link className="w-3.5 h-3.5" />
-                <span className="hidden @[360px]:inline">URL</span>
+                <span className="hidden @[360px]:inline">链接</span>
               </button>
             </HeaderActionTooltip>
 
             {/* Missing media indicator */}
             {currentProjectBrokenMediaIds.length > 0 && (
               <HeaderActionTooltip
-                label={`View ${currentProjectBrokenMediaIds.length} missing media file${currentProjectBrokenMediaIds.length === 1 ? '' : 's'}`}
+                label={`查看 ${currentProjectBrokenMediaIds.length} 个丢失媒体文件`}
               >
                 <button
                   onClick={openMissingMediaDialog}
@@ -850,7 +845,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 >
                   <Link2Off className="w-3.5 h-3.5" />
                   <span className="hidden @[340px]:inline">
-                    {currentProjectBrokenMediaIds.length} Missing
+                    缺失 {currentProjectBrokenMediaIds.length}
                   </span>
                 </button>
               </HeaderActionTooltip>
@@ -864,7 +859,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 {/* Selection badge */}
                 <div className="flex items-center gap-1 h-7 pl-2 pr-1 rounded-md bg-accent/50 border border-border min-w-0 max-w-full">
                   <span className="tabular-nums shrink-0">{selectedAssetCount}</span>
-                  <span className="text-muted-foreground hidden @[360px]:inline">selected</span>
+                  <span className="text-muted-foreground hidden @[360px]:inline">已选</span>
                   <HeaderActionTooltip label="Clear selection">
                     <button
                       onClick={clearSelection}
@@ -878,7 +873,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 {/* Generate proxies for selection */}
                 {selectedProxyEligibleCount > 0 && (
                   <HeaderActionTooltip
-                    label={`Generate proxies for ${selectedProxyEligibleCount} selected item${selectedProxyEligibleCount === 1 ? '' : 's'}`}
+                    label={`为 ${selectedProxyEligibleCount} 个已选项目生成代理`}
                   >
                     <button
                       onClick={handleGenerateSelectedProxies}
@@ -889,14 +884,14 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                     >
                       <Zap className="w-3.5 h-3.5" />
                       <span className="hidden @[440px]:inline">
-                        Proxy ({selectedProxyEligibleCount})
+                        代理 ({selectedProxyEligibleCount})
                       </span>
                     </button>
                   </HeaderActionTooltip>
                 )}
 
                 {/* Delete action */}
-                <HeaderActionTooltip label="Delete selected assets">
+                <HeaderActionTooltip label="删除已选资源">
                   <button
                     onClick={handleDeleteSelected}
                     className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0
@@ -905,7 +900,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                       transition-colors duration-150"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
-                    <span className="hidden @[400px]:inline">Delete</span>
+                    <span className="hidden @[400px]:inline">删除</span>
                   </button>
                 </HeaderActionTooltip>
               </>
@@ -925,11 +920,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       >
         <DialogContent className="sm:max-w-[560px]">
           <DialogHeader>
-            <DialogTitle>Import From URL</DialogTitle>
+            <DialogTitle>从链接导入</DialogTitle>
             <DialogDescription>
-              Paste a direct link to a media file. MP4, WebM, MOV, MP3, WAV, JPG, PNG, GIF, WebP,
-              and SVG links work when the site allows browser downloads. YouTube and similar page
-              URLs usually will not.
+              粘贴媒体文件直链。若目标站点允许浏览器下载，通常支持 MP4、WebM、MOV、MP3、WAV、
+              JPG、PNG、GIF、WebP、SVG。YouTube
+              等页面链接通常不适用。通过链接导入的资源通常不会自动生成代理。
             </DialogDescription>
           </DialogHeader>
 
@@ -945,7 +940,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 disabled={isImportUrlSubmitting}
               />
               <p className="text-xs text-muted-foreground">
-                The file is downloaded into the current project and stored locally for editing.
+                文件会下载到当前项目，并在本地存储用于编辑。
               </p>
             </div>
 
@@ -961,7 +956,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 }}
                 disabled={isImportUrlSubmitting}
               >
-                Cancel
+                取消
               </Button>
               <Button
                 type="submit"
@@ -970,7 +965,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 }
               >
                 {isImportUrlSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                Import
+                导入
               </Button>
             </DialogFooter>
           </form>
@@ -1059,203 +1054,158 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           the media-library grid, so they're hidden when the Scene browser is
           mounted (it has its own search). */}
       <div className="px-4 pt-3 pb-2 space-y-2 flex-shrink-0">
-        {/* Search + Media/Scenes toggle group */}
+        {/* Search */}
         <div className="@container flex items-center gap-2">
-          {!sceneBrowserOpen && (
-            <div className="relative group flex-1 min-w-0">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-              <Input
-                placeholder="Search media..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              )}
-            </div>
-          )}
-          {sceneBrowserOpen && <div className="flex-1 min-w-0" aria-hidden />}
-          <div
-            role="group"
-            aria-label="Library view"
-            className="inline-flex items-center h-7 rounded-md border border-border bg-secondary p-0.5 shrink-0"
-          >
-            <HeaderActionTooltip label="Show media library">
+          <div className="relative group flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+            <Input
+              placeholder="搜索媒体..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-8 h-7 bg-secondary border border-border focus:border-primary text-foreground placeholder:text-muted-foreground text-xs"
+            />
+            {searchQuery && (
               <button
-                onClick={() => {
-                  if (sceneBrowserOpen) closeSceneBrowser()
-                }}
-                aria-pressed={!sceneBrowserOpen}
-                className={cn(
-                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
-                  !sceneBrowserOpen
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
               >
-                <Film className="w-3 h-3" />
-                <span className="hidden @[280px]:inline">Media</span>
+                <X className="w-3 h-3" />
               </button>
-            </HeaderActionTooltip>
-            <HeaderActionTooltip label="Search scenes (Ctrl+Shift+F)">
-              <button
-                onClick={() => {
-                  if (!sceneBrowserOpen) openSceneBrowser()
-                }}
-                aria-pressed={sceneBrowserOpen}
-                className={cn(
-                  'flex items-center gap-1 h-6 px-1.5 @[280px]:px-2 rounded-[3px] text-[11px] transition-colors duration-150',
-                  sceneBrowserOpen
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <ScanSearch className="w-3 h-3" />
-                <span className="hidden @[280px]:inline">Scenes</span>
-              </button>
-            </HeaderActionTooltip>
+            )}
           </div>
         </div>
 
-        {!sceneBrowserOpen && (
-          <>
-            {/* Filters and sort */}
-            <div className="@container flex items-center gap-1.5 min-w-0">
-              {/* Filter by type */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className={`h-6 bg-secondary border text-[10px] px-2 flex-shrink-0 ${
-                      filterByType
-                        ? 'border-primary text-primary hover:bg-primary/10'
-                        : 'border-border text-muted-foreground hover:border-primary/50 hover:text-primary'
-                    }`}
-                  >
-                    <Filter className="w-2.5 h-2.5" />
-                    <span className="hidden @[280px]:inline ml-1">
-                      {filterByType ? filterByType.toUpperCase() : 'ALL'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="bg-popover border border-border">
-                  <DropdownMenuItem
-                    onClick={() => setFilterByType(null)}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    All Types
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-border" />
-                  <DropdownMenuItem
-                    onClick={() => setFilterByType('video')}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <Video className="w-3 h-3 mr-2" />
-                    Video
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setFilterByType('audio')}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <FileAudio className="w-3 h-3 mr-2" />
-                    Audio
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setFilterByType('image')}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    <ImageIcon className="w-3 h-3 mr-2" />
-                    Image
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+        <>
+          {/* Filters and sort */}
+          <div className="@container flex items-center gap-1.5 min-w-0">
+            {/* Filter by type */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`h-6 bg-secondary border text-[10px] px-2 flex-shrink-0 ${
+                    filterByType
+                      ? 'border-primary text-primary hover:bg-primary/10'
+                      : 'border-border text-muted-foreground hover:border-primary/50 hover:text-primary'
+                  }`}
+                >
+                  <Filter className="w-2.5 h-2.5" />
+                  <span className="hidden @[280px]:inline ml-1">
+                    {filterByType ? filterByType.toUpperCase() : '全部'}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="bg-popover border border-border">
+                <DropdownMenuItem
+                  onClick={() => setFilterByType(null)}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  全部类型
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-border" />
+                <DropdownMenuItem
+                  onClick={() => setFilterByType('video')}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  <Video className="w-3 h-3 mr-2" />
+                  视频
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setFilterByType('audio')}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  <FileAudio className="w-3 h-3 mr-2" />
+                  音频
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setFilterByType('image')}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  <ImageIcon className="w-3 h-3 mr-2" />
+                  图片
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-              {/* Sort by */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 bg-secondary border border-border text-muted-foreground hover:border-primary/50 hover:text-primary text-[10px] px-2 flex-shrink-0"
-                  >
-                    <SortAsc className="w-2.5 h-2.5" />
-                    <span className="hidden @[280px]:inline ml-1">
-                      {sortBy === 'name' ? 'NAME' : sortBy === 'date' ? 'DATE' : 'SIZE'}
-                    </span>
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="bg-popover border border-border">
-                  <DropdownMenuItem
-                    onClick={() => setSortBy('date')}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Date (Newest)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setSortBy('name')}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Name (A-Z)
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setSortBy('size')}
-                    className="text-xs hover:bg-accent hover:text-accent-foreground"
-                  >
-                    Size (Largest)
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+            {/* Sort by */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 bg-secondary border border-border text-muted-foreground hover:border-primary/50 hover:text-primary text-[10px] px-2 flex-shrink-0"
+                >
+                  <SortAsc className="w-2.5 h-2.5" />
+                  <span className="hidden @[280px]:inline ml-1">
+                    {sortBy === 'name' ? 'NAME' : sortBy === 'date' ? 'DATE' : 'SIZE'}
+                  </span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="bg-popover border border-border">
+                <DropdownMenuItem
+                  onClick={() => setSortBy('date')}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  日期（最新）
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSortBy('name')}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  名称（A-Z）
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setSortBy('size')}
+                  className="text-xs hover:bg-accent hover:text-accent-foreground"
+                >
+                  大小（从大到小）
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-              {/* View mode toggle + item size */}
-              <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-                {viewMode === 'grid' && (
-                  <Slider
-                    min={1}
-                    max={5}
-                    step={1}
-                    value={[mediaItemSize]}
-                    onValueChange={([v]) => setMediaItemSize(v ?? 3)}
-                    className="flex-1 min-w-6 max-w-24"
-                    aria-label="Grid item size"
-                  />
-                )}
-                <div className="flex items-center border border-border rounded bg-secondary flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setViewMode('grid')}
-                    className={`h-6 w-6 p-0 rounded-none rounded-l ${
-                      viewMode === 'grid'
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <Grid3x3 className="w-3 h-3" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className={`h-6 w-6 p-0 rounded-none rounded-r ${
-                      viewMode === 'list'
-                        ? 'bg-primary/10 text-primary'
-                        : 'text-muted-foreground hover:text-foreground'
-                    }`}
-                  >
-                    <List className="w-3 h-3" />
-                  </Button>
-                </div>
+            {/* View mode toggle + item size */}
+            <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+              {viewMode === 'grid' && (
+                <Slider
+                  min={1}
+                  max={5}
+                  step={1}
+                  value={[mediaItemSize]}
+                  onValueChange={([v]) => setMediaItemSize(v ?? 3)}
+                  className="flex-1 min-w-6 max-w-24"
+                  aria-label="网格项大小"
+                />
+              )}
+              <div className="flex items-center border border-border rounded bg-secondary flex-shrink-0">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewMode('grid')}
+                  className={`h-6 w-6 p-0 rounded-none rounded-l ${
+                    viewMode === 'grid'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <Grid3x3 className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setViewMode('list')}
+                  className={`h-6 w-6 p-0 rounded-none rounded-r ${
+                    viewMode === 'list'
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  <List className="w-3 h-3" />
+                </Button>
               </div>
             </div>
-          </>
-        )}
+          </div>
+        </>
       </div>
 
       {/* Composition navigation banner — shown when inside a sub-composition */}
@@ -1266,7 +1216,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             className="flex items-center gap-1.5 text-xs text-violet-300 hover:text-violet-100 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Back</span>
+            <span>返回</span>
           </button>
           <span className="text-xs text-violet-400/60">/</span>
           <span className="text-xs text-violet-300 font-medium truncate">{activeCompLabel}</span>
@@ -1275,13 +1225,9 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
       {/* Scrollable content: wrapper provides relative context for the drag overlay */}
       <div className="flex-1 relative min-h-0">
-        {sceneBrowserOpen && <SceneBrowserPanel className="absolute inset-0 bg-background" />}
         <div
           ref={scrollContainerRef}
-          className={cn(
-            'relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]',
-            sceneBrowserOpen && 'hidden',
-          )}
+          className="relative h-full overflow-y-auto px-4 pb-4 [scrollbar-gutter:stable]"
           onClick={handleScrollContentClick}
           onDragEnter={handleDragEnter}
           onDragOver={handleDragOver}
@@ -1333,7 +1279,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
               <div className="w-16 h-16 rounded-full flex items-center justify-center bg-primary/20 border-2 border-primary">
                 <Upload className="w-7 h-7 text-primary animate-bounce" />
               </div>
-              <p className="text-base font-bold tracking-wide text-primary">DROP FILES HERE</p>
+              <p className="text-base font-bold tracking-wide text-primary">将文件拖放到这里</p>
               <div className="flex flex-wrap justify-center gap-2 mt-2">
                 <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
                   MP4
@@ -1371,10 +1317,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
           icon={<Loader2 className="w-3.5 h-3.5 text-purple-400 animate-spin flex-shrink-0" />}
           label={
             analysisProgress.total > 1
-              ? `Analyzing ${Math.min(analysisProgress.completed + 1, analysisProgress.total)} of ${analysisProgress.total} with AI`
-              : 'Analyzing 1 item with AI'
+              ? `正在使用 AI 分析 ${Math.min(analysisProgress.completed + 1, analysisProgress.total)}/${analysisProgress.total}`
+              : '正在使用 AI 分析 1 个项目'
           }
-          progressAriaLabel="AI analysis progress"
+          progressAriaLabel="AI 分析进度"
           progressPercent={analysisPercent}
           meta={
             <>
@@ -1385,10 +1331,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                   onClick={() => mediaAnalysisService.requestCancel()}
                   className="text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Cancel
+                  取消
                 </button>
               ) : (
-                <span className="text-muted-foreground/80">Cancelling…</span>
+                <span className="text-muted-foreground/80">正在取消…</span>
               )}
             </>
           }
@@ -1401,8 +1347,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {transcribingCount > 0 && (
         <BackgroundTaskProgress
           icon={<FileText className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />}
-          label={`Generating ${transcribingCount} ${transcribingCount === 1 ? 'transcript' : 'transcripts'} in background`}
-          progressAriaLabel="Transcript generation progress"
+          label={`后台正在生成 ${transcribingCount} ${transcribingCount === 1 ? '条转录' : '条转录'}`}
+          progressAriaLabel="转录生成进度"
           progressPercent={transcribingAvgProgress * 100}
           meta={
             <>
@@ -1415,7 +1361,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 onClick={handleCancelAllTranscriptions}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel all
+                全部取消
               </button>
             </>
           }
@@ -1427,8 +1373,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       {generatingCount > 0 && (
         <BackgroundTaskProgress
           icon={<Loader2 className="w-3.5 h-3.5 text-green-500 animate-spin flex-shrink-0" />}
-          label={`Generating ${generatingCount} ${generatingCount === 1 ? 'proxy' : 'proxies'} in background`}
-          progressAriaLabel="Proxy generation progress"
+          label={`后台正在生成 ${generatingCount} ${generatingCount === 1 ? '个代理' : '个代理'}`}
+          progressAriaLabel="代理生成进度"
           progressPercent={generatingAvgProgress * 100}
           meta={
             <>
@@ -1438,7 +1384,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 onClick={handleCancelAllProxies}
                 className="text-muted-foreground hover:text-foreground transition-colors"
               >
-                Cancel all
+                全部取消
               </button>
             </>
           }
@@ -1458,24 +1404,22 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete selected assets?</AlertDialogTitle>
+            <AlertDialogTitle>删除已选资源？</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
-                  Are you sure you want to delete{' '}
-                  {deleteSummary ||
-                    `${deleteAssetCount} selected asset${deleteAssetCount === 1 ? '' : 's'}`}
-                  ? This action cannot be undone.
+                  确定要删除
+                  {deleteSummary || `${deleteAssetCount} 个已选资源`}
+                  ？此操作无法撤销。
                 </p>
                 {affectedAssetInstanceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">Linked instances will be removed</p>
+                      <p className="font-medium">已关联实例将被移除</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        {affectedAssetInstanceCount} clip{affectedAssetInstanceCount > 1 ? 's' : ''}{' '}
-                        across the timeline and nested compound clips reference these assets and
-                        will also be deleted.
+                        时间线与嵌套复合片段中有 {affectedAssetInstanceCount}{' '}
+                        个片段引用了这些资源，也会一并删除。
                       </p>
                     </div>
                   </div>
@@ -1484,16 +1428,14 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              Delete{' '}
-              {deleteSummary || `${deleteAssetCount} asset${deleteAssetCount === 1 ? '' : 's'}`}
-              {affectedAssetInstanceCount > 0
-                ? ` & ${affectedAssetInstanceCount} clip${affectedAssetInstanceCount > 1 ? 's' : ''}`
-                : ''}
+              删除
+              {deleteSummary || `${deleteAssetCount} 个资源`}
+              {affectedAssetInstanceCount > 0 ? ` + ${affectedAssetInstanceCount} 个片段` : ''}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

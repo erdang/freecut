@@ -15,9 +15,9 @@ const GROUP_CONFIG: Record<
   ChangelogGroup,
   { label: string; icon: ComponentType<{ className?: string }> }
 > = {
-  added: { label: 'Added', icon: Sparkles },
-  fixed: { label: 'Fixed', icon: Bug },
-  improved: { label: 'Improved', icon: Zap },
+  added: { label: '新增', icon: Sparkles },
+  fixed: { label: '修复', icon: Bug },
+  improved: { label: '优化', icon: Zap },
 }
 
 const GROUP_ORDER: ChangelogGroup[] = ['added', 'fixed', 'improved']
@@ -27,7 +27,7 @@ function capitalize(s: string): string {
 }
 
 function formatEntryLabel(entry: ChangelogEntry): string {
-  return entry.version === 'current' ? 'This Week' : entry.version
+  return entry.version === 'current' ? '本周更新' : entry.version
 }
 
 function formatWeekRange(mondayIso: string): string {
@@ -42,8 +42,8 @@ function formatWeekRange(mondayIso: string): string {
 
 function formatEntrySubtitle(entry: ChangelogEntry): string {
   if (entry.subtitle) return entry.subtitle
-  if (entry.version === 'current') return `As of ${formatSingleDate(entry.date)}`
-  return `Week of ${formatWeekRange(entry.date)}`
+  if (entry.version === 'current') return `截至 ${formatSingleDate(entry.date)}`
+  return `更新周：${formatWeekRange(entry.date)}`
 }
 
 function formatSingleDate(iso: string): string {
@@ -81,7 +81,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         <DialogHeader className="px-6 pt-5 pb-3">
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            What's New
+            新功能
           </DialogTitle>
         </DialogHeader>
         <Separator />
@@ -106,7 +106,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
                           <span className="font-medium truncate">{formatEntryLabel(entry)}</span>
                           {isCurrent && (
                             <span className="text-[10px] uppercase tracking-wide text-primary bg-primary/10 px-1.5 py-0.5 rounded shrink-0">
-                              New
+                              新
                             </span>
                           )}
                         </div>
@@ -126,14 +126,14 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         </div>
         <Separator />
         <div className="px-6 py-3 flex justify-between items-center text-xs text-muted-foreground">
-          <span>{latestReleaseVersion ? `Released: v${latestReleaseVersion}` : 'Pre-release'}</span>
+          <span>{latestReleaseVersion ? `发布版本：v${latestReleaseVersion}` : '预发布'}</span>
           <a
             href={`${GITHUB_REPO_URL}/blob/main/CHANGELOG.md`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 hover:text-foreground hover:underline"
           >
-            Full changelog
+            完整更新日志
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>

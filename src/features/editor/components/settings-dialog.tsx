@@ -68,10 +68,10 @@ import { EDITOR_DENSITY_OPTIONS } from '@/app/editor-layout'
 const log = createLogger('SettingsDialog')
 
 const SETTINGS_SECTIONS = [
-  { id: 'general', label: 'General', icon: Settings2 },
-  { id: 'timeline', label: 'Timeline', icon: Rows3 },
+  { id: 'general', label: '通用', icon: Settings2 },
+  { id: 'timeline', label: '时间线', icon: Rows3 },
   { id: 'ai', label: 'AI', icon: Sparkles },
-  { id: 'storage', label: 'Storage', icon: HardDrive },
+  { id: 'storage', label: '存储', icon: HardDrive },
 ] as const
 
 const ESTIMATE_REFERENCE_DURATION_SEC = 60
@@ -80,10 +80,10 @@ const ESTIMATE_REFERENCE_FPS = 30
 function formatCaptionEstimate(unit: CaptioningIntervalUnit, value: number): string {
   const intervalSec = resolveCaptioningIntervalSec(unit, value, ESTIMATE_REFERENCE_FPS)
   if (intervalSec <= 0) {
-    return 'Enter an interval above zero.'
+    return '请输入大于 0 的间隔值。'
   }
   const sceneCount = Math.max(1, Math.round(ESTIMATE_REFERENCE_DURATION_SEC / intervalSec))
-  return `~${sceneCount} ${sceneCount === 1 ? 'scene' : 'scenes'} per 1-min clip at ${ESTIMATE_REFERENCE_FPS}fps`
+  return `按 ${ESTIMATE_REFERENCE_FPS}fps 计算，1 分钟片段约 ${sceneCount} 个场景`
 }
 
 type SettingsSectionId = (typeof SETTINGS_SECTIONS)[number]['id']
@@ -106,13 +106,13 @@ interface ActionFeedback {
 }
 
 function formatCount(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? '' : 's'}`
+  return `${count} 个${noun}`
 }
 
 function formatFailedItems(items: string[]): string {
   if (items.length === 0) return ''
   if (items.length <= 2) return items.join(', ')
-  return `${items.slice(0, 2).join(', ')}, +${items.length - 2} more`
+  return `${items.slice(0, 2).join(', ')} 等 ${items.length} 项`
 }
 
 function createBatchResult(total: number, failedItems: string[]): BatchActionResult {
@@ -128,14 +128,14 @@ function getBatchOutcomeFeedback(actionLabel: string, result: BatchActionResult)
   if (result.total === 0) {
     return {
       tone: 'success',
-      message: `No project media to ${actionLabel.toLowerCase()}.`,
+      message: `当前项目没有可执行“${actionLabel}”的媒体。`,
     }
   }
 
   if (result.failed === 0) {
     return {
       tone: 'success',
-      message: `${actionLabel} completed for ${formatCount(result.succeeded, 'item')}.`,
+      message: `${actionLabel}已完成：${formatCount(result.succeeded, '项')}。`,
     }
   }
 
@@ -144,13 +144,13 @@ function getBatchOutcomeFeedback(actionLabel: string, result: BatchActionResult)
   if (result.succeeded === 0) {
     return {
       tone: 'error',
-      message: `Couldn't ${actionLabel.toLowerCase()} ${formatCount(result.failed, 'item')}${failedLabel ? `: ${failedLabel}` : '.'}`,
+      message: `未能完成“${actionLabel}”：${formatCount(result.failed, '项')}${failedLabel ? `（${failedLabel}）` : ''}。`,
     }
   }
 
   return {
     tone: 'error',
-    message: `${actionLabel} completed for ${result.succeeded}/${result.total} items. Needs attention: ${failedLabel}.`,
+    message: `${actionLabel}部分完成：${result.succeeded}/${result.total} 项，需处理：${failedLabel}。`,
   }
 }
 
@@ -162,14 +162,14 @@ function showBatchOutcomeToast(
 ): void {
   if (result.total === 0) {
     toast.success(successTitle, {
-      description: 'No project media needed updating.',
+      description: '当前项目没有需要处理的媒体。',
     })
     return
   }
 
   if (result.failed === 0) {
     toast.success(successTitle, {
-      description: `${formatCount(result.succeeded, 'item')} updated.`,
+      description: `已处理 ${formatCount(result.succeeded, '项')}。`,
     })
     return
   }
@@ -177,7 +177,7 @@ function showBatchOutcomeToast(
   const description =
     result.succeeded === 0
       ? formatFailedItems(result.failedItems)
-      : `${formatCount(result.succeeded, 'item')} updated. Failed: ${formatFailedItems(result.failedItems)}`
+      : `已处理 ${formatCount(result.succeeded, '项')}；失败：${formatFailedItems(result.failedItems)}`
 
   toast.error(result.succeeded === 0 ? failureTitle : partialTitle, {
     description,
@@ -347,7 +347,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
 
   const intervalBounds = CAPTIONING_INTERVAL_BOUNDS[captioningIntervalUnit]
   const intervalInputStep = captioningIntervalUnit === 'seconds' ? 0.5 : 1
-  const intervalUnitLabel = captioningIntervalUnit === 'seconds' ? 'sec' : 'frames'
+  const intervalUnitLabel = captioningIntervalUnit === 'seconds' ? '秒' : '帧'
 
   const mediaItems = useMediaLibraryStore((s) => s.mediaItems)
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus)
@@ -368,23 +368,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     try {
       const items = mediaItems.map((m) => ({ id: m.id, fileName: m.fileName }))
       const result = await clearProjectCaches(items)
-      const feedback = getBatchOutcomeFeedback('Clear Cache', result)
+      const feedback = getBatchOutcomeFeedback('清理缓存', result)
       setClearFeedback(feedback)
       setClearState(result.failed === 0 ? 'done' : 'partial')
-      showBatchOutcomeToast(
-        'Project cache cleared',
-        'Project cache partially cleared',
-        'Project cache not cleared',
-        result,
-      )
+      showBatchOutcomeToast('项目缓存已清理', '项目缓存部分清理完成', '项目缓存清理失败', result)
       setTimeout(() => setClearState('idle'), 2000)
     } catch (err) {
       log.error('Failed to clear caches', err)
       setClearFeedback({
         tone: 'error',
-        message: "Couldn't clear project cache.",
+        message: '清理项目缓存失败。',
       })
-      toast.error('Failed to clear project cache')
+      toast.error('清理项目缓存失败')
       setClearState('idle')
     }
   }, [mediaItems])
@@ -401,15 +396,10 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       const result = await regenerateProjectThumbnails(items, (done, total) => {
         setRegenProgress(`${done}/${total}`)
       })
-      const feedback = getBatchOutcomeFeedback('Regenerate Thumbnails', result)
+      const feedback = getBatchOutcomeFeedback('重建缩略图', result)
       setRegenFeedback(feedback)
       setRegenState(result.failed === 0 ? 'done' : 'partial')
-      showBatchOutcomeToast(
-        'Thumbnails regenerated',
-        'Thumbnails partially regenerated',
-        'Thumbnails not regenerated',
-        result,
-      )
+      showBatchOutcomeToast('缩略图已重建', '缩略图部分重建完成', '缩略图重建失败', result)
       setTimeout(() => {
         setRegenState('idle')
         setRegenProgress('')
@@ -418,9 +408,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       log.error('Failed to regenerate thumbnails', err)
       setRegenFeedback({
         tone: 'error',
-        message: "Couldn't regenerate thumbnails.",
+        message: '重建缩略图失败。',
       })
-      toast.error('Failed to regenerate thumbnails')
+      toast.error('重建缩略图失败')
       setRegenState('idle')
       setRegenProgress('')
     }
@@ -430,23 +420,18 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     setProxyState('clearing')
     try {
       const result = await clearProjectProxies(mediaItems)
-      const feedback = getBatchOutcomeFeedback('Delete Proxies', result)
+      const feedback = getBatchOutcomeFeedback('删除代理文件', result)
       setProxyFeedback(feedback)
       setProxyState(result.failed === 0 ? 'done' : 'partial')
-      showBatchOutcomeToast(
-        'Proxies deleted',
-        'Proxies partially deleted',
-        'Proxies not deleted',
-        result,
-      )
+      showBatchOutcomeToast('代理文件已删除', '代理文件部分删除完成', '代理文件删除失败', result)
       setTimeout(() => setProxyState('idle'), 2000)
     } catch (err) {
       log.error('Failed to clear proxies', err)
       setProxyFeedback({
         tone: 'error',
-        message: "Couldn't delete proxies.",
+        message: '删除代理文件失败。',
       })
-      toast.error('Failed to delete proxies')
+      toast.error('删除代理文件失败')
       setProxyState('idle')
     }
   }, [mediaItems])
@@ -508,7 +493,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0 sm:top-16 sm:max-h-[calc(100vh-4rem)] sm:translate-y-0 sm:origin-top">
         <DialogHeader className="flex flex-row items-center justify-between border-b px-6 py-4 pr-14">
-          <DialogTitle>Editor Settings</DialogTitle>
+          <DialogTitle>编辑器设置</DialogTitle>
           <Button
             variant="ghost"
             size="sm"
@@ -516,7 +501,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
             className="h-8 shrink-0 gap-1.5"
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            Reset
+            重置
           </Button>
         </DialogHeader>
         <div className="flex min-h-0">
@@ -549,7 +534,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
               {activeSection === 'general' && (
                 <div className="space-y-3">
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Editor Density</Label>
+                    <Label className="text-sm">编辑器密度</Label>
                     <Select
                       value={editorDensity}
                       onValueChange={(value) =>
@@ -568,12 +553,11 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-muted-foreground">
-                      Compact fits more of the editor into a 1080p screen. Default restores the
-                      roomier layout.
+                      紧凑模式可在 1080p 屏幕显示更多内容；默认模式提供更宽松布局。
                     </p>
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Auto-save</Label>
+                    <Label className="text-sm">自动保存</Label>
                     <Switch
                       checked={autoSaveInterval > 0}
                       onCheckedChange={(v) => setSetting('autoSaveInterval', v ? 5 : 0)}
@@ -581,7 +565,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   </div>
                   {autoSaveInterval > 0 && (
                     <div className="flex items-center justify-between">
-                      <Label className="text-sm text-muted-foreground">Interval</Label>
+                      <Label className="text-sm text-muted-foreground">间隔</Label>
                       <div className="w-32 flex items-center gap-2">
                         <Slider
                           value={[autoSaveInterval]}
@@ -597,7 +581,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     </div>
                   )}
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Undo History Depth</Label>
+                    <Label className="text-sm">撤销历史深度</Label>
                     <div className="w-32 flex items-center gap-2">
                       <Slider
                         value={[maxUndoHistory]}
@@ -617,9 +601,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="space-y-0.5">
-                        <Label className="text-sm">Caption sample interval</Label>
+                        <Label className="text-sm">字幕采样间隔</Label>
                         <p className="text-xs text-muted-foreground">
-                          How often Analyze with AI samples a frame for captioning.
+                          “AI 分析”进行字幕采样时抓取帧的频率。
                         </p>
                       </div>
                     </div>
@@ -637,7 +621,7 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                                 : 'text-muted-foreground hover:text-foreground',
                             )}
                           >
-                            {unit === 'seconds' ? 'Seconds' : 'Frames'}
+                            {unit === 'seconds' ? '秒' : '帧'}
                           </button>
                         ))}
                       </div>
@@ -670,12 +654,12 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                           captioningIntervalValue === DEFAULT_CAPTIONING_INTERVAL_SECONDS
                         }
                       >
-                        Reset
+                        重置
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {formatCaptionEstimate(captioningIntervalUnit, captioningIntervalValue)}.
-                      Smaller intervals produce denser scenes but take longer to generate.
+                      间隔越小，场景切分越密集，但生成耗时更长。
                     </p>
                   </div>
                 </div>
@@ -685,9 +669,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Snap by Default</Label>
+                      <Label className="text-sm">默认吸附</Label>
                       <p className="text-xs text-muted-foreground">
-                        Sets the initial snap state when a project opens.
+                        设置项目打开时的初始吸附状态。
                       </p>
                     </div>
                     <Switch
@@ -696,14 +680,14 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Show Waveforms</Label>
+                    <Label className="text-sm">显示波形</Label>
                     <Switch
                       checked={showWaveforms}
                       onCheckedChange={(v) => setSetting('showWaveforms', v)}
                     />
                   </div>
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm">Show Filmstrips</Label>
+                    <Label className="text-sm">显示胶片条</Label>
                     <Switch
                       checked={showFilmstrips}
                       onCheckedChange={(v) => setSetting('showFilmstrips', v)}
@@ -716,9 +700,9 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Generate Missing Proxies</Label>
+                      <Label className="text-sm">生成缺失代理</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Queue proxy generation for video in this project that does not have one yet
+                        为当前项目中尚未生成代理的视频加入生成队列
                       </p>
                     </div>
                     <Button
@@ -734,20 +718,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {proxyGenerateState === 'done' && <Check className="w-3.5 h-3.5" />}
                       {proxyGenerateState === 'idle' && <Film className="w-3.5 h-3.5" />}
                       {proxyGenerateState === 'queueing'
-                        ? 'Queueing...'
+                        ? '排队中...'
                         : proxyGenerateState === 'done'
-                          ? 'Queued'
+                          ? '已加入队列'
                           : missingProjectProxyCount > 0
-                            ? `Generate (${missingProjectProxyCount})`
-                            : 'Up to date'}
+                            ? `生成（${missingProjectProxyCount}）`
+                            : '已是最新'}
                     </Button>
                   </div>
                   <Separator className="bg-white/8" />
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Clear Project Cache</Label>
+                      <Label className="text-sm">清理项目缓存</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Waveforms, filmstrips, GIF frames, decoded audio
+                        波形、胶片条、GIF 帧、解码音频
                       </p>
                       {clearFeedback && (
                         <p
@@ -776,19 +760,19 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {clearState === 'partial' && <TriangleAlert className="w-3.5 h-3.5" />}
                       {clearState === 'idle' && <Trash2 className="w-3.5 h-3.5" />}
                       {clearState === 'clearing'
-                        ? 'Clearing...'
+                        ? '清理中...'
                         : clearState === 'done'
-                          ? 'Cleared'
+                          ? '已清理'
                           : clearState === 'partial'
-                            ? 'Partial'
-                            : 'Clear'}
+                            ? '部分完成'
+                            : '清理'}
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Regenerate Thumbnails</Label>
+                      <Label className="text-sm">重建缩略图</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Re-create media library thumbnails for this project
+                        为当前项目重新生成媒体库缩略图
                       </p>
                       {regenFeedback && (
                         <p
@@ -817,17 +801,17 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {regenState === 'working'
                         ? regenProgress
                         : regenState === 'done'
-                          ? 'Done'
+                          ? '完成'
                           : regenState === 'partial'
-                            ? 'Partial'
-                            : 'Regenerate'}
+                            ? '部分完成'
+                            : '重建'}
                     </Button>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <Label className="text-sm">Delete Proxies</Label>
+                      <Label className="text-sm">删除代理文件</Label>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        Remove generated proxy videos for this project
+                        删除当前项目已生成的代理视频
                       </p>
                       {proxyFeedback && (
                         <p
@@ -856,20 +840,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       {proxyState === 'partial' && <TriangleAlert className="w-3.5 h-3.5" />}
                       {proxyState === 'idle' && <Film className="w-3.5 h-3.5" />}
                       {proxyState === 'clearing'
-                        ? 'Deleting...'
+                        ? '删除中...'
                         : proxyState === 'done'
-                          ? 'Deleted'
+                          ? '已删除'
                           : proxyState === 'partial'
-                            ? 'Partial'
-                            : 'Delete'}
+                            ? '部分完成'
+                            : '删除'}
                     </Button>
                   </div>
                   <Separator className="bg-white/8" />
                   <div className="space-y-3">
                     <div className="space-y-1">
-                      <Label className="text-sm">Local AI</Label>
+                      <Label className="text-sm">本地 AI</Label>
                       <p className="text-xs text-muted-foreground">
-                        Unload resident runtimes or clear cached model downloads.
+                        卸载常驻运行时或清理模型下载缓存。
                       </p>
                     </div>
                     <LocalInferenceUnloadControl />
@@ -885,22 +869,21 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
       <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Clear project cache?</AlertDialogTitle>
+            <AlertDialogTitle>确认清理项目缓存？</AlertDialogTitle>
             <AlertDialogDescription>
-              This will delete cached waveforms, filmstrips, GIF frames, and decoded audio for the
-              current project ({mediaItems.length} media items). These will be regenerated
-              automatically when needed. Your project data, media files, thumbnails, and proxies
-              will not be affected.
+              这将删除当前项目（共 {mediaItems.length} 个媒体）的波形、胶片条、GIF
+              帧和解码音频缓存。
+              这些缓存会在需要时自动重新生成。项目数据、媒体文件、缩略图和代理文件不会受影响。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 void handleClearCache()
               }}
             >
-              Clear Cache
+              清理缓存
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -150,7 +150,7 @@ export function TranscribeDialog({
     [isRunning, onOpenChange],
   )
 
-  const title = hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'
+  const title = hasTranscript ? '刷新转录' : '生成转录'
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange} modal>
@@ -176,7 +176,7 @@ export function TranscribeDialog({
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-sm">Model</Label>
+            <Label className="text-sm">模型</Label>
             <Select
               value={model}
               onValueChange={(value) => setModel(value as MediaTranscriptModel)}
@@ -196,7 +196,7 @@ export function TranscribeDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm">Quantization</Label>
+            <Label className="text-sm">量化</Label>
             <Select
               value={quantization}
               onValueChange={(value) => setQuantization(value as MediaTranscriptQuantization)}
@@ -216,14 +216,14 @@ export function TranscribeDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm">Language</Label>
+            <Label className="text-sm">语言</Label>
             <Combobox
               value={languageValue}
               onValueChange={setLanguageValue}
               options={WHISPER_LANGUAGE_OPTIONS}
-              placeholder="Auto-detect"
-              searchPlaceholder="Search languages..."
-              emptyMessage="No languages match that search."
+              placeholder="自动检测"
+              searchPlaceholder="搜索语言..."
+              emptyMessage="没有匹配的语言。"
               disabled={isRunning}
             />
           </div>
@@ -246,7 +246,7 @@ export function TranscribeDialog({
               {progressPercent !== null && (
                 <div
                   role="progressbar"
-                  aria-label="Transcription progress"
+                  aria-label="转录进度"
                   aria-valuemin={0}
                   aria-valuemax={100}
                   aria-valuenow={progressPercent}
@@ -266,14 +266,14 @@ export function TranscribeDialog({
           {isRunning ? (
             <Button variant="destructive" onClick={onCancel}>
               <Square className="mr-1.5 h-3.5 w-3.5" />
-              Stop
+              停止
             </Button>
           ) : (
             <>
               <Button variant="outline" onClick={() => handleOpenChange(false)}>
-                Cancel
+                取消
               </Button>
-              <Button onClick={handleStart}>Start Transcription</Button>
+              <Button onClick={handleStart}>开始转录</Button>
             </>
           )}
         </DialogFooter>

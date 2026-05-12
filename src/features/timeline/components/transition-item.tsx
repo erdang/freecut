@@ -47,6 +47,52 @@ interface TransitionItemProps {
  */
 const BRIDGE_SELECT_SIDE_INSET = 6
 const CUT_PASS_THROUGH_ZONE = 24
+const TRANSITION_PRESENTATION_LABELS_ZH: Record<string, string> = {
+  fade: '淡入淡出',
+  wipe: '滑动擦除',
+  slide: '推拉',
+  barnDoor: '开门',
+  split: '分裂',
+  bandWipe: '条带擦除',
+  centerWipe: '中心擦除',
+  edgeWipe: '边缘擦除',
+  radialWipe: '径向擦除',
+  spiralWipe: '螺旋擦除',
+  venetianBlindWipe: '百叶窗擦除',
+  xWipe: 'X 擦除',
+  clockWipe: '时钟擦除',
+  iris: '圆形光圈',
+  arrowIris: '箭头光圈',
+  crossIris: '十字光圈',
+  diamondIris: '菱形光圈',
+  eyeIris: '眼形光圈',
+  hexagonIris: '六边形光圈',
+  ovalIris: '椭圆光圈',
+  pentagonIris: '五边形光圈',
+  squareIris: '方形光圈',
+  triangleIris: '三角光圈',
+  boxShape: '方框形状',
+  heartShape: '心形形状',
+  starShape: '星形形状',
+  triangleLeftShape: '左三角形',
+  triangleRightShape: '右三角形',
+  flip: '翻页翻转',
+  dissolve: '交叉溶解',
+  additiveDissolve: '叠加溶解',
+  blurDissolve: '模糊溶解',
+  dipToColorDissolve: '经颜色溶解',
+  nonAdditiveDissolve: '非叠加溶解',
+  smoothCut: '平滑切换',
+  sparkles: '星光闪烁',
+  glitch: '故障闪断',
+  pixelate: '像素化',
+  chromatic: '色差偏移',
+  radialBlur: '径向模糊',
+  liquidDistort: '液态扭曲',
+  lensWarpZoom: '镜头畸变变焦',
+  lightLeakBurn: '漏光灼烧',
+  filmGateSlip: '胶片门抖动',
+}
 
 function readDraggedTransitionDescriptor(
   event: React.DragEvent,
@@ -509,8 +555,9 @@ export const TransitionItem = memo(function TransitionItem({
     return null
   }
 
+  const presentationId = transition.presentation ?? 'fade'
   const presentationLabel =
-    transition.presentation?.charAt(0).toUpperCase() + transition.presentation?.slice(1) || 'Fade'
+    TRANSITION_PRESENTATION_LABELS_ZH[presentationId] ?? transition.presentation ?? '淡入淡出'
 
   // Determine cursor based on hover state
   const cursor = hoveredEdge ? 'ew-resize' : 'pointer'
@@ -660,7 +707,7 @@ export const TransitionItem = memo(function TransitionItem({
       <ContextMenuContent>
         <ContextMenuItem onClick={handleDelete} className="text-destructive">
           <Trash2 className="w-4 h-4 mr-2" />
-          Remove Transition
+          删除转场
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>

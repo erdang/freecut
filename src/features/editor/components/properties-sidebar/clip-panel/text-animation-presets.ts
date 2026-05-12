@@ -35,18 +35,18 @@ export interface TextAnimationKeyframePayload {
 }
 
 const TEXT_ANIMATION_EFFECT_PRESETS: TextAnimationPreset[] = [
-  { id: 'fade', label: 'Fade' },
-  { id: 'rise', label: 'Rise' },
-  { id: 'drop', label: 'Drop' },
-  { id: 'left', label: 'Left' },
-  { id: 'right', label: 'Right' },
-  { id: 'tilt', label: 'Tilt' },
-  { id: 'pop', label: 'Pop' },
-  { id: 'swing', label: 'Swing' },
+  { id: 'fade', label: '淡入淡出' },
+  { id: 'rise', label: '上浮' },
+  { id: 'drop', label: '下落' },
+  { id: 'left', label: '左移' },
+  { id: 'right', label: '右移' },
+  { id: 'tilt', label: '倾斜' },
+  { id: 'pop', label: '弹入' },
+  { id: 'swing', label: '摆动' },
 ]
 
 export const TEXT_ANIMATION_PRESETS: TextAnimationPresetOption[] = [
-  { id: 'none', label: 'None' },
+  { id: 'none', label: '无' },
   ...TEXT_ANIMATION_EFFECT_PRESETS,
 ]
 

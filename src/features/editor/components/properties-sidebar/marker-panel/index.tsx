@@ -8,22 +8,16 @@ import { PropertySection, PropertyRow, NumberInput, ColorPicker } from '../compo
 
 const DEFAULT_MARKER_COLOR = 'oklch(0.65 0.20 250)'
 
-// Preset colors for quick selection
 const MARKER_PRESET_COLORS = [
-  'oklch(0.65 0.20 250)', // Blue (default)
-  'oklch(0.65 0.20 30)', // Red
-  'oklch(0.70 0.20 140)', // Green
-  'oklch(0.70 0.18 85)', // Yellow
-  'oklch(0.60 0.20 310)', // Purple
-  'oklch(0.70 0.15 180)', // Cyan
+  'oklch(0.65 0.20 250)',
+  'oklch(0.65 0.20 30)',
+  'oklch(0.70 0.20 140)',
+  'oklch(0.70 0.18 85)',
+  'oklch(0.60 0.20 310)',
+  'oklch(0.70 0.15 180)',
 ]
 
-/**
- * Marker properties panel - shown when a marker is selected.
- * Allows editing frame position, label, and color.
- */
 export function MarkerPanel() {
-  // Granular selectors (Zustand v5 best practice)
   const selectedMarkerId = useSelectionStore((s) => s.selectedMarkerId)
   const clearSelection = useSelectionStore((s) => s.clearSelection)
   const markers = useTimelineStore((s) => s.markers)
@@ -31,13 +25,11 @@ export function MarkerPanel() {
   const removeMarker = useTimelineStore((s) => s.removeMarker)
   const fps = useTimelineStore((s) => s.fps)
 
-  // Derive selected marker
   const selectedMarker = useMemo(
     () => markers.find((m) => m.id === selectedMarkerId),
     [markers, selectedMarkerId],
   )
 
-  // Handle frame change
   const handleFrameChange = useCallback(
     (frame: number) => {
       if (selectedMarkerId) {
@@ -47,18 +39,15 @@ export function MarkerPanel() {
     [selectedMarkerId, updateMarker],
   )
 
-  // Handle label change
   const handleLabelChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       if (selectedMarkerId) {
-        // Store undefined if empty string to keep data clean
         updateMarker(selectedMarkerId, { label: e.target.value || undefined })
       }
     },
     [selectedMarkerId, updateMarker],
   )
 
-  // Handle color change
   const handleColorChange = useCallback(
     (color: string) => {
       if (selectedMarkerId) {
@@ -68,7 +57,6 @@ export function MarkerPanel() {
     [selectedMarkerId, updateMarker],
   )
 
-  // Handle delete
   const handleDelete = useCallback(() => {
     if (selectedMarkerId) {
       removeMarker(selectedMarkerId)
@@ -76,14 +64,12 @@ export function MarkerPanel() {
     }
   }, [selectedMarkerId, removeMarker, clearSelection])
 
-  // Handle reset color to default
   const handleResetColor = useCallback(() => {
     if (selectedMarkerId && selectedMarker?.color !== DEFAULT_MARKER_COLOR) {
       updateMarker(selectedMarkerId, { color: DEFAULT_MARKER_COLOR })
     }
   }, [selectedMarkerId, selectedMarker?.color, updateMarker])
 
-  // Format frame as timecode (MM:SS.FF)
   const formatTimecode = useCallback(
     (frame: number): string => {
       const totalSeconds = frame / fps
@@ -107,7 +93,6 @@ export function MarkerPanel() {
   return (
     <div className="space-y-4">
       <PropertySection title="标记" icon={MapPin} defaultOpen={true}>
-        {/* Frame position */}
         <PropertyRow label="帧">
           <NumberInput
             value={selectedMarker.frame}
@@ -119,14 +104,12 @@ export function MarkerPanel() {
           />
         </PropertyRow>
 
-        {/* Timecode (read-only) */}
         <PropertyRow label="时间">
           <span className="text-xs font-mono tabular-nums text-muted-foreground">
             {formatTimecode(selectedMarker.frame)}
           </span>
         </PropertyRow>
 
-        {/* Label */}
         <PropertyRow label="标签">
           <Input
             value={selectedMarker.label || ''}
@@ -136,9 +119,8 @@ export function MarkerPanel() {
           />
         </PropertyRow>
 
-        {/* Color */}
         <ColorPicker
-          label="Color"
+          label="颜色"
           color={selectedMarker.color}
           onChange={handleColorChange}
           onReset={handleResetColor}
@@ -146,7 +128,6 @@ export function MarkerPanel() {
           presets={MARKER_PRESET_COLORS}
         />
 
-        {/* Delete button */}
         <div className="pt-2">
           <Button
             variant="destructive"

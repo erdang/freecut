@@ -17,6 +17,7 @@ import {
 } from '@/infrastructure/gpu/effects'
 import { useEffectPreviews } from '../hooks/use-effect-previews'
 import { getMappedSelectionEffectEntry } from '../utils/effect-selection'
+import { tEffectCategory, tEffectText } from '../utils/effect-localization'
 import {
   getAutoKeyframeOperation,
   getResolvedAnimatedEffectParamValue,
@@ -547,7 +548,9 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
     return gpuCategories
       .map(({ category, effects: catEffects }) => ({
         category,
-        effects: catEffects.filter((def) => def.name.toLowerCase().includes(q)),
+        effects: catEffects.filter((def) =>
+          `${def.name} ${tEffectText(def.name)}`.toLowerCase().includes(q),
+        ),
       }))
       .filter(({ effects: catEffects }) => catEffects.length > 0)
   }, [gpuCategories, searchQuery])
@@ -555,7 +558,9 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   const filteredPresets = useMemo(() => {
     if (!searchQuery.trim()) return EFFECT_PRESETS
     const q = searchQuery.toLowerCase()
-    return EFFECT_PRESETS.filter((p) => p.name.toLowerCase().includes(q))
+    return EFFECT_PRESETS.filter((p) =>
+      `${p.name} ${tEffectText(p.name)}`.toLowerCase().includes(q),
+    )
   }, [searchQuery])
 
   const hasResults = filteredCategories.length > 0 || filteredPresets.length > 0
@@ -563,7 +568,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
   if (visualItems.length === 0) return null
 
   return (
-    <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
+    <PropertySection title="效果" icon={Sparkles} defaultOpen={true}>
       {/* Add Effect Picker + Toggle All */}
       <div className="px-2 pb-2 flex gap-1">
         <Button
@@ -574,7 +579,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
           onClick={() => (pickerOpen ? closePicker() : openPicker())}
         >
           <Plus className="w-3 h-3 mr-1" />
-          Add Effect
+          添加效果
         </Button>
         {pickerOpen &&
           createPortal(
@@ -592,7 +597,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder="Search effects..."
+                    placeholder="搜索效果..."
                     className="w-full h-7 pl-7 pr-2 text-xs bg-transparent rounded-sm border border-input placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
                 </div>
@@ -605,7 +610,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                   <div key={category}>
                     {index > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
                     <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      {category.charAt(0).toUpperCase() + category.slice(1)}
+                      {tEffectCategory(category)}
                     </div>
                     {catEffects.map((def) => (
                       <button
@@ -626,7 +631,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                         ) : (
                           <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
                         )}
-                        {def.name}
+                        {tEffectText(def.name)}
                       </button>
                     ))}
                   </div>
@@ -635,9 +640,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                 {filteredPresets.length > 0 && (
                   <>
                     {filteredCategories.length > 0 && <div className="-mx-1 my-1 h-px bg-muted" />}
-                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">
-                      Presets
-                    </div>
+                    <div className="px-2 py-1 text-xs font-medium text-muted-foreground">预设</div>
                     {filteredPresets.map((preset) => (
                       <button
                         key={preset.id}
@@ -657,7 +660,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                         ) : (
                           <span className="w-8 h-[18px] rounded-sm bg-muted flex-shrink-0" />
                         )}
-                        {preset.name}
+                        {tEffectText(preset.name)}
                       </button>
                     ))}
                   </>
@@ -666,7 +669,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
                 {/* No results */}
                 {!hasResults && (
                   <div className="px-2 py-4 text-xs text-muted-foreground text-center">
-                    No effects found
+                    未找到效果
                   </div>
                 )}
               </div>
@@ -679,7 +682,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
             size="sm"
             className="h-7 px-2"
             onClick={handleToggleAll}
-            title={allEffectsEnabled ? 'Disable all effects' : 'Enable all effects'}
+            title={allEffectsEnabled ? '禁用全部效果' : '启用全部效果'}
           >
             {allEffectsEnabled ? (
               <EyeOff className="w-3.5 h-3.5" />
@@ -761,7 +764,7 @@ export const EffectsSection = memo(function EffectsSection({ items }: EffectsSec
       {/* Empty state */}
       {effects.length === 0 && (
         <div className="px-2 py-3 text-xs text-muted-foreground text-center">
-          No effects applied. Click "Add Effect" to get started.
+          当前未应用效果。点击“添加效果”开始。
         </div>
       )}
     </PropertySection>

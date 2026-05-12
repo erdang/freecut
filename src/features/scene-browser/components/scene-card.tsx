@@ -54,7 +54,7 @@ export const SceneCard = memo(function SceneCard({
       if (colorMode) {
         setReference({
           sceneId: `swatch-${Math.round(swatch.l)}-${Math.round(swatch.a)}-${Math.round(swatch.b)}`,
-          label: 'Picked swatch',
+          label: '已选色块',
           palette: [{ l: swatch.l, a: swatch.a, b: swatch.b, weight: 1 }],
         })
         return
@@ -113,7 +113,7 @@ export const SceneCard = memo(function SceneCard({
         'focus-visible:border-primary/60 focus-visible:bg-primary/10',
         showSignals && isTop && 'border-primary/40 bg-primary/5',
       )}
-      title="Click to preview in source monitor — drag to add to the timeline"
+      title="点击在源监看器预览，拖拽可添加到时间线"
     >
       <div className="relative aspect-video max-h-32 w-full shrink-0 overflow-hidden rounded-md bg-secondary">
         {thumbUrl ? (
@@ -139,8 +139,8 @@ export const SceneCard = memo(function SceneCard({
           <span
             role="button"
             tabIndex={-1}
-            aria-label="Find scenes with a similar palette"
-            title="Find scenes with a similar palette"
+            aria-label="查找相似色板场景"
+            title="查找相似色板场景"
             className="absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white/90 opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
             onClick={handleFindSimilarPalette}
           >

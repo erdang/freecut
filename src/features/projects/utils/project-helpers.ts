@@ -1,9 +1,6 @@
 import { CURRENT_SCHEMA_VERSION } from '@/core/projects/migrations'
 import type { Project } from '@/types/project'
 
-/**
- * Generate a unique project ID (8-character base62 hash)
- */
 function generateProjectId(): string {
   const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
   const array = new Uint8Array(8)
@@ -13,9 +10,6 @@ function generateProjectId(): string {
     .join('')
 }
 
-/**
- * Format date to relative time (e.g., "2 hours ago", "3 days ago")
- */
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now()
   const diff = now - timestamp
@@ -28,18 +22,15 @@ export function formatRelativeTime(timestamp: number): string {
   const months = Math.floor(days / 30)
   const years = Math.floor(days / 365)
 
-  if (seconds < 60) return 'just now'
-  if (minutes < 60) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`
-  if (hours < 24) return `${hours} hour${hours > 1 ? 's' : ''} ago`
-  if (days < 7) return `${days} day${days > 1 ? 's' : ''} ago`
-  if (weeks < 4) return `${weeks} week${weeks > 1 ? 's' : ''} ago`
-  if (months < 12) return `${months} month${months > 1 ? 's' : ''} ago`
-  return `${years} year${years > 1 ? 's' : ''} ago`
+  if (seconds < 60) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+  if (hours < 24) return `${hours} 小时前`
+  if (days < 7) return `${days} 天前`
+  if (weeks < 4) return `${weeks} 周前`
+  if (months < 12) return `${months} 个月前`
+  return `${years} 年前`
 }
 
-/**
- * Search filter function
- */
 export function filterProjects(projects: Project[], searchQuery: string): Project[] {
   if (!searchQuery.trim()) return projects
 
@@ -52,9 +43,6 @@ export function filterProjects(projects: Project[], searchQuery: string): Projec
   )
 }
 
-/**
- * Filter projects by resolution
- */
 export function filterByResolution(projects: Project[], resolution?: string): Project[] {
   if (!resolution) return projects
 
@@ -65,18 +53,12 @@ export function filterByResolution(projects: Project[], resolution?: string): Pr
   })
 }
 
-/**
- * Filter projects by FPS
- */
 export function filterByFps(projects: Project[], fps?: number): Project[] {
   if (!fps) return projects
 
   return projects.filter((project) => project?.metadata?.fps === fps)
 }
 
-/**
- * Sort projects
- */
 type SortField = 'name' | 'createdAt' | 'updatedAt' | 'resolution'
 type SortDirection = 'asc' | 'desc'
 
@@ -112,9 +94,6 @@ export function sortProjects(
   return sorted
 }
 
-/**
- * Get unique resolutions from projects
- */
 export function getUniqueResolutions(projects: Project[]): string[] {
   const resolutions = new Set(
     projects
@@ -124,17 +103,11 @@ export function getUniqueResolutions(projects: Project[]): string[] {
   return Array.from(resolutions).sort()
 }
 
-/**
- * Get unique FPS values from projects
- */
 export function getUniqueFps(projects: Project[]): number[] {
   const fpsSet = new Set(projects.filter((p) => p?.metadata?.fps).map((p) => p.metadata.fps))
   return Array.from(fpsSet).sort((a, b) => a - b)
 }
 
-/**
- * Create a new project object
- */
 export function createProjectObject(
   formData: {
     name: string
@@ -164,39 +137,26 @@ export function createProjectObject(
   }
 }
 
-/**
- * Duplicate project with new ID and name
- */
 export function duplicateProject(project: Project): Project {
   const now = Date.now()
 
   return {
     ...project,
     id: generateProjectId(),
-    name: `${project.name} (Copy)`,
+    name: `${project.name}（副本）`,
     createdAt: now,
     updatedAt: now,
   }
 }
 
-/**
- * Format the default backup name used before upgrading a legacy project.
- */
 export function formatProjectUpgradeBackupName(
   projectName: string,
   fromVersion: number,
   toVersion: number,
 ): string {
-  return `${projectName} (Backup before upgrade v${fromVersion} to v${toVersion})`
+  return `${projectName}（升级前备份 v${fromVersion} -> v${toVersion}）`
 }
 
-/**
- * Generate a unique project name from a template prefix
- * Finds the maximum numeric suffix and increments it
- * @param namePrefix - The prefix for the project name (e.g., "YouTube")
- * @param existingNames - Array of existing project names to check for collisions
- * @returns A unique project name (e.g., "YouTube (1)", "YouTube (2)")
- */
 export function generateTemplateName(namePrefix: string, existingNames: string[]): string {
   const escapedPrefix = namePrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const pattern = new RegExp(`^${escapedPrefix}\\s*\\((\\d+)\\)$`)

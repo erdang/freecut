@@ -343,7 +343,9 @@ export function buildPreviewCompositionData({
     (max, item) => Math.max(max, item.from + item.durationInFrames),
     0,
   )
-  const totalFrames = furthestItemEndFrame === 0 ? 900 : furthestItemEndFrame + fps * 5
+  // Playback duration should match the live timeline content length so
+  // play/stop boundaries stay in sync after trims/splits.
+  const totalFrames = furthestItemEndFrame === 0 ? 900 : furthestItemEndFrame
   const inputProps: CompositionInputProps = {
     fps,
     width: project.width,

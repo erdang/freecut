@@ -91,7 +91,7 @@ function TransitionColorPicker({
     <div ref={containerRef} className="relative flex-1">
       <button
         type="button"
-        aria-label={`${label} color`}
+        aria-label={`${label} 颜色`}
         onClick={() => setIsOpen((open) => !open)}
         className="flex w-full items-center gap-2"
       >
@@ -173,37 +173,37 @@ function getPresentationOptionLabel(
 }
 
 const DIRECTION_OPTIONS = [
-  { value: 'from-left', label: 'Left' },
-  { value: 'from-right', label: 'Right' },
-  { value: 'from-top', label: 'Top' },
-  { value: 'from-bottom', label: 'Bottom' },
+  { value: 'from-left', label: '左' },
+  { value: 'from-right', label: '右' },
+  { value: 'from-top', label: '上' },
+  { value: 'from-bottom', label: '下' },
 ] as const satisfies ReadonlyArray<{
   value: WipeDirection | SlideDirection | FlipDirection
   label: string
 }>
 
 const EASE_OPTIONS = [
-  { value: 'linear', label: 'Linear' },
-  { value: 'ease-in', label: 'In' },
-  { value: 'ease-out', label: 'Out' },
-  { value: 'ease-in-out', label: 'In & Out' },
+  { value: 'linear', label: '线性' },
+  { value: 'ease-in', label: '缓入' },
+  { value: 'ease-out', label: '缓出' },
+  { value: 'ease-in-out', label: '缓入缓出' },
 ] as const satisfies ReadonlyArray<{ value: TransitionTiming; label: string }>
 
 const PLACEMENT_OPTIONS = [
   {
     value: 1,
-    label: 'Left',
-    title: 'Place transition before the cut',
+    label: '左',
+    title: '将转场放在剪切点前',
   },
   {
     value: 0.5,
-    label: 'Center',
-    title: 'Center transition on the cut',
+    label: '中',
+    title: '将转场居中于剪切点',
   },
   {
     value: 0,
-    label: 'Right',
-    title: 'Place transition after the cut',
+    label: '右',
+    title: '将转场放在剪切点后',
   },
 ] as const
 
@@ -263,7 +263,7 @@ export function TransitionPanel() {
   )
   const currentPresentationLabel = currentPresentationConfig
     ? getPresentationOptionLabel(currentPresentationConfig)
-    : 'Select preset'
+    : '选择预设'
   const transitionDefinition = useMemo(
     () =>
       selectedTransition
@@ -568,15 +568,15 @@ export function TransitionPanel() {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
         <Zap className="w-8 h-8 text-muted-foreground/50 mb-2" />
-        <p className="text-xs text-muted-foreground">Transition not found</p>
+        <p className="text-xs text-muted-foreground">未找到转场</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <PropertySection title="Transition" icon={Zap} defaultOpen={true}>
-        <PropertyRow label="Preset" tooltip="Transition style preset">
+      <PropertySection title="转场" icon={Zap} defaultOpen={true}>
+        <PropertyRow label="预设" tooltip="转场样式预设">
           <div className="w-full">
             <Button
               ref={presetTriggerRef}
@@ -606,10 +606,10 @@ export function TransitionPanel() {
                   <div className="border-b border-border p-1.5">
                     <input
                       type="search"
-                      aria-label="Search transitions"
+                      aria-label="搜索转场"
                       value={presetSearchQuery}
                       onChange={(event) => setPresetSearchQuery(event.currentTarget.value)}
-                      placeholder="Search transitions"
+                      placeholder="搜索转场"
                       className="h-7 w-full rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring"
                       autoFocus
                     />
@@ -646,7 +646,7 @@ export function TransitionPanel() {
                     ))}
                     {filteredPresentationConfigGroups.length === 0 && (
                       <div className="px-2 py-6 text-center text-xs text-muted-foreground">
-                        No transitions found
+                        未找到转场
                       </div>
                     )}
                   </div>
@@ -657,7 +657,7 @@ export function TransitionPanel() {
         </PropertyRow>
 
         {/* Duration slider */}
-        <PropertyRow label="Duration" tooltip="Transition duration">
+        <PropertyRow label="时长" tooltip="转场时长">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={selectedTransition.durationInFrames}
@@ -675,17 +675,14 @@ export function TransitionPanel() {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetDuration}
-              title="Reset to 1s"
+              title="重置为 1 秒"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow
-          label="Placement"
-          tooltip="Position the transition before, across, or after the cut"
-        >
+        <PropertyRow label="位置" tooltip="设置转场位于剪切点前、中、后">
           <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
             {PLACEMENT_OPTIONS.map(({ value, label, title }) => {
               const maxForPlacement =
@@ -699,8 +696,8 @@ export function TransitionPanel() {
                 <button
                   key={label}
                   type="button"
-                  aria-label={`${label} placement`}
-                  title={disabled ? `${title} (not enough source handle)` : title}
+                  aria-label={`${label} 位置`}
+                  title={disabled ? `${title}（素材余量不足）` : title}
                   disabled={disabled}
                   onClick={() => handlePlacementChange(value)}
                   className={cn(
@@ -719,7 +716,7 @@ export function TransitionPanel() {
         </PropertyRow>
 
         {easeOptions.length > 0 && (
-          <PropertyRow label="Ease" tooltip="Easing curve for the transition">
+          <PropertyRow label="缓动" tooltip="转场缓动曲线">
             <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
               {easeOptions.map((option) => (
                 <button
@@ -741,7 +738,7 @@ export function TransitionPanel() {
         )}
 
         {transitionDefinition?.hasDirection && directionOptions.length > 0 && (
-          <PropertyRow label="Direction" tooltip="Direction for the transition motion">
+          <PropertyRow label="方向" tooltip="转场运动方向">
             <div className="flex items-center gap-0.5 p-0.5 bg-secondary rounded-md">
               {directionOptions.map((option) => (
                 <button
@@ -791,8 +788,8 @@ export function TransitionPanel() {
                 className="h-7 w-7 flex-shrink-0"
                 onClick={() => handleParameterReset(parameter)}
                 disabled={isParameterAtDefault(selectedTransition.properties, parameter)}
-                title={`Reset ${parameter.label}`}
-                aria-label={`Reset ${parameter.label}`}
+                title={`重置 ${parameter.label}`}
+                aria-label={`重置 ${parameter.label}`}
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </Button>
@@ -810,7 +807,7 @@ export function TransitionPanel() {
             onClick={handleDelete}
           >
             <Trash2 className="w-3 h-3 mr-1.5" />
-            Delete
+            删除
           </Button>
         </div>
       </PropertySection>

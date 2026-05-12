@@ -139,7 +139,7 @@ const MarkerIndicator = memo(function MarkerIndicator({
         zIndex: isSelected ? 20 : 15,
       }}
       onMouseDown={handleMouseDown}
-      title={marker.label || `Marker at frame ${marker.frame}`}
+      title={marker.label || `第 ${marker.frame} 帧标记`}
     >
       {/* Invisible larger hit area */}
       <div

@@ -42,21 +42,21 @@ export function MediaInfoPopover({
   const [transcript, setTranscript] = useState<MediaTranscript | null>(null)
   const [transcriptLoading, setTranscriptLoading] = useState(false)
   const mediaType = getMediaType(media.mimeType)
-  const typeLabel = mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Audio' : 'Image'
+  const typeLabel = mediaType === 'video' ? '视频' : mediaType === 'audio' ? '音频' : '图片'
   const isTranscribable = mediaType === 'video' || mediaType === 'audio'
 
   const rows: Array<{ icon: React.ReactNode; label: string; value: string }> = []
 
   rows.push({
     icon: <FileType className="w-3 h-3" />,
-    label: 'Type',
+    label: '类型',
     value: `${typeLabel} (${media.mimeType.split('/')[1]})`,
   })
 
   if ((mediaType === 'video' || mediaType === 'audio') && media.duration > 0) {
     rows.push({
       icon: <Clock className="w-3 h-3" />,
-      label: 'Duration',
+      label: '时长',
       value: formatDuration(media.duration),
     })
   }
@@ -64,7 +64,7 @@ export function MediaInfoPopover({
   if ((mediaType === 'video' || mediaType === 'image') && media.width > 0 && media.height > 0) {
     rows.push({
       icon: <Maximize2 className="w-3 h-3" />,
-      label: 'Dimensions',
+      label: '分辨率',
       value: `${media.width} × ${media.height}`,
     })
   }
@@ -72,19 +72,19 @@ export function MediaInfoPopover({
   if (media.codec && media.codec !== 'importing...') {
     let codecStr = media.codec
     if (media.audioCodec) codecStr += ` / ${media.audioCodec}`
-    rows.push({ icon: <Film className="w-3 h-3" />, label: 'Codec', value: codecStr })
+    rows.push({ icon: <Film className="w-3 h-3" />, label: '编码', value: codecStr })
   }
 
   rows.push({
     icon: <HardDrive className="w-3 h-3" />,
-    label: 'Size',
+    label: '大小',
     value: formatBytes(media.fileSize),
   })
 
   if (mediaType === 'video' && media.fps > 0) {
     rows.push({
       icon: <Film className="w-3 h-3" />,
-      label: 'Frame Rate',
+      label: '帧率',
       value: `${media.fps.toFixed(2)} fps`,
     })
   }
@@ -125,7 +125,7 @@ export function MediaInfoPopover({
             triggerClassName ??
             'p-0.5 rounded bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors'
           }
-          title="Media info"
+          title="媒体信息"
         >
           <Info className="w-3 h-3" />
         </button>
@@ -161,7 +161,7 @@ export function MediaInfoPopover({
             <div className="flex items-center gap-1.5 px-3 py-1.5">
               <FileText className="w-3 h-3 text-primary" />
               <span className="text-[10px] font-medium text-muted-foreground">
-                {transcript ? `Transcript (${transcript.segments.length})` : 'Transcript'}
+                {transcript ? `转录 (${transcript.segments.length})` : '转录'}
               </span>
               {transcript && (
                 <span className="ml-auto text-[10px] text-muted-foreground">
@@ -172,7 +172,7 @@ export function MediaInfoPopover({
             {transcriptLoading ? (
               <div className="px-3 pb-3 flex items-center gap-2 text-[10px] text-muted-foreground">
                 <Loader2 className="w-3 h-3 animate-spin" />
-                Loading transcript...
+                正在加载转录...
               </div>
             ) : transcript ? (
               <div className="px-3 pb-2 space-y-2">
@@ -192,7 +192,7 @@ export function MediaInfoPopover({
                           e.stopPropagation()
                           onSeekToCaption?.(segment.start)
                         }}
-                        title="Open in source monitor"
+                        title="在源监看器中打开"
                       >
                         {formatTimestamp(segment.start)}
                       </button>

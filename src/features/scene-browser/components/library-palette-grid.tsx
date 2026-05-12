@@ -67,7 +67,7 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
       setQuery('')
       setReference({
         sceneId: `library-color-${Math.round(cluster.l)}-${Math.round(cluster.a)}-${Math.round(cluster.b)}`,
-        label: 'Library color',
+        label: '媒体库颜色',
         palette: [{ l: cluster.l, a: cluster.a, b: cluster.b, weight: 1 }],
       })
     },
@@ -83,7 +83,7 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
         )}
       >
         <Palette className="h-3.5 w-3.5" />
-        <span>No palettes indexed yet — run AI captioning to populate.</span>
+        <span>尚未建立色板索引，请先运行 AI 字幕分析。</span>
       </div>
     )
   }
@@ -126,15 +126,15 @@ export const LibraryPaletteGrid = memo(function LibraryPaletteGrid({
                 'hover:-translate-y-0.5 hover:text-foreground hover:shadow-md',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
               )}
-              title={`${hidden.length} more color${hidden.length === 1 ? '' : 's'}`}
-              aria-label={`Show ${hidden.length} more colors`}
+              title={`还有 ${hidden.length} 种颜色`}
+              aria-label={`显示另外 ${hidden.length} 种颜色`}
             >
               <MoreHorizontal className="h-3 w-3" />
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-64 p-2">
             <div className="mb-1.5 flex items-center justify-between px-1 text-[10.5px] uppercase tracking-wide text-muted-foreground">
-              <span>More colors</span>
+              <span>更多颜色</span>
               <span>{hidden.length}</span>
             </div>
             <div
@@ -174,7 +174,7 @@ function SwatchButton({
 }) {
   const [r, g, b] = labToRgb(cluster.l, cluster.a, cluster.b)
   const share = cluster.weight / totalWeight
-  const label = `Find scenes in this color (${Math.round(share * 100)}% of the library)`
+  const label = `查找此颜色的场景（约占媒体库 ${Math.round(share * 100)}%）`
   return (
     <button
       type="button"

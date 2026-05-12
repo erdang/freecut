@@ -1345,6 +1345,8 @@ export function usePreviewRenderPump({
       if (targetFrame === null) {
         resetScrubLoopState()
         bypassPreviewSeekRef.current = false
+        const releasedFromSettledScrubTarget =
+          prev.previewFrame !== null && prev.previewFrame === prev.currentFrame
 
         // When leaving a transition frame (e.g. 12714â†’12715), the
         // StableVideoSequence pool lane needs time to re-seek from the
@@ -1369,6 +1371,21 @@ export function usePreviewRenderPump({
             if (roundedFrame !== state.currentFrame) {
               trackPlayerSeek(state.currentFrame)
               playerRef.current?.seekTo(state.currentFrame)
+              return
+            }
+
+            if (!requiresRenderedPath && !releasedFromSettledScrubTarget) {
+              hideAllOverlays()
+              return
+            }
+
+            if (
+              !requiresRenderedPath &&
+              usePreviewBridgeStore.getState().displayedFrame === null &&
+              scrubOffscreenRenderedFrameRef.current === state.currentFrame
+            ) {
+              drawToDisplay(state.currentFrame)
+              showFastScrubOverlayForFrame()
             }
             return
           }

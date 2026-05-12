@@ -20,6 +20,7 @@ import {
   type GpuCurvesChannelKey,
 } from '@/shared/utils/gpu-curves'
 import type { GpuEffect, ItemEffect } from '@/types/effects'
+import { tEffectText } from '../../utils/effect-localization'
 
 interface GpuCurvesPanelProps {
   effect: ItemEffect
@@ -210,14 +211,14 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
 
   return (
     <div className="space-y-0">
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
           <Button
             variant="ghost"
             size="icon"
             className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
             onClick={() => onReset(effect.id)}
-            title="Reset to defaults"
+            title="重置为默认"
             disabled={isDefault}
           >
             <RotateCcw className="w-3 h-3" />
@@ -227,7 +228,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onToggle(effect.id)}
-            title={effect.enabled ? 'Disable effect' : 'Enable effect'}
+            title={effect.enabled ? '禁用效果' : '启用效果'}
           >
             {effect.enabled ? (
               <Eye className="w-3 h-3" />
@@ -240,14 +241,14 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onRemove(effect.id)}
-            title="Remove effect"
+            title="移除效果"
           >
             <Trash2 className="w-3 h-3" />
           </Button>
         </div>
       </PropertyRow>
 
-      <PropertyRow label="Channel">
+      <PropertyRow label="通道">
         <div className="flex items-center gap-1 flex-wrap justify-end">
           {CHANNELS.map((channel) => (
             <Button
@@ -257,7 +258,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
               className="h-7 px-2 text-xs"
               onClick={() => setActiveChannel(channel.key)}
             >
-              {channel.label}
+              {tEffectText(channel.label)}
             </Button>
           ))}
           <Button
@@ -267,7 +268,7 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
             onClick={handleResetChannel}
             disabled={!effect.enabled}
           >
-            Reset Channel
+            重置通道
           </Button>
         </div>
       </PropertyRow>
@@ -383,8 +384,8 @@ export const GpuCurvesPanel = memo(function GpuCurvesPanel({
           </svg>
         </div>
         <div className="mt-1 text-center text-[10px] text-muted-foreground">
-          Drag both points to shape the {activeChannelMeta.label.toLowerCase()} curve. Pull the left
-          point down and the right point up for a classic S-curve.
+          拖动两个控制点可调整 {tEffectText(activeChannelMeta.label)}{' '}
+          曲线。将左点下拉、右点上推可形成经典 S 曲线。
         </div>
       </div>
     </div>

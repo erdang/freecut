@@ -79,30 +79,30 @@ export function ProjectCard({
     setClearLocalFiles(false)
 
     if (!result.success) {
-      toast.error('Failed to delete project', { description: result.error })
+      toast.error('删除项目失败', { description: result.error })
       return
     }
 
     if (wantedLocalDelete && !result.localFilesDeleted) {
-      toast.warning(`Moved "${result.originalName}" to trash`, {
-        description: 'Local files were not removed — you may need to delete the folder manually.',
+      toast.warning(`已将“${result.originalName}”移入回收站`, {
+        description: '本地文件未被删除，你可能需要手动删除该文件夹。',
       })
       return
     }
 
-    toast.success(`Moved "${result.originalName}" to trash`, {
+    toast.success(`已将“${result.originalName}”移入回收站`, {
       description: wantedLocalDelete
-        ? 'Local files deleted — undo will not restore them.'
-        : 'You can undo this for the next few seconds.',
+        ? '本地文件已删除，撤销操作不会恢复本地文件。'
+        : '你可以在接下来的几秒内撤销此操作。',
       duration: 8000,
       action: {
-        label: 'Undo',
+        label: '撤销',
         onClick: async () => {
           const undo = await restoreProject(projectId)
           if (undo.success) {
-            toast.success(`Restored "${result.originalName}"`)
+            toast.success(`已恢复“${result.originalName}”`)
           } else {
-            toast.error('Failed to restore project', { description: undo.error })
+            toast.error('恢复项目失败', { description: undo.error })
           }
         },
       },
@@ -118,7 +118,7 @@ export function ProjectCard({
     setIsDuplicating(false)
 
     if (!result.success) {
-      toast.error('Failed to duplicate project', { description: result.error })
+      toast.error('复制项目失败', { description: result.error })
     }
   }
 
@@ -142,7 +142,6 @@ export function ProjectCard({
     onCardMouseDown?.(e, project)
   }
 
-  // Safe metadata access with defaults
   const width = project?.metadata?.width || 1920
   const height = project?.metadata?.height || 1080
   const fps = project?.metadata?.fps || 30
@@ -173,14 +172,12 @@ export function ProjectCard({
           : 'border-border hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5'
       }`}
     >
-      {/* Selection check badge */}
       {isSelected && (
         <div className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center shadow-md pointer-events-none">
           <Check className="w-4 h-4" strokeWidth={3} />
         </div>
       )}
 
-      {/* Thumbnail */}
       <div className="block relative aspect-video bg-secondary/30 overflow-hidden">
         {thumbnailUrl ? (
           <img
@@ -196,21 +193,18 @@ export function ProjectCard({
           </div>
         )}
 
-        {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
           <div className="flex items-center gap-2 text-white">
             <PlayCircle className="w-6 h-6" />
-            <span className="font-medium">Double-click to open</span>
+            <span className="font-medium">双击打开</span>
           </div>
         </div>
 
-        {/* Resolution badge */}
         <div className="absolute top-2 right-2 px-2 py-1 bg-black/80 backdrop-blur-sm rounded text-xs font-mono text-white pointer-events-none">
           {resolution}
         </div>
       </div>
 
-      {/* Content */}
       <div className="p-4">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex-1 min-w-0">
@@ -224,7 +218,6 @@ export function ProjectCard({
             )}
           </div>
 
-          {/* Actions dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -249,12 +242,12 @@ export function ProjectCard({
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <PlayCircle className="w-4 h-4" />
-                  Open in Editor
+                  在编辑器中打开
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={handleEdit} className="flex items-center gap-2">
                 <Edit2 className="w-4 h-4" />
-                Edit Settings
+                编辑设置
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={handleDuplicate}
@@ -262,7 +255,7 @@ export function ProjectCard({
                 className="flex items-center gap-2"
               >
                 <Copy className="w-4 h-4" />
-                {isDuplicating ? 'Duplicating...' : 'Duplicate'}
+                {isDuplicating ? '复制中...' : '复制'}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -271,13 +264,12 @@ export function ProjectCard({
                 className="flex items-center gap-2 text-destructive focus:text-destructive"
               >
                 <Trash2 className="w-4 h-4" />
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting ? '删除中...' : '删除'}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
 
-        {/* Delete Confirmation Dialog */}
         <AlertDialog
           open={showDeleteDialog}
           onOpenChange={(open) => {
@@ -289,11 +281,11 @@ export function ProjectCard({
             <AlertDialogHeader>
               <AlertDialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-destructive" />
-                Delete Project
+                删除项目
               </AlertDialogTitle>
               <AlertDialogDescription>
-                Are you sure you want to delete <strong>{project.name}</strong>? This action cannot
-                be undone and will permanently remove the project and all its contents.
+                确定要删除 <strong>{project.name}</strong>{' '}
+                吗？该操作不可撤销，并会永久删除项目及其全部内容。
               </AlertDialogDescription>
             </AlertDialogHeader>
             {project.rootFolderHandle && (
@@ -307,29 +299,28 @@ export function ProjectCard({
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
                     <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
-                    Also delete local files on disk
+                    同时删除磁盘中的本地文件
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Remove files from the linked folder
-                    {project.rootFolderName ? ` "${project.rootFolderName}"` : ''}. This cannot be
-                    undone.
+                    删除关联文件夹
+                    {project.rootFolderName ? `“${project.rootFolderName}”` : ''}
+                    中的文件。此操作不可撤销。
                   </p>
                 </div>
               </label>
             )}
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleConfirmDelete}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Delete Project
+                删除项目
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Metadata */}
         <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <span className="font-mono">{aspectRatioLabel}</span>

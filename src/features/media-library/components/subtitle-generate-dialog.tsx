@@ -389,35 +389,35 @@ export function SubtitleGenerateDialog(props: SubtitleGenerateDialogProps) {
         }}
       >
         <DialogHeader>
-          <DialogTitle>Generate Subtitle</DialogTitle>
+          <DialogTitle>生成字幕</DialogTitle>
           <DialogDescription className="truncate">{fileName}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-sm">源语种 source_lang</Label>
+            <Label className="text-sm">源语言（source_lang）</Label>
             <Combobox
               value={sourceLangValue}
               onValueChange={setSourceLangValue}
               options={languageOptions}
               portalled={false}
-              placeholder="Auto-detect"
-              searchPlaceholder="Search source language..."
-              emptyMessage="No languages match that search."
+              placeholder="自动检测"
+              searchPlaceholder="搜索源语言..."
+              emptyMessage="没有匹配的语言。"
               triggerClassName={!hasSourceLanguageValue ? 'text-muted-foreground' : undefined}
             />
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm">要翻译的语种 target_lang（必选）</Label>
+            <Label className="text-sm">目标语言（target_lang，必选）</Label>
             <Combobox
               value={targetLangValue}
               onValueChange={setTargetLangValue}
               options={targetLanguageOptions}
               portalled={false}
-              placeholder="Select target language (optional)"
-              searchPlaceholder="Search target language..."
-              emptyMessage="No languages match that search."
+              placeholder="选择目标语言（必选）"
+              searchPlaceholder="搜索目标语言..."
+              emptyMessage="没有匹配的语言。"
             />
           </div>
           <div className="space-y-1.5">
@@ -469,13 +469,13 @@ export function SubtitleGenerateDialog(props: SubtitleGenerateDialogProps) {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={isRunning}>
-            Cancel
+            取消
           </Button>
           <Button
             onClick={handleStart}
             disabled={!targetLangValue || !isChunkDurationValid || isRunning}
           >
-            {isRunning ? 'Running...' : 'Start'}
+            {isRunning ? '执行中...' : '开始生成'}
           </Button>
         </DialogFooter>
       </DialogContent>

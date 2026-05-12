@@ -23,13 +23,13 @@ import { PropertySection, PropertyRow, NumberInput, SliderInput, ColorPicker } f
 
 // Shape type options
 const SHAPE_TYPE_OPTIONS: { value: ShapeType; label: string }[] = [
-  { value: 'rectangle', label: 'Rectangle' },
-  { value: 'circle', label: 'Circle' },
-  { value: 'triangle', label: 'Triangle' },
-  { value: 'ellipse', label: 'Ellipse' },
-  { value: 'star', label: 'Star' },
-  { value: 'polygon', label: 'Polygon' },
-  { value: 'heart', label: 'Heart' },
+  { value: 'rectangle', label: '矩形' },
+  { value: 'circle', label: '圆形' },
+  { value: 'triangle', label: '三角形' },
+  { value: 'ellipse', label: '椭圆' },
+  { value: 'star', label: '星形' },
+  { value: 'polygon', label: '多边形' },
+  { value: 'heart', label: '心形' },
 ]
 
 // Triangle direction options
@@ -38,10 +38,10 @@ const DIRECTION_OPTIONS: {
   label: string
   icon: typeof ChevronUp
 }[] = [
-  { value: 'up', label: 'Up', icon: ChevronUp },
-  { value: 'down', label: 'Down', icon: ChevronDown },
-  { value: 'left', label: 'Left', icon: ChevronLeft },
-  { value: 'right', label: 'Right', icon: ChevronRight },
+  { value: 'up', label: '上', icon: ChevronUp },
+  { value: 'down', label: '下', icon: ChevronDown },
+  { value: 'left', label: '左', icon: ChevronLeft },
+  { value: 'right', label: '右', icon: ChevronRight },
 ]
 
 interface ShapeSectionProps {
@@ -353,14 +353,12 @@ export function ShapeSection({ items }: ShapeSectionProps) {
   }
 
   return (
-    <PropertySection title="Shape" icon={Shapes} defaultOpen={true}>
+    <PropertySection title="形状" icon={Shapes} defaultOpen={true}>
       {/* Shape Type */}
-      <PropertyRow label="Type">
+      <PropertyRow label="类型">
         <Select value={sharedValues.shapeType} onValueChange={handleShapeTypeChange}>
           <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
-            <SelectValue
-              placeholder={sharedValues.shapeType === undefined ? 'Mixed' : 'Select shape'}
-            />
+            <SelectValue placeholder={sharedValues.shapeType === undefined ? '混合' : '选择形状'} />
           </SelectTrigger>
           <SelectContent>
             {SHAPE_TYPE_OPTIONS.map((shape) => (
@@ -373,7 +371,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       </PropertyRow>
 
       {singlePathShape && (
-        <PropertyRow label="Path">
+        <PropertyRow label="路径">
           <div className="flex items-center gap-2 w-full">
             <Button
               variant={isEditingPathShape ? 'default' : 'outline'}
@@ -388,18 +386,16 @@ export function ShapeSection({ items }: ShapeSectionProps) {
               }}
             >
               <MousePointer2 className="w-3.5 h-3.5" />
-              {isEditingPathShape ? 'Done' : 'Edit Path'}
+              {isEditingPathShape ? '完成' : '编辑路径'}
             </Button>
-            <span className="text-[10px] text-muted-foreground">
-              Drag points and handles in the preview.
-            </span>
+            <span className="text-[10px] text-muted-foreground">在预览中拖动锚点和手柄。</span>
           </div>
         </PropertyRow>
       )}
 
       {/* Fill Color */}
       <ColorPicker
-        label="Fill"
+        label="填充"
         color={sharedValues.fillColor ?? '#3b82f6'}
         onChange={handleFillColorChange}
         onLiveChange={handleFillColorLiveChange}
@@ -408,7 +404,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       />
 
       {/* Stroke Width */}
-      <PropertyRow label="Stroke W.">
+      <PropertyRow label="描边宽度">
         <NumberInput
           value={sharedValues.strokeWidth}
           onChange={handleStrokeWidthChange}
@@ -424,7 +420,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       {/* Stroke Color - only show when stroke width > 0 */}
       {(sharedValues.strokeWidth === 'mixed' || sharedValues.strokeWidth > 0) && (
         <ColorPicker
-          label="Stroke"
+          label="描边"
           color={sharedValues.strokeColor || '#1e40af'}
           onChange={handleStrokeColorChange}
           onLiveChange={handleStrokeColorLiveChange}
@@ -435,7 +431,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
 
       {/* Corner Radius - shown for rectangle, triangle, star, polygon */}
       {showCornerRadius && (
-        <PropertyRow label="Radius">
+        <PropertyRow label="圆角">
           <NumberInput
             value={sharedValues.cornerRadius}
             onChange={handleCornerRadiusChange}
@@ -451,7 +447,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
 
       {/* Direction - shown for triangle only */}
       {showDirection && (
-        <PropertyRow label="Direction">
+        <PropertyRow label="方向">
           <div className="flex gap-1">
             {DIRECTION_OPTIONS.map((dir) => (
               <Button
@@ -471,7 +467,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
 
       {/* Points - shown for star and polygon */}
       {showPoints && (
-        <PropertyRow label="Points">
+        <PropertyRow label="角点数">
           <NumberInput
             value={sharedValues.points}
             onChange={handlePointsChange}
@@ -486,7 +482,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
 
       {/* Inner Radius - shown for star only */}
       {showInnerRadius && (
-        <PropertyRow label="Inner R.">
+        <PropertyRow label="内半径">
           <NumberInput
             value={sharedValues.innerRadius}
             onChange={handleInnerRadiusChange}
@@ -503,7 +499,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       <div className="border-t border-border my-3" />
 
       {/* Use as Mask Toggle */}
-      <PropertyRow label="Use as Mask">
+      <PropertyRow label="用作蒙版">
         <Button
           variant={sharedValues.isMask === true ? 'secondary' : 'ghost'}
           size="sm"
@@ -511,7 +507,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
           onClick={() => handleIsMaskChange(sharedValues.isMask !== true)}
           disabled={sharedValues.isMask === 'mixed'}
         >
-          {sharedValues.isMask === 'mixed' ? 'Mixed' : sharedValues.isMask ? 'On' : 'Off'}
+          {sharedValues.isMask === 'mixed' ? '混合' : sharedValues.isMask ? '开' : '关'}
         </Button>
       </PropertyRow>
 
@@ -519,7 +515,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
       {(sharedValues.isMask === true || sharedValues.isMask === 'mixed') && (
         <>
           {/* Mask Type */}
-          <PropertyRow label="Mask Type">
+          <PropertyRow label="蒙版类型">
             <Select
               value={sharedValues.maskType}
               onValueChange={handleMaskTypeChange}
@@ -527,15 +523,15 @@ export function ShapeSection({ items }: ShapeSectionProps) {
             >
               <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
                 <SelectValue
-                  placeholder={sharedValues.maskType === undefined ? 'Mixed' : 'Select type'}
+                  placeholder={sharedValues.maskType === undefined ? '混合' : '选择类型'}
                 />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="clip" className="text-xs">
-                  Clip (Hard edges)
+                  裁剪（硬边）
                 </SelectItem>
                 <SelectItem value="alpha" className="text-xs">
-                  Alpha (Soft edges)
+                  Alpha（软边）
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -560,7 +556,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
                   size="icon"
                   className="h-7 w-7 flex-shrink-0"
                   onClick={handleResetMaskFeather}
-                  title="Reset to 10px"
+                  title="重置为 10px"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </Button>
@@ -569,7 +565,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
           )}
 
           {/* Invert Mask */}
-          <PropertyRow label="Invert">
+          <PropertyRow label="反相">
             <Button
               variant={sharedValues.maskInvert === true ? 'secondary' : 'ghost'}
               size="sm"
@@ -577,11 +573,7 @@ export function ShapeSection({ items }: ShapeSectionProps) {
               onClick={() => handleMaskInvertChange(sharedValues.maskInvert !== true)}
               disabled={sharedValues.isMask !== true || sharedValues.maskInvert === 'mixed'}
             >
-              {sharedValues.maskInvert === 'mixed'
-                ? 'Mixed'
-                : sharedValues.maskInvert
-                  ? 'On'
-                  : 'Off'}
+              {sharedValues.maskInvert === 'mixed' ? '混合' : sharedValues.maskInvert ? '开' : '关'}
             </Button>
           </PropertyRow>
         </>

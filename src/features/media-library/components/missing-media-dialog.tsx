@@ -216,12 +216,9 @@ export function MissingMediaDialog() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Link2Off className="w-5 h-5 text-destructive" />
-            Missing Media Files
+            媒体文件丢失
           </DialogTitle>
-          <DialogDescription>
-            {brokenItems.length} media file
-            {brokenItems.length !== 1 ? 's' : ''} could not be located.
-          </DialogDescription>
+          <DialogDescription>有 {brokenItems.length} 个媒体文件无法定位。</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
@@ -230,13 +227,13 @@ export function MissingMediaDialog() {
             {permissionDenied.length > 0 && (
               <div className="flex items-center gap-1 px-2 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded">
                 <AlertTriangle className="w-3 h-3 text-yellow-500" />
-                <span>{permissionDenied.length} need permission</span>
+                <span>{permissionDenied.length} 个需要授权</span>
               </div>
             )}
             {fileMissing.length > 0 && (
               <div className="flex items-center gap-1 px-2 py-1 bg-destructive/10 border border-destructive/30 rounded">
                 <X className="w-3 h-3 text-destructive" />
-                <span>{fileMissing.length} not found</span>
+                <span>{fileMissing.length} 个未找到</span>
               </div>
             )}
           </div>
@@ -254,7 +251,7 @@ export function MissingMediaDialog() {
               ) : (
                 <Folder className="w-4 h-4 mr-2" />
               )}
-              Scan Project Folder ({projectRootFolderName})
+              扫描项目文件夹（{projectRootFolderName}）
             </Button>
           )}
 
@@ -270,9 +267,7 @@ export function MissingMediaDialog() {
             ) : (
               <FolderOpen className="w-4 h-4 mr-2" />
             )}
-            {projectRootFolderHandle
-              ? 'Browse Another Folder...'
-              : 'Locate Folder (auto-match by filename)'}
+            {projectRootFolderHandle ? '浏览其他文件夹...' : '定位文件夹（按文件名自动匹配）'}
           </Button>
 
           {/* List of broken media */}
@@ -300,8 +295,8 @@ export function MissingMediaDialog() {
                   <p className="text-sm font-medium truncate">{item.fileName}</p>
                   <p className="text-xs text-muted-foreground">
                     {item.errorType === 'permission_denied'
-                      ? 'Permission expired - grant access to restore'
-                      : 'File moved or deleted'}
+                      ? '权限已失效，请重新授权以恢复'
+                      : '文件已移动或删除'}
                   </p>
                 </div>
 
@@ -316,7 +311,7 @@ export function MissingMediaDialog() {
                   ) : (
                     <>
                       <Search className="w-3 h-3 mr-1" />
-                      {item.errorType === 'permission_denied' ? 'Grant Access' : 'Locate'}
+                      {item.errorType === 'permission_denied' ? '授权' : '定位'}
                     </>
                   )}
                 </Button>
@@ -327,10 +322,10 @@ export function MissingMediaDialog() {
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
           <Button variant="ghost" onClick={handleDismissAll} className="text-muted-foreground">
-            Work Offline
+            离线继续
           </Button>
           <Button variant="outline" onClick={handleClose}>
-            Close
+            关闭
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -61,7 +61,7 @@ export const SubtitleSection = memo(function SubtitleSection({
   if (segments.length > 1) {
     const totalCues = segments.reduce((sum, segment) => sum + segment.cues.length, 0)
     return (
-      <PropertySection title="Subtitle" icon={Captions} defaultOpen={true}>
+      <PropertySection title="字幕" icon={Captions} defaultOpen={true}>
         <div className="space-y-3 px-1">
           <CaptionStyleControls
             items={segments}
@@ -70,8 +70,8 @@ export const SubtitleSection = memo(function SubtitleSection({
           />
 
           <p className="text-xs text-muted-foreground">
-            {segments.length} segments selected · {totalCues} cues total. Style applies to all.
-            Select a single segment to edit individual cues.
+            {segments.length} 段已选 · 共 {totalCues} 条字幕。样式将应用到全部。
+            选择单个片段可编辑每条字幕。
           </p>
         </div>
       </PropertySection>
@@ -132,20 +132,20 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
     segment.source.type === 'embedded-subtitles'
       ? (segment.source.trackName ??
         segment.source.language ??
-        `Track ${segment.source.trackNumber}`)
+        `轨道 ${segment.source.trackNumber}`)
       : segment.source.type === 'subtitle-import'
         ? segment.source.fileName
-        : 'Transcript'
+        : '转录字幕'
 
   // Memoize the items array passed to CaptionStyleControls so identity is
   // stable across re-renders that don't actually change the segment object.
   const styleItems = useMemo(() => [segment], [segment])
 
   return (
-    <PropertySection title="Subtitle" icon={Captions} defaultOpen={true}>
+    <PropertySection title="字幕" icon={Captions} defaultOpen={true}>
       <div className="space-y-3 px-1">
         <p className="text-xs text-muted-foreground">
-          {segment.cues.length} cues · {sourceLabel}
+          {segment.cues.length} 条字幕 · {sourceLabel}
         </p>
 
         <CaptionStyleControls
@@ -165,7 +165,7 @@ const SingleSubtitleSegmentEditor = memo(function SingleSubtitleSegmentEditor({
  *  self-measure for any variation (e.g. alignment badge present/absent). */
 const CUE_ROW_ESTIMATE_PX = 116
 
-/** Minimum cue duration (10ms) — prevents start/end inputs from collapsing
+/** Minimum cue duration (10ms) - prevents start/end inputs from collapsing
  *  the cue to a zero or negative-length range. */
 const MIN_CUE_DURATION_SECONDS = 0.01
 
@@ -245,14 +245,14 @@ interface SubtitleCueRowProps {
 /**
  * Editor row for a single cue.
  *
- * The textarea shows plain text — markup is hidden so users don't see
+ * The textarea shows plain text - markup is hidden so users don't see
  * literal `<i>` brackets. The Italic/Bold/Underline toggles below wrap
  * (or unwrap) the entire cue with the corresponding tag, and any ASS
  * `{\anN}` alignment in the original cue text is preserved across edits.
  *
  * Trade-off: cues with mixed-run formatting (e.g. half italic) collapse
  * to whole-cue formatting on first text edit. That's rare in real subs
- * and the alternative — rich-text editing — is a much bigger surface.
+ * and the alternative - rich-text editing - is a much bigger surface.
  */
 const SubtitleCueRow = memo(function SubtitleCueRow({
   index,
@@ -285,7 +285,7 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
       <div className="flex items-center gap-2 pb-1.5">
         <button
           type="button"
-          title="Seek playhead to this cue"
+          title="将播放头定位到此字幕"
           onClick={() => onSeek?.(startSeconds)}
           className="rounded text-[10px] font-semibold uppercase tracking-wide tabular-nums px-1.5 py-0.5 text-muted-foreground hover:bg-secondary/60 hover:text-foreground transition-colors"
         >
@@ -339,21 +339,21 @@ const SubtitleCueRow = memo(function SubtitleCueRow({
         <FormatToggleButton
           active={flags.italic}
           onClick={() => handleToggle('italic')}
-          label="Italic"
+          label="斜体"
           glyph="I"
           glyphStyle={{ fontStyle: 'italic' }}
         />
         <FormatToggleButton
           active={flags.bold}
           onClick={() => handleToggle('bold')}
-          label="Bold"
+          label="粗体"
           glyph="B"
           glyphStyle={{ fontWeight: 700 }}
         />
         <FormatToggleButton
           active={flags.underline}
           onClick={() => handleToggle('underline')}
-          label="Underline"
+          label="下划线"
           glyph="U"
           glyphStyle={{ textDecoration: 'underline' }}
         />

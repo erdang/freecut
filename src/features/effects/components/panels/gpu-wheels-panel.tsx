@@ -7,6 +7,7 @@ import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects'
 import { KeyframeToggle } from '@/features/effects/deps/keyframes-contract'
 import type { AnimatableProperty } from '@/types/keyframe'
 import { PropertyRow, SliderInput } from '@/shared/ui/property-controls'
+import { tEffectText } from '../../utils/effect-localization'
 
 interface GpuWheelsPanelProps {
   itemIds: string[]
@@ -183,7 +184,7 @@ const WheelControl = memo(function WheelControl({
         className="h-5 w-5"
         onClick={onReset}
         disabled={disabled}
-        title={`Reset ${label}`}
+        title={`重置${label}`}
       >
         <RotateCcw className="w-3 h-3" />
       </Button>
@@ -241,14 +242,14 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
 
   return (
     <div className="space-y-0">
-      <PropertyRow label={definition.name}>
+      <PropertyRow label={tEffectText(definition.name)}>
         <div className="flex items-center gap-1 min-w-0 w-full justify-end">
           <Button
             variant="ghost"
             size="icon"
             className={`h-6 w-6 flex-shrink-0 ${isDefault ? 'opacity-30' : ''}`}
             onClick={() => onReset(effect.id)}
-            title="Reset to defaults"
+            title="重置为默认"
             disabled={isDefault}
           >
             <RotateCcw className="w-3 h-3" />
@@ -258,7 +259,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onToggle(effect.id)}
-            title={effect.enabled ? 'Disable effect' : 'Enable effect'}
+            title={effect.enabled ? '禁用效果' : '启用效果'}
           >
             {effect.enabled ? (
               <Eye className="w-3 h-3" />
@@ -271,7 +272,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
             size="icon"
             className="h-6 w-6 flex-shrink-0"
             onClick={() => onRemove(effect.id)}
-            title="Remove effect"
+            title="移除效果"
           >
             <Trash2 className="w-3 h-3" />
           </Button>
@@ -283,7 +284,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
           {WHEEL_DESCRIPTORS.map((desc) => (
             <WheelControl
               key={desc.label}
-              label={desc.label}
+              label={tEffectText(desc.label)}
               hue={(gpuEffect.params[desc.hueKey] as number) ?? 0}
               amount={(gpuEffect.params[desc.amountKey] as number) ?? 0}
               size={wheelSize}
@@ -317,7 +318,7 @@ export const GpuWheelsPanel = memo(function GpuWheelsPanel({
         const value = (gpuEffect.params[key] as number) ?? param.default
         const keyframeProperty = getKeyframeProperty(effect.id, key)
         return (
-          <PropertyRow key={key} label={param.label} className={tonalRowClass}>
+          <PropertyRow key={key} label={tEffectText(param.label)} className={tonalRowClass}>
             <div className="flex items-center gap-1 min-w-0 w-full">
               <SliderInput
                 value={value}

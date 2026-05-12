@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react'
+import { useRef, useEffect, useLayoutEffect, useMemo, memo, useCallback, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { TimelineItem as TimelineItemType } from '@/types/timeline'
 import type { MediaMetadata } from '@/types/storage'
@@ -609,7 +609,7 @@ export const TimelineItem = memo(
     useEffect(() => {
       if (!dewatermarkDialogOpen) return
       if (item.type !== 'video' || !item.mediaId) {
-        setDewatermarkFrameError('Current clip is not a video or has no media source.')
+        setDewatermarkFrameError('当前片段不是视频，或缺少媒体源。')
         return
       }
       const mediaId = item.mediaId
@@ -651,7 +651,7 @@ export const TimelineItem = memo(
             tryResolve(0)
           })
           if (!canvas) {
-            throw new Error('Canvas is not ready.')
+            throw new Error('画布尚未就绪。')
           }
 
           const preferredUrl = item.type === 'video' ? item.src : ''
@@ -684,7 +684,7 @@ export const TimelineItem = memo(
             }
             const onError = () => {
               cleanup()
-              reject(new Error('Failed to load video metadata.'))
+              reject(new Error('加载视频元数据失败。'))
             }
             video.addEventListener('loadedmetadata', onLoaded)
             video.addEventListener('error', onError)
@@ -769,7 +769,7 @@ export const TimelineItem = memo(
           canvas.width = width
           canvas.height = height
           const ctx = canvas.getContext('2d')
-          if (!ctx) throw new Error('Failed to create canvas context.')
+          if (!ctx) throw new Error('无法创建画布上下文。')
           ctx.clearRect(0, 0, width, height)
           ctx.drawImage(video, 0, 0, width, height)
 
@@ -781,9 +781,7 @@ export const TimelineItem = memo(
             height,
           })
         } catch (error) {
-          setDewatermarkFrameError(
-            error instanceof Error ? error.message : 'Failed to load frame preview.',
-          )
+          setDewatermarkFrameError(error instanceof Error ? error.message : '加载帧预览失败。')
         } finally {
           if (!disposed) {
             setDewatermarkFrameLoading(false)
@@ -1474,7 +1472,7 @@ export const TimelineItem = memo(
           if (!granted) {
             mediaStore.showNotification?.({
               type: 'error',
-              message: `FreeCut needs permission to read "${mediaForItem.fileName}" before extracting subtitles.`,
+              message: `提取字幕前需要读取“${mediaForItem.fileName}”的权限。`,
             })
             return
           }
@@ -1487,7 +1485,7 @@ export const TimelineItem = memo(
         if (!blob) {
           mediaStore.showNotification?.({
             type: 'error',
-            message: `FreeCut could not load "${mediaForItem.fileName}".`,
+            message: `无法加载“${mediaForItem.fileName}”。`,
           })
           return
         }
@@ -1498,7 +1496,7 @@ export const TimelineItem = memo(
           message:
             error instanceof Error
               ? error.message
-              : `Failed to open "${mediaForItem.fileName}" for subtitle extraction.`,
+              : `无法打开“${mediaForItem.fileName}”以提取字幕。`,
         })
       }
     }, [mediaForItem])
@@ -1530,14 +1528,13 @@ export const TimelineItem = memo(
           type: 'success',
           message:
             result.segmentsCreated > 0
-              ? `Consolidated ${result.cuesConsolidated} caption${result.cuesConsolidated === 1 ? '' : 's'} into ${result.segmentsCreated} segment${result.segmentsCreated === 1 ? '' : 's'}.`
-              : 'No per-cue captions found for this clip.',
+              ? `已将 ${result.cuesConsolidated} 条逐句字幕合并为 ${result.segmentsCreated} 个分段。`
+              : '该片段未找到可合并的逐句字幕。',
         })
       } catch (error) {
         mediaStore.showNotification?.({
           type: 'error',
-          message:
-            error instanceof Error ? error.message : 'Failed to consolidate captions to segment.',
+          message: error instanceof Error ? error.message : '合并字幕到分段失败。',
         })
       }
     }, [item.id])
@@ -4143,7 +4140,7 @@ export const TimelineItem = memo(
             setPointerHint({
               x: e.clientX,
               y: e.clientY,
-              message: 'Use slip/slide on source-based clips only',
+              message: '仅支持在有源媒体片段上使用滑移/滑动',
               tone: 'warning',
             })
           }
@@ -4154,7 +4151,7 @@ export const TimelineItem = memo(
             setPointerHint({
               x: e.clientX,
               y: e.clientY,
-              message: "This clip can't be rate stretched",
+              message: '此片段不支持速率拉伸',
               tone: 'warning',
             })
             return
@@ -4833,7 +4830,7 @@ export const TimelineItem = memo(
                 ? `${getTranscriptionStageLabel(transcriptProgress.stage)} (${Math.round(
                     getTranscriptionOverallPercent(transcriptProgress),
                   )}%)`
-                : 'Transcribing...'
+                : '转录中...'
             }
             errorMessage={captionDialogError}
             onStart={(values: TranscribeDialogValues) => {
@@ -4842,8 +4839,7 @@ export const TimelineItem = memo(
               setCaptionDialogError(null)
               handleCaptionsFromDialog(values, hasGeneratedCaptions, (error) => {
                 captionStartedRef.current = false
-                const baseMessage =
-                  error instanceof Error ? error.message : 'Failed to generate captions'
+                const baseMessage = error instanceof Error ? error.message : '生成字幕失败'
                 setCaptionDialogError(
                   isTranscriptionOutOfMemoryError(error) ? TRANSCRIPTION_OOM_HINT : baseMessage,
                 )
@@ -4894,8 +4890,8 @@ export const TimelineItem = memo(
             <div className="min-h-0 space-y-3 overflow-y-auto pr-1">
               <div className="text-xs text-muted-foreground">
                 {dewatermarkFrameInfo
-                  ? `Timeline frame: ${dewatermarkFrameInfo.timelineFrame} | Source frame: ${dewatermarkFrameInfo.sourceFrame} @ ${dewatermarkFrameInfo.sourceFps.toFixed(2)}fps`
-                  : 'Frame info unavailable'}
+                  ? `时间线帧：${dewatermarkFrameInfo.timelineFrame} | 源帧：${dewatermarkFrameInfo.sourceFrame} @ ${dewatermarkFrameInfo.sourceFps.toFixed(2)}fps`
+                  : '帧信息不可用'}
               </div>
 
               <div className="relative mx-auto w-full overflow-hidden rounded-md border border-border bg-black/40">
@@ -4924,7 +4920,7 @@ export const TimelineItem = memo(
 
               {dewatermarkSelectionPixels && (
                 <div className="rounded-md border border-border bg-secondary/20 px-3 py-2 text-xs text-muted-foreground">
-                  Selection px: x={dewatermarkSelectionPixels.x}, y=
+                  选区像素：x={dewatermarkSelectionPixels.x}，y=
                   {dewatermarkSelectionPixels.y}, w=
                   {dewatermarkSelectionPixels.width}, h=
                   {dewatermarkSelectionPixels.height}
@@ -4932,7 +4928,7 @@ export const TimelineItem = memo(
               )}
 
               {dewatermarkFrameLoading && (
-                <div className="text-xs text-muted-foreground">Loading frame preview...</div>
+                <div className="text-xs text-muted-foreground">正在加载帧预览...</div>
               )}
               {dewatermarkFrameError && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
@@ -4951,22 +4947,18 @@ export const TimelineItem = memo(
                   <div>任务已提交：{dewatermarkTaskResult.task_id ?? '-'}</div>
                   {dewatermarkTaskResult.message && <div>{dewatermarkTaskResult.message}</div>}
                   {dewatermarkTaskResult.status_url && (
-                    <div className="break-all">status_url: {dewatermarkTaskResult.status_url}</div>
+                    <div className="break-all">状态链接： {dewatermarkTaskResult.status_url}</div>
                   )}
                   {dewatermarkTaskResult.progress_url && (
-                    <div className="break-all">
-                      progress_url: {dewatermarkTaskResult.progress_url}
-                    </div>
+                    <div className="break-all">进度链接： {dewatermarkTaskResult.progress_url}</div>
                   )}
                   {dewatermarkTaskResult.completion_url && (
                     <div className="break-all">
-                      completion_url: {dewatermarkTaskResult.completion_url}
+                      完成链接： {dewatermarkTaskResult.completion_url}
                     </div>
                   )}
                   {dewatermarkTaskResult.download_url && (
-                    <div className="break-all">
-                      download_url: {dewatermarkTaskResult.download_url}
-                    </div>
+                    <div className="break-all">下载链接： {dewatermarkTaskResult.download_url}</div>
                   )}
                 </div>
               )}
@@ -4975,7 +4967,7 @@ export const TimelineItem = memo(
                 <div className="space-y-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-100">
                   <div>
                     状态：
-                    {dewatermarkCompletion.status ?? (dewatermarkPolling ? 'processing' : '-')}
+                    {dewatermarkCompletion.status ?? (dewatermarkPolling ? '处理中' : '-')}
                   </div>
                   <div>
                     进度：
@@ -4983,14 +4975,10 @@ export const TimelineItem = memo(
                   </div>
                   {dewatermarkPolling && <div>任务处理中，请稍候...</div>}
                   {dewatermarkCompletion.download_url && (
-                    <div className="break-all">
-                      download_url: {dewatermarkCompletion.download_url}
-                    </div>
+                    <div className="break-all">下载链接： {dewatermarkCompletion.download_url}</div>
                   )}
                   {dewatermarkCompletion.output_path && (
-                    <div className="break-all">
-                      output_path: {dewatermarkCompletion.output_path}
-                    </div>
+                    <div className="break-all">输出路径： {dewatermarkCompletion.output_path}</div>
                   )}
                 </div>
               )}

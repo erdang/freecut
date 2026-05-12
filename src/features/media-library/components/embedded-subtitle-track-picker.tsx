@@ -22,13 +22,10 @@ import {
 } from '../services/subtitle-sidecar-service'
 
 interface EmbeddedSubtitleTrackPickerProps {
-  /** When non-null, the picker is open scanning/listing tracks for this media. */
   media: MediaMetadata | null
-  /** Resolved blob — caller is responsible for permission + opening. */
   blob: Blob | null
   onClose: () => void
   onTrackPicked: (track: EmbeddedSubtitleTrack) => void
-  /** Optional notice rendered in the body (used to surface scan errors). */
   errorMessage?: string | null
 }
 
@@ -105,7 +102,7 @@ export function EmbeddedSubtitleTrackPicker({
         if (cancelled) return
         setState({
           status: 'error',
-          message: error instanceof Error ? error.message : 'Failed to scan embedded subtitles.',
+          message: error instanceof Error ? error.message : '扫描内嵌字幕失败。',
         })
       })
 
@@ -129,11 +126,11 @@ export function EmbeddedSubtitleTrackPicker({
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Embedded subtitles</DialogTitle>
+          <DialogTitle>内嵌字幕</DialogTitle>
           <DialogDescription>
             {media
-              ? `Pick a subtitle track to insert as captions for ${media.fileName}.`
-              : 'Pick a subtitle track to insert as captions.'}
+              ? `为 ${media.fileName} 选择一条字幕轨道并插入为字幕。`
+              : '选择一条字幕轨道并插入为字幕。'}
           </DialogDescription>
         </DialogHeader>
 
@@ -141,7 +138,7 @@ export function EmbeddedSubtitleTrackPicker({
           {state.status === 'scanning' && (
             <div className="flex flex-col gap-2 py-6">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Scanning for subtitle tracks…</span>
+                <span className="text-muted-foreground">正在扫描字幕轨道...</span>
                 <span className="tabular-nums text-xs text-muted-foreground">
                   {state.totalBytes > 0
                     ? `${Math.round((state.bytesRead / state.totalBytes) * 100)}%`
@@ -166,8 +163,7 @@ export function EmbeddedSubtitleTrackPicker({
 
           {state.status === 'empty' && (
             <p className="py-6 text-sm text-muted-foreground">
-              No supported text-subtitle tracks were found in this file. Bitmap (image-based)
-              subtitle tracks aren&apos;t currently supported.
+              未在该文件中找到受支持的文本字幕轨道。当前暂不支持位图（图片式）字幕轨道。
             </p>
           )}
 
@@ -189,7 +185,7 @@ export function EmbeddedSubtitleTrackPicker({
                 ))}
               </ul>
               {state.fromCache && (
-                <p className="pt-3 text-xs text-muted-foreground">Loaded from cache.</p>
+                <p className="pt-3 text-xs text-muted-foreground">已从缓存加载。</p>
               )}
             </ScrollArea>
           )}
@@ -199,7 +195,7 @@ export function EmbeddedSubtitleTrackPicker({
 
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            取消
           </Button>
           <Button
             disabled={!selectedTrack}
@@ -207,7 +203,7 @@ export function EmbeddedSubtitleTrackPicker({
               if (selectedTrack) onTrackPicked(selectedTrack)
             }}
           >
-            Insert {selectedTrack ? `(${selectedTrack.cues.length} cues)` : ''}
+            插入 {selectedTrack ? `（${selectedTrack.cues.length} 条字幕）` : ''}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -238,16 +234,16 @@ function TrackRow({ track, selected, isDefault, onSelect }: TrackRowProps) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-medium truncate">{label}</span>
-            {track.forced && <Badge>forced</Badge>}
-            {track.default && <Badge>default</Badge>}
-            {isDefault && !track.forced && !track.default && <Badge>auto-pick</Badge>}
+            {track.forced && <Badge>强制</Badge>}
+            {track.default && <Badge>默认</Badge>}
+            {isDefault && !track.forced && !track.default && <Badge>自动选择</Badge>}
           </div>
           <div className="text-xs text-muted-foreground truncate">
-            Track {track.trackNumber} · {track.codecId.replace('S_TEXT/', '')}
+            轨道 {track.trackNumber} · {track.codecId.replace('S_TEXT/', '')}
           </div>
         </div>
         <div className="text-xs text-muted-foreground tabular-nums shrink-0">
-          {track.cues.length} cues
+          {track.cues.length} 条
         </div>
       </button>
     </li>

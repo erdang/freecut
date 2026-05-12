@@ -329,7 +329,7 @@ function TrackSectionScrollbarOverlay({
       className="relative shrink-0"
       style={{ height: `${height}px` }}
       role="scrollbar"
-      aria-label={`${section} track section scrollbar`}
+      aria-label={`${section === 'video' ? '视频' : section === 'audio' ? '音频' : '轨道'}区滚动条`}
       aria-controls="timeline-track-sections"
       aria-orientation="vertical"
       aria-valuemin={0}

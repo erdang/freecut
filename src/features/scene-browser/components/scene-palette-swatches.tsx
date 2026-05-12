@@ -46,7 +46,7 @@ export const ScenePaletteSwatches = memo(function ScenePaletteSwatches({
   return (
     <div
       className={cn('flex items-center gap-0.5', className)}
-      title={`Dominant palette (${palette.length} ${palette.length === 1 ? 'color' : 'colors'})`}
+      title={`主色板（${palette.length} 种颜色）`}
     >
       {palette.map((swatch, i) => {
         // Width proportional to pixel coverage so a dominant color
@@ -69,8 +69,8 @@ export const ScenePaletteSwatches = memo(function ScenePaletteSwatches({
             key={i}
             role="button"
             tabIndex={-1}
-            aria-label="Search by this color"
-            title="Search by this color"
+            aria-label="按此颜色搜索"
+            title="按此颜色搜索"
             className={commonClass}
             style={style}
             onClick={(e) => {

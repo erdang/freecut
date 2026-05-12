@@ -148,125 +148,53 @@ function getSubtitleExtractionErrorMessage(error: unknown, media: MediaMetadata)
   if (error instanceof FileAccessError) {
     if (error.type === 'permission_denied') {
       markSubtitleSourceUnreadable(media, 'permission_denied')
-      return `FreeCut needs permission to read "${media.fileName}" before extracting subtitles.`
+      return `FreeCut 需要读取“${media.fileName}”的权限后才能提取字幕。`
     }
     if (error.type === 'file_missing') {
       markSubtitleSourceUnreadable(media, 'file_missing')
-      return `FreeCut could not find "${media.fileName}". Relink the file and try again.`
+      return `FreeCut 找不到“${media.fileName}”。请重新关联文件后重试。`
     }
-    return `FreeCut could not read "${media.fileName}" right now. Close any app using it and try again.`
+    return `FreeCut 当前无法读取“${media.fileName}”。请关闭占用该文件的应用后重试。`
   }
 
   const errorName = getErrorName(error)
   if (errorName) {
     if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
       markSubtitleSourceUnreadable(media, 'permission_denied')
-      return `FreeCut needs permission to read "${media.fileName}" before extracting subtitles.`
+      return `FreeCut 需要读取“${media.fileName}”的权限后才能提取字幕。`
     }
     if (errorName === 'NotFoundError') {
       markSubtitleSourceUnreadable(media, 'file_missing')
-      return `FreeCut could not find "${media.fileName}". Relink the file and try again.`
+      return `FreeCut 找不到“${media.fileName}”。请重新关联文件后重试。`
     }
     if (errorName === 'NotReadableError') {
-      return `FreeCut could not read "${media.fileName}" right now. Close any app using it and try again.`
+      return `FreeCut 当前无法读取“${media.fileName}”。请关闭占用该文件的应用后重试。`
     }
   }
 
-  return error instanceof Error ? error.message : 'Failed to extract embedded subtitles'
+  return error instanceof Error ? error.message : '提取内嵌字幕失败'
 }
 
-function MediaCardActionMenuItems({
-  isBroken,
-  onRelink,
-  canGenerateProxy,
-  hasProxy,
-  proxyStatus,
-  isTranscribable,
-  isTranscribing,
-  hasTranscript,
-  canExtractEmbeddedSubtitles,
-  isExtractingEmbeddedSubtitles,
-  isTaggable,
-  isTagging,
-  onGenerateProxy,
-  onDeleteProxy,
-  onGenerateTranscript,
-  onDeleteTranscript,
-  onExtractEmbeddedSubtitles,
-  onAnalyzeWithAI,
-  onDelete,
-}: MediaCardActionMenuProps) {
-  const hasBrokenGroup = isBroken && !!onRelink
-  const canShowGenerateProxy = canGenerateProxy && !hasProxy && proxyStatus !== 'generating'
-  const showProxyGroup = !isBroken && (canShowGenerateProxy || hasProxy)
-  const canShowGenerateTranscript = isTranscribable && !isBroken && !isTranscribing
-  const canShowDeleteTranscript = isTranscribable && !isBroken && hasTranscript && !isTranscribing
-  const showTranscriptGroup = canShowGenerateTranscript || canShowDeleteTranscript
-  const showEmbeddedSubtitleGroup = canExtractEmbeddedSubtitles && !isBroken
-  const showAiGroup = isTaggable && !isBroken && !isTagging
+function MediaCardActionMenuItems(props: MediaCardActionMenuProps) {
+  const hasBrokenGroup = props.isBroken && !!props.onRelink
+  const showEmbeddedSubtitleGroup = props.canExtractEmbeddedSubtitles && !props.isBroken
 
   const groups: ReactNode[] = []
 
   if (hasBrokenGroup) {
     groups.push(
       <Fragment key="broken">
-        <ContextMenuLabel>File</ContextMenuLabel>
+        <ContextMenuLabel>文件</ContextMenuLabel>
         <ContextMenuItem
           onClick={(event) => {
             event.stopPropagation()
-            onRelink!()
+            props.onRelink!()
           }}
           className="text-primary focus:text-primary"
         >
           <RefreshCw className="w-3 h-3 mr-2" />
-          Relink File...
+          重新关联文件...
         </ContextMenuItem>
-      </Fragment>,
-    )
-  }
-
-  if (showProxyGroup) {
-    groups.push(
-      <Fragment key="proxy">
-        <ContextMenuLabel>Proxy</ContextMenuLabel>
-        {canShowGenerateProxy && (
-          <ContextMenuItem onClick={onGenerateProxy}>
-            <Zap className="w-3 h-3 mr-2" />
-            Generate Proxy
-          </ContextMenuItem>
-        )}
-        {hasProxy && (
-          <ContextMenuItem
-            onClick={onDeleteProxy}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="w-3 h-3 mr-2" />
-            Delete Proxy
-          </ContextMenuItem>
-        )}
-      </Fragment>,
-    )
-  }
-
-  if (showTranscriptGroup) {
-    groups.push(
-      <Fragment key="transcript">
-        <ContextMenuLabel>Transcript</ContextMenuLabel>
-        {canShowGenerateTranscript && (
-          <ContextMenuItem onClick={onGenerateTranscript}>
-            <FileText className="w-3 h-3 mr-2" />
-            {hasTranscript ? 'Refresh Transcript' : 'Generate Transcript'}
-          </ContextMenuItem>
-        )}
-        {canShowDeleteTranscript && (
-          <ContextMenuItem
-            onClick={onDeleteTranscript}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="w-3 h-3 mr-2" />
-            Delete Transcript
-          </ContextMenuItem>
-        )}
       </Fragment>,
     )
   }
@@ -274,29 +202,17 @@ function MediaCardActionMenuItems({
   if (showEmbeddedSubtitleGroup) {
     groups.push(
       <Fragment key="embedded-subtitles">
-        <ContextMenuLabel>Captions</ContextMenuLabel>
+        <ContextMenuLabel>字幕</ContextMenuLabel>
         <ContextMenuItem
-          onClick={onExtractEmbeddedSubtitles}
-          disabled={isExtractingEmbeddedSubtitles}
+          onClick={props.onExtractEmbeddedSubtitles}
+          disabled={props.isExtractingEmbeddedSubtitles}
         >
-          {isExtractingEmbeddedSubtitles ? (
+          {props.isExtractingEmbeddedSubtitles ? (
             <Loader2 className="w-3 h-3 mr-2 animate-spin" />
           ) : (
             <FileText className="w-3 h-3 mr-2" />
           )}
-          Extract Embedded Subtitles
-        </ContextMenuItem>
-      </Fragment>,
-    )
-  }
-
-  if (showAiGroup) {
-    groups.push(
-      <Fragment key="ai">
-        <ContextMenuLabel>AI</ContextMenuLabel>
-        <ContextMenuItem onClick={onAnalyzeWithAI}>
-          <Sparkles className="w-3 h-3 mr-2" />
-          Analyze with AI
+          提取内嵌字幕
         </ContextMenuItem>
       </Fragment>,
     )
@@ -304,9 +220,9 @@ function MediaCardActionMenuItems({
 
   groups.push(
     <Fragment key="destructive">
-      <ContextMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+      <ContextMenuItem onClick={props.onDelete} className="text-destructive focus:text-destructive">
         <Trash2 className="w-3 h-3 mr-2" />
-        Delete
+        删除
       </ContextMenuItem>
     </Fragment>,
   )
@@ -536,8 +452,7 @@ export const MediaCard = memo(function MediaCard({
               store.setTranscriptStatus(target.id, previousStatus === 'ready' ? 'ready' : 'error')
               store.clearTranscriptProgress(target.id)
 
-              const baseMessage =
-                error instanceof Error ? error.message : 'Failed to transcribe media'
+              const baseMessage = error instanceof Error ? error.message : '转录媒体失败'
               lastErrorMessage = isTranscriptionOutOfMemoryError(error)
                 ? TRANSCRIPTION_OOM_HINT
                 : baseMessage
@@ -549,24 +464,24 @@ export const MediaCard = memo(function MediaCard({
             if (targets.length === 1) {
               store.showNotification({
                 type: 'success',
-                message: `Transcript ready for "${targets[0]!.fileName}"`,
+                message: `“${targets[0]!.fileName}”转录完成`,
               })
             } else {
               store.showNotification({
                 type: 'success',
-                message: `Transcripts ready for ${succeeded} media files`,
+                message: `${succeeded} 个媒体文件转录完成`,
               })
             }
             setTranscribeDialogOpen(false)
           } else if (failed > 0) {
-            const msg = lastErrorMessage ?? 'Failed to transcribe media'
+            const msg = lastErrorMessage ?? '转录媒体失败'
             setTranscribeErrorMessage(msg)
             store.showNotification({
               type: 'error',
               message:
                 targets.length === 1
                   ? msg
-                  : `Transcription failed for ${failed} of ${targets.length} media files`,
+                  : `${targets.length} 个媒体文件中有 ${failed} 个转录失败`,
             })
           } else {
             setTranscribeDialogOpen(false)
@@ -613,20 +528,20 @@ export const MediaCard = memo(function MediaCard({
       const [only] = targets
       store.showNotification({
         type: 'success',
-        message: `Transcript deleted for "${only!.fileName}"`,
+        message: `已删除“${only!.fileName}”的转录`,
       })
     } else if (targets.length > 1 && failures === 0) {
       store.showNotification({
         type: 'success',
-        message: `Deleted ${targets.length} transcripts`,
+        message: `已删除 ${targets.length} 条转录`,
       })
     } else if (failures > 0) {
       store.showNotification({
         type: 'error',
         message:
           failures === targets.length
-            ? 'Failed to delete transcript'
-            : `Failed to delete ${failures} of ${targets.length} transcripts`,
+            ? '删除转录失败'
+            : `${targets.length} 条转录中有 ${failures} 条删除失败`,
       })
     }
   }
@@ -638,7 +553,7 @@ export const MediaCard = memo(function MediaCard({
     if (targets.length === 0) {
       store.showNotification({
         type: 'error',
-        message: 'Choose an MKV or WebM video with embedded text subtitles.',
+        message: '请选择带有内嵌文本字幕的 MKV 或 WebM 视频。',
       })
       return
     }
@@ -673,7 +588,7 @@ export const MediaCard = memo(function MediaCard({
           const hasPermission = await requestSubtitleSourcePermission(target)
           if (!hasPermission) {
             markSubtitleSourceUnreadable(target, 'permission_denied')
-            lastErrorMessage = `FreeCut needs permission to read "${target.fileName}" before extracting subtitles.`
+            lastErrorMessage = `FreeCut 需要读取“${target.fileName}”的权限后才能提取字幕。`
             useSubtitleScanProgressStore.getState().markEntryStatus(i, 'error')
             continue
           }
@@ -710,12 +625,10 @@ export const MediaCard = memo(function MediaCard({
     }
 
     if (succeeded > 0) {
-      const fileWord = succeeded === 1 ? 'file' : 'files'
-      const trackWord = totalTracksCached === 1 ? 'track' : 'tracks'
       const summary =
         succeeded === targets.length
-          ? `Cached ${totalTracksCached} subtitle ${trackWord} across ${succeeded} ${fileWord}.`
-          : `Cached subtitles for ${succeeded} of ${targets.length} files (${totalTracksCached} ${trackWord}).`
+          ? `已缓存 ${succeeded} 个文件中的 ${totalTracksCached} 条字幕轨道。`
+          : `${targets.length} 个文件中已成功缓存 ${succeeded} 个，共 ${totalTracksCached} 条字幕轨道。`
       useSubtitleScanProgressStore.getState().finish(summary)
       return
     }
@@ -724,7 +637,7 @@ export const MediaCard = memo(function MediaCard({
     useSubtitleScanProgressStore.getState().close()
     store.showNotification({
       type: 'error',
-      message: lastErrorMessage ?? 'Failed to scan embedded subtitles.',
+      message: lastErrorMessage ?? '扫描内嵌字幕失败。',
     })
   }
 
@@ -1185,7 +1098,7 @@ export const MediaCard = memo(function MediaCard({
                 {!isBroken && !isImporting && isTagging && (
                   <div
                     className="absolute bottom-0.5 left-0.5 p-0.5 rounded bg-purple-500/90 text-white"
-                    title="Analyzing with AI"
+                    title="正在使用 AI 分析"
                   >
                     <Loader2 className="w-2.5 h-2.5 animate-spin" />
                   </div>
@@ -1207,7 +1120,7 @@ export const MediaCard = memo(function MediaCard({
                   transcriptProgressPercent !== null && (
                     <div
                       role="progressbar"
-                      aria-label="Transcript progress"
+                      aria-label="转录进度"
                       aria-valuemin={0}
                       aria-valuemax={100}
                       aria-valuenow={transcriptProgressPercent}
@@ -1224,7 +1137,7 @@ export const MediaCard = memo(function MediaCard({
                   <button
                     type="button"
                     onClick={handleAudioToggle}
-                    aria-label={audioPlaying ? 'Stop audio' : 'Play audio'}
+                    aria-label={audioPlaying ? '停止音频' : '播放音频'}
                     aria-pressed={audioPlaying}
                     className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors"
                   >
@@ -1246,7 +1159,7 @@ export const MediaCard = memo(function MediaCard({
               {/* Info — single row: icon + name + duration */}
               <div className="flex-1 min-w-0 flex items-center gap-1.5">
                 {isImporting ? (
-                  <span className="text-[10px] text-muted-foreground">Importing...</span>
+                  <span className="text-[10px] text-muted-foreground">导入中...</span>
                 ) : (
                   <>
                     <div className="p-0.5 rounded bg-primary/90 text-primary-foreground flex-shrink-0">
@@ -1350,7 +1263,7 @@ export const MediaCard = memo(function MediaCard({
               {isImporting && (
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-2 pointer-events-none">
                   <Loader2 className="w-6 h-6 text-white animate-spin" />
-                  <div className="text-[9px] text-white/60 uppercase tracking-wider">Importing</div>
+                  <div className="text-[9px] text-white/60 tracking-wider">导入中</div>
                 </div>
               )}
 
@@ -1370,7 +1283,7 @@ export const MediaCard = memo(function MediaCard({
                   {!isBroken && isTagging && (
                     <div
                       className="p-0.5 rounded bg-purple-500/90 text-white pointer-events-none"
-                      title="Analyzing with AI"
+                      title="正在使用 AI 分析"
                     >
                       <Loader2 className="w-2.5 h-2.5 animate-spin" />
                     </div>
@@ -1383,7 +1296,7 @@ export const MediaCard = memo(function MediaCard({
                   {!isBroken && hasCaptions && (
                     <div
                       className="p-0.5 rounded bg-purple-500/90 text-white pointer-events-none"
-                      title={`${media.aiCaptions!.length} AI caption${media.aiCaptions!.length === 1 ? '' : 's'}`}
+                      title={`${media.aiCaptions!.length} 条 AI 字幕`}
                     >
                       <Sparkles className="w-2.5 h-2.5" />
                     </div>
@@ -1399,7 +1312,7 @@ export const MediaCard = memo(function MediaCard({
                 <button
                   type="button"
                   onClick={handleAudioToggle}
-                  aria-label={audioPlaying ? 'Stop audio' : 'Play audio'}
+                  aria-label={audioPlaying ? '停止音频' : '播放音频'}
                   aria-pressed={audioPlaying}
                   className="absolute inset-0 flex items-center justify-center bg-black/0 hover:bg-black/30 transition-colors group/play"
                 >
@@ -1449,7 +1362,7 @@ export const MediaCard = memo(function MediaCard({
                 transcriptProgressPercent !== null && (
                   <div
                     role="progressbar"
-                    aria-label="Transcript progress"
+                    aria-label="转录进度"
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={transcriptProgressPercent}

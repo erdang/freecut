@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react'
+﻿import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react'
 import {
   ChevronDown,
   ChevronLeft,
@@ -6,7 +6,6 @@ import {
   ChevronUp,
   Film,
   Layers,
-  LineChart,
   Type,
   Square,
   Circle,
@@ -32,7 +31,6 @@ import {
   MediaLibrary,
   setMediaDragData,
 } from '@/features/editor/deps/media-library'
-import { KeyframeGraphPanel } from '@/features/editor/deps/timeline-ui'
 import { TransitionsPanel } from './transitions-panel'
 import {
   createDefaultAdjustmentItem,
@@ -50,7 +48,11 @@ import {
   getGpuCategoriesWithEffects,
   getGpuEffectDefaultParams,
 } from '@/infrastructure/gpu/effects'
-import { useEffectPreviews } from '@/features/editor/deps/effects-contract'
+import {
+  tEffectCategory,
+  tEffectText,
+  useEffectPreviews,
+} from '@/features/editor/deps/effects-contract'
 import { createLogger } from '@/shared/logging/logger'
 import { useSettingsStore } from '@/features/editor/deps/settings'
 import { ThirdPartyTtsPanel } from './third-party-tts-panel'
@@ -77,7 +79,7 @@ function renderTextTemplatePreview(preset?: TextStylePreset) {
       >
         <Type className="w-3.5 h-3.5 text-muted-foreground/80" />
         <div className="text-[9px] leading-none tracking-wide text-muted-foreground/80 uppercase">
-          Text
+          文本
         </div>
       </div>
     )
@@ -266,9 +268,9 @@ const TEXT_TEMPLATE_GROUPS: ReadonlyArray<{
   key: TextStylePresetLayout
   label: string
 }> = [
-  { key: 'single', label: 'Single' },
-  { key: 'two', label: '2 Spans' },
-  { key: 'three', label: '3 Spans' },
+  { key: 'single', label: '单行' },
+  { key: 'two', label: '双行' },
+  { key: 'three', label: '三行' },
 ]
 
 export const MediaSidebar = memo(function MediaSidebar() {
@@ -279,34 +281,10 @@ export const MediaSidebar = memo(function MediaSidebar() {
   const toggleLeftSidebar = useEditorStore((s) => s.toggleLeftSidebar)
   const mediaFullColumn = useEditorStore((s) => s.mediaFullColumn)
   const toggleMediaFullColumn = useEditorStore((s) => s.toggleMediaFullColumn)
-  const keyframeEditorOpen = useEditorStore((s) => s.keyframeEditorOpen)
-  const setKeyframeEditorOpen = useEditorStore((s) => s.setKeyframeEditorOpen)
-  const toggleKeyframeEditorOpen = useEditorStore((s) => s.toggleKeyframeEditorOpen)
   const activeTab = useEditorStore((s) => s.activeTab)
   const setActiveTab = useEditorStore((s) => s.setActiveTab)
   const sidebarWidth = useEditorStore((s) => s.sidebarWidth)
   const setSidebarWidth = useEditorStore((s) => s.setSidebarWidth)
-
-  // Auto-expand sidebar to 35% viewport when keyframe editor opens
-  const prevKeyframeOpenRef = useRef(keyframeEditorOpen)
-  const savedWidthBeforeExpandRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    const wasOpen = prevKeyframeOpenRef.current
-    prevKeyframeOpenRef.current = keyframeEditorOpen
-
-    if (keyframeEditorOpen && !wasOpen) {
-      const targetWidth = Math.floor(window.innerWidth * 0.35)
-      const clamped = clampLeftEditorSidebarWidth(targetWidth, editorLayout)
-      if (clamped > sidebarWidth) {
-        savedWidthBeforeExpandRef.current = sidebarWidth
-        setSidebarWidth(clamped)
-      }
-    } else if (!keyframeEditorOpen && wasOpen && savedWidthBeforeExpandRef.current !== null) {
-      setSidebarWidth(savedWidthBeforeExpandRef.current)
-      savedWidthBeforeExpandRef.current = null
-    }
-  }, [keyframeEditorOpen, editorLayout, sidebarWidth, setSidebarWidth])
 
   // Resize handle logic
   const isResizingRef = useRef(false)
@@ -497,12 +475,12 @@ export const MediaSidebar = memo(function MediaSidebar() {
     (presetId: string) => {
       const preset = EFFECT_PRESETS.find((p) => p.id === presetId)
       if (!preset) return
-      handleAddAdjustmentLayer(preset.effects, preset.name)
+      handleAddAdjustmentLayer(preset.effects, tEffectText(preset.name))
     },
     [handleAddAdjustmentLayer],
   )
 
-  // Add a single GPU effect ââ‚¬” to selected clips, or as adjustment layer if nothing selected
+  // Add a single GPU effect 芒芒鈥毬€?to selected clips, or as adjustment layer if nothing selected
   const handleAddGpuEffect = useCallback(
     (gpuEffectId: string) => {
       const { selectedItemIds } = useSelectionStore.getState()
@@ -523,7 +501,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
         }
         visualIds.forEach((id) => addEffect(id, effect))
       } else {
-        // No visual selection ââ‚¬” create adjustment layer with this effect
+        // No visual selection 芒芒鈥毬€?create adjustment layer with this effect
         const defaults = getGpuEffectDefaultParams(gpuEffectId)
         handleAddAdjustmentLayer([
           { type: 'gpu-effect', gpuEffectType: gpuEffectId, params: defaults },
@@ -563,12 +541,12 @@ export const MediaSidebar = memo(function MediaSidebar() {
 
   // Category items for the vertical nav
   const categories = [
-    { id: 'media' as const, icon: Film, label: 'Media' },
-    { id: 'text' as const, icon: Type, label: 'Text' },
-    { id: 'shapes' as const, icon: Pentagon, label: 'Shapes' },
-    { id: 'effects' as const, icon: Layers, label: 'Effects' },
-    { id: 'transitions' as const, icon: Blend, label: 'Transitions' },
-    { id: 'tts-api' as const, icon: Mic, label: 'TTS API' },
+    { id: 'media' as const, icon: Film, label: '媒体' },
+    { id: 'text' as const, icon: Type, label: '文本' },
+    { id: 'shapes' as const, icon: Pentagon, label: '图形' },
+    { id: 'effects' as const, icon: Layers, label: '效果' },
+    { id: 'transitions' as const, icon: Blend, label: '转场' },
+    { id: 'tts-api' as const, icon: Mic, label: 'TTS 接口' },
   ]
 
   useEffect(() => {
@@ -634,7 +612,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               width: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize,
               height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize,
             }}
-            data-tooltip={leftSidebarOpen ? 'Collapse Panel' : 'Expand Panel'}
+            data-tooltip={leftSidebarOpen ? '收起面板' : '展开面板'}
             data-tooltip-side="right"
           >
             {leftSidebarOpen ? (
@@ -673,25 +651,6 @@ export const MediaSidebar = memo(function MediaSidebar() {
               <Icon className="w-4 h-4" />
             </button>
           ))}
-
-          <div className="w-6 border-t border-border mx-auto my-0.5" />
-
-          <button
-            onClick={toggleKeyframeEditorOpen}
-            className={`
-              w-9 h-9 rounded-lg flex items-center justify-center transition-all
-              ${
-                keyframeEditorOpen
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-              }
-            `}
-            data-tooltip={keyframeEditorOpen ? 'Hide Keyframe Editor' : 'Keyframe Editor'}
-            data-tooltip-side="right"
-            aria-label={keyframeEditorOpen ? 'Hide keyframe editor' : 'Show keyframe editor'}
-          >
-            <LineChart className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
@@ -709,14 +668,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
         {/* Use Activity for React 19 performance optimization - defers updates when hidden */}
         <Activity mode={leftSidebarOpen ? 'visible' : 'hidden'}>
           <div className="h-full min-h-0 flex flex-col" style={{ width: sidebarWidth }}>
-            <KeyframeGraphPanel
-              isOpen={keyframeEditorOpen}
-              onToggle={toggleKeyframeEditorOpen}
-              onClose={() => setKeyframeEditorOpen(false)}
-              placement="top"
-            />
-
-            {/* Panel Header ââ‚¬” sits with the tab content, below the keyframe editor */}
+            {/* Panel Header */}
             <div
               className="flex items-center justify-between px-3 border-b border-border flex-shrink-0"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderHeight }}
@@ -733,7 +685,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   height: EDITOR_LAYOUT_CSS_VALUES.sidebarHeaderButtonSize,
                 }}
                 onClick={toggleMediaFullColumn}
-                data-tooltip={mediaFullColumn ? 'Dock to preview' : 'Expand full column'}
+                data-tooltip={mediaFullColumn ? '停靠到预览区' : '展开为整列'}
                 data-tooltip-side="bottom"
               >
                 {mediaFullColumn ? (
@@ -758,7 +710,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
               <div className="space-y-3">
                 <div className="space-y-3">
                   <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
-                    Templates
+                    模板
                   </div>
                   {TEXT_TEMPLATE_GROUPS.map((group) => {
                     const presets = textTemplatesByLayout[group.key]
@@ -779,7 +731,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                               draggable={true}
                               onDragStart={handleTemplateDragStart({
                                 itemType: 'text',
-                                label: 'Text',
+                                label: '文本',
                               })}
                               onDragEnd={handleTemplateDragEnd}
                               onClick={() => {
@@ -790,7 +742,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                             >
                               {renderTextTemplatePreview()}
                               <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight w-full">
-                                Add Text
+                                添加文本
                               </span>
                             </button>
                           ) : null}
@@ -837,7 +789,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Rectangle',
+                    label: '矩形',
                     shapeType: 'rectangle',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -851,7 +803,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Square className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Rectangle
+                    矩形
                   </span>
                 </button>
 
@@ -859,7 +811,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Circle',
+                    label: '圆形',
                     shapeType: 'circle',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -873,7 +825,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Circle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Circle
+                    圆形
                   </span>
                 </button>
 
@@ -881,7 +833,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Triangle',
+                    label: '三角形',
                     shapeType: 'triangle',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -895,7 +847,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Triangle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Triangle
+                    三角形
                   </span>
                 </button>
 
@@ -903,7 +855,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Ellipse',
+                    label: '椭圆',
                     shapeType: 'ellipse',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -917,7 +869,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Circle className="w-3.5 h-2.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Ellipse
+                    椭圆
                   </span>
                 </button>
 
@@ -925,7 +877,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Star',
+                    label: '星形',
                     shapeType: 'star',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -939,7 +891,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Star className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Star
+                    星形
                   </span>
                 </button>
 
@@ -947,7 +899,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Polygon',
+                    label: '多边形',
                     shapeType: 'polygon',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -961,7 +913,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Hexagon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Polygon
+                    多边形
                   </span>
                 </button>
 
@@ -969,7 +921,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'shape',
-                    label: 'Heart',
+                    label: '心形',
                     shapeType: 'heart',
                   })}
                   onDragEnd={handleTemplateDragEnd}
@@ -983,20 +935,20 @@ export const MediaSidebar = memo(function MediaSidebar() {
                     <Heart className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Heart
+                    心形
                   </span>
                 </button>
 
                 <button
                   onClick={() => useMaskEditorStore.getState().startShapePenMode()}
                   className="flex flex-col items-center justify-center gap-1 p-2 rounded-lg border border-border bg-secondary/30 hover:bg-secondary/50 hover:border-primary/50 transition-colors group"
-                  title="Draw a custom path shape with the pen tool"
+                  title="使用钢笔工具绘制自定义路径图形"
                 >
                   <div className="w-7 h-7 rounded border border-border bg-secondary/50 flex items-center justify-center group-hover:bg-secondary/70">
                     <Pen className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground" />
                   </div>
                   <span className="text-[9px] text-muted-foreground group-hover:text-foreground">
-                    Pen
+                    钢笔
                   </span>
                 </button>
               </div>
@@ -1012,7 +964,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   draggable={true}
                   onDragStart={handleTemplateDragStart({
                     itemType: 'adjustment',
-                    label: 'Adjustment Layer',
+                    label: '调整图层',
                   })}
                   onDragEnd={handleTemplateDragEnd}
                   onClick={() => {
@@ -1026,7 +978,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                   </div>
                   <div className="text-left">
                     <div className="text-xs text-muted-foreground group-hover:text-foreground">
-                      Blank Adjustment Layer
+                      空白调整图层
                     </div>
                   </div>
                 </button>
@@ -1034,7 +986,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 {/* Presets */}
                 <div>
                   <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                    Presets
+                    预设
                   </div>
                   <div className="grid grid-cols-3 gap-1.5">
                     {EFFECT_PRESETS.map((preset) => (
@@ -1043,7 +995,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                         draggable={true}
                         onDragStart={handleTemplateDragStart({
                           itemType: 'adjustment',
-                          label: preset.name,
+                          label: tEffectText(preset.name),
                           effects: preset.effects,
                         })}
                         onDragEnd={handleTemplateDragEnd}
@@ -1066,7 +1018,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                           </div>
                         )}
                         <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight">
-                          {preset.name}
+                          {tEffectText(preset.name)}
                         </span>
                       </button>
                     ))}
@@ -1077,7 +1029,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                 {gpuCategories.map(({ category, effects: catEffects }) => (
                   <div key={category}>
                     <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1.5">
-                      {category}
+                      {tEffectCategory(category)}
                     </div>
                     <div className="grid grid-cols-3 gap-1.5">
                       {catEffects.map((def) => (
@@ -1086,7 +1038,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                           draggable={true}
                           onDragStart={handleTemplateDragStart({
                             itemType: 'adjustment',
-                            label: def.name,
+                            label: tEffectText(def.name),
                             effects: [
                               {
                                 type: 'gpu-effect',
@@ -1113,7 +1065,7 @@ export const MediaSidebar = memo(function MediaSidebar() {
                             <div className="w-full aspect-video rounded-sm bg-muted" />
                           )}
                           <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight truncate w-full">
-                            {def.name}
+                            {tEffectText(def.name)}
                           </span>
                         </button>
                       ))}

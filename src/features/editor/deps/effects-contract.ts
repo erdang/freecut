@@ -8,4 +8,5 @@ export {
   useEffectPreviews,
   prewarmEffectPreviews,
 } from '@/features/effects/hooks/use-effect-previews'
+export { tEffectCategory, tEffectText } from '@/features/effects/utils/effect-localization'
 export type { EffectPreviewEntry } from '@/features/effects/hooks/use-effect-previews'

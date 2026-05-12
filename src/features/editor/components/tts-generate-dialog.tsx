@@ -193,7 +193,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         type="button"
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm glow-primary-sm transition-colors hover:bg-primary/90"
         onClick={togglePlay}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? '暂停' : '播放'}
       >
         {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-px" />}
       </button>
@@ -207,7 +207,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         max={100}
         step={0.1}
         className="min-w-0 flex-1"
-        aria-label="Seek"
+        aria-label="拖动进度"
       />
       <span className="shrink-0 select-none font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatTime(currentTime)}
@@ -301,18 +301,18 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
   const handleGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setError('Open a project before generating audio.')
+      setError('请先打开项目再生成音频。')
       return
     }
     if (!trimmedText) {
-      setError('Enter some text to synthesize.')
+      setError('请输入要合成的文本。')
       return
     }
     if (!isTtsSupported) {
       setError(
         engine === 'kokoro'
-          ? 'WebGPU is required for Kokoro TTS. Try Chrome 113+, Edge 113+, or Safari 26+.'
-          : 'Browser-managed storage is required for MOSS multilingual TTS. Try a recent Chromium browser.',
+          ? 'Kokoro TTS 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。'
+          : 'MOSS 多语言 TTS 需要浏览器托管存储。请使用较新的 Chromium 浏览器。',
       )
       return
     }
@@ -327,7 +327,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
     setResult(null)
     setInserted(false)
     setIsGenerating(true)
-    setProgress('Preparing local TTS...')
+    setProgress('正在准备本地 TTS...')
 
     const thisSession = sessionIdRef.current
 
@@ -367,7 +367,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
           ? (KOKORO_TTS_VOICE_OPTIONS.find((option) => option.value === kokoroVoice)?.label ??
             kokoroVoice)
           : getMossTtsVoiceOption(mossVoice).label
-      const modelLabel = engine === 'kokoro' ? 'Best' : 'Multilingual Nano'
+      const modelLabel = engine === 'kokoro' ? '最佳' : '多语言 Nano'
       const tags =
         engine === 'kokoro'
           ? [
@@ -383,9 +383,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
       setProgress(null)
     } catch (generationError) {
       if (sessionIdRef.current !== thisSession) return
-      setError(
-        generationError instanceof Error ? generationError.message : 'Failed to generate speech.',
-      )
+      setError(generationError instanceof Error ? generationError.message : '语音生成失败。')
       setProgress(null)
     } finally {
       if (sessionIdRef.current === thisSession) {
@@ -428,18 +426,16 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         setInserted(true)
         showNotification({
           type: 'success',
-          message: `Added "${media.fileName}" to timeline and linked with text.`,
+          message: `已将“${media.fileName}”添加到时间线并与文本关联。`,
         })
       } else {
         showNotification({
           type: 'warning',
-          message: `Saved "${media.fileName}" but no audio track is available.`,
+          message: `已保存“${media.fileName}”，但当前没有可用的音频轨道。`,
         })
       }
     } catch (insertError) {
-      setError(
-        insertError instanceof Error ? insertError.message : 'Failed to save and insert audio.',
-      )
+      setError(insertError instanceof Error ? insertError.message : '保存并插入音频失败。')
     } finally {
       setIsInserting(false)
     }
@@ -461,10 +457,10 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <WandSparkles className="h-4 w-4" />
-            Generate Audio from Text
+            从文本生成音频
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Generate speech and insert it at the text clip's position.
+            生成语音并插入到文本片段对应位置。
           </DialogDescription>
         </DialogHeader>
 
@@ -472,21 +468,21 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
           {!isTtsSupported && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
               {engine === 'kokoro'
-                ? 'WebGPU is not available in this browser. Kokoro TTS needs Chrome 113+, Edge 113+, or Safari 26+.'
-                : 'Browser-managed storage is not available in this browser. MOSS multilingual TTS works best in a recent Chromium browser.'}
+                ? '当前浏览器不支持 WebGPU。Kokoro TTS 需要 Chrome 113+、Edge 113+ 或 Safari 26+。'
+                : '当前浏览器不支持浏览器托管存储。MOSS 多语言 TTS 建议使用较新的 Chromium 浏览器。'}
             </div>
           )}
 
           <div className="space-y-3">
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <Label>Engine</Label>
+                <Label>引擎</Label>
                 <Popover>
                   <PopoverTrigger asChild>
                     <button
                       type="button"
                       className="inline-flex h-4 w-4 items-center justify-center text-muted-foreground transition-colors hover:text-foreground"
-                      aria-label="TTS engine support details"
+                      aria-label="TTS 引擎支持说明"
                     >
                       <Info className="h-3.5 w-3.5" />
                     </button>
@@ -494,12 +490,12 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                   <PopoverContent align="start" className="w-80 space-y-2 p-3">
                     <div className="space-y-1">
                       <p className="text-xs font-medium">Kokoro</p>
-                      <p className="text-[11px] text-muted-foreground">English voices on WebGPU.</p>
+                      <p className="text-[11px] text-muted-foreground">基于 WebGPU 的英文语音。</p>
                     </div>
                     <div className="space-y-1">
                       <p className="text-xs font-medium">MOSS Nano</p>
                       <p className="text-[11px] text-muted-foreground">
-                        Supported languages: {mossLanguagesLabel}.
+                        支持语言：{mossLanguagesLabel}。
                       </p>
                     </div>
                   </PopoverContent>
@@ -515,10 +511,10 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="kokoro" className="text-xs">
-                    Kokoro (English, WebGPU)
+                    Kokoro（英文，WebGPU）
                   </SelectItem>
                   <SelectItem value="moss" className="text-xs">
-                    MOSS Nano (20 languages, CPU)
+                    MOSS Nano（20 种语言，CPU）
                   </SelectItem>
                 </SelectContent>
               </Select>
@@ -526,7 +522,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
             <div className="grid grid-cols-1 gap-3">
               <div className="space-y-1.5">
-                <Label>Voice</Label>
+                <Label>音色</Label>
                 <Select
                   value={voice}
                   onValueChange={(value) => {
@@ -557,12 +553,12 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
 
           {/* Text input */}
           <div className="space-y-2">
-            <Label htmlFor="tts-dialog-text">Text</Label>
+            <Label htmlFor="tts-dialog-text">文本</Label>
             <Textarea
               id="tts-dialog-text"
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="Enter the text you want to hear spoken..."
+              placeholder="输入你想要朗读的文本..."
               className="min-h-28 resize-y bg-secondary/30 text-sm"
               disabled={isGenerating || isInserting}
             />
@@ -571,7 +567,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
           {/* Speed */}
           {supportsNativeSpeed && (
             <SliderInput
-              label="Speed"
+              label="语速"
               value={speed}
               onChange={setSpeed}
               min={0.5}
@@ -614,7 +610,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
               {inserted && (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400">
                   <CheckCircle2 className="h-3 w-3" />
-                  Inserted & linked
+                  已插入并关联
                 </span>
               )}
             </div>
@@ -636,7 +632,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
               ) : (
                 <WandSparkles className="h-3.5 w-3.5" />
               )}
-              {isGenerating ? 'Generating...' : result ? 'Regenerate' : 'Generate'}
+              {isGenerating ? '生成中...' : result ? '重新生成' : '生成'}
             </Button>
 
             {result && !inserted && (
@@ -653,7 +649,7 @@ export const TtsGenerateDialog = memo(function TtsGenerateDialog() {
                 ) : (
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                {isInserting ? 'Inserting...' : 'Insert & Link'}
+                {isInserting ? '插入中...' : '插入并关联'}
               </Button>
             )}
           </div>

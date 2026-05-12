@@ -75,21 +75,21 @@ const VIDEO_CODEC_LABELS: Record<string, string> = {
 }
 
 const VIDEO_CONTAINER_DESCRIPTIONS: Record<ClientVideoContainer, string> = {
-  mp4: 'Most compatible, H.264/H.265',
-  mov: 'Best for macOS/iOS',
-  webm: 'Web-optimized, VP8/VP9/AV1',
-  mkv: 'Flexible, H.264/H.265/VP8/VP9/AV1',
+  mp4: '兼容性最好，支持 H.264/H.265',
+  mov: '最适合 macOS/iOS',
+  webm: '网页优化，支持 VP8/VP9/AV1',
+  mkv: '格式灵活，支持 H.264/H.265/VP8/VP9/AV1',
 }
 
 function formatTime(seconds: number): string {
-  if (seconds < 60) return `${Math.round(seconds)}s`
+  if (seconds < 60) return `${Math.round(seconds)}秒`
   const minutes = Math.floor(seconds / 60)
   const remainingSeconds = Math.round(seconds % 60)
-  return `${minutes}m ${remainingSeconds}s`
+  return `${minutes}分 ${remainingSeconds}秒`
 }
 
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024) return `${bytes} 字节`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
@@ -108,7 +108,7 @@ function getResolutionOptions(projectWidth: number, projectHeight: number) {
 
     const label =
       scale === 1
-        ? `Same as project (${width}×${height})`
+        ? `与项目一致 (${width}×${height})`
         : `${Math.min(width, height)}p (${width}×${height})`
 
     return { value: `${width}x${height}`, label }
@@ -287,9 +287,9 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   }, [open, projectHeight, projectWidth, resetState])
 
   const getAudioContainerOptions = () => [
-    { value: 'mp3', label: 'MP3', description: 'Universal, small files' },
-    { value: 'aac', label: 'AAC', description: 'High quality, compact' },
-    { value: 'wav', label: 'WAV', description: 'Lossless PCM, large files' },
+    { value: 'mp3', label: 'MP3', description: '通用格式，文件较小' },
+    { value: 'aac', label: 'AAC', description: '音质较高，体积紧凑' },
+    { value: 'wav', label: 'WAV', description: '无损 PCM，文件较大' },
   ]
 
   useEffect(() => {
@@ -310,7 +310,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
       })
       .catch((err) => {
         if (cancelled) return
-        const message = err instanceof Error ? err.message : 'Unable to verify codec support'
+        const message = err instanceof Error ? err.message : '无法验证编码器支持情况'
         setVideoSupportError(message)
       })
       .finally(() => {
@@ -410,33 +410,33 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const getTitle = () => {
     switch (view) {
       case 'settings':
-        return 'Export Video'
+        return '导出媒体'
       case 'progress':
         return (
           <span className="flex items-center gap-2">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            Exporting video...
+            正在导出...
           </span>
         )
       case 'complete':
         return (
           <span className="flex items-center gap-2">
             <CheckCircle2 className="h-5 w-5 text-green-500" />
-            Export complete!
+            导出完成
           </span>
         )
       case 'error':
         return (
           <span className="flex items-center gap-2">
             <AlertCircle className="h-5 w-5 text-destructive" />
-            Export failed
+            导出失败
           </span>
         )
       case 'cancelled':
         return (
           <span className="flex items-center gap-2">
             <X className="h-5 w-5 text-muted-foreground" />
-            Export cancelled
+            已取消导出
           </span>
         )
     }
@@ -445,15 +445,15 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const getDescription = () => {
     switch (view) {
       case 'settings':
-        return 'Configure export settings and render your video'
+        return '设置导出参数并开始渲染'
       case 'progress':
-        return 'Rendering your video'
+        return '正在渲染媒体'
       case 'complete':
-        return 'Your video is ready to download'
+        return '文件已生成，可立即下载'
       case 'error':
-        return 'Something went wrong during export'
+        return '导出过程中发生错误'
       case 'cancelled':
-        return 'The export was cancelled'
+        return '导出已取消'
     }
   }
 
@@ -475,7 +475,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
           <div className="space-y-6 py-4">
             {/* Export Mode: Video or Audio Toggle Group */}
             <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">Export Type</Label>
+              <Label className="text-sm font-medium">导出类型</Label>
               <div className="flex rounded-md border border-border p-0.5 bg-muted/30">
                 <button
                   type="button"
@@ -487,7 +487,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   }`}
                 >
                   <Video className="h-3.5 w-3.5" />
-                  Video
+                  视频
                 </button>
                 <button
                   type="button"
@@ -499,7 +499,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   }`}
                 >
                   <Music className="h-3.5 w-3.5" />
-                  Audio
+                  音频
                 </button>
               </div>
             </div>
@@ -509,12 +509,12 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Scissors className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">Export Range</span>
+                  <span className="text-sm font-medium">导出范围</span>
                 </div>
                 {hasInOutPoints && (
                   <div className="flex items-center gap-2">
                     <Label htmlFor="render-whole" className="text-xs text-muted-foreground">
-                      Render whole project
+                      导出整个项目
                     </Label>
                     <Switch
                       id="render-whole"
@@ -526,19 +526,19 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               </div>
               <div className="grid grid-cols-3 gap-3 text-sm">
                 <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">In</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">入点</div>
                   <div className="font-mono text-foreground">
                     {formatTimecode(exportRange.start, fps)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">Out</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">出点</div>
                   <div className="font-mono text-foreground">
                     {formatTimecode(exportRange.end, fps)}
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">Duration</div>
+                  <div className="text-xs text-muted-foreground mb-0.5">时长</div>
                   <div className="font-mono text-foreground">
                     {formatTime(framesToSeconds(exportRange.duration, fps))}
                   </div>
@@ -546,7 +546,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               </div>
               {hasInOutPoints && !renderWholeProject && (
                 <p className="text-xs text-muted-foreground">
-                  Exporting in/out range. Toggle above to export the full timeline.
+                  当前仅导出入点到出点范围。打开上方开关可导出完整时间线。
                 </p>
               )}
             </div>
@@ -559,8 +559,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        Could not verify browser codec support. Export will validate again when
-                        rendering starts.
+                        无法确认浏览器编码器支持情况。开始渲染时会再次校验。
                       </AlertDescription>
                     </Alert>
                   )}
@@ -569,20 +568,20 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                     <Alert>
                       <AlertCircle className="h-4 w-4" />
                       <AlertDescription>
-                        This browser cannot encode video at {settings.resolution.width}x
-                        {settings.resolution.height}. Try a lower resolution or another browser.
+                        当前浏览器无法在 {settings.resolution.width}x{settings.resolution.height}{' '}
+                        分辨率下编码视频。请尝试更低分辨率或更换浏览器。
                       </AlertDescription>
                     </Alert>
                   )}
 
                   <div className="space-y-2">
-                    <Label htmlFor="container">Format</Label>
+                    <Label htmlFor="container">格式</Label>
                     <Select
                       value={videoContainer}
                       onValueChange={(v) => setVideoContainer(v as ClientVideoContainer)}
                     >
                       <SelectTrigger id="container">
-                        <SelectValue placeholder="Select format" />
+                        <SelectValue placeholder="选择格式" />
                       </SelectTrigger>
                       <SelectContent>
                         {videoContainerOptions.map((option) => (
@@ -602,7 +601,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="codec">Codec</Label>
+                    <Label htmlFor="codec">编码器</Label>
                     <Select
                       value={settings.codec}
                       onValueChange={(value) =>
@@ -610,7 +609,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                       }
                     >
                       <SelectTrigger id="codec">
-                        <SelectValue placeholder="Select codec" />
+                        <SelectValue placeholder="选择编码器" />
                       </SelectTrigger>
                       <SelectContent>
                         {codecOptions.map((option) => (
@@ -627,7 +626,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="quality">Quality</Label>
+                    <Label htmlFor="quality">质量</Label>
                     <Select
                       value={settings.quality}
                       onValueChange={(value) =>
@@ -635,19 +634,19 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                       }
                     >
                       <SelectTrigger id="quality">
-                        <SelectValue placeholder="Select quality" />
+                        <SelectValue placeholder="选择质量" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="low">Low (Faster, smaller file)</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High (Recommended)</SelectItem>
-                        <SelectItem value="ultra">Ultra (Slower, larger file)</SelectItem>
+                        <SelectItem value="low">低（更快，文件更小）</SelectItem>
+                        <SelectItem value="medium">中</SelectItem>
+                        <SelectItem value="high">高（推荐）</SelectItem>
+                        <SelectItem value="ultra">超高（更慢，文件更大）</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="resolution">Resolution</Label>
+                    <Label htmlFor="resolution">分辨率</Label>
                     <Select
                       value={`${settings.resolution.width}x${settings.resolution.height}`}
                       onValueChange={(value) => {
@@ -658,7 +657,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                       }}
                     >
                       <SelectTrigger id="resolution">
-                        <SelectValue placeholder="Select resolution" />
+                        <SelectValue placeholder="选择分辨率" />
                       </SelectTrigger>
                       <SelectContent>
                         {resolutionOptions.map((option) => (
@@ -673,28 +672,26 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
                     <div className="space-y-1">
                       <Label htmlFor="embed-subtitles" className="text-sm font-medium">
-                        Embed subtitles
+                        嵌入字幕
                       </Label>
                       <p className="text-xs text-muted-foreground">
-                        Adds transcript captions as a selectable subtitle track when available.
+                        检测到转录字幕时，将其作为可选字幕轨道嵌入导出文件。
                       </p>
                       {embedSubtitles &&
                         hasTranscriptSubtitles &&
                         !containerSupportsEmbeddedSubtitles && (
                           <p className="text-xs text-destructive">
-                            {videoContainer.toUpperCase()} does not support embedded subtitles. Use
-                            MP4, WebM, or MKV.
+                            {videoContainer.toUpperCase()} 不支持嵌入字幕，请使用 MP4、WebM 或 MKV。
                           </p>
                         )}
                       {embedSubtitles && hasTranscriptSubtitles && videoContainer === 'mp4' && (
                         <p className="text-xs text-muted-foreground">
-                          MP4 embeds WebVTT subtitles; some players only show MKV/WebM subtitle
-                          tracks.
+                          MP4 使用 WebVTT 字幕；部分播放器仅显示 MKV/WebM 的字幕轨道。
                         </p>
                       )}
                       {!hasTranscriptSubtitles && (
                         <p className="text-xs text-muted-foreground">
-                          No transcript subtitle segments found on the timeline.
+                          时间线上未找到转录字幕片段。
                         </p>
                       )}
                     </div>
@@ -714,19 +711,17 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               <div className="space-y-4">
                 <Alert>
                   <Music className="h-4 w-4" />
-                  <AlertDescription>
-                    Exports audio only. Video tracks will be ignored.
-                  </AlertDescription>
+                  <AlertDescription>仅导出音频，视频轨道将被忽略。</AlertDescription>
                 </Alert>
 
                 <div className="space-y-2">
-                  <Label htmlFor="audio-format">Format</Label>
+                  <Label htmlFor="audio-format">格式</Label>
                   <Select
                     value={audioContainer}
                     onValueChange={(v) => setAudioContainer(v as ClientAudioContainer)}
                   >
                     <SelectTrigger id="audio-format">
-                      <SelectValue placeholder="Select format" />
+                      <SelectValue placeholder="选择格式" />
                     </SelectTrigger>
                     <SelectContent>
                       {getAudioContainerOptions().map((option) => (
@@ -742,7 +737,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="audio-quality">Quality</Label>
+                  <Label htmlFor="audio-quality">质量</Label>
                   <Select
                     value={settings.quality}
                     onValueChange={(value) =>
@@ -750,13 +745,13 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                     }
                   >
                     <SelectTrigger id="audio-quality">
-                      <SelectValue placeholder="Select quality" />
+                      <SelectValue placeholder="选择质量" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="low">Low (96 kbps)</SelectItem>
-                      <SelectItem value="medium">Medium (192 kbps)</SelectItem>
-                      <SelectItem value="high">High (256 kbps)</SelectItem>
-                      <SelectItem value="ultra">Ultra (320 kbps)</SelectItem>
+                      <SelectItem value="low">低（96 kbps）</SelectItem>
+                      <SelectItem value="medium">中（192 kbps）</SelectItem>
+                      <SelectItem value="high">高（256 kbps）</SelectItem>
+                      <SelectItem value="ultra">超高（320 kbps）</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -765,7 +760,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={handleClose}>
-                Cancel
+                取消
               </Button>
               <Button
                 onClick={handleStartExport}
@@ -774,7 +769,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                   (!hasSupportedVideoPath || isCheckingVideoSupport || hasSubtitleExportConflict)
                 }
               >
-                {exportMode === 'audio' ? 'Export Audio' : 'Export Video'}
+                {exportMode === 'audio' ? '导出音频' : '导出视频'}
               </Button>
             </div>
           </div>
@@ -790,10 +785,10 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 </div>
                 <div className="flex items-center justify-between text-sm gap-2">
                   <span className="text-muted-foreground truncate">
-                    {status === 'preparing' && 'Preparing...'}
-                    {status === 'rendering' && 'Rendering frames...'}
-                    {status === 'encoding' && 'Encoding...'}
-                    {status === 'finalizing' && 'Finalizing...'}
+                    {status === 'preparing' && '准备中...'}
+                    {status === 'rendering' && '正在渲染帧...'}
+                    {status === 'encoding' && '正在编码...'}
+                    {status === 'finalizing' && '正在收尾...'}
                   </span>
                   <span className="font-medium tabular-nums flex-shrink-0">
                     {Math.round(progress)}%
@@ -805,7 +800,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 {renderedFrames !== undefined && totalFrames !== undefined && (
                   <div className="flex items-center gap-2 text-sm">
                     <Film className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-muted-foreground">Frames:</span>
+                    <span className="text-muted-foreground">帧数：</span>
                     <span className="font-medium tabular-nums">
                       {renderedFrames}/{totalFrames}
                     </span>
@@ -814,20 +809,20 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
                 {elapsedSeconds > 0 && (
                   <div className="flex items-center gap-2 text-sm">
                     <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <span className="text-muted-foreground">Elapsed:</span>
+                    <span className="text-muted-foreground">已用时：</span>
                     <span className="font-medium tabular-nums">{formatTime(elapsedSeconds)}</span>
                   </div>
                 )}
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Keep this tab open while rendering. Longer videos may take several minutes.
+                渲染期间请保持当前页面开启。较长视频可能需要数分钟。
               </p>
             </div>
 
             <div className="flex justify-end">
               <Button variant="outline" onClick={cancelExport}>
-                Cancel Export
+                取消导出
               </Button>
             </div>
           </div>
@@ -841,7 +836,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
             <Alert className="border-green-900 bg-green-950">
               <CheckCircle2 className="h-4 w-4 text-green-500" />
               <AlertDescription className="text-green-400">
-                {exportMode === 'audio' ? 'Audio' : 'Video'} exported successfully!
+                {exportMode === 'audio' ? '音频' : '视频'}导出成功！
               </AlertDescription>
             </Alert>
 
@@ -849,14 +844,14 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
               {fileSize && (
                 <div className="flex items-center gap-2 text-sm">
                   <HardDrive className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">File size:</span>
+                  <span className="text-muted-foreground">文件大小：</span>
                   <span className="font-medium">{formatFileSize(fileSize)}</span>
                 </div>
               )}
               {elapsedSeconds > 0 && (
                 <div className="flex items-center gap-2 text-sm">
                   <Clock className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Time taken:</span>
+                  <span className="text-muted-foreground">总耗时：</span>
                   <span className="font-medium">{formatTime(elapsedSeconds)}</span>
                 </div>
               )}
@@ -864,11 +859,11 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={handleClose}>
-                Close
+                关闭
               </Button>
               <Button onClick={downloadVideo}>
                 <Download className="mr-2 h-4 w-4" />
-                Download
+                下载
               </Button>
             </div>
           </div>
@@ -884,7 +879,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
             <div className="flex justify-end">
               <Button variant="outline" onClick={handleClose}>
-                Close
+                关闭
               </Button>
             </div>
           </div>
@@ -895,12 +890,12 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
           <div className="space-y-4 py-4">
             <Alert>
               <X className="h-4 w-4" />
-              <AlertDescription>The export process was cancelled.</AlertDescription>
+              <AlertDescription>导出流程已取消。</AlertDescription>
             </Alert>
 
             <div className="flex justify-end">
               <Button variant="outline" onClick={handleClose}>
-                Close
+                关闭
               </Button>
             </div>
           </div>

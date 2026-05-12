@@ -199,20 +199,20 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
   const remainingPenPoints = Math.max(0, 3 - penVertexCount)
   const displayedEditVertexCount = previewVertexCount || editVertexCount
   const penModeHint = canFinishPenPath
-    ? 'Close the path from here, or click the first node.'
+    ? '可在此闭合路径，或点击首个节点。'
     : penVertexCount === 0
-      ? 'Click in the preview to place your first point.'
-      : `Add ${remainingPenPoints} more ${remainingPenPoints === 1 ? 'point' : 'points'} to finish.`
+      ? '在预览区点击放置第一个点。'
+      : `再添加 ${remainingPenPoints} 个点即可完成。`
   const editModeHint =
     displayedEditVertexCount > 0
-      ? 'Drag points, handles, or the path body to adjust the shape.'
-      : 'Drag inside the path to move it.'
+      ? '拖动节点、控制柄或路径主体以调整形状。'
+      : '在路径内部拖动即可移动。'
   const selectedVertexHint =
     selectedVertexCount === 0
-      ? 'Select a point to enable corner and bezier conversion.'
+      ? '选择一个点后可转换为直角点或贝塞尔点。'
       : selectedVertexCount === 1 && selectedVertexIndex !== null
-        ? `Point ${selectedVertexIndex + 1} selected for knot conversion.`
-        : `${selectedVertexCount} points selected for knot conversion.`
+        ? `已选择第 ${selectedVertexIndex + 1} 个点，可进行节点转换。`
+        : `已选择 ${selectedVertexCount} 个点，可进行节点转换。`
 
   // Measure preview container size for zoom calculations
   useEffect(() => {
@@ -473,7 +473,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
       ref={splitContainerRef}
       className="flex-1 flex min-h-0 min-w-0 relative"
       role="region"
-      aria-label="Preview area"
+      aria-label="预览区域"
     >
       {sourcePreviewMediaId && (
         <>
@@ -496,8 +496,8 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               onMouseDown={handleSourceSplitDragStart}
               onReset={handleResetSourceSplit}
               showReset={Math.abs(displayedSourceSplitPercent - sourceResetPercent) > 0.5}
-              resetLabel="Reset source monitor width"
-              resetTooltip="Reset Source Monitor Width"
+              resetLabel="重置源监视器宽度"
+              resetTooltip="重置源监视器宽度"
             />
           </InteractionLockRegion>
         </>
@@ -507,14 +507,14 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
         className={`flex flex-col min-w-0 min-h-0 ${hasSidePanels ? '' : 'flex-1'}`}
         style={hasSidePanels ? { width: `${programPanelPercent}%` } : undefined}
         role="region"
-        aria-label="Program monitor"
+        aria-label="节目监视器"
       >
         {hasSidePanels && (
           <div
             className="border-b border-border flex items-center px-3 flex-shrink-0"
             style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewSplitHeaderHeight }}
           >
-            <span className="text-xs text-muted-foreground">Program</span>
+            <span className="text-xs text-muted-foreground">节目</span>
           </div>
         )}
 
@@ -522,7 +522,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
           <div
             ref={previewContainerRef}
             className="flex-1 min-h-0 relative overflow-hidden"
-            aria-label="Preview canvas region"
+            aria-label="预览画布区域"
           >
             <ProgramPreviewSurface
               project={liveProject}
@@ -536,15 +536,15 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
               role="toolbar"
-              aria-label="Path pen controls"
+              aria-label="钢笔路径控制"
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-500">
-                    Pen Tool
+                    钢笔工具
                   </span>
                   <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-600">
-                    {penVertexCount} {penVertexCount === 1 ? 'point' : 'points'}
+                    {penVertexCount} 个点
                   </span>
                 </div>
                 <span className="min-w-0 truncate text-xs text-muted-foreground">
@@ -553,7 +553,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
                 <span className="hidden text-[11px] text-muted-foreground lg:inline">
-                  Backspace removes the last point.
+                  Backspace 可删除最后一个点。
                 </span>
                 <Button
                   type="button"
@@ -562,7 +562,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
                   disabled={!canFinishPenPath}
                   onClick={requestFinishPenMode}
                 >
-                  Finish Shape
+                  完成形状
                 </Button>
                 <Button
                   type="button"
@@ -571,7 +571,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
                   className="h-8 px-3 text-[11px]"
                   onClick={requestCancelPenMode}
                 >
-                  Cancel
+                  取消
                 </Button>
               </div>
             </div>
@@ -580,15 +580,15 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               className="border-t border-border panel-header flex items-center px-3 flex-shrink-0 gap-3 overflow-hidden"
               style={{ height: EDITOR_LAYOUT_CSS_VALUES.previewControlsHeight }}
               role="toolbar"
-              aria-label="Path edit controls"
+              aria-label="路径编辑控制"
             >
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-500">
-                    Path Edit
+                    路径编辑
                   </span>
                   <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium text-cyan-600">
-                    {displayedEditVertexCount} {displayedEditVertexCount === 1 ? 'point' : 'points'}
+                    {displayedEditVertexCount} 个点
                   </span>
                 </div>
                 <span className="min-w-0 truncate text-xs text-muted-foreground">
@@ -597,7 +597,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
                 <span className="hidden text-[11px] text-muted-foreground xl:inline">
-                  Double-click an edge to add a point. Drag empty space to box-select points.
+                  双击边线可添加点，拖动空白区域可框选点。
                 </span>
                 <span className="hidden text-[11px] text-muted-foreground 2xl:inline">
                   {selectedVertexHint}
@@ -610,7 +610,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
                   disabled={!hasSelectedVertex}
                   onClick={() => requestConvertSelectedVertex('corner')}
                 >
-                  Corner
+                  直角点
                 </Button>
                 <Button
                   type="button"
@@ -620,7 +620,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
                   disabled={!hasSelectedVertex}
                   onClick={() => requestConvertSelectedVertex('bezier')}
                 >
-                  Bezier
+                  贝塞尔点
                 </Button>
                 <Button
                   type="button"
@@ -628,7 +628,7 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
                   className="h-8 px-3 text-[11px]"
                   onClick={stopMaskEditing}
                 >
-                  Done
+                  完成
                 </Button>
               </div>
             </div>
@@ -674,8 +674,8 @@ export const PreviewArea = memo(function PreviewArea({ project }: PreviewAreaPro
               onMouseDown={handleScopesSplitDragStart}
               onReset={handleResetScopesSplit}
               showReset={Math.abs(displayedScopesSplitPercent - scopesResetPercent) > 0.5}
-              resetLabel="Reset color scopes width"
-              resetTooltip="Reset Color Scopes Width"
+              resetLabel="重置示波器宽度"
+              resetTooltip="重置示波器宽度"
             />
           </InteractionLockRegion>
           <InteractionLockRegion

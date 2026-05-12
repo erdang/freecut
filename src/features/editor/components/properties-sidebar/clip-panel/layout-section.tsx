@@ -639,7 +639,7 @@ export const LayoutSection = memo(function LayoutSection({
     queueMicrotask(clearTransformUiState)
   }, [items, onTransformChange, canvas, clearTransformUiState])
 
-  // Reset rotation to 0°
+  // Reset rotation to 0掳
   const handleResetRotation = useCallback(() => {
     const tolerance = 0.5
     items.forEach((item) => {
@@ -714,12 +714,12 @@ export const LayoutSection = memo(function LayoutSection({
             </div>
           </div>
           <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 flex-shrink-0"
-          onClick={handleResetPosition}
-          title="重置到中心"
-        >
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 flex-shrink-0"
+            onClick={handleResetPosition}
+            title="重置到中心"
+          >
             <RotateCcw className="w-3.5 h-3.5" />
           </Button>
         </div>
@@ -816,7 +816,7 @@ export const LayoutSection = memo(function LayoutSection({
       </PropertyRow>
 
       {mediaTransformItems.length > 0 && (
-        <PropertyRow label="Anchor">
+        <PropertyRow label="锚点">
           <div className="flex items-center gap-1 w-full">
             <div className="flex items-center gap-0.5 flex-1 min-w-0">
               <NumberInput
@@ -855,7 +855,7 @@ export const LayoutSection = memo(function LayoutSection({
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetAnchor}
-              title="Reset anchor to center"
+              title="重置锚点到中心"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
@@ -864,23 +864,23 @@ export const LayoutSection = memo(function LayoutSection({
       )}
 
       {mediaTransformItems.length > 0 && (
-        <PropertyRow label="Flip">
+        <PropertyRow label="翻转">
           <div className="flex items-center justify-between gap-3 w-full">
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Switch
                 checked={flipHorizontal === 'mixed' ? false : flipHorizontal}
                 onCheckedChange={handleFlipHorizontalChange}
-                aria-label="Flip video horizontally"
+                aria-label="水平翻转视频"
               />
-              <span>Horizontal{flipHorizontal === 'mixed' ? ' (mixed)' : ''}</span>
+              <span>水平{flipHorizontal === 'mixed' ? '（混合）' : ''}</span>
             </label>
             <label className="flex items-center gap-2 text-xs text-muted-foreground">
               <Switch
                 checked={flipVertical === 'mixed' ? false : flipVertical}
                 onCheckedChange={handleFlipVerticalChange}
-                aria-label="Flip video vertically"
+                aria-label="垂直翻转视频"
               />
-              <span>Vertical{flipVertical === 'mixed' ? ' (mixed)' : ''}</span>
+              <span>垂直{flipVertical === 'mixed' ? '（混合）' : ''}</span>
             </label>
           </div>
         </PropertyRow>

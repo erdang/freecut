@@ -31,12 +31,10 @@ export function ProjectTemplatePicker({
               isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'
             }`}
           >
-            {/* Silhouette Container */}
             <div
               className="relative h-24 bg-secondary/30 rounded overflow-hidden flex items-center justify-center"
               style={{ containerType: 'size' }}
             >
-              {/* Aspect Ratio Silhouette */}
               <div
                 className={`bg-primary/20 border-2 border-dashed rounded-sm ${
                   isSelected ? 'border-primary' : 'border-primary/40'
@@ -49,7 +47,6 @@ export function ProjectTemplatePicker({
               />
             </div>
 
-            {/* Template Info */}
             <div className="flex-1 text-left">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 {template.platform}
@@ -59,7 +56,7 @@ export function ProjectTemplatePicker({
               </h3>
               <p className="text-xs text-muted-foreground mt-2">
                 {resolution}
-                <span className="mx-1">•</span>
+                <span className="mx-1">·</span>
                 {aspectRatio}
               </p>
             </div>
@@ -92,16 +89,16 @@ export function ProjectTemplatePicker({
           </div>
           <div className="flex-1 text-left">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Custom
+              自定义
             </p>
             <h3
               className={`font-medium text-sm transition-colors mt-1 ${
                 isCustomSelected ? 'text-primary' : 'text-foreground group-hover:text-primary'
               }`}
             >
-              Custom Size
+              自定义尺寸
             </h3>
-            <p className="text-xs text-muted-foreground mt-2">Enter dimensions</p>
+            <p className="text-xs text-muted-foreground mt-2">输入宽高尺寸</p>
           </div>
         </button>
       )}

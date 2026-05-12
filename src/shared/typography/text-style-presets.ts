@@ -88,7 +88,7 @@ export interface TextScale {
 const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   'clean-title': {
     id: 'clean-title',
-    label: 'Clean',
+    label: '简洁',
     previewKind: 'clean',
     layout: 'single',
     sample: { title: 'Main', subtitle: 'Title' },
@@ -115,7 +115,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   poster: {
     id: 'poster',
-    label: 'Poster',
+    label: '海报',
     previewKind: 'poster',
     layout: 'single',
     sample: { title: 'Tonight' },
@@ -145,7 +145,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'outline-pill': {
     id: 'outline-pill',
-    label: 'Outline',
+    label: '描边',
     previewKind: 'outline-pill',
     layout: 'single',
     sample: { title: 'Featured' },
@@ -175,7 +175,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'lower-third': {
     id: 'lower-third',
-    label: 'Lower Third',
+    label: '下三分之一',
     previewKind: 'lower-third',
     layout: 'two',
     sample: { title: 'Name', subtitle: 'Role or subtitle' },
@@ -202,7 +202,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'speaker-card': {
     id: 'speaker-card',
-    label: 'Speaker',
+    label: '讲者',
     previewKind: 'speaker',
     layout: 'two',
     sample: { title: 'Alex Morgan', subtitle: 'Product Designer' },
@@ -229,7 +229,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   cinematic: {
     id: 'cinematic',
-    label: 'Cinematic',
+    label: '电影感',
     previewKind: 'cinematic',
     layout: 'single',
     sample: { title: 'CINEMA', subtitle: 'PRESENTS' },
@@ -259,10 +259,10 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   quote: {
     id: 'quote',
-    label: 'Quote',
+    label: '引用',
     previewKind: 'quote',
     layout: 'two',
-    sample: { title: 'Quote', subtitle: 'Attribution' },
+    sample: { title: '引语', subtitle: '署名' },
     style: {
       fontFamily: 'Playfair Display',
       fontWeight: 'semibold',
@@ -286,7 +286,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   neon: {
     id: 'neon',
-    label: 'Neon',
+    label: '霓虹',
     previewKind: 'neon',
     layout: 'single',
     sample: { title: 'NEON', subtitle: 'Glow' },
@@ -316,10 +316,10 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'headline-stack': {
     id: 'headline-stack',
-    label: 'Headline',
+    label: '标题',
     previewKind: 'stacked',
     layout: 'three',
-    sample: { eyebrow: 'TOP STORY', title: 'Headline', subtitle: 'Subhead' },
+    sample: { eyebrow: '要闻', title: '标题', subtitle: '副标题' },
     style: {
       fontFamily: 'Inter Tight',
       fontWeight: 'bold',
@@ -343,7 +343,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'breaking-update': {
     id: 'breaking-update',
-    label: 'Breaking',
+    label: '快讯',
     previewKind: 'breaking',
     layout: 'three',
     sample: { eyebrow: 'BREAKING', title: 'Major Update', subtitle: 'Developing now' },
@@ -370,7 +370,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'event-card': {
     id: 'event-card',
-    label: 'Event',
+    label: '活动',
     previewKind: 'event',
     layout: 'three',
     sample: { eyebrow: 'LIVE', title: 'Summer Fest', subtitle: 'Friday 8 PM' },
@@ -397,7 +397,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   'launch-stack': {
     id: 'launch-stack',
-    label: 'Launch',
+    label: '发布',
     previewKind: 'launch',
     layout: 'three',
     sample: { eyebrow: 'NOW LIVE', title: 'New Collection', subtitle: 'Shop the drop' },
@@ -427,7 +427,7 @@ const TEXT_STYLE_RECIPES: Record<TextStylePresetId, TextStyleRecipe> = {
   },
   badge: {
     id: 'badge',
-    label: 'Badge',
+    label: '徽章',
     previewKind: 'badge',
     layout: 'single',
     sample: { title: 'NEW DROP', subtitle: 'Tag' },

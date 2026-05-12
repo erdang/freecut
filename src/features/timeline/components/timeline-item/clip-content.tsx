@@ -238,7 +238,7 @@ export const ClipContent = memo(function ClipContent({
         {linkedSyncOffsetLabel && (
           <span
             className="shrink-0 rounded bg-destructive/90 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-destructive-foreground"
-            title={`Linked clips out of sync by ${linkedSyncOffsetLabel}`}
+            title={`链接片段不同步：${linkedSyncOffsetLabel}`}
           >
             {linkedSyncOffsetLabel}
           </span>
@@ -251,9 +251,7 @@ export const ClipContent = memo(function ClipContent({
                 : 'bg-black/55 text-white/90'
             }`}
             title={
-              linkedSyncOffsetLabel
-                ? `Linked audio/video pair out of sync by ${linkedSyncOffsetLabel}`
-                : 'Linked audio/video pair'
+              linkedSyncOffsetLabel ? `链接音视频不同步：${linkedSyncOffsetLabel}` : '已链接音视频'
             }
           >
             <Link2 className="h-3 w-3" />

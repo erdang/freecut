@@ -19,7 +19,7 @@ export const Route = createFileRoute('/projects/new')({
       const { loadProjects } = useProjectStore.getState()
       await loadProjects()
     } catch (err) {
-      logger.warn('Failed to pre-load projects in beforeLoad:', err)
+      logger.warn('beforeLoad 预加载项目失败:', err)
     }
   },
 })
@@ -42,12 +42,12 @@ function NewProject() {
           params: { projectId: result.project.id },
         })
       } else {
-        toast.error('Failed to create project', { description: result.error })
+        toast.error('创建项目失败', { description: result.error })
         setIsSubmitting(false)
       }
     } catch (error) {
-      logger.error('Failed to create project:', error)
-      toast.error('Failed to create project', { description: 'Please try again' })
+      logger.error('创建项目失败:', error)
+      toast.error('创建项目失败', { description: '请稍后重试' })
       setIsSubmitting(false)
     }
   }
@@ -65,7 +65,7 @@ function NewProject() {
               href="https://github.com/walterlow/freecut"
               target="_blank"
               rel="noopener noreferrer"
-              data-tooltip="View on GitHub"
+              data-tooltip="查看 GitHub"
               data-tooltip-side="left"
             >
               <Github className="w-5 h-5" />

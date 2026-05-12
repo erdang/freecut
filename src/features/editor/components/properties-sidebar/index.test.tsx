@@ -98,7 +98,7 @@ describe('PropertiesSidebar', () => {
 
     render(<PropertiesSidebar />)
 
-    expect(screen.getByText('2 clips selected')).toBeInTheDocument()
+    expect(screen.getByText('已选中 2 个片段')).toBeInTheDocument()
     expect(screen.getByTitle('clip-a.mp4, clip-b.mp4')).toBeInTheDocument()
   })
 
@@ -108,7 +108,7 @@ describe('PropertiesSidebar', () => {
     render(<PropertiesSidebar />)
 
     expect(screen.getByText('clip-a.mp4')).toBeInTheDocument()
-    expect(screen.queryByText('2 clips selected')).not.toBeInTheDocument()
+    expect(screen.queryByText('已选中 2 个片段')).not.toBeInTheDocument()
     expect(screen.getByTitle('clip-a.mp4, clip-a.wav')).toBeInTheDocument()
   })
 

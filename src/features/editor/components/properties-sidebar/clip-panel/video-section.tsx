@@ -487,8 +487,8 @@ export function VideoSection({ items }: VideoSectionProps) {
 
   return (
     <>
-      <PropertySection title="Playback" icon={Video} defaultOpen={true}>
-        <PropertyRow label="Speed">
+      <PropertySection title="播放" icon={Video} defaultOpen={true}>
+        <PropertyRow label="速度">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={speed}
@@ -505,14 +505,14 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetSpeed}
-              title="Reset to 1x"
+              title="重置为 1x"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Fade In">
+        <PropertyRow label="淡入">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={fadeIn}
@@ -529,14 +529,14 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetFadeIn}
-              title="Reset to 0"
+              title="重置为 0"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Fade Out">
+        <PropertyRow label="淡出">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={fadeOut}
@@ -553,7 +553,7 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={handleResetFadeOut}
-              title="Reset to 0"
+              title="重置为 0"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
@@ -561,8 +561,8 @@ export function VideoSection({ items }: VideoSectionProps) {
         </PropertyRow>
       </PropertySection>
 
-      <PropertySection title="Cropping" icon={Crop} defaultOpen={true}>
-        <PropertyRow label="Left">
+      <PropertySection title="裁剪" icon={Crop} defaultOpen={true}>
+        <PropertyRow label="左">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropLeft}
@@ -586,14 +586,14 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('left')}
-              title="Reset left crop"
+              title="重置左侧裁剪"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Right">
+        <PropertyRow label="右">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropRight}
@@ -617,14 +617,14 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('right')}
-              title="Reset right crop"
+              title="重置右侧裁剪"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Top">
+        <PropertyRow label="上">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropTop}
@@ -648,14 +648,14 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('top')}
-              title="Reset top crop"
+              title="重置顶部裁剪"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Bottom">
+        <PropertyRow label="下">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropBottom}
@@ -679,14 +679,14 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={() => resetCropEdge('bottom')}
-              title="Reset bottom crop"
+              title="重置底部裁剪"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>
           </div>
         </PropertyRow>
 
-        <PropertyRow label="Softness">
+        <PropertyRow label="柔化">
           <div className="flex items-center gap-1 w-full">
             <SliderInput
               value={cropSoftness}
@@ -710,7 +710,7 @@ export function VideoSection({ items }: VideoSectionProps) {
               size="icon"
               className="h-7 w-7 flex-shrink-0"
               onClick={resetCropSoftness}
-              title="Reset crop softness"
+              title="重置裁剪柔化"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </Button>

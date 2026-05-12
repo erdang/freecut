@@ -77,17 +77,17 @@ import {
   type MusicgenModelId,
 } from '../services/musicgen-service'
 
-const DEFAULT_PROMPT = 'Welcome to freecut. This voice was generated locally in the browser.'
+const DEFAULT_PROMPT = '欢迎使用 freecut。这段语音在浏览器本地生成。'
 
 const MUSIC_PROMPT_PRESETS = [
   {
-    label: 'Lo-fi Chill',
+    label: 'Lo-fi 放松',
     prompt: 'Warm lo-fi beat with dusty drums, mellow bass, and a dreamy synth lead',
   },
   { label: '80s Pop', prompt: '80s pop track with bassy drums and synth' },
   { label: '90s Rock', prompt: '90s rock song with loud guitars and heavy drums' },
   {
-    label: 'Upbeat EDM',
+    label: '活力 EDM',
     prompt:
       'A light and cheery EDM track, with syncopated drums, airy pads, and strong emotions bpm: 130',
   },
@@ -199,7 +199,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         type="button"
         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm glow-primary-sm transition-colors hover:bg-primary/90"
         onClick={togglePlay}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? '暂停' : '播放'}
       >
         {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-px" />}
       </button>
@@ -213,7 +213,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         max={100}
         step={0.1}
         className="min-w-0 flex-1"
-        aria-label="Seek"
+        aria-label="拖动进度"
       />
       <span className="shrink-0 select-none font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatTime(currentTime)}
@@ -373,25 +373,25 @@ export const AiPanel = memo(function AiPanel() {
 
   const handleTtsGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setTtsError('Open a project before generating audio.')
+      setTtsError('请先打开项目再生成音频。')
       return
     }
     if (!trimmedTtsText) {
-      setTtsError('Enter some text to synthesize.')
+      setTtsError('请输入要合成的文本。')
       return
     }
     if (!isTtsSupported) {
       setTtsError(
         ttsEngine === 'kokoro'
-          ? 'WebGPU is required for Kokoro TTS. Try Chrome 113+, Edge 113+, or Safari 26+.'
-          : 'Browser-managed storage is required for MOSS multilingual TTS. Try a recent Chromium browser.',
+          ? 'Kokoro TTS 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。'
+          : 'MOSS 多语言 TTS 需要浏览器托管存储。请使用较新的 Chromium 浏览器。',
       )
       return
     }
 
     setTtsError(null)
     setIsTtsGenerating(true)
-    setTtsProgress('Preparing local TTS...')
+    setTtsProgress('正在准备本地 TTS...')
 
     try {
       const result =
@@ -419,7 +419,7 @@ export const AiPanel = memo(function AiPanel() {
           ? getKokoroTtsVoiceOption(ttsKokoroVoice).label
           : getMossTtsVoiceOption(ttsMossVoice).label
       const modelLabel =
-        ttsEngine === 'kokoro' ? getKokoroTtsModelOption(ttsModel).label : 'Multilingual Nano'
+        ttsEngine === 'kokoro' ? getKokoroTtsModelOption(ttsModel).label : '多语言 Nano'
       const engineTags =
         ttsEngine === 'kokoro'
           ? [
@@ -450,9 +450,7 @@ export const AiPanel = memo(function AiPanel() {
       setTtsGenerations((prev) => [generation, ...prev])
       setTtsProgress(null)
     } catch (generationError) {
-      setTtsError(
-        generationError instanceof Error ? generationError.message : 'Failed to generate speech.',
-      )
+      setTtsError(generationError instanceof Error ? generationError.message : '语音生成失败。')
       setTtsProgress(null)
     } finally {
       setIsTtsGenerating(false)
@@ -471,11 +469,11 @@ export const AiPanel = memo(function AiPanel() {
   const handleMusicGenerate = useCallback(async () => {
     if (!currentProjectId) return null
     if (!trimmedMusicPrompt) {
-      setMusicError('Describe the music you want to generate.')
+      setMusicError('请描述你想生成的音乐。')
       return null
     }
     if (!isMusicSupported) {
-      setMusicError('WebGPU is required for MusicGen. Try Chrome 113+, Edge 113+, or Safari 26+.')
+      setMusicError('MusicGen 需要 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 26+。')
       return null
     }
 
@@ -484,7 +482,7 @@ export const AiPanel = memo(function AiPanel() {
 
     setMusicError(null)
     setIsMusicGenerating(true)
-    setMusicProgress('Preparing local music generation...')
+    setMusicProgress('正在准备本地音乐生成...')
     setMusicProgressPct(null)
 
     try {
@@ -512,9 +510,9 @@ export const AiPanel = memo(function AiPanel() {
         duration,
         textSnippet: trimmedMusicPrompt,
         voice: modelLabel,
-        model: `target ${musicDuration}s`,
+        model: `目标 ${musicDuration}s`,
         summary: trimmedMusicPrompt,
-        details: `${modelLabel} / target ${musicDuration}s / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        details: `${modelLabel} / 目标 ${musicDuration}s / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
         tags: [
           'ai-generated',
           'musicgen',
@@ -530,9 +528,7 @@ export const AiPanel = memo(function AiPanel() {
       if (generationError instanceof DOMException && generationError.name === 'AbortError') {
         // Intentional cancellation — no error shown.
       } else {
-        setMusicError(
-          generationError instanceof Error ? generationError.message : 'Failed to generate music.',
-        )
+        setMusicError(generationError instanceof Error ? generationError.message : '音乐生成失败。')
       }
     } finally {
       musicAbortRef.current = null
@@ -611,7 +607,7 @@ export const AiPanel = memo(function AiPanel() {
       if (media) {
         showNotification({
           type: 'success',
-          message: `Saved "${media.fileName}" to the media library.`,
+          message: `已将“${media.fileName}”保存到媒体库。`,
         })
       }
     },
@@ -631,8 +627,8 @@ export const AiPanel = memo(function AiPanel() {
       showNotification({
         type: inserted ? 'success' : 'warning',
         message: inserted
-          ? `Saved "${media.fileName}" and added to timeline.`
-          : `Saved "${media.fileName}" but no audio track is available.`,
+          ? `已保存“${media.fileName}”并添加到时间线。`
+          : `已保存“${media.fileName}”，但当前没有可用音频轨道。`,
       })
     },
     [saveGeneration, showNotification],
@@ -695,9 +691,9 @@ export const AiPanel = memo(function AiPanel() {
               <button
                 type="button"
                 className="flex w-full items-center justify-between gap-2 text-left"
-                aria-label={ttsSectionOpen ? 'Collapse text to speech' : 'Expand text to speech'}
+                aria-label={ttsSectionOpen ? '收起文本转语音' : '展开文本转语音'}
               >
-                <h2 className="text-sm font-medium">Text to Speech</h2>
+                <h2 className="text-sm font-medium">文本转语音</h2>
                 <ChevronDown
                   className={cn(
                     'h-4 w-4 text-muted-foreground transition-transform',
@@ -712,18 +708,18 @@ export const AiPanel = memo(function AiPanel() {
             {!isTtsSupported && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
                 {ttsEngine === 'kokoro'
-                  ? 'WebGPU is not available in this browser. Kokoro TTS needs Chrome 113+, Edge 113+, or Safari 26+.'
-                  : 'Browser-managed storage is not available in this browser. MOSS multilingual TTS works best in a recent Chromium browser.'}
+                  ? '当前浏览器不支持 WebGPU。Kokoro TTS 需要 Chrome 113+、Edge 113+ 或 Safari 26+。'
+                  : '当前浏览器不支持浏览器托管存储。MOSS 多语言 TTS 建议使用较新的 Chromium 浏览器。'}
               </div>
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="ai-tts-text">Text</Label>
+              <Label htmlFor="ai-tts-text">文本</Label>
               <Textarea
                 id="ai-tts-text"
                 value={text}
                 onChange={(event) => setText(event.target.value)}
-                placeholder="Enter the text you want to hear spoken..."
+                placeholder="输入你想要朗读的文本..."
                 className="min-h-24 resize-y bg-secondary/30 text-sm"
                 disabled={isGenerating}
               />
@@ -731,7 +727,7 @@ export const AiPanel = memo(function AiPanel() {
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <Label>Engine</Label>
+                <Label>引擎</Label>
                 <Select
                   value={ttsEngine}
                   onValueChange={(value) => setTtsEngine(value as StoredTtsEngine)}
@@ -742,10 +738,10 @@ export const AiPanel = memo(function AiPanel() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="kokoro" className="text-xs">
-                      Kokoro (English, WebGPU)
+                      Kokoro（英文，WebGPU）
                     </SelectItem>
                     <SelectItem value="moss" className="text-xs">
-                      MOSS Nano (20 languages, CPU)
+                      MOSS Nano（20 种语言，CPU）
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -753,7 +749,7 @@ export const AiPanel = memo(function AiPanel() {
 
               <div className="grid grid-cols-1 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Voice</Label>
+                  <Label>音色</Label>
                   <Select
                     value={voice}
                     onValueChange={(value) => {
@@ -786,7 +782,7 @@ export const AiPanel = memo(function AiPanel() {
             <div className="flex items-center gap-2">
               {supportsNativeTtsSpeed && (
                 <SliderInput
-                  label="Speed"
+                  label="语速"
                   value={speed}
                   onChange={setSpeed}
                   min={0.5}
@@ -809,11 +805,11 @@ export const AiPanel = memo(function AiPanel() {
                 ) : (
                   <WandSparkles className="h-3.5 w-3.5" />
                 )}
-                {isGenerating ? 'Generating...' : 'Generate'}
+                {isGenerating ? '生成中...' : '生成'}
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              {currentTtsRuntimeLabel} runs locally in the browser on {currentTtsBackendLabel}.
+              {currentTtsRuntimeLabel} 在浏览器中以 {currentTtsBackendLabel} 后端本地运行。
             </p>
 
             {progress && (
@@ -832,7 +828,7 @@ export const AiPanel = memo(function AiPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
-                    History ({generations.length}) - {formatBytes(totalBytes)}
+                    历史记录（{generations.length}）- {formatBytes(totalBytes)}
                   </span>
                   <Button
                     variant="ghost"
@@ -842,7 +838,7 @@ export const AiPanel = memo(function AiPanel() {
                     disabled={anySaving}
                   >
                     <Trash2 className="h-3 w-3" />
-                    Clear all
+                    清空
                   </Button>
                 </div>
 
@@ -869,11 +865,9 @@ export const AiPanel = memo(function AiPanel() {
                 <button
                   type="button"
                   className="flex flex-1 items-center justify-between gap-2 text-left"
-                  aria-label={
-                    musicSectionOpen ? 'Collapse music generation' : 'Expand music generation'
-                  }
+                  aria-label={musicSectionOpen ? '收起音乐生成' : '展开音乐生成'}
                 >
-                  <h2 className="text-sm font-medium">Music Generation</h2>
+                  <h2 className="text-sm font-medium">音乐生成</h2>
                   <ChevronDown
                     className={cn(
                       'h-4 w-4 text-muted-foreground transition-transform',
@@ -887,7 +881,7 @@ export const AiPanel = memo(function AiPanel() {
                   <button
                     type="button"
                     className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
-                    aria-label="Music generation info"
+                    aria-label="音乐生成说明"
                     onMouseEnter={() => setMusicInfoOpen(true)}
                     onMouseLeave={() => setMusicInfoOpen(false)}
                   >
@@ -911,8 +905,8 @@ export const AiPanel = memo(function AiPanel() {
                     </span>
                   </div>
                   <p className="leading-relaxed text-muted-foreground">
-                    Uses Xenova&apos;s browser-ready MusicGen model through Transformers.js. The
-                    first download is large, then it stays cached locally.
+                    使用 Xenova 的浏览器可用 MusicGen 模型（基于 Transformers.js）。
+                    首次下载体积较大，后续会缓存到本地。
                   </p>
                   <table className="w-full text-[11px]">
                     <tbody>
@@ -927,8 +921,7 @@ export const AiPanel = memo(function AiPanel() {
                     </tbody>
                   </table>
                   <p className="leading-relaxed text-muted-foreground">
-                    Prompt with genre, mood, tempo, and instrumentation. Shorter clips finish much
-                    faster.
+                    可在提示词中描述风格、情绪、节奏和配器。时长越短，生成通常越快。
                   </p>
                 </PopoverContent>
               </Popover>
@@ -938,21 +931,20 @@ export const AiPanel = memo(function AiPanel() {
           <CollapsibleContent className="space-y-4 pt-3">
             {!isMusicSupported && (
               <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
-                WebGPU is not available in this browser. MusicGen needs Chrome 113+, Edge 113+, or
-                Safari 26+.
+                当前浏览器不支持 WebGPU。MusicGen 需要 Chrome 113+、Edge 113+ 或 Safari 26+。
               </div>
             )}
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="ai-music-prompt">Prompt</Label>
+                <Label htmlFor="ai-music-prompt">提示词</Label>
                 <Select
                   value=""
                   onValueChange={(value) => setMusicPrompt(value)}
                   disabled={isMusicGenerating}
                 >
                   <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1.5 text-[11px] text-muted-foreground shadow-none hover:text-foreground">
-                    <SelectValue placeholder="Presets" />
+                    <SelectValue placeholder="预设" />
                   </SelectTrigger>
                   <SelectContent align="end">
                     {MUSIC_PROMPT_PRESETS.map((preset) => (
@@ -967,14 +959,14 @@ export const AiPanel = memo(function AiPanel() {
                 id="ai-music-prompt"
                 value={musicPrompt}
                 onChange={(event) => setMusicPrompt(event.target.value)}
-                placeholder="Describe the kind of music you want to generate..."
+                placeholder="描述你想生成的音乐风格..."
                 className="min-h-24 resize-y bg-secondary/30 text-sm"
                 disabled={isMusicGenerating}
               />
             </div>
 
             <SliderInput
-              label="Length"
+              label="长度"
               value={musicDuration}
               onChange={(value) => setMusicDuration(Math.round(value))}
               min={currentMusicModel.minDurationSeconds}
@@ -993,7 +985,7 @@ export const AiPanel = memo(function AiPanel() {
                   className="h-7 shrink-0 gap-1.5 text-muted-foreground"
                 >
                   <X className="h-3.5 w-3.5" />
-                  Cancel
+                  取消
                 </Button>
               )}
               <Button
@@ -1011,7 +1003,7 @@ export const AiPanel = memo(function AiPanel() {
                 ) : (
                   <WandSparkles className="h-3.5 w-3.5" />
                 )}
-                {isMusicGenerating ? 'Generating...' : 'Generate Music'}
+                {isMusicGenerating ? '生成中...' : '生成音乐'}
               </Button>
             </div>
 
@@ -1039,7 +1031,7 @@ export const AiPanel = memo(function AiPanel() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-muted-foreground">
-                    Music History ({musicGenerations.length}) - {formatBytes(totalMusicBytes)}
+                    音乐历史（{musicGenerations.length}）- {formatBytes(totalMusicBytes)}
                   </span>
                   <Button
                     variant="ghost"
@@ -1049,7 +1041,7 @@ export const AiPanel = memo(function AiPanel() {
                     disabled={anyMusicSaving}
                   >
                     <Trash2 className="h-3 w-3" />
-                    Clear all
+                    清空
                   </Button>
                 </div>
 
@@ -1112,7 +1104,7 @@ const GenerationRow = memo(function GenerationRow({
             type="button"
             className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
             onClick={() => onRemove(gen.id)}
-            aria-label="Remove"
+            aria-label="移除"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -1127,7 +1119,7 @@ const GenerationRow = memo(function GenerationRow({
         {saved ? (
           <span className="flex items-center gap-1 text-[11px] text-emerald-400">
             <CheckCircle2 className="h-3 w-3" />
-            Saved
+            已保存
           </span>
         ) : (
           <>
@@ -1145,7 +1137,7 @@ const GenerationRow = memo(function GenerationRow({
               ) : (
                 <ListPlus className="h-3 w-3" />
               )}
-              {gen.saving ? 'Saving...' : 'Save & Insert'}
+              {gen.saving ? '保存中...' : '保存并插入'}
             </Button>
             <Button
               variant="ghost"
@@ -1157,7 +1149,7 @@ const GenerationRow = memo(function GenerationRow({
               disabled={gen.saving}
             >
               <Download className="h-3 w-3" />
-              Save to Library
+              保存到媒体库
             </Button>
           </>
         )}

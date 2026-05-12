@@ -192,7 +192,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
             el.pause()
           }
         }}
-        aria-label={isPlaying ? 'Pause' : 'Play'}
+        aria-label={isPlaying ? '暂停' : '播放'}
       >
         {isPlaying ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3 ml-px" />}
       </button>
@@ -206,7 +206,7 @@ const MiniAudioPlayer = memo(function MiniAudioPlayer({ src }: { src: string }) 
         max={100}
         step={0.1}
         className="min-w-0 flex-1"
-        aria-label="Seek"
+        aria-label="拖动进度"
       />
       <span className="shrink-0 select-none font-mono text-[10px] tabular-nums text-muted-foreground">
         {formatTime(currentTime)}
@@ -330,33 +330,31 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
 
   const handleGenerate = useCallback(async () => {
     if (!currentProjectId) {
-      setError('Open a project before generating audio.')
+      setError('请先打开项目再生成音频。')
       return
     }
     if (!trimmedText) {
-      setError('Enter some text to synthesize.')
+      setError('请输入要合成的文本。')
       return
     }
     if (!isNetworkSupported) {
-      setError('Network requests are not supported in this environment.')
+      setError('当前环境不支持网络请求。')
       return
     }
     if (voiceprintType === '1' && voiceOptions.length === 0) {
-      setError(
-        'No reference voiceprint options are available. Please configure thirdPartyTtsVoiceprintListUrl.',
-      )
+      setError('没有可用的参考声纹选项，请先配置 thirdPartyTtsVoiceprintListUrl。')
       return
     }
     if (voiceprintType === '1' && !voice.trim()) {
-      setError('Please select a reference voiceprint.')
+      setError('请选择参考声纹。')
       return
     }
     if (voiceprintType === '2' && !voiceprintFile) {
-      setError('Please upload a voiceprint file.')
+      setError('请上传声纹文件。')
       return
     }
     if (emoControlMethod === '2' && !emoRefFile) {
-      setError('Please upload an emotion reference audio file.')
+      setError('请上传情感参考音频文件。')
       return
     }
     if (resultUrlRef.current && !inserted) {
@@ -368,7 +366,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
     setResult(null)
     setInserted(false)
     setIsGenerating(true)
-    setProgress('Requesting third-party TTS service...')
+    setProgress('正在请求第三方 TTS 服务...')
 
     const thisSession = sessionIdRef.current
 
@@ -393,8 +391,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
       const objectUrl = URL.createObjectURL(blob)
       resultUrlRef.current = objectUrl
 
-      const voiceLabel =
-        voiceprintType === '1' ? voice : voiceprintFile?.name || 'uploaded-voiceprint'
+      const voiceLabel = voiceprintType === '1' ? voice : voiceprintFile?.name || '已上传声纹'
       const voiceTag =
         voiceprintType === '1' ? `tts-voice:${voice.toLowerCase()}` : 'tts-voice:uploaded'
 
@@ -411,9 +408,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
       setProgress(null)
     } catch (generationError) {
       if (sessionIdRef.current !== thisSession) return
-      setError(
-        generationError instanceof Error ? generationError.message : 'Failed to generate speech.',
-      )
+      setError(generationError instanceof Error ? generationError.message : '语音生成失败。')
       setProgress(null)
     } finally {
       if (sessionIdRef.current === thisSession) {
@@ -466,18 +461,16 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
         setInserted(true)
         showNotification({
           type: 'success',
-          message: `Added "${media.fileName}" to timeline and linked with text.`,
+          message: `已将“${media.fileName}”添加到时间线并与文本关联。`,
         })
       } else {
         showNotification({
           type: 'warning',
-          message: `Saved "${media.fileName}" but no audio track is available.`,
+          message: `已保存“${media.fileName}”，但当前没有可用音轨。`,
         })
       }
     } catch (insertError) {
-      setError(
-        insertError instanceof Error ? insertError.message : 'Failed to save and insert audio.',
-      )
+      setError(insertError instanceof Error ? insertError.message : '保存并插入音频失败。')
     } finally {
       setIsInserting(false)
     }
@@ -506,21 +499,21 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <WandSparkles className="h-4 w-4" />
-            Generate Audio from Text (Third-Party API)
+            从文本生成音频（第三方 API）
           </DialogTitle>
           <DialogDescription className="text-xs">
-            Generate speech via third-party TTS API and insert it at the text clip position.
+            通过第三方 TTS API 生成语音，并插入到文本片段位置。
           </DialogDescription>
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           <div className="space-y-2">
-            <Label htmlFor="third-party-tts-dialog-text">Text</Label>
+            <Label htmlFor="third-party-tts-dialog-text">文本</Label>
             <Textarea
               id="third-party-tts-dialog-text"
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="Enter the text you want to hear spoken..."
+              placeholder="输入你想要朗读的文本..."
               className="min-h-28 resize-y bg-secondary/30 text-sm"
               disabled={isGenerating || isInserting}
             />
@@ -528,14 +521,14 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
 
           {voiceprintType === '1' ? (
             <div className="space-y-1.5">
-              <Label>Reference Voiceprint</Label>
+              <Label>参考声纹</Label>
               <Select
                 value={voice}
                 onValueChange={(value) => setVoice(value as ThirdPartyTtsVoice)}
                 disabled={isGenerating || isInserting || isLoadingVoiceOptions}
               >
                 <SelectTrigger className="h-8 text-xs focus:ring-inset">
-                  <SelectValue placeholder="Select reference voiceprint" />
+                  <SelectValue placeholder="请选择参考声纹" />
                 </SelectTrigger>
                 <SelectContent className="[&_[data-radix-select-viewport]]:p-0">
                   {voiceOptions.map((option) => (
@@ -552,7 +545,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="third-party-tts-dialog-voiceprint-upload">Upload Voiceprint</Label>
+              <Label htmlFor="third-party-tts-dialog-voiceprint-upload">上传声纹</Label>
               <Input
                 ref={voiceprintInputRef}
                 id="third-party-tts-dialog-voiceprint-upload"
@@ -578,9 +571,9 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                 </span>
                 <span className="min-w-0">
                   <p className="truncate text-xs font-medium">
-                    {voiceprintFile ? 'Replace uploaded voiceprint' : 'Click to upload voiceprint'}
+                    {voiceprintFile ? '替换已上传声纹' : '点击上传声纹'}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">Supported: WAV, MP3, M4A, OGG</p>
+                  <p className="text-[11px] text-muted-foreground">支持格式：WAV、MP3、M4A、OGG</p>
                 </span>
               </label>
               <div className="flex items-center justify-between rounded-md border border-border bg-secondary/20 px-2.5 py-2">
@@ -589,7 +582,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                   <span className="truncate text-xs text-foreground/90">
                     {voiceprintFile
                       ? `${voiceprintFile.name} (${formatFileSize(voiceprintFile.size)})`
-                      : 'No file selected'}
+                      : '未选择文件'}
                   </span>
                 </span>
                 {voiceprintFile && (
@@ -607,7 +600,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                     }}
                   >
                     <X className="h-3 w-3" />
-                    Clear
+                    清除
                   </Button>
                 )}
               </div>
@@ -615,7 +608,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
           )}
 
           <div className="space-y-1.5">
-            <Label>Voiceprint Source</Label>
+            <Label>声纹来源</Label>
             <Select
               value={voiceprintType}
               onValueChange={(value) => {
@@ -645,7 +638,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
           </div>
 
           <div className="space-y-1.5">
-            <Label>Emotion Control Method</Label>
+            <Label>情感控制方式</Label>
             <Select
               value={emoControlMethod}
               onValueChange={(value) => {
@@ -676,9 +669,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
 
           {emoControlMethod === '2' && (
             <div className="space-y-2">
-              <Label htmlFor="third-party-tts-dialog-emo-ref-upload">
-                Upload Emotion Reference Audio
-              </Label>
+              <Label htmlFor="third-party-tts-dialog-emo-ref-upload">上传情感参考音频</Label>
               <Input
                 ref={emoRefInputRef}
                 id="third-party-tts-dialog-emo-ref-upload"
@@ -704,11 +695,9 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                 </span>
                 <span className="min-w-0">
                   <p className="truncate text-xs font-medium">
-                    {emoRefFile
-                      ? 'Replace emotion reference audio'
-                      : 'Click to upload emotion reference audio'}
+                    {emoRefFile ? '替换情感参考音频' : '点击上传情感参考音频'}
                   </p>
-                  <p className="text-[11px] text-muted-foreground">Supported: WAV, MP3, M4A, OGG</p>
+                  <p className="text-[11px] text-muted-foreground">支持格式：WAV、MP3、M4A、OGG</p>
                 </span>
               </label>
               <div className="flex items-center justify-between rounded-md border border-border bg-secondary/20 px-2.5 py-2">
@@ -717,7 +706,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                   <span className="truncate text-xs text-foreground/90">
                     {emoRefFile
                       ? `${emoRefFile.name} (${formatFileSize(emoRefFile.size)})`
-                      : 'No file selected'}
+                      : '未选择文件'}
                   </span>
                 </span>
                 {emoRefFile && (
@@ -735,7 +724,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                     }}
                   >
                     <X className="h-3 w-3" />
-                    Clear
+                    清除
                   </Button>
                 )}
               </div>
@@ -744,7 +733,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
 
           {emoControlMethod === '3' && (
             <div className="space-y-2">
-              <Label>Emotion Vector</Label>
+              <Label>情感向量</Label>
               <div className="space-y-2 rounded-lg border border-border bg-secondary/10 p-2">
                 {THIRD_PARTY_TTS_EMOTION_VECTOR_OPTIONS.map((option) => (
                   <SliderInput
@@ -763,7 +752,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
           )}
 
           <SliderInput
-            label="Speed"
+            label="语速"
             value={speed}
             onChange={setSpeed}
             min={0.5}
@@ -774,7 +763,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
           />
 
           <SliderInput
-            label="Emo Weight"
+            label="情感权重"
             value={emoWeight}
             onChange={setEmoWeight}
             min={0}
@@ -804,16 +793,16 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
               }`}
             >
               <p className="text-[11px] text-muted-foreground">
-                {result.voice} / VoiceprintType:{result.voiceprintType} / EmoMethod:
-                {result.emoControlMethod} / EmoWeight:{result.emoWeight.toFixed(2)} / Third-Party
-                API / {result.duration > 0 ? result.duration.toFixed(1) + 's' : '-'}
+                {result.voice} / 声纹类型:{result.voiceprintType} / 情感控制:
+                {result.emoControlMethod} / 情感权重:{result.emoWeight.toFixed(2)} / 第三方 API /
+                {result.duration > 0 ? result.duration.toFixed(1) + 's' : '-'}
               </p>
               <MiniAudioPlayer src={result.objectUrl} />
 
               {inserted && (
                 <span className="flex items-center gap-1 text-[11px] text-emerald-400">
                   <CheckCircle2 className="h-3 w-3" />
-                  Inserted & linked
+                  已插入并关联
                 </span>
               )}
             </div>
@@ -834,7 +823,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
               ) : (
                 <WandSparkles className="h-3.5 w-3.5" />
               )}
-              {isGenerating ? 'Generating...' : result ? 'Regenerate' : 'Generate'}
+              {isGenerating ? '生成中...' : result ? '重新生成' : '生成'}
             </Button>
 
             {result && !inserted && (
@@ -851,7 +840,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
                 ) : (
                   <CheckCircle2 className="h-3.5 w-3.5" />
                 )}
-                {isInserting ? 'Inserting...' : 'Insert & Link'}
+                {isInserting ? '插入中...' : '插入并关联'}
               </Button>
             )}
           </div>

@@ -9,13 +9,13 @@ import {
 function getStateLabel(state: 'loading' | 'running' | 'ready' | 'error'): string {
   switch (state) {
     case 'loading':
-      return 'Local AI Loading'
+      return '本地 AI 加载中'
     case 'running':
-      return 'Local AI Active'
+      return '本地 AI 运行中'
     case 'error':
-      return 'Local AI Error'
+      return '本地 AI 异常'
     case 'ready':
-      return 'Local AI Ready'
+      return '本地 AI 就绪'
   }
 }
 
@@ -31,9 +31,7 @@ export function LocalInferenceStatusPill() {
   const detailParts = [
     summary.primaryLabel,
     summary.backendLabel,
-    summary.activeJobs > 0
-      ? `${summary.activeJobs} job${summary.activeJobs === 1 ? '' : 's'}`
-      : null,
+    summary.activeJobs > 0 ? `${summary.activeJobs} 个任务` : null,
     estimateLabel,
   ].filter(Boolean)
 

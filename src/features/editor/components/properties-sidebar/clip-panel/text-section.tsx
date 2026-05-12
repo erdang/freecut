@@ -58,10 +58,10 @@ import {
 } from '@/shared/utils/text-layout-drafts'
 
 const FONT_WEIGHT_OPTIONS = [
-  { value: 'normal', label: 'Regular' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'semibold', label: 'Semibold' },
-  { value: 'bold', label: 'Bold' },
+  { value: 'normal', label: '常规' },
+  { value: 'medium', label: '中等' },
+  { value: 'semibold', label: '半粗体' },
+  { value: 'bold', label: '粗体' },
 ] as const
 
 const FONT_WEIGHT_VALUES = FONT_WEIGHT_MAP as Record<NonNullable<TextItem['fontWeight']>, number>
@@ -79,7 +79,7 @@ const EMPTY_TEXT_STROKE: NonNullable<TextItem['stroke']> = {
 const TEXT_EFFECT_PRESETS = [
   {
     id: 'none',
-    label: 'None',
+    label: '无',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: undefined,
       stroke: undefined,
@@ -87,7 +87,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'shadow',
-    label: 'Shadow',
+    label: '阴影',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: {
         offsetX: 4,
@@ -100,7 +100,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'outline',
-    label: 'Outline',
+    label: '描边',
     getUpdates: (): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: undefined,
       stroke: {
@@ -111,7 +111,7 @@ const TEXT_EFFECT_PRESETS = [
   },
   {
     id: 'glow',
-    label: 'Glow',
+    label: '发光',
     getUpdates: (color: string): Pick<TextItem, 'textShadow' | 'stroke'> => ({
       textShadow: {
         offsetX: 0,
@@ -223,20 +223,20 @@ function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
   if (spanCount >= 3) {
     return [
       {
-        label: 'Eyebrow',
-        placeholder: 'Eyebrow text',
+        label: '眉题',
+        placeholder: '眉题文本',
         rows: 1,
         allowItalic: false,
       },
       {
-        label: 'Title',
-        placeholder: 'Title text',
+        label: '标题',
+        placeholder: '标题文本',
         rows: 2,
         allowItalic: true,
       },
       {
-        label: 'Subtitle',
-        placeholder: 'Subtitle text',
+        label: '副标题',
+        placeholder: '副标题文本',
         rows: 2,
         allowItalic: true,
       },
@@ -246,14 +246,14 @@ function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
   if (spanCount === 2) {
     return [
       {
-        label: 'Title',
-        placeholder: 'Title text',
+        label: '标题',
+        placeholder: '标题文本',
         rows: 2,
         allowItalic: true,
       },
       {
-        label: 'Subtitle',
-        placeholder: 'Subtitle text',
+        label: '副标题',
+        placeholder: '副标题文本',
         rows: 2,
         allowItalic: true,
       },
@@ -262,8 +262,8 @@ function getSpanEditorConfigs(spanCount: number): SpanEditorConfig[] {
 
   return [
     {
-      label: 'Text',
-      placeholder: 'Enter text...',
+      label: '文本',
+      placeholder: '输入文本...',
       rows: 3,
       allowItalic: true,
     },
@@ -1149,9 +1149,9 @@ export function TextSection({
   return (
     <>
       {showContentSection && (
-        <PropertySection title="Text" icon={Type} defaultOpen={true}>
+        <PropertySection title="文本" icon={Type} defaultOpen={true}>
           {/* Text Content */}
-          <PropertyRow label="Content">
+          <PropertyRow label="内容">
             <div className="flex flex-1 min-w-0 flex-col gap-2">
               <div className="grid w-full grid-cols-3 gap-1.5">
                 <Button
@@ -1160,7 +1160,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplySpanLayout('single')}
                 >
-                  Single
+                  单行
                 </Button>
                 <Button
                   variant={activeEditorSpans.length === 2 ? 'secondary' : 'outline'}
@@ -1168,7 +1168,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplySpanLayout('two')}
                 >
-                  2 Spans
+                  2 段
                 </Button>
                 <Button
                   variant={activeEditorSpans.length >= 3 ? 'secondary' : 'outline'}
@@ -1176,7 +1176,7 @@ export function TextSection({
                   className="h-7 text-[11px]"
                   onClick={() => handleApplySpanLayout('three')}
                 >
-                  3 Spans
+                  3 段
                 </Button>
               </div>
               <Select
@@ -1186,9 +1186,7 @@ export function TextSection({
                 <SelectTrigger className="h-7 text-xs w-full">
                   <SelectValue
                     placeholder={
-                      sharedValues.textStylePresetId === undefined
-                        ? 'Mixed / None'
-                        : 'Select preset'
+                      sharedValues.textStylePresetId === undefined ? '混合 / 无' : '选择预设'
                     }
                   />
                 </SelectTrigger>
@@ -1209,8 +1207,8 @@ export function TextSection({
                     >
                       {(() => {
                         const config = spanEditorConfigs[index] ?? {
-                          label: `Span ${index + 1}`,
-                          placeholder: `Span ${index + 1} text`,
+                          label: `段落 ${index + 1}`,
+                          placeholder: `输入第 ${index + 1} 段文本`,
                           rows: 2,
                           allowItalic: true,
                         }
@@ -1230,14 +1228,14 @@ export function TextSection({
                             <div className="mt-2">
                               <FontPicker
                                 value={span.fontFamily ?? firstTextItem.fontFamily}
-                                placeholder="Select font"
+                                placeholder="閫夋嫨瀛椾綋"
                                 previewText={span.text || config.label}
                                 onValueChange={(value) => handleSpanFontFamilyChange(index, value)}
                               />
                             </div>
                             <div className="mt-2 grid grid-cols-2 gap-2">
                               <NumberInput
-                                label="Size"
+                                label="大小"
                                 value={span.fontSize ?? firstTextItem.fontSize ?? 60}
                                 onChange={(value) => handleSpanFontSizeChange(index, value)}
                                 onLiveChange={(value) => handleSpanFontSizeLiveChange(index, value)}
@@ -1269,7 +1267,7 @@ export function TextSection({
                             </div>
                             <div className="mt-2">
                               <NumberInput
-                                label="Spacing"
+                                label="字间距"
                                 value={span.letterSpacing ?? firstTextItem.letterSpacing ?? 0}
                                 onChange={(value) => handleSpanLetterSpacingChange(index, value)}
                                 onLiveChange={(value) =>
@@ -1300,7 +1298,7 @@ export function TextSection({
                                   size="icon"
                                   className="h-7 w-7"
                                   onClick={() => handleSpanItalicToggle(index)}
-                                  title={`Italic ${config.label.toLowerCase()}`}
+                                  title={`斜体 ${config.label}`}
                                 >
                                   <Italic className="w-3.5 h-3.5" />
                                 </Button>
@@ -1314,7 +1312,7 @@ export function TextSection({
                                 size="icon"
                                 className="h-7 w-7"
                                 onClick={() => handleSpanUnderlineToggle(index)}
-                                title={`Underline ${config.label.toLowerCase()}`}
+                                title={`下划线 ${config.label}`}
                               >
                                 <Underline className="w-3.5 h-3.5" />
                               </Button>
@@ -1329,7 +1327,7 @@ export function TextSection({
                 <Textarea
                   value={sharedValues.text ?? ''}
                   onChange={handleTextChange}
-                  placeholder={sharedValues.text === undefined ? 'Mixed' : 'Enter text...'}
+                  placeholder={sharedValues.text === undefined ? '混合' : '输入文本...'}
                   className="min-h-[60px] text-xs flex-1 min-w-0"
                   rows={3}
                 />
@@ -1338,7 +1336,7 @@ export function TextSection({
           </PropertyRow>
 
           {sharedValues.textStylePresetId && (
-            <PropertyRow label="Scale">
+            <PropertyRow label="缩放">
               <div className="flex items-center gap-1 min-w-0 w-full">
                 <SliderInput
                   value={sharedValues.textStyleScale}
@@ -1360,10 +1358,10 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Font" className="items-start">
+            <PropertyRow label="字体" className="items-start">
               <FontPicker
                 value={sharedValues.fontFamily}
-                placeholder={sharedValues.fontFamily === undefined ? 'Mixed' : 'Select font'}
+                placeholder={sharedValues.fontFamily === undefined ? '混合' : '选择字体'}
                 previewText={fontPreviewText}
                 onValueChange={handleFontFamilyChange}
               />
@@ -1371,7 +1369,7 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Size">
+            <PropertyRow label="大小">
               <div className="flex items-center gap-1 min-w-0 w-full">
                 <NumberInput
                   value={sharedValues.fontSize}
@@ -1393,11 +1391,11 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Weight">
+            <PropertyRow label="字重">
               <Select value={sharedValues.fontWeight} onValueChange={handleFontWeightChange}>
                 <SelectTrigger className="h-7 text-xs flex-1 min-w-0">
                   <SelectValue
-                    placeholder={sharedValues.fontWeight === undefined ? 'Mixed' : 'Select weight'}
+                    placeholder={sharedValues.fontWeight === undefined ? '混合' : '选择字重'}
                   />
                 </SelectTrigger>
                 <SelectContent>
@@ -1412,15 +1410,15 @@ export function TextSection({
           )}
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Style">
+            <PropertyRow label="样式">
               <div className="flex gap-1">
                 <Button
                   variant={isBoldActive ? 'secondary' : 'ghost'}
                   size="icon"
                   className="h-7 w-7"
                   onClick={handleBoldToggle}
-                  title={canUseBold ? 'Bold' : 'Bold is not available for this font'}
-                  aria-label="Bold"
+                  title={canUseBold ? '粗体' : '该字体不支持粗体'}
+                  aria-label="粗体"
                   aria-pressed={isBoldActive}
                   disabled={!canUseBold}
                 >
@@ -1431,8 +1429,8 @@ export function TextSection({
                   size="icon"
                   className="h-7 w-7"
                   onClick={handleItalicToggle}
-                  title="Italic"
-                  aria-label="Italic"
+                  title="斜体"
+                  aria-label="斜体"
                   aria-pressed={isItalicActive}
                 >
                   <Italic className="w-3.5 h-3.5" />
@@ -1442,8 +1440,8 @@ export function TextSection({
                   size="icon"
                   className="h-7 w-7"
                   onClick={handleUnderlineToggle}
-                  title="Underline"
-                  aria-label="Underline"
+                  title="下划线"
+                  aria-label="下划线"
                   aria-pressed={isUnderlineActive}
                 >
                   <Underline className="w-3.5 h-3.5" />
@@ -1453,14 +1451,14 @@ export function TextSection({
           )}
 
           {/* Text Align */}
-          <PropertyRow label="Align">
+          <PropertyRow label="对齐">
             <div className="flex gap-1">
               <Button
                 variant={sharedValues.textAlign === 'left' ? 'secondary' : 'ghost'}
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('left')}
-                title="Align Left"
+                title="左对齐"
               >
                 <AlignLeft className="w-3.5 h-3.5" />
               </Button>
@@ -1469,7 +1467,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('center')}
-                title="Align Center"
+                title="居中对齐"
               >
                 <AlignCenter className="w-3.5 h-3.5" />
               </Button>
@@ -1478,7 +1476,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleTextAlignChange('right')}
-                title="Align Right"
+                title="右对齐"
               >
                 <AlignRight className="w-3.5 h-3.5" />
               </Button>
@@ -1488,7 +1486,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('top')}
-                title="Align Top"
+                title="顶部对齐"
               >
                 <AlignStartHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -1497,7 +1495,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('middle')}
-                title="Align Middle"
+                title="垂直居中"
               >
                 <AlignCenterHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -1506,7 +1504,7 @@ export function TextSection({
                 size="icon"
                 className="h-7 w-7"
                 onClick={() => handleVerticalAlignChange('bottom')}
-                title="Align Bottom"
+                title="底部对齐"
               >
                 <AlignEndHorizontal className="w-3.5 h-3.5" />
               </Button>
@@ -1515,7 +1513,7 @@ export function TextSection({
 
           {!hasStructuredSpanEditor && (
             <ColorPicker
-              label="Color"
+              label="颜色"
               color={sharedValues.color ?? '#ffffff'}
               onChange={handleColorChange}
               onLiveChange={handleColorLiveChange}
@@ -1524,7 +1522,7 @@ export function TextSection({
             />
           )}
 
-          <PropertyRow label="Background">
+          <PropertyRow label="背景">
             <div className="flex flex-1 min-w-0 gap-1">
               <div className="flex-1 min-w-0">
                 <ColorPicker
@@ -1539,15 +1537,15 @@ export function TextSection({
                 className="h-7 px-2 text-[11px]"
                 onClick={handleBackgroundColorClear}
                 disabled={!hasAnyBackground}
-                title="Clear background"
+                title="清除背景"
               >
-                Clear
+                清除
               </Button>
             </div>
           </PropertyRow>
 
           {!hasStructuredSpanEditor && (
-            <PropertyRow label="Spacing">
+            <PropertyRow label="字间距">
               <NumberInput
                 value={sharedValues.letterSpacing}
                 onChange={handleLetterSpacingChange}
@@ -1562,7 +1560,7 @@ export function TextSection({
           )}
 
           {/* Line Height */}
-          <PropertyRow label="Line H.">
+          <PropertyRow label="行高">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={sharedValues.lineHeight}
@@ -1582,7 +1580,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Padding">
+          <PropertyRow label="内边距">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={textPadding}
@@ -1602,7 +1600,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Radius">
+          <PropertyRow label="圆角">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={backgroundRadius}
@@ -1625,8 +1623,8 @@ export function TextSection({
       )}
 
       {showEffectSection && (
-        <PropertySection title="Effects" icon={Sparkles} defaultOpen={true}>
-          <PropertyRow label="Presets" className="items-start">
+        <PropertySection title="效果" icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label="预设" className="items-start">
             <div className="grid w-full grid-cols-2 gap-1.5">
               {TEXT_EFFECT_PRESETS.map((preset) => (
                 <Button
@@ -1643,7 +1641,7 @@ export function TextSection({
           </PropertyRow>
 
           <ColorPicker
-            label="Shadow"
+            label="阴影"
             color={sharedValues.shadowColor || '#000000'}
             onChange={handleShadowColorChange}
             onLiveChange={handleShadowColorLiveChange}
@@ -1651,7 +1649,7 @@ export function TextSection({
             defaultColor="#000000"
           />
 
-          <PropertyRow label="Shadow X">
+          <PropertyRow label="阴影 X">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={shadowOffsetX}
@@ -1671,7 +1669,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Shadow Y">
+          <PropertyRow label="阴影 Y">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={shadowOffsetY}
@@ -1691,7 +1689,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Shadow B.">
+          <PropertyRow label="阴影模糊">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={shadowBlur}
@@ -1711,7 +1709,7 @@ export function TextSection({
             </div>
           </PropertyRow>
 
-          <PropertyRow label="Stroke W.">
+          <PropertyRow label="描边宽度">
             <div className="flex items-center gap-1 min-w-0 w-full">
               <NumberInput
                 value={strokeWidth}
@@ -1733,7 +1731,7 @@ export function TextSection({
 
           {(strokeWidth === 'mixed' || strokeWidth > 0) && (
             <ColorPicker
-              label="Stroke"
+              label="描边"
               color={sharedValues.strokeColor || '#111827'}
               onChange={handleStrokeColorChange}
               onLiveChange={handleStrokeColorLiveChange}
@@ -1745,8 +1743,8 @@ export function TextSection({
       )}
 
       {showAnimationSection && (
-        <PropertySection title="Animation" icon={Sparkles} defaultOpen={true}>
-          <PropertyRow label="Intro" className="items-start">
+        <PropertySection title="动画" icon={Sparkles} defaultOpen={true}>
+          <PropertyRow label="入场" className="items-start">
             <div className="grid w-full grid-cols-4 gap-1.5">
               {TEXT_ANIMATION_PRESETS.map((preset) => (
                 <Button
@@ -1761,7 +1759,7 @@ export function TextSection({
               ))}
             </div>
           </PropertyRow>
-          <PropertyRow label="Outro" className="items-start">
+          <PropertyRow label="出场" className="items-start">
             <div className="grid w-full grid-cols-4 gap-1.5">
               {TEXT_ANIMATION_PRESETS.map((preset) => (
                 <Button
@@ -1777,7 +1775,7 @@ export function TextSection({
             </div>
           </PropertyRow>
           <div className="px-1 pt-1 text-[11px] text-muted-foreground">
-            Applies short ease-out text motion at the start or end of each selected clip.
+            在每个选中片段的开头或结尾应用简短的文字动画效果。
           </div>
         </PropertySection>
       )}

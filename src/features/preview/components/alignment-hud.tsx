@@ -37,22 +37,22 @@ const ALIGNMENT_ACTIONS: Array<{
   label: string
   minItems: number
 }> = [
-  { type: 'left', icon: AlignStartVertical, label: 'Align Left', minItems: 1 },
-  { type: 'center-h', icon: AlignCenterVertical, label: 'Center Horizontally', minItems: 1 },
-  { type: 'right', icon: AlignEndVertical, label: 'Align Right', minItems: 1 },
-  { type: 'top', icon: AlignStartHorizontal, label: 'Align Top', minItems: 1 },
-  { type: 'center-v', icon: AlignCenterHorizontal, label: 'Center Vertically', minItems: 1 },
-  { type: 'bottom', icon: AlignEndHorizontal, label: 'Align Bottom', minItems: 1 },
+  { type: 'left', icon: AlignStartVertical, label: '左对齐', minItems: 1 },
+  { type: 'center-h', icon: AlignCenterVertical, label: '水平居中', minItems: 1 },
+  { type: 'right', icon: AlignEndVertical, label: '右对齐', minItems: 1 },
+  { type: 'top', icon: AlignStartHorizontal, label: '顶部对齐', minItems: 1 },
+  { type: 'center-v', icon: AlignCenterHorizontal, label: '垂直居中', minItems: 1 },
+  { type: 'bottom', icon: AlignEndHorizontal, label: '底部对齐', minItems: 1 },
   {
     type: 'distribute-h',
     icon: AlignHorizontalDistributeCenter,
-    label: 'Distribute Horizontally',
+    label: '水平分布',
     minItems: 3,
   },
   {
     type: 'distribute-v',
     icon: AlignVerticalDistributeCenter,
-    label: 'Distribute Vertically',
+    label: '垂直分布',
     minItems: 3,
   },
 ]
@@ -248,11 +248,9 @@ export function AlignmentToolbar({ projectSize }: AlignmentToolbarProps) {
         style={BUTTON_STYLE}
         onClick={() => setSetting('canvasSnapEnabled', !canvasSnapEnabled)}
         data-tooltip={
-          canvasSnapEnabled
-            ? 'Disable Canvas Snapping (hold Alt while dragging to bypass)'
-            : 'Enable Canvas Snapping'
+          canvasSnapEnabled ? '关闭画布吸附（按住 Alt 拖动可临时忽略）' : '开启画布吸附'
         }
-        aria-label="Toggle Canvas Snapping"
+        aria-label="切换画布吸附"
         aria-pressed={canvasSnapEnabled}
       >
         <Magnet className="w-3.5 h-3.5" />

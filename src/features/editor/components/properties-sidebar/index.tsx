@@ -72,7 +72,7 @@ function getClipHeader(items: HeaderItem[]) {
     }
   }
 
-  const fallbackLabel = `${logicalCount} clip${logicalCount === 1 ? '' : 's'} selected`
+  const fallbackLabel = `已选中 ${logicalCount} 个片段`
 
   return {
     text: fallbackLabel,

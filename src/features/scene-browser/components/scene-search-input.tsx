@@ -38,12 +38,12 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             ? 'border-primary/60 bg-primary/10 text-primary'
             : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
         )}
-        title={colorMode ? 'Exit color mode' : 'Search by color'}
-        aria-label={colorMode ? 'Exit color mode' : 'Search by color'}
+        title={colorMode ? '退出颜色模式' : '按颜色搜索'}
+        aria-label={colorMode ? '退出颜色模式' : '按颜色搜索'}
         aria-pressed={colorMode}
       >
         <Palette className="h-3 w-3" />
-        {!compact && 'Color'}
+        {!compact && '颜色'}
       </button>
       {!colorMode && (
         <DropdownMenu>
@@ -56,13 +56,11 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
                   ? 'border-primary/60 bg-primary/10 text-primary'
                   : 'border-border bg-secondary text-muted-foreground hover:text-foreground',
               )}
-              title={
-                semanticActive ? 'Semantic search (by meaning)' : 'Keyword search (exact match)'
-              }
-              aria-label={semanticActive ? 'Semantic search' : 'Keyword search'}
+              title={semanticActive ? '语义搜索（按含义）' : '关键词搜索（精确匹配）'}
+              aria-label={semanticActive ? '语义搜索' : '关键词搜索'}
             >
               {semanticActive ? <Sparkles className="h-3 w-3" /> : <Type className="h-3 w-3" />}
-              {!compact && (semanticActive ? 'Semantic' : 'Keyword')}
+              {!compact && (semanticActive ? '语义' : '关键词')}
               <ChevronDown className="h-3 w-3 opacity-70" />
             </button>
           </DropdownMenuTrigger>
@@ -72,8 +70,8 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             >
               <Type className="mr-2 h-3 w-3" />
               <div className="flex flex-col">
-                <span>Keyword</span>
-                <span className="text-[10px] text-muted-foreground">Exact word matches</span>
+                <span>关键词</span>
+                <span className="text-[10px] text-muted-foreground">精确词匹配</span>
               </div>
               {!semanticActive && <Check className="ml-auto h-3 w-3" />}
             </DropdownMenuItem>
@@ -84,8 +82,8 @@ export function SceneSearchModeButtons({ compact = false }: { compact?: boolean 
             >
               <Sparkles className="mr-2 h-3 w-3" />
               <div className="flex flex-col">
-                <span>Semantic</span>
-                <span className="text-[10px] text-muted-foreground">Match by meaning</span>
+                <span>语义</span>
+                <span className="text-[10px] text-muted-foreground">按语义匹配</span>
               </div>
               {semanticActive && <Check className="ml-auto h-3 w-3" />}
             </DropdownMenuItem>
@@ -129,7 +127,7 @@ export function SceneSearchField() {
             type="button"
             onClick={() => setReference(null)}
             className="flex h-6 max-w-[220px] items-center gap-1 rounded-md border border-primary/60 bg-primary/10 px-2 text-[11px] text-primary transition-colors hover:bg-primary/20"
-            title="Clear reference and pick another color"
+            title="清除参考并重新选择颜色"
           >
             <Palette className="h-3 w-3 shrink-0" />
             <span className="truncate">{reference.label}</span>
@@ -152,10 +150,10 @@ export function SceneSearchField() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder={
             reference
-              ? 'Finding scenes with a similar palette…'
+              ? '正在查找相似色板场景...'
               : semanticActive
-                ? 'Search by meaning — "sunset over water", "people laughing"…'
-                : 'Search scenes by what you see…'
+                ? '按语义搜索，例如“海边日落”“人群欢笑”...'
+                : '按画面内容搜索场景...'
           }
           disabled={!!reference}
           className="h-8 pl-8 pr-7 text-[12px] disabled:opacity-60"
@@ -167,7 +165,7 @@ export function SceneSearchField() {
             type="button"
             onClick={() => setQuery('')}
             className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
-            aria-label="Clear search"
+            aria-label="清除搜索"
           >
             <X className="h-3 w-3" />
           </button>
@@ -178,7 +176,7 @@ export function SceneSearchField() {
           type="button"
           onClick={() => setReference(null)}
           className="flex h-8 max-w-[220px] items-center gap-1 rounded-md border border-primary/60 bg-primary/10 px-2 text-[11px] text-primary transition-colors hover:bg-primary/20"
-          title={`Similar palette to ${reference.label} — click to clear`}
+          title={`与 ${reference.label} 相似的色板，点击清除`}
         >
           <Palette className="h-3 w-3 shrink-0" />
           <span className="truncate">{reference.label}</span>

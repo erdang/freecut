@@ -1,27 +1,3 @@
-/**
- * LegacyMigrationErrors
- *
- * Surfaces per-store errors left over from a partial legacy-IDB migration.
- *
- * Context: `migrateFromLegacyIDB()` only sets the "migration complete"
- * marker when every record copied without error. Any per-store failures
- * are persisted to `.freecut-migration-errors.json` in the workspace so
- * the next launch can offer a targeted retry. Without this banner, a
- * user whose migration partially-failed would see the main migration
- * banner again and have to re-run everything blindly.
- *
- * Behavior:
- *  - On mount, read `getMigrationErrors()`. Empty → render nothing.
- *  - Non-empty → show a compact banner with the failure count, grouped
- *    by store, and a Retry button that re-runs the migration. Records
- *    that succeeded first time throw "already exists" and get pushed
- *    into the error list (caught per-store, harmless); records that
- *    previously failed get another shot.
- *  - On retry success (zero new errors), the migrate pipeline sets
- *    the migration marker and clears the error file; this component
- *    unmounts itself on next render.
- */
-
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
@@ -84,19 +60,18 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
     try {
       const report = await migrateFromLegacyIDB()
       if (report.errors.length === 0) {
-        toast.success('Retry succeeded — all items migrated.')
+        toast.success('重试成功，所有条目均已迁移。')
         setState({ kind: 'idle' })
       } else {
-        toast.warning(`Retry completed with ${report.errors.length} item(s) still failing.`)
+        toast.warning(`重试后仍有 ${report.errors.length} 条记录失败。`)
         setState({ kind: 'show', errors: report.errors })
       }
       await onRetried?.()
     } catch (error) {
       logger.error('retry migration failed', error)
-      toast.error('Retry failed', {
-        description: error instanceof Error ? error.message : 'Unknown error',
+      toast.error('重试失败', {
+        description: error instanceof Error ? error.message : '未知错误',
       })
-      // Fall back to whatever the persisted state looks like now.
       const errors = await getMigrationErrors()
       setState(errors.length > 0 ? { kind: 'show', errors } : { kind: 'idle' })
     }
@@ -112,7 +87,7 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
     return (
       <div className="panel-bg border border-border rounded-lg p-4 flex items-center gap-3 text-sm">
         <RefreshCw className="h-4 w-4 animate-spin" />
-        <span>Retrying migration…</span>
+        <span>正在重试迁移...</span>
       </div>
     )
   }
@@ -124,12 +99,10 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
       <div className="flex items-start gap-3">
         <AlertTriangle className="h-4 w-4 mt-0.5 text-yellow-500 shrink-0" />
         <div className="flex-1 min-w-0">
-          <div className="font-medium">
-            {total} item{total === 1 ? '' : 's'} failed to migrate
-          </div>
+          <div className="font-medium">仍有 {total} 条数据迁移失败</div>
           <div className="text-muted-foreground text-xs mt-1">
-            {grouped.map(({ store, count }) => `${count} ${store}`).join(', ')}. Retry to copy
-            anything still missing from the legacy database.
+            {grouped.map(({ store, count }) => `${store}: ${count}`).join('，')}
+            。请重试迁移以补齐缺失数据。
           </div>
 
           {expanded && (
@@ -147,13 +120,13 @@ export function LegacyMigrationErrors({ onRetried }: Props) {
           )}
         </div>
         <Button size="sm" onClick={() => void handleRetry()} className="gap-2">
-          <RefreshCw className="h-3 w-3" /> Retry
+          <RefreshCw className="h-3 w-3" /> 重试
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? 'Hide details' : 'Show details'}
+          {expanded ? '收起详情' : '查看详情'}
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setState({ kind: 'dismissed' })}>
-          Dismiss
+          关闭
         </Button>
       </div>
     </div>

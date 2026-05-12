@@ -94,7 +94,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
     <div className="space-y-1">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground pb-1.5">
-          Style preset
+          样式预设
         </p>
         <div className="grid grid-cols-3 gap-1.5">
           {CAPTION_STYLE_PRESETS.map((preset) => (
@@ -119,7 +119,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
       <Separator className="my-1" />
 
       <ColorPicker
-        label="Color"
+        label="颜色"
         color={sampleColor}
         onChange={(color) => applyPatch({ color })}
         onLiveChange={(color) => applyPatch({ color })}
@@ -127,7 +127,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
         defaultColor="#ffffff"
       />
 
-      <PropertyRow label="Size">
+      <PropertyRow label="大小">
         <SliderInput
           value={sampleFontSize}
           onChange={(fontSize) => applyPatch({ fontSize })}
@@ -140,7 +140,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
         />
       </PropertyRow>
 
-      <PropertyRow label="Vertical">
+      <PropertyRow label="垂直位置">
         <SliderInput
           value={verticalY}
           onChange={updateVerticalPosition}
@@ -153,7 +153,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
         />
       </PropertyRow>
 
-      <PropertyRow label="Background">
+      <PropertyRow label="背景">
         <div className="flex flex-1 min-w-0">
           <button
             type="button"
@@ -169,13 +169,13 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
                 : 'border-border hover:bg-secondary/40 text-muted-foreground',
             )}
           >
-            {hasBackground ? 'On' : 'Off'}
+            {hasBackground ? '开' : '关'}
           </button>
         </div>
       </PropertyRow>
 
       {hasBackground && (
-        <PropertyRow label="Padding">
+        <PropertyRow label="内边距">
           <SliderInput
             value={sampleTextPadding}
             onChange={(textPadding) => applyPatch({ textPadding })}

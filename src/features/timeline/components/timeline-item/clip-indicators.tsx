@@ -48,7 +48,7 @@ export const ClipIndicators = memo(function ClipIndicators({
 
   return (
     <>
-      {/* Label-row badges ââ‚¬” single container to prevent overlap */}
+      {/* Label-row badges: single container to prevent overlap */}
       {(hasKeyframes ||
         (isShape && isMask) ||
         showSpeedBadge ||
@@ -85,12 +85,12 @@ export const ClipIndicators = memo(function ClipIndicators({
               className="px-1 py-0.5 text-[10px] font-bold bg-black/60 text-white rounded font-mono"
               title={
                 reverseConformStatus === 'ready'
-                  ? 'Reversed playback prepared'
+                  ? '倒放已准备完成'
                   : reverseConformStatus === 'pending'
-                    ? 'Preparing reversed clip'
+                    ? '正在准备倒放片段'
                     : reverseConformStatus === 'error'
-                      ? 'Reversed playback; preparation failed'
-                      : 'Reversed playback'
+                      ? '倒放中；准备失败'
+                      : '倒放中'
               }
             >
               REV
@@ -99,7 +99,7 @@ export const ClipIndicators = memo(function ClipIndicators({
           {reverseConformStatus === 'pending' && (
             <span
               className="px-1 py-0.5 text-[10px] font-bold bg-sky-600/80 text-white rounded font-mono"
-              title="Preparing reversed clip"
+              title="正在准备倒放片段"
             >
               PREP
             </span>
@@ -107,7 +107,7 @@ export const ClipIndicators = memo(function ClipIndicators({
           {reverseConformStatus === 'error' && (
             <span
               className="px-1 py-0.5 text-[10px] font-bold bg-red-600/80 text-white rounded font-mono"
-              title="Reverse preparation failed"
+              title="倒放准备失败"
             >
               ERR
             </span>

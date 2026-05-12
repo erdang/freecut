@@ -36,17 +36,17 @@ export const THIRD_PARTY_TTS_VOICEPRINT_TYPE_OPTIONS: Array<{
   value: ThirdPartyTtsVoiceprintType
   label: string
 }> = [
-  { value: '1', label: 'Existing Voiceprint' },
-  { value: '2', label: 'Upload Voiceprint' },
+  { value: '1', label: '使用已有声纹' },
+  { value: '2', label: '上传声纹文件' },
 ]
 
 export const THIRD_PARTY_TTS_EMO_CONTROL_METHOD_OPTIONS: Array<{
   value: ThirdPartyTtsEmoControlMethod
   label: string
 }> = [
-  { value: '1', label: 'Same as voice reference audio' },
-  { value: '2', label: 'Use emotion reference audio' },
-  { value: '3', label: 'Use emotion vector control' },
+  { value: '1', label: '与声纹参考音频一致' },
+  { value: '2', label: '使用情感参考音频' },
+  { value: '3', label: '使用情感向量控制' },
 ]
 
 export const THIRD_PARTY_TTS_EMOTION_VECTOR_OPTIONS: Array<{

@@ -37,11 +37,11 @@ function scoreTier(
 function tierLabel(tier: Tier): string {
   switch (tier) {
     case 'strong':
-      return 'Strong'
+      return '强'
     case 'good':
-      return 'Good'
+      return '中'
     case 'fair':
-      return 'Fair'
+      return '弱'
   }
 }
 
@@ -104,8 +104,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         key="keyword"
         tone="keyword"
         icon={<Type className="h-2.5 w-2.5" />}
-        label="Keyword"
-        hint={`Keyword match · cosine ${score.toFixed(2)}`}
+        label="关键词"
+        hint={`关键词匹配 · 余弦值 ${score.toFixed(2)}`}
       />,
     )
   }
@@ -136,8 +136,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-text"
           tone="text"
           icon={<MessageSquareText className="h-2.5 w-2.5" />}
-          label={`Meaning · ${tierLabel(textTier)}`}
-          hint={`Text-embedding cosine: ${(textScore ?? 0).toFixed(3)}`}
+          label={`语义 · ${tierLabel(textTier)}`}
+          hint={`文本嵌入余弦值：${(textScore ?? 0).toFixed(3)}`}
         />,
       )
     }
@@ -147,8 +147,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-image"
           tone="visual"
           icon={<Eye className="h-2.5 w-2.5" />}
-          label={`Visual · ${tierLabel(imageTier)}`}
-          hint={`CLIP cosine: ${(imageScore ?? 0).toFixed(3)}`}
+          label={`视觉 · ${tierLabel(imageTier)}`}
+          hint={`CLIP 余弦值：${(imageScore ?? 0).toFixed(3)}`}
         />,
       )
     }
@@ -158,8 +158,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-color"
           tone="palette"
           icon={<Palette className="h-2.5 w-2.5" />}
-          label={`Color · ${signals.colorMatch}`}
-          hint={`Palette match on ${signals.colorMatch} (∆E 2000)`}
+          label={`颜色 · ${signals.colorMatch}`}
+          hint={`${signals.colorMatch} 色板匹配（∆E 2000）`}
         />,
       )
     }
@@ -169,8 +169,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="palette-similar"
           tone="palette"
           icon={<Palette className="h-2.5 w-2.5" />}
-          label={`Palette · ∆E ${signals.paletteDistance.toFixed(1)}`}
-          hint="Weighted-mean ∆E 2000 to the reference palette"
+          label={`色板 · ∆E ${signals.paletteDistance.toFixed(1)}`}
+          hint="与参考色板的加权平均 ∆E 2000"
         />,
       )
     }
@@ -183,8 +183,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-weak"
           tone="text"
           icon={<Sparkles className="h-2.5 w-2.5" />}
-          label="Below threshold"
-          hint={`cosine ${score.toFixed(3)}`}
+          label="低于阈值"
+          hint={`余弦值 ${score.toFixed(3)}`}
         />,
       )
     }
@@ -198,8 +198,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         <Chip
           tone="top"
           icon={<Sparkles className="h-2.5 w-2.5" />}
-          label="Top"
-          hint="Highest-scoring match"
+          label="最佳"
+          hint="当前得分最高的匹配"
         />
       )}
       {chips}

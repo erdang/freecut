@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react'
+﻿import { memo, useCallback, useMemo } from 'react'
 import { Blend, Info } from 'lucide-react'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'
@@ -222,29 +222,18 @@ export const TransitionsPanel = memo(function TransitionsPanel() {
           <div className="text-muted-foreground leading-relaxed">
             {hasValidClickTarget ? (
               <span className="text-primary">
-                Click to apply to the selected cut, or drag a transition onto any valid cut in the
-                timeline.
+                点击可应用到当前选中剪切点，或将转场拖拽到时间线中的任意有效剪切点。
               </span>
             ) : adjacentInfo?.reason ? (
-              <span>
-                Drag a transition onto a valid cut. Click-to-apply is unavailable here:{' '}
-                {adjacentInfo.reason}.
-              </span>
+              <span>请将转场拖拽到有效剪切点。当前无法点击应用：{adjacentInfo.reason}。</span>
             ) : selectionCount === 1 ? (
               <span>
-                Drag a transition onto a valid cut, or place clips next to each other and select one
-                clip to click-apply.
+                将转场拖拽到有效剪切点，或先让两个片段首尾相邻并选中其中一个片段后点击应用。
               </span>
             ) : selectionCount > 1 ? (
-              <span>
-                Drag a transition onto a valid cut, or select a single video or image clip to
-                click-apply.
-              </span>
+              <span>将转场拖拽到有效剪切点，或只选中一个视频/图片片段后点击应用。</span>
             ) : (
-              <span>
-                Drag a transition onto a valid cut, or select a video or image clip to add a
-                transition to its neighbor.
-              </span>
+              <span>将转场拖拽到有效剪切点，或选中视频/图片片段后为其相邻片段添加转场。</span>
             )}
           </div>
         </div>

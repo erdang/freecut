@@ -38,14 +38,13 @@ export function UnsupportedAudioCodecDialog({
         <AlertDialogHeader className="overflow-hidden">
           <AlertDialogTitle className="flex items-center gap-2">
             <VolumeX className="w-5 h-5 text-yellow-500 shrink-0" />
-            Unsupported Audio Codec
+            不支持的音频编码
           </AlertDialogTitle>
           <AlertDialogDescription asChild>
             <div className="space-y-3">
               <p>
-                {files.length === 1 ? 'This file uses' : `${files.length} files use`} an audio codec
-                that cannot be decoded in the browser. Audio waveform visualization will not be
-                available.
+                {files.length === 1 ? '该文件使用了' : `这 ${files.length} 个文件使用了`}
+                浏览器暂不支持解码的音频编码， 因此无法显示音频波形。
               </p>
 
               <div className="max-h-[200px] overflow-y-auto overflow-x-hidden space-y-2">
@@ -66,15 +65,14 @@ export function UnsupportedAudioCodecDialog({
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Video playback and editing will work normally. Only audio waveform display is
-                affected.
+                视频播放与编辑不受影响，仅音频波形显示受限。
               </p>
             </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel onClick={onCancel}>Cancel Import</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm}>Import Anyway</AlertDialogAction>
+          <AlertDialogCancel onClick={onCancel}>取消导入</AlertDialogCancel>
+          <AlertDialogAction onClick={onConfirm}>仍然导入</AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

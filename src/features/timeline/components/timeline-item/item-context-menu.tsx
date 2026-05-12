@@ -360,11 +360,13 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
     return keyframedProperties.filter((p) => p.keyframes.length > 0)
   }, [keyframedProperties])
   const sceneVerificationModelOptions = useMemo(() => getSceneVerificationModelOptions(), [])
-  const captionActionLabel = hasCaptions ? 'Regenerate Captions' : 'Generate Captions'
+  const captionActionLabel = hasCaptions ? '重新生成字幕' : '生成字幕'
+  const showCaptionGenerationMenu = false
+  const showSceneAndFillerMenus = false
   const generateAudioHandler = onGenerateAudioFromTextByThirdParty ?? onGenerateAudioFromText
   const generateAudioLabel = onGenerateAudioFromTextByThirdParty
-    ? 'Generate Audio from Text (Third-Party API)'
-    : 'Generate Audio from Text'
+    ? '从文本生成音频（第三方 API）'
+    : '从文本生成音频'
 
   const hasKeyframes = propertiesWithKeyframes.length > 0
 
@@ -398,19 +400,19 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
             <>
               {showJoinLeft && (
                 <ContextMenuItem onClick={onJoinLeft}>
-                  Join with Previous
+                  与前一片段合并
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
               {showJoinRight && (
                 <ContextMenuItem onClick={onJoinRight}>
-                  Join with Next
+                  与后一片段合并
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
               {canJoinSelected && (
                 <ContextMenuItem onClick={onJoinSelected}>
-                  Join Selected
+                  合并所选片段
                   <ContextMenuShortcut>J</ContextMenuShortcut>
                 </ContextMenuItem>
               )}
@@ -423,7 +425,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           <>
             {canLinkSelected && onLinkSelected && (
               <ContextMenuItem onClick={onLinkSelected}>
-                Link Clips
+                链接片段
                 <ContextMenuShortcut>
                   {formatHotkeyBinding(hotkeys.LINK_AUDIO_VIDEO)}
                 </ContextMenuShortcut>
@@ -431,7 +433,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
             )}
             {canUnlinkSelected && onUnlinkSelected && (
               <ContextMenuItem onClick={onUnlinkSelected}>
-                Unlink Clips
+                取消链接片段
                 <ContextMenuShortcut>
                   {formatHotkeyBinding(hotkeys.UNLINK_AUDIO_VIDEO)}
                 </ContextMenuShortcut>
@@ -441,14 +443,14 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           </>
         )}
 
-        {/* Clear Keyframes submenu - only show if item has keyframes */}
+        {/* 清除关键帧 submenu - only show if item has keyframes */}
         {hasKeyframes && (
           <>
             <ContextMenuSub>
-              <ContextMenuSubTrigger>Clear Keyframes</ContextMenuSubTrigger>
+              <ContextMenuSubTrigger>清除关键帧</ContextMenuSubTrigger>
               <ContextMenuSubContent className="w-48">
                 <ContextMenuItem onClick={onClearAllKeyframes}>
-                  Clear All
+                  清除全部
                   <ContextMenuShortcut>
                     {formatHotkeyBinding(hotkeys.CLEAR_KEYFRAMES)}
                   </ContextMenuShortcut>
@@ -471,7 +473,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {/* Bento Layout - only show when 2+ items selected */}
         {selectedCount >= 2 && onBentoLayout && (
           <>
-            <ContextMenuItem onClick={onBentoLayout}>Bento Layout...</ContextMenuItem>
+            <ContextMenuItem onClick={onBentoLayout}>宫格布局...</ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
@@ -480,7 +482,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {canReverse && onReverse && (
           <>
             <ContextMenuItem onClick={onReverse}>
-              {isReversed ? 'Unreverse' : 'Reverse'}
+              {isReversed ? '取消倒放' : '倒放'}
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -490,7 +492,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {isVideoItem && playheadInBounds && onFreezeFrame && (
           <>
             <ContextMenuItem onClick={onFreezeFrame}>
-              Insert Freeze Frame
+              插入定格帧
               <ContextMenuShortcut>Shift+F</ContextMenuShortcut>
             </ContextMenuItem>
             <ContextMenuSeparator />
@@ -518,23 +520,23 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           </>
         )}
 
-        {canDetectScenes && onDetectScenes && (
+        {showSceneAndFillerMenus && canDetectScenes && onDetectScenes && (
           <>
             {isDetectingScenes ? (
-              <ContextMenuItem disabled>Detecting Scenes...</ContextMenuItem>
+              <ContextMenuItem disabled>正在检测场景...</ContextMenuItem>
             ) : (
               <ContextMenuSub>
-                <ContextMenuSubTrigger>Detect Scenes &amp; Split</ContextMenuSubTrigger>
+                <ContextMenuSubTrigger>检测场景并分割</ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-48">
                   <ContextMenuItem onClick={() => onDetectScenes('histogram')}>
-                    Fast (Histogram)
+                    快速（直方图）
                   </ContextMenuItem>
                   {sceneVerificationModelOptions.map((option) => (
                     <ContextMenuItem
                       key={option.value}
                       onClick={() => onDetectScenes('optical-flow', option.value)}
                     >
-                      {`AI (${option.label})`}
+                      {`AI（${option.label}）`}
                     </ContextMenuItem>
                   ))}
                 </ContextMenuSubContent>
@@ -544,19 +546,19 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           </>
         )}
 
-        {canRemoveSilence && onRemoveSilence && (
+        {showSceneAndFillerMenus && canRemoveSilence && onRemoveSilence && (
           <>
             <ContextMenuItem onClick={onRemoveSilence} disabled={isRemovingSilence}>
-              {isRemovingSilence ? 'Detecting Silence...' : 'Remove Silence...'}
+              {isRemovingSilence ? '正在检测静音...' : '移除静音...'}
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
 
-        {canRemoveFillers && onRemoveFillers && (
+        {showSceneAndFillerMenus && canRemoveFillers && onRemoveFillers && (
           <>
             <ContextMenuItem onClick={onRemoveFillers} disabled={isRemovingFillers}>
-              {isRemovingFillers ? 'Detecting Fillers...' : 'Remove Filler Words...'}
+              {isRemovingFillers ? '正在检测口头词...' : '移除口头词...'}
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -570,16 +572,16 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           </>
         )}
 
-        {canManageCaptions && onOpenCaptionDialog && (
+        {showCaptionGenerationMenu && canManageCaptions && onOpenCaptionDialog && (
           <>
             {isGeneratingCaptions ? (
-              <ContextMenuItem disabled>Updating captions...</ContextMenuItem>
+              <ContextMenuItem disabled>正在更新字幕...</ContextMenuItem>
             ) : hasTranscript && onApplyCaptionsFromTranscript ? (
               <ContextMenuSub>
-                <ContextMenuSubTrigger>Captions</ContextMenuSubTrigger>
+                <ContextMenuSubTrigger>字幕</ContextMenuSubTrigger>
                 <ContextMenuSubContent className="w-56">
                   <ContextMenuItem onClick={onApplyCaptionsFromTranscript}>
-                    Insert Existing Captions
+                    插入现有字幕
                   </ContextMenuItem>
                   <ContextMenuItem onClick={onOpenCaptionDialog}>
                     {captionActionLabel}
@@ -595,9 +597,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
 
         {canExtractEmbeddedSubtitles && onExtractEmbeddedSubtitles && (
           <>
-            <ContextMenuItem onClick={onExtractEmbeddedSubtitles}>
-              Extract Embedded Subtitles…
-            </ContextMenuItem>
+            <ContextMenuItem onClick={onExtractEmbeddedSubtitles}>提取内嵌字幕...</ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}
@@ -605,7 +605,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {canConsolidateCaptionsToSegment && onConsolidateCaptionsToSegment && (
           <>
             <ContextMenuItem onClick={onConsolidateCaptionsToSegment}>
-              Consolidate Captions to Segment
+              将字幕合并到片段
             </ContextMenuItem>
             <ContextMenuSeparator />
           </>
@@ -613,13 +613,13 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
 
         {/* Composition operations */}
         {isCompositionItem && onEnterComposition && (
-          <ContextMenuItem onClick={onEnterComposition}>Open Compound Clip</ContextMenuItem>
+          <ContextMenuItem onClick={onEnterComposition}>打开复合片段</ContextMenuItem>
         )}
         {isCompositionItem && onDissolveComposition && (
-          <ContextMenuItem onClick={onDissolveComposition}>Dissolve Compound Clip</ContextMenuItem>
+          <ContextMenuItem onClick={onDissolveComposition}>解散复合片段</ContextMenuItem>
         )}
         {canCreatePreComp && onCreatePreComp && (
-          <ContextMenuItem onClick={onCreatePreComp}>Create Compound Clip</ContextMenuItem>
+          <ContextMenuItem onClick={onCreatePreComp}>创建复合片段</ContextMenuItem>
         )}
         {((isCompositionItem && (onEnterComposition || onDissolveComposition)) ||
           (canCreatePreComp && onCreatePreComp)) && <ContextMenuSeparator />}
@@ -629,7 +629,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           disabled={!isSelected}
           className="text-destructive focus:text-destructive"
         >
-          Ripple Delete
+          波纹删除
           <ContextMenuShortcut>Ctrl+Del</ContextMenuShortcut>
         </ContextMenuItem>
         <ContextMenuItem
@@ -637,7 +637,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
           disabled={!isSelected}
           className="text-destructive focus:text-destructive"
         >
-          Delete
+          删除
           <ContextMenuShortcut>Del</ContextMenuShortcut>
         </ContextMenuItem>
       </ContextMenuContent>

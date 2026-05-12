@@ -43,9 +43,9 @@ interface SceneBrowserPanelProps {
 }
 
 const SORT_OPTIONS: Array<{ value: SceneBrowserSortMode; label: string }> = [
-  { value: 'relevance', label: 'Relevance' },
-  { value: 'time', label: 'Timestamp' },
-  { value: 'name', label: 'Media name' },
+  { value: 'relevance', label: '相关性' },
+  { value: 'time', label: '时间戳' },
+  { value: 'name', label: '媒体名称' },
 ]
 
 export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
@@ -136,8 +136,8 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
   const isFiltered = query.trim().length > 0
 
   const scopeLabel = scopedMedia
-    ? `${clipsWithCaptions} clip · ${totalScenes} ${totalScenes === 1 ? 'scene' : 'scenes'}`
-    : `${clipsWithCaptions} ${clipsWithCaptions === 1 ? 'clip' : 'clips'} · ${totalScenes} ${totalScenes === 1 ? 'scene' : 'scenes'}`
+    ? `${clipsWithCaptions} 个片段 · ${totalScenes} 个场景`
+    : `${clipsWithCaptions} 个片段 · ${totalScenes} 个场景`
 
   return (
     <div className={cn('flex min-h-0 flex-col', className)}>
@@ -163,10 +163,10 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
           ) : (
             <Select value={scope ?? 'all'} onValueChange={handleScopeChange}>
               <SelectTrigger className="h-6 w-36 text-[11px]">
-                <SelectValue placeholder="Scope" />
+                <SelectValue placeholder="范围" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All media</SelectItem>
+                <SelectItem value="all">全部媒体</SelectItem>
                 {mediaWithCaptions.map((media) => (
                   <SelectItem key={media.id} value={media.id}>
                     {media.fileName}
@@ -184,13 +184,11 @@ export function SceneBrowserPanel({ className }: SceneBrowserPanelProps) {
       <div className="flex items-center justify-between border-b border-border/30 px-3 py-1.5 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <Sparkles className="h-3 w-3 text-purple-400" />
-          {isFiltered
-            ? `${scenes.length} ${scenes.length === 1 ? 'match' : 'matches'} · ${scopeLabel}`
-            : scopeLabel}
+          {isFiltered ? `${scenes.length} 个匹配结果 · ${scopeLabel}` : scopeLabel}
         </span>
         <div className="flex items-center gap-1.5">
           <ViewModeToggle value={viewMode} onChange={setViewMode} />
-          <span className="text-muted-foreground/80">Sort</span>
+          <span className="text-muted-foreground/80">排序</span>
           <Select value={sortMode} onValueChange={(v) => setSortMode(v as SceneBrowserSortMode)}>
             <SelectTrigger className="h-6 w-28 text-[11px]">
               <SelectValue />
@@ -257,8 +255,8 @@ function SemanticIndexBanner({
   progress: { indexing: number; indexTotal: number; loadingModel: boolean }
 }) {
   const label = progress.loadingModel
-    ? 'Downloading semantic model (~22 MB, first run only)…'
-    : `Indexing captions for semantic search — ${progress.indexing}/${progress.indexTotal} clips`
+    ? '正在下载语义模型（约 22 MB，仅首次）...'
+    : `正在为语义搜索建立字幕索引 - ${progress.indexing}/${progress.indexTotal} 个片段`
   return (
     <div className="flex items-center gap-2 rounded-md border border-purple-400/20 bg-purple-400/5 px-3 py-2 text-[11px] text-purple-300/90">
       <BrainCircuit className="h-3 w-3 shrink-0 animate-pulse" />
@@ -268,12 +266,12 @@ function SemanticIndexBanner({
 }
 
 function ReanalyzingBanner({ items }: { items: Array<{ id: string; fileName: string }> }) {
-  const label = items.length === 1 ? items[0]!.fileName : `${items.length} clips`
+  const label = items.length === 1 ? items[0]!.fileName : `${items.length} 个片段`
   return (
     <div className="flex items-center gap-2 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-[11px] text-primary/90">
       <Loader2 className="h-3 w-3 shrink-0 animate-spin" />
       <span className="truncate">
-        Re-analyzing <span className="font-medium">{label}</span> — scenes will refresh when done.
+        正在重新分析 <span className="font-medium">{label}</span>，完成后将刷新场景结果。
       </span>
     </div>
   )
@@ -296,7 +294,7 @@ function CompactScopePicker({
   mediaWithCaptions: ReadonlyArray<{ id: string; fileName: string }>
   onChange: (value: string) => void
 }) {
-  const title = scopedMedia ? `Scope: ${scopedMedia.fileName}` : 'Scope: All media'
+  const title = scopedMedia ? `范围：${scopedMedia.fileName}` : '范围：全部媒体'
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -320,7 +318,7 @@ function CompactScopePicker({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuItem onClick={() => onChange('all')}>
-          All media
+          全部媒体
           {scope === null && <Check className="ml-auto h-3 w-3" />}
         </DropdownMenuItem>
         {mediaWithCaptions.length > 0 && <DropdownMenuSeparator />}
@@ -362,11 +360,11 @@ function AnalyzeMenu({
             'border-border bg-secondary text-muted-foreground hover:text-foreground',
             (disabled || busy) && 'cursor-not-allowed opacity-60',
           )}
-          title="Analyze media with AI"
-          aria-label="Analyze media with AI"
+          title="使用 AI 分析媒体"
+          aria-label="使用 AI 分析媒体"
         >
           {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wand2 className="h-3 w-3" />}
-          {!compact && 'Analyze'}
+          {!compact && '分析'}
           <ChevronDown className="h-3 w-3 opacity-70" />
         </button>
       </DropdownMenuTrigger>
@@ -375,23 +373,21 @@ function AnalyzeMenu({
           <>
             <DropdownMenuItem onClick={() => onRun('scope', scopedMedia.id)}>
               <Sparkles className="mr-2 h-3 w-3" />
-              <span className="truncate">Analyze "{scopedMedia.fileName}"</span>
+              <span className="truncate">分析“{scopedMedia.fileName}”</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
         )}
         <DropdownMenuItem onClick={() => onRun('missing')} disabled={missingCount === 0}>
           <Sparkles className="mr-2 h-3 w-3" />
-          Analyze new media
-          <span className="ml-auto text-[10px] text-muted-foreground">
-            {missingCount} {missingCount === 1 ? 'clip' : 'clips'}
-          </span>
+          分析新增媒体
+          <span className="ml-auto text-[10px] text-muted-foreground">{missingCount} 个片段</span>
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => onRun('all')} disabled={totalAnalyzable === 0}>
           <Wand2 className="mr-2 h-3 w-3" />
-          Re-analyze all
+          重新分析全部
           <span className="ml-auto text-[10px] text-muted-foreground">
-            {totalAnalyzable} {totalAnalyzable === 1 ? 'clip' : 'clips'}
+            {totalAnalyzable} 个片段
           </span>
         </DropdownMenuItem>
       </DropdownMenuContent>
@@ -417,8 +413,8 @@ function ViewModeToggle({
             ? 'bg-primary/15 text-primary'
             : 'text-muted-foreground hover:text-foreground',
         )}
-        title="List view"
-        aria-label="List view"
+        title="列表视图"
+        aria-label="列表视图"
         aria-pressed={value === 'list'}
       >
         <List className="h-3 w-3" />
@@ -432,8 +428,8 @@ function ViewModeToggle({
             ? 'bg-primary/15 text-primary'
             : 'text-muted-foreground hover:text-foreground',
         )}
-        title="Grid view"
-        aria-label="Grid view"
+        title="网格视图"
+        aria-label="网格视图"
         aria-pressed={value === 'grid'}
       >
         <LayoutGrid className="h-3 w-3" />
@@ -453,10 +449,10 @@ function EmptyState({
     return (
       <div className="flex flex-col items-center gap-2 px-6 py-12 text-center text-muted-foreground">
         <Sparkles className="h-6 w-6 text-purple-400/60" />
-        <p className="text-[12px]">No AI captions yet.</p>
+        <p className="text-[12px]">还没有 AI 场景字幕。</p>
         <p className="max-w-xs text-[11px] text-muted-foreground/80">
-          Run <span className="font-medium">Analyze with AI</span> on a clip from the media library
-          to generate searchable scene captions.
+          请在媒体库中对片段执行 <span className="font-medium">AI 分析</span>
+          ，生成可搜索的场景字幕。
         </p>
       </div>
     )
@@ -464,9 +460,9 @@ function EmptyState({
   if (isFiltered) {
     return (
       <div className="flex flex-col items-center gap-1 px-6 py-10 text-center text-muted-foreground">
-        <p className="text-[12px]">No scenes match your search.</p>
+        <p className="text-[12px]">没有匹配到场景。</p>
         <p className="text-[11px] text-muted-foreground/80">
-          Try a shorter query or switch scope to <span className="font-medium">All media</span>.
+          试试更短关键词，或将范围切换到 <span className="font-medium">全部媒体</span>。
         </p>
       </div>
     )
