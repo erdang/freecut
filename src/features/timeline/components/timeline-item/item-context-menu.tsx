@@ -54,6 +54,10 @@ interface ItemContextMenuProps {
   playheadInBounds?: boolean
   onFreezeFrame?: () => void
   onDewatermark?: () => void
+  canOpenGenerateSubtitleDialog?: boolean
+  onOpenGenerateSubtitleDialog?: () => void
+  canDownloadSubtitle?: boolean
+  onDownloadSubtitle?: () => void
   canManageCaptions?: boolean
   hasCaptions?: boolean
   hasTranscript?: boolean
@@ -129,6 +133,10 @@ export const ItemContextMenu = memo(function ItemContextMenu({
   playheadInBounds,
   onFreezeFrame,
   onDewatermark,
+  canOpenGenerateSubtitleDialog,
+  onOpenGenerateSubtitleDialog,
+  canDownloadSubtitle,
+  onDownloadSubtitle,
   canManageCaptions,
   hasCaptions,
   hasTranscript,
@@ -206,6 +214,10 @@ export const ItemContextMenu = memo(function ItemContextMenu({
       playheadInBounds={playheadInBounds}
       onFreezeFrame={onFreezeFrame}
       onDewatermark={onDewatermark}
+      canOpenGenerateSubtitleDialog={canOpenGenerateSubtitleDialog}
+      onOpenGenerateSubtitleDialog={onOpenGenerateSubtitleDialog}
+      canDownloadSubtitle={canDownloadSubtitle}
+      onDownloadSubtitle={onDownloadSubtitle}
       canManageCaptions={canManageCaptions}
       hasCaptions={hasCaptions}
       hasTranscript={hasTranscript}
@@ -301,6 +313,10 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   playheadInBounds,
   onFreezeFrame,
   onDewatermark,
+  canOpenGenerateSubtitleDialog,
+  onOpenGenerateSubtitleDialog,
+  canDownloadSubtitle,
+  onDownloadSubtitle,
   canManageCaptions,
   hasCaptions,
   hasTranscript,
@@ -484,6 +500,20 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
         {isVideoItem && onDewatermark && (
           <>
             <ContextMenuItem onClick={onDewatermark}>去水印</ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {canOpenGenerateSubtitleDialog && onOpenGenerateSubtitleDialog && (
+          <>
+            <ContextMenuItem onClick={onOpenGenerateSubtitleDialog}>生成字幕</ContextMenuItem>
+            <ContextMenuSeparator />
+          </>
+        )}
+
+        {canDownloadSubtitle && onDownloadSubtitle && (
+          <>
+            <ContextMenuItem onClick={onDownloadSubtitle}>下载字幕</ContextMenuItem>
             <ContextMenuSeparator />
           </>
         )}

@@ -42,6 +42,12 @@ import {
   mediaLibraryService as mediaLibraryServiceForSubtitles,
   useEmbeddedSubtitlePickerStore,
 } from '@/features/timeline/deps/media-library-service'
+import { thirdPartySubtitleGenerateService } from '@/features/timeline/deps/third-party-subtitle-generate-service'
+import {
+  buildCaptionTrackAbove,
+  buildSubtitleSegmentForClip,
+  findCompatibleCaptionTrackForRanges,
+} from '@/features/timeline/deps/caption-items'
 
 function isEmbeddedSubtitleContainer(fileName: string, mimeType: string): boolean {
   const name = fileName.toLowerCase()
@@ -58,6 +64,10 @@ import {
   type TranscribeDialogValues,
 } from '@/features/timeline/deps/transcribe-dialog'
 import {
+  SubtitleGenerateDialog,
+  type SubtitleGenerateDialogValues,
+} from '@/features/timeline/deps/subtitle-generate-dialog'
+import {
   getTranscriptionOverallPercent,
   getTranscriptionStageLabel,
 } from '@/shared/utils/transcription-progress'
@@ -65,6 +75,7 @@ import {
   isTranscriptionOutOfMemoryError,
   TRANSCRIPTION_OOM_HINT,
 } from '@/shared/utils/transcription-cancellation'
+import { serializeSrt, type SubtitleCue as ExportSubtitleCue } from '@/shared/utils/subtitles'
 import type { PreviewItemUpdate } from '../../utils/item-edit-preview'
 import {
   useTimelineDrag,
@@ -207,6 +218,50 @@ function getPixelsPerSecondNow(): number {
   return useZoomStore.getState().pixelsPerSecond
 }
 
+function getGenerateSubtitleProgressPercent(message: string): number | null {
+  const normalized = message.trim().toLowerCase()
+  if (!normalized) return null
+
+  if (normalized.includes('preparing') || normalized.includes('准备中')) {
+    return 2
+  }
+  if (normalized.includes('decoding audio')) {
+    return 8
+  }
+
+  const uploadedMatch = /uploaded chunk\s+(\d+)\s*\/\s*(\d+)/i.exec(message)
+  if (uploadedMatch) {
+    const done = Number(uploadedMatch[1])
+    const total = Number(uploadedMatch[2])
+    if (Number.isFinite(done) && Number.isFinite(total) && total > 0) {
+      const ratio = Math.max(0, Math.min(1, done / total))
+      return Math.round(10 + ratio * 70)
+    }
+  }
+
+  if (normalized.includes('waiting for recognition results')) {
+    return 85
+  }
+
+  const translatingMatch =
+    /translating subtitles\s+(\d+)\s*\/\s*(\d+)/i.exec(message) ??
+    /翻译进度\s*(\d+)\s*\/\s*(\d+)/i.exec(message)
+  if (translatingMatch) {
+    const done = Number(translatingMatch[1])
+    const total = Number(translatingMatch[2])
+    if (Number.isFinite(done) && Number.isFinite(total) && total > 0) {
+      const ratio = Math.max(0, Math.min(1, done / total))
+      return Math.round(86 + ratio * 12)
+    }
+  }
+
+  if (normalized.includes('translating subtitles') || normalized.includes('翻译中')) {
+    return 92
+  }
+
+  return null
+}
+
 function frameToPixelsNow(frame: number): number {
   const fps = useTimelineStore.getState().fps
   return fps > 0 ? (frame / fps) * getPixelsPerSecondNow() : 0
@@ -229,6 +284,54 @@ function getTrackPushZoneStyle(gapFrames: number): string {
   const adaptiveWidth = `clamp(${TRACK_PUSH_MIN_PX}px, calc(${TRACK_PUSH_MAX_PX}px - (var(--timeline-pixels-per-second, 0px) / ${zoomSlopeDivisor})), ${TRACK_PUSH_MAX_PX}px)`
   return `min(${gapWidth}, ${adaptiveWidth})`
 }
+
+function toSafeSubtitleFileNamePart(value: string): string {
+  const normalized = value
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return normalized || 'subtitle'
+}
+
+function toSubtitleDownloadTimestamp(now: Date = new Date()): string {
+  const year = String(now.getFullYear())
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  const seconds = String(now.getSeconds()).padStart(2, '0')
+  return `${year}${month}${day}-${hours}${minutes}${seconds}`
+}
+
+function buildGeneratedSubtitleDownloadFileName(baseFileName: string, targetLang?: string): string {
+  const base = toSafeSubtitleFileNamePart(baseFileName.replace(/\.[^./\\]+$/, ''))
+  const lang = toSafeSubtitleFileNamePart(targetLang || 'target')
+  const timestamp = toSubtitleDownloadTimestamp()
+  return `${base}-${lang}-${timestamp}.srt`
+}
+
+function downloadGeneratedSubtitleFile(cues: readonly ExportSubtitleCue[], fileName: string): void {
+  if (typeof window === 'undefined' || cues.length === 0) {
+    return
+  }
+
+  const srtText = serializeSrt(cues)
+  if (!srtText.trim()) {
+    return
+  }
+
+  const blob = new Blob(['\uFEFF', srtText], { type: 'text/srt;charset=utf-8' })
+  const objectUrl = window.URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = objectUrl
+  anchor.download = fileName
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  window.URL.revokeObjectURL(objectUrl)
+}
+
 const VIDEO_FADE_EPSILON = 0.0001
 const AUDIO_FADE_EPSILON = 0.0001
 const AUDIO_VOLUME_EPSILON = 0.05
@@ -443,6 +546,15 @@ export const TimelineItem = memo(
     )
     const [captionDialogOpen, setCaptionDialogOpen] = useState(false)
     const [captionDialogError, setCaptionDialogError] = useState<string | null>(null)
+    const [generateSubtitleDialogOpen, setGenerateSubtitleDialogOpen] = useState(false)
+    const [generateSubtitleRunning, setGenerateSubtitleRunning] = useState(false)
+    const [generateSubtitleError, setGenerateSubtitleError] = useState<string | null>(null)
+    const [generateSubtitleProgressPercent, setGenerateSubtitleProgressPercent] = useState<
+      number | null
+    >(null)
+    const [generateSubtitleProgressLabel, setGenerateSubtitleProgressLabel] = useState<
+      string | null
+    >(null)
     const [dewatermarkDialogOpen, setDewatermarkDialogOpen] = useState(false)
     const [dewatermarkFrameLoading, setDewatermarkFrameLoading] = useState(false)
     const [dewatermarkFrameError, setDewatermarkFrameError] = useState<string | null>(null)
@@ -1115,6 +1227,229 @@ export const TimelineItem = memo(
       !!item.mediaId &&
       !isBroken &&
       (item.type === 'video' || (item.type === 'audio' && linkedVideoCaptionOwner === null))
+    const canOpenGenerateSubtitleDialog =
+      isSelected && !!item.mediaId && !isBroken && (item.type === 'video' || item.type === 'audio')
+    const canRenderGenerateSubtitleDialog =
+      generateSubtitleDialogOpen ||
+      (!!item.mediaId && !isBroken && (item.type === 'video' || item.type === 'audio'))
+
+    const handleGenerateSubtitleStart = useCallback(
+      async (values: SubtitleGenerateDialogValues) => {
+        if (!item.mediaId) {
+          setGenerateSubtitleError('当前片段缺少媒体来源。')
+          return
+        }
+
+        setGenerateSubtitleRunning(true)
+        setGenerateSubtitleError(null)
+        setGenerateSubtitleProgressPercent(2)
+        setGenerateSubtitleProgressLabel('准备中...')
+
+        try {
+          const mediaBlob = await mediaLibraryServiceForSubtitles.getMediaFile(item.mediaId)
+          if (!mediaBlob) {
+            throw new Error('无法读取媒体文件。')
+          }
+
+          const sourceFileName =
+            mediaFileName?.trim() || item.label?.trim() || `clip-${item.mediaId.slice(0, 8)}`
+          const mediaFile =
+            mediaBlob instanceof File
+              ? mediaBlob
+              : new File([mediaBlob], sourceFileName, {
+                  type: mediaBlob.type || (item.type === 'audio' ? 'audio/wav' : 'video/mp4'),
+                  lastModified: Date.now(),
+                })
+
+          const sourceFps =
+            item.sourceFps && Number.isFinite(item.sourceFps) && item.sourceFps > 0
+              ? item.sourceFps
+              : Math.max(1, useTimelineStore.getState().fps)
+          const timelineFpsForTrim = Math.max(1, useTimelineStore.getState().fps)
+          const clipSpeed =
+            Number.isFinite(item.speed) && item.speed && item.speed > 0 ? item.speed : 1
+          const sourceStartFrames = Math.max(0, item.sourceStart ?? 0)
+          const sourceStartSeconds = sourceStartFrames / Math.max(1, sourceFps)
+          const timelineDurationSeconds = item.durationInFrames / timelineFpsForTrim
+          const clipSourceDurationSeconds = Math.max(0, timelineDurationSeconds * clipSpeed)
+          let sourceEndSeconds = sourceStartSeconds + clipSourceDurationSeconds
+
+          if (
+            item.sourceEnd !== undefined &&
+            Number.isFinite(item.sourceEnd) &&
+            item.sourceEnd > 0
+          ) {
+            sourceEndSeconds = Math.min(sourceEndSeconds, item.sourceEnd / Math.max(1, sourceFps))
+          }
+
+          const clipTrimRange =
+            sourceEndSeconds > sourceStartSeconds + 0.001
+              ? {
+                  startSeconds: sourceStartSeconds,
+                  endSeconds: sourceEndSeconds,
+                }
+              : null
+
+          const result = await thirdPartySubtitleGenerateService.generateByWebSocket({
+            file: mediaFile,
+            source_lang: values.source_lang,
+            target_lang: values.target_lang,
+            chunkDurationSeconds: values.chunkDurationSeconds,
+            clipTrimRange,
+            onProgress: (message) => {
+              setGenerateSubtitleProgressLabel(message)
+              const nextPercent = getGenerateSubtitleProgressPercent(message)
+              if (nextPercent !== null) {
+                setGenerateSubtitleProgressPercent(nextPercent)
+              }
+            },
+          })
+
+          const subtitleCues = result.trackCues
+          if (subtitleCues.length > 0) {
+            const timeline = useTimelineStore.getState()
+            const project = useProjectStore.getState().currentProject
+            const canvasWidth = project?.metadata.width ?? 1920
+            const canvasHeight = project?.metadata.height ?? 1080
+            const clipEndFrame = item.from + item.durationInFrames
+            const timelineFps = Math.max(1, timeline.fps)
+            const generatedSourceTrackName = 'third-party-translate'
+
+            let tracks = [...timeline.tracks]
+            let targetTrack = findCompatibleCaptionTrackForRanges(tracks, timeline.items, [
+              { startFrame: item.from, endFrame: clipEndFrame },
+            ])
+            if (!targetTrack) {
+              const clipTrack = tracks.find((track) => track.id === item.trackId)
+              targetTrack = clipTrack
+                ? buildCaptionTrackAbove(tracks, clipTrack.order)
+                : buildCaptionTrackAbove(tracks, 0)
+              tracks = [...tracks, targetTrack].sort((a, b) => a.order - b.order)
+              timeline.setTracks(tracks)
+            }
+
+            const clip = item.type === 'audio' || item.type === 'video' ? item : null
+            if (clip) {
+              const cues = subtitleCues
+                .map((cue) => ({
+                  id: cue.id,
+                  startSeconds: Math.max(0, cue.startSeconds + result.timeBaseOffsetSeconds),
+                  endSeconds: Math.max(
+                    cue.startSeconds + result.timeBaseOffsetSeconds + 0.1,
+                    cue.endSeconds + result.timeBaseOffsetSeconds,
+                  ),
+                  text:
+                    values.includeSourceWithTranslation && cue.sourceText.trim().length > 0
+                      ? `${cue.sourceText}\n${cue.text}`
+                      : cue.text,
+                }))
+                .filter(
+                  (cue) =>
+                    Number.isFinite(cue.startSeconds) &&
+                    Number.isFinite(cue.endSeconds) &&
+                    cue.endSeconds > cue.startSeconds,
+                )
+                .filter((cue) => cue.endSeconds > cue.startSeconds)
+
+              const segment = buildSubtitleSegmentForClip({
+                trackId: targetTrack.id,
+                cues,
+                clip,
+                timelineFps,
+                canvasWidth,
+                canvasHeight,
+                label: `生成字幕（${values.target_lang}）`,
+                source: {
+                  type: 'embedded-subtitles',
+                  mediaId: clip.mediaId ?? item.mediaId,
+                  clipId: clip.id,
+                  trackNumber: 0,
+                  language: values.target_lang || undefined,
+                  trackName: generatedSourceTrackName,
+                  codecId: 'text/plain',
+                  importedAt: Date.now(),
+                },
+              })
+
+              if (segment) {
+                const previousGeneratedIds = timeline.items
+                  .filter(
+                    (timelineItem) =>
+                      timelineItem.type === 'subtitle' &&
+                      timelineItem.source.type === 'embedded-subtitles' &&
+                      timelineItem.source.clipId === clip.id &&
+                      timelineItem.source.trackName === generatedSourceTrackName,
+                  )
+                  .map((timelineItem) => timelineItem.id)
+
+                if (previousGeneratedIds.length > 0) {
+                  timeline.removeItems(previousGeneratedIds)
+                }
+
+                timeline.addItems([{ ...segment, trackId: targetTrack.id }])
+                useSelectionStore.getState().selectItems([segment.id])
+              }
+            }
+          }
+
+          useMediaLibraryStore.getState().showNotification?.({
+            type: 'success',
+            message: result.translatedText
+              ? `字幕生成并翻译完成，共 ${result.segments.length} 段。`
+              : result.fullText
+                ? `字幕生成完成，共 ${result.segments.length} 段。`
+                : `字幕生成完成，共 ${result.segments.length} 段（文本为空）。`,
+          })
+          setGenerateSubtitleProgressPercent(100)
+          setGenerateSubtitleDialogOpen(false)
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : '生成字幕失败：WebSocket 请求未完成。'
+          setGenerateSubtitleError(message)
+        } finally {
+          setGenerateSubtitleProgressPercent(null)
+          setGenerateSubtitleProgressLabel(null)
+          setGenerateSubtitleRunning(false)
+        }
+      },
+      [item, mediaFileName],
+    )
+
+    const handleDownloadSubtitle = useCallback(() => {
+      if (item.type !== 'subtitle' || item.cues.length === 0) {
+        return
+      }
+
+      const timelineFps = Math.max(1, useTimelineStore.getState().fps)
+      const segmentStartSeconds = item.from / timelineFps
+      const exportCues: ExportSubtitleCue[] = item.cues
+        .map((cue) => ({
+          id: cue.id,
+          startSeconds: Math.max(0, segmentStartSeconds + cue.startSeconds),
+          endSeconds: Math.max(
+            segmentStartSeconds + cue.startSeconds + 0.1,
+            segmentStartSeconds + cue.endSeconds,
+          ),
+          text: cue.text,
+        }))
+        .filter((cue) => Number.isFinite(cue.startSeconds) && Number.isFinite(cue.endSeconds))
+        .filter((cue) => cue.endSeconds > cue.startSeconds)
+
+      if (exportCues.length === 0) {
+        return
+      }
+
+      const sourceBase =
+        item.source.type === 'subtitle-import'
+          ? item.source.fileName
+          : item.source.type === 'embedded-subtitles'
+            ? item.source.trackName || item.label || 'subtitle'
+            : item.label || 'subtitle'
+      const subtitleSourceLanguage =
+        item.source.type === 'embedded-subtitles' ? item.source.language : undefined
+      const fileName = buildGeneratedSubtitleDownloadFileName(sourceBase, subtitleSourceLanguage)
+      downloadGeneratedSubtitleFile(exportCues, fileName)
+    }, [item])
 
     const mediaForItem = useMediaLibraryStore(
       useCallback(
@@ -3961,6 +4296,12 @@ export const TimelineItem = memo(
           })()}
           onFreezeFrame={handleFreezeFrame}
           onDewatermark={item.type === 'video' ? () => setDewatermarkDialogOpen(true) : undefined}
+          canOpenGenerateSubtitleDialog={canOpenGenerateSubtitleDialog}
+          onOpenGenerateSubtitleDialog={() => {
+            setGenerateSubtitleDialogOpen(true)
+          }}
+          canDownloadSubtitle={item.type === 'subtitle'}
+          onDownloadSubtitle={item.type === 'subtitle' ? handleDownloadSubtitle : undefined}
           isTextItem={item.type === 'text' && hasSpeakableText}
           onGenerateAudioFromText={handleGenerateAudioFromText}
           onGenerateAudioFromTextByThirdParty={handleGenerateAudioFromTextByThirdParty}
@@ -4517,8 +4858,32 @@ export const TimelineItem = memo(
           />
         )}
 
+        {canRenderGenerateSubtitleDialog && item.mediaId && (
+          <SubtitleGenerateDialog
+            open={generateSubtitleDialogOpen}
+            onOpenChange={(next) => {
+              if (!next) {
+                setGenerateSubtitleError(null)
+                setGenerateSubtitleProgressPercent(null)
+                setGenerateSubtitleProgressLabel(null)
+              }
+              setGenerateSubtitleDialogOpen(next)
+            }}
+            fileName={mediaFileName}
+            isRunning={generateSubtitleRunning}
+            progressPercent={generateSubtitleProgressPercent ?? undefined}
+            progressLabel={generateSubtitleProgressLabel ?? undefined}
+            errorMessage={generateSubtitleError}
+            onStart={handleGenerateSubtitleStart}
+          />
+        )}
+
         <Dialog open={dewatermarkDialogOpen} onOpenChange={setDewatermarkDialogOpen}>
-          <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl">
+          <DialogContent
+            className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-2xl"
+            onPointerDownOutside={(event) => event.preventDefault()}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
             <DialogHeader>
               <DialogTitle>去水印</DialogTitle>
               <DialogDescription>
@@ -4719,6 +5084,10 @@ export const TimelineItem = memo(
 
     const prevIsMask = prevItem.type === 'shape' ? prevItem.isMask : undefined
     const nextIsMask = nextItem.type === 'shape' ? nextItem.isMask : undefined
+    const subtitleCuesUnchanged =
+      prevItem.type !== 'subtitle' ||
+      nextItem.type !== 'subtitle' ||
+      prevItem.cues === nextItem.cues
 
     return (
       prevItem.id === nextItem.id &&
@@ -4746,6 +5115,7 @@ export const TimelineItem = memo(
       prevItem.audioFadeOutCurveX === nextItem.audioFadeOutCurveX &&
       prevItem.fadeIn === nextItem.fadeIn &&
       prevItem.fadeOut === nextItem.fadeOut &&
+      subtitleCuesUnchanged &&
       prevIsMask === nextIsMask &&
       prevProps.timelineDuration === nextProps.timelineDuration &&
       prevProps.trackLocked === nextProps.trackLocked &&

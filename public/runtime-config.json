@@ -5,5 +5,16 @@
   "thirdPartyTtsVoiceprintDeleteUrl": "/tts-proxy/voices",
   "thirdPartyDewatermarkApiUrl": "/dewatermark-proxy/api/process",
   "thirdPartyDewatermarkResultBaseUrl": "/dewatermark-proxy",
-  "thirdPartyDewatermarkPreviewBaseUrl": "/dewatermark-preview-proxy"
+  "thirdPartyDewatermarkPreviewBaseUrl": "/dewatermark-preview-proxy",
+  "thirdPartySubtitleWsUrl": "/subtitle-ws-proxy/ws",
+  "thirdPartySubtitleChunkDurationSeconds": 5,
+  "thirdPartySubtitleTranslateApiUrl": "http://192.168.0.15:8022/api/translate",
+  "thirdPartySubtitleTranslateModel": "12b",
+  "thirdPartySubtitleTranslateQuantization": 0,
+  "thirdPartySubtitleTranslateChunkSize": 100,
+  "thirdPartySubtitleTranslateOverlap": 0,
+  "thirdPartySubtitleTranslateAutoSplit": true,
+  "thirdPartySubtitleTranslateStream": false,
+  "thirdPartySubtitleSaveChunkLocally": false,
+  "thirdPartySubtitleSaveChunkOrder": 0
 }

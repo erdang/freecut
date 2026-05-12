@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Square } from 'lucide-react'
 import {
   Dialog,
@@ -62,6 +62,8 @@ export function TranscribeDialog({
   onStart,
   onCancel,
 }: TranscribeDialogProps) {
+  const outsideCloseBlockedRef = useRef(false)
+  const clearOutsideCloseBlockedTimerRef = useRef<number | null>(null)
   const defaultModel = useSettingsStore((s) => s.defaultWhisperModel)
   const defaultQuantization = useSettingsStore((s) => s.defaultWhisperQuantization)
   const defaultLanguage = useSettingsStore((s) => s.defaultWhisperLanguage)
@@ -86,6 +88,26 @@ export function TranscribeDialog({
     setQuantization(defaultQuantization)
     setLanguageValue(getWhisperLanguageSelectValue(defaultLanguage))
   }, [open, defaultLanguage, defaultModel, defaultQuantization])
+
+  useEffect(() => {
+    return () => {
+      if (clearOutsideCloseBlockedTimerRef.current !== null) {
+        window.clearTimeout(clearOutsideCloseBlockedTimerRef.current)
+      }
+    }
+  }, [])
+
+  const markOutsideCloseBlocked = useCallback(() => {
+    outsideCloseBlockedRef.current = true
+    if (clearOutsideCloseBlockedTimerRef.current !== null) {
+      window.clearTimeout(clearOutsideCloseBlockedTimerRef.current)
+    }
+    // Keep the block only for this interaction tick so later explicit close works once.
+    clearOutsideCloseBlockedTimerRef.current = window.setTimeout(() => {
+      outsideCloseBlockedRef.current = false
+      clearOutsideCloseBlockedTimerRef.current = null
+    }, 0)
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -116,6 +138,10 @@ export function TranscribeDialog({
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
+      if (!nextOpen && outsideCloseBlockedRef.current) {
+        outsideCloseBlockedRef.current = false
+        return
+      }
       if (isRunning && !nextOpen) {
         return
       }
@@ -131,8 +157,14 @@ export function TranscribeDialog({
       <DialogContent
         className="sm:max-w-md"
         hideCloseButton={isRunning}
-        onPointerDownOutside={(event) => event.preventDefault()}
-        onInteractOutside={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => {
+          markOutsideCloseBlocked()
+          event.preventDefault()
+        }}
+        onInteractOutside={(event) => {
+          markOutsideCloseBlocked()
+          event.preventDefault()
+        }}
         onEscapeKeyDown={(event) => {
           if (isRunning) event.preventDefault()
         }}

@@ -11,6 +11,7 @@ const dewatermarkProxyTarget =
 const dewatermarkPreviewProxyTarget =
   process.env.VITE_DEWATERMARK_PREVIEW_PROXY_TARGET ?? 'http://192.168.0.15:8000'
 const ttsProxyTarget = process.env.VITE_TTS_PROXY_TARGET ?? 'http://192.168.0.15:9930'
+const subtitleWsProxyTarget = process.env.VITE_SUBTITLE_WS_PROXY_TARGET ?? 'ws://192.168.0.15:8023'
 const toolIgnorePatterns = [
   'dist/**',
   'coverage/**',
@@ -79,6 +80,13 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/tts-proxy/, ''),
+      },
+      '/subtitle-ws-proxy': {
+        target: subtitleWsProxyTarget,
+        ws: true,
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/subtitle-ws-proxy/, ''),
       },
     },
   },

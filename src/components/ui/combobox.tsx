@@ -6,7 +6,6 @@ import * as React from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/shared/ui/cn'
 
 export interface ComboboxOption {
@@ -26,6 +25,7 @@ interface ComboboxProps {
   className?: string
   triggerClassName?: string
   contentClassName?: string
+  portalled?: boolean
 }
 
 export function Combobox({
@@ -39,6 +39,7 @@ export function Combobox({
   className,
   triggerClassName,
   contentClassName,
+  portalled = true,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
@@ -116,6 +117,7 @@ export function Combobox({
         </PopoverTrigger>
         <PopoverContent
           align="start"
+          portalled={portalled}
           className={cn('p-0', contentClassName)}
           style={contentWidth ? { width: contentWidth } : undefined}
         >
@@ -127,44 +129,49 @@ export function Combobox({
               autoFocus
             />
           </div>
-          <ScrollArea className="max-h-72">
-            <div className="p-1">
-              {filteredOptions.length === 0 ? (
-                <div className="px-2 py-6 text-center text-sm text-muted-foreground">
-                  {emptyMessage}
-                </div>
-              ) : (
-                filteredOptions.map((option) => {
-                  const isSelected = option.value === value
+          <div
+            className="max-h-72 overflow-y-auto overscroll-contain p-1"
+            onWheelCapture={(event) => {
+              // Keep wheel interactions inside the dropdown list and prevent
+              // parent containers (timeline/canvas) from hijacking scroll.
+              event.stopPropagation()
+            }}
+          >
+            {filteredOptions.length === 0 ? (
+              <div className="px-2 py-6 text-center text-sm text-muted-foreground">
+                {emptyMessage}
+              </div>
+            ) : (
+              filteredOptions.map((option) => {
+                const isSelected = option.value === value
 
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      role="option"
-                      aria-selected={isSelected}
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors',
+                      'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
+                    )}
+                    onClick={() => {
+                      onValueChange(option.value)
+                      setOpen(false)
+                    }}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    <Check
                       className={cn(
-                        'flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors',
-                        'hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground',
+                        'ml-2 h-4 w-4 shrink-0',
+                        isSelected ? 'opacity-100' : 'opacity-0',
                       )}
-                      onClick={() => {
-                        onValueChange(option.value)
-                        setOpen(false)
-                      }}
-                    >
-                      <span className="truncate">{option.label}</span>
-                      <Check
-                        className={cn(
-                          'ml-2 h-4 w-4 shrink-0',
-                          isSelected ? 'opacity-100' : 'opacity-0',
-                        )}
-                      />
-                    </button>
-                  )
-                })
-              )}
-            </div>
-          </ScrollArea>
+                    />
+                  </button>
+                )
+              })
+            )}
+          </div>
         </PopoverContent>
       </Popover>
     </div>

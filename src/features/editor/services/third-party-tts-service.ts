@@ -348,12 +348,6 @@ function createOutputFileName(text: string, voice: ThirdPartyTtsVoice, extension
   return `ai-tts-${makeSafeFileNameSegment(text)}-${voiceSegment}-${timestamp}.${extension}`
 }
 
-function stripFileSuffix(value: string): string {
-  const trimmed = value.trim()
-  if (!trimmed) return ''
-  return trimmed.replace(/\.[a-z0-9]{1,8}$/i, '')
-}
-
 function decodeBase64Audio(base64Value: string): Blob {
   const dataUrlMatch = base64Value.match(/^data:(audio\/[^;]+);base64,(.+)$/i)
   const mimeType = dataUrlMatch?.[1] ?? 'audio/wav'
@@ -752,7 +746,7 @@ class ThirdPartyTtsService {
       if (!selectedVoice) {
         throw new Error('Please select a reference voiceprint')
       }
-      formData.append('prompt_name', stripFileSuffix(selectedVoice) || selectedVoice)
+      formData.append('prompt_name', selectedVoice)
     } else {
       if (!voiceprintFile) {
         throw new Error('Please upload a voiceprint file')

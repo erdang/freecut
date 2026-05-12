@@ -11,8 +11,13 @@ export {
   getMediaTranscriptionModelOptions,
 } from '../transcription/registry'
 export { TranscribeDialog, type TranscribeDialogValues } from '../components/transcribe-dialog'
+export {
+  SubtitleGenerateDialog,
+  type SubtitleGenerateDialogValues,
+} from '../components/subtitle-generate-dialog'
 export { useEmbeddedSubtitlePickerStore } from '../stores/embedded-subtitle-picker-store'
 export { subtitleSidecarService } from '../services/subtitle-sidecar-service'
+export { thirdPartySubtitleGenerateService } from '../services/third-party-subtitle-generate-service'
 export { opfsService } from '../services/opfs-service'
 export {
   resolveMediaUrl,
@@ -31,6 +36,11 @@ export {
   extractValidMediaFileEntriesFromDataTransfer,
   supportsFileSystemDragDrop,
 } from '../utils/file-drop'
+export {
+  buildCaptionTrackAbove,
+  buildSubtitleSegmentForClip,
+  findCompatibleCaptionTrackForRanges,
+} from '../utils/caption-items'
 export type { OrphanedClipInfo } from '../types'
 export type { ExtractedMediaFileEntry } from '../utils/file-drop'
 export { getMediaType, getMimeType } from '../utils/validation'
