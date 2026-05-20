@@ -395,7 +395,7 @@ export function SubtitleGenerateDialog(props: SubtitleGenerateDialogProps) {
 
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-sm">源语言（source_lang）</Label>
+            <Label className="text-sm">源语言</Label>
             <Combobox
               value={sourceLangValue}
               onValueChange={setSourceLangValue}
@@ -409,7 +409,7 @@ export function SubtitleGenerateDialog(props: SubtitleGenerateDialogProps) {
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-sm">目标语言（target_lang，必选）</Label>
+            <Label className="text-sm">目标语言（必选）</Label>
             <Combobox
               value={targetLangValue}
               onValueChange={setTargetLangValue}

@@ -630,13 +630,6 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
               添加声纹
             </Button>
           </div>
-          <div className="rounded-md border border-border/80 bg-secondary/20 p-2 text-[11px] text-muted-foreground">
-            API 地址从 <code>public/runtime-config.json</code> 的 <code>thirdPartyTtsApiUrl</code>{' '}
-            读取。参考声纹列表可通过 <code>thirdPartyTtsVoiceprintListUrl</code>{' '}
-            配置；添加声纹接口使用 <code>thirdPartyTtsVoiceprintCreateUrl</code>，删除声纹接口使用{' '}
-            <code>thirdPartyTtsVoiceprintDeleteUrl</code>。
-          </div>
-
           {!isTtsSupported && (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-100">
               当前环境不支持网络请求。
