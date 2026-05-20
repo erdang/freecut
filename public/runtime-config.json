@@ -8,7 +8,7 @@
   "thirdPartyDewatermarkPreviewBaseUrl": "/dewatermark-preview-proxy",
   "thirdPartySubtitleWsUrl": "/subtitle-ws-proxy/ws",
   "thirdPartySubtitleChunkDurationSeconds": 5,
-  "thirdPartySubtitleTranslateApiUrl": "http://192.168.0.15:8022/api/translate",
+  "thirdPartySubtitleTranslateApiUrl": "/subtitle-translate-proxy/api/translate",
   "thirdPartySubtitleTranslateModel": "12b",
   "thirdPartySubtitleTranslateQuantization": 0,
   "thirdPartySubtitleTranslateChunkSize": 100,

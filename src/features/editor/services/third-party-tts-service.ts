@@ -2,6 +2,29 @@
 
 const logger = createLogger('ThirdPartyTtsService')
 const RUNTIME_CONFIG_URL = `${import.meta.env.BASE_URL}runtime-config.json`
+const RUNTIME_CONFIG_PUBLIC_URL = `${import.meta.env.BASE_URL}public/runtime-config.json`
+
+const API_URL_KEYS = ['thirdPartyTtsApiUrl', 'third_party_tts_api_url']
+const VOICEPRINT_LIST_URL_KEYS = [
+  'thirdPartyTtsVoiceprintListUrl',
+  'third_party_tts_voiceprint_list_url',
+  'thirdPartyTtsVoiceprintUrl',
+  'third_party_tts_voiceprint_url',
+]
+const VOICEPRINT_CREATE_URL_KEYS = [
+  'thirdPartyTtsVoiceprintCreateUrl',
+  'third_party_tts_voiceprint_create_url',
+  'thirdPartyTtsVoiceprintAddUrl',
+  'third_party_tts_voiceprint_add_url',
+]
+const VOICEPRINT_DELETE_URL_KEYS = [
+  'thirdPartyTtsVoiceprintDeleteUrl',
+  'third_party_tts_voiceprint_delete_url',
+  'thirdPartyTtsVoiceprintRemoveUrl',
+  'third_party_tts_voiceprint_remove_url',
+]
+
+let lastRuntimeConfigDebugSummary = ''
 
 interface RuntimeConfig {
   thirdPartyTtsApiUrl?: string
@@ -172,44 +195,187 @@ function readString(record: Record<string, unknown>, keys: string[]): string | n
   return null
 }
 
-async function loadRuntimeConfig(): Promise<RuntimeConfig> {
-  try {
-    const response = await fetch(RUNTIME_CONFIG_URL, { cache: 'no-store' })
-    if (!response.ok) {
-      return {}
-    }
+function parseJsonRecord(rawText: string): Record<string, unknown> | null {
+  const sanitized = rawText.replace(/^\uFEFF/, '')
+  if (!sanitized.trim()) return {}
 
-    const payload = asRecord(await response.json())
-    return payload
-      ? {
-          thirdPartyTtsApiUrl:
-            readString(payload, ['thirdPartyTtsApiUrl', 'third_party_tts_api_url']) ?? '',
-          thirdPartyTtsVoiceprintListUrl:
-            readString(payload, [
-              'thirdPartyTtsVoiceprintListUrl',
-              'third_party_tts_voiceprint_list_url',
-              'thirdPartyTtsVoiceprintUrl',
-              'third_party_tts_voiceprint_url',
-            ]) ?? '',
-          thirdPartyTtsVoiceprintCreateUrl:
-            readString(payload, [
-              'thirdPartyTtsVoiceprintCreateUrl',
-              'third_party_tts_voiceprint_create_url',
-              'thirdPartyTtsVoiceprintAddUrl',
-              'third_party_tts_voiceprint_add_url',
-            ]) ?? '',
-          thirdPartyTtsVoiceprintDeleteUrl:
-            readString(payload, [
-              'thirdPartyTtsVoiceprintDeleteUrl',
-              'third_party_tts_voiceprint_delete_url',
-              'thirdPartyTtsVoiceprintRemoveUrl',
-              'third_party_tts_voiceprint_remove_url',
-            ]) ?? '',
-        }
-      : {}
+  try {
+    return asRecord(JSON.parse(sanitized))
+  } catch {
+    return null
+  }
+}
+
+function readConfigFromSource(record: Record<string, unknown> | null): RuntimeConfig {
+  if (!record) return {}
+
+  const nested =
+    asRecord(record.data) ?? asRecord(record.config) ?? asRecord(record.runtimeConfig) ?? null
+  const source = nested ?? record
+
+  return {
+    thirdPartyTtsApiUrl: readString(source, API_URL_KEYS) ?? '',
+    thirdPartyTtsVoiceprintListUrl: readString(source, VOICEPRINT_LIST_URL_KEYS) ?? '',
+    thirdPartyTtsVoiceprintCreateUrl: readString(source, VOICEPRINT_CREATE_URL_KEYS) ?? '',
+    thirdPartyTtsVoiceprintDeleteUrl: readString(source, VOICEPRINT_DELETE_URL_KEYS) ?? '',
+  }
+}
+
+function mergeMissingRuntimeConfig(target: RuntimeConfig, incoming: RuntimeConfig): void {
+  if (!target.thirdPartyTtsApiUrl && incoming.thirdPartyTtsApiUrl) {
+    target.thirdPartyTtsApiUrl = incoming.thirdPartyTtsApiUrl
+  }
+  if (!target.thirdPartyTtsVoiceprintListUrl && incoming.thirdPartyTtsVoiceprintListUrl) {
+    target.thirdPartyTtsVoiceprintListUrl = incoming.thirdPartyTtsVoiceprintListUrl
+  }
+  if (!target.thirdPartyTtsVoiceprintCreateUrl && incoming.thirdPartyTtsVoiceprintCreateUrl) {
+    target.thirdPartyTtsVoiceprintCreateUrl = incoming.thirdPartyTtsVoiceprintCreateUrl
+  }
+  if (!target.thirdPartyTtsVoiceprintDeleteUrl && incoming.thirdPartyTtsVoiceprintDeleteUrl) {
+    target.thirdPartyTtsVoiceprintDeleteUrl = incoming.thirdPartyTtsVoiceprintDeleteUrl
+  }
+}
+
+function mergeOverrideRuntimeConfig(target: RuntimeConfig, incoming: RuntimeConfig): void {
+  if (incoming.thirdPartyTtsApiUrl) {
+    target.thirdPartyTtsApiUrl = incoming.thirdPartyTtsApiUrl
+  }
+  if (incoming.thirdPartyTtsVoiceprintListUrl) {
+    target.thirdPartyTtsVoiceprintListUrl = incoming.thirdPartyTtsVoiceprintListUrl
+  }
+  if (incoming.thirdPartyTtsVoiceprintCreateUrl) {
+    target.thirdPartyTtsVoiceprintCreateUrl = incoming.thirdPartyTtsVoiceprintCreateUrl
+  }
+  if (incoming.thirdPartyTtsVoiceprintDeleteUrl) {
+    target.thirdPartyTtsVoiceprintDeleteUrl = incoming.thirdPartyTtsVoiceprintDeleteUrl
+  }
+}
+
+function readWindowRuntimeConfig(): RuntimeConfig {
+  if (typeof window === 'undefined') return {}
+
+  const win = window as unknown as Record<string, unknown>
+  const candidates = [
+    asRecord(win.__FREECUT_RUNTIME_CONFIG__),
+    asRecord(win.__FREECUT_CONFIG__),
+    asRecord(win.__RUNTIME_CONFIG__),
+  ]
+
+  for (const candidate of candidates) {
+    const parsed = readConfigFromSource(candidate)
+    if (
+      parsed.thirdPartyTtsApiUrl ||
+      parsed.thirdPartyTtsVoiceprintListUrl ||
+      parsed.thirdPartyTtsVoiceprintCreateUrl ||
+      parsed.thirdPartyTtsVoiceprintDeleteUrl
+    ) {
+      return parsed
+    }
+  }
+
+  return {}
+}
+
+function readLocalStorageRuntimeConfig(): RuntimeConfig {
+  if (typeof window === 'undefined') return {}
+
+  try {
+    return {
+      thirdPartyTtsApiUrl: window.localStorage.getItem('thirdPartyTtsApiUrl')?.trim() ?? '',
+      thirdPartyTtsVoiceprintListUrl:
+        window.localStorage.getItem('thirdPartyTtsVoiceprintListUrl')?.trim() ?? '',
+      thirdPartyTtsVoiceprintCreateUrl:
+        window.localStorage.getItem('thirdPartyTtsVoiceprintCreateUrl')?.trim() ?? '',
+      thirdPartyTtsVoiceprintDeleteUrl:
+        window.localStorage.getItem('thirdPartyTtsVoiceprintDeleteUrl')?.trim() ?? '',
+    }
   } catch {
     return {}
   }
+}
+
+async function loadRuntimeConfig(): Promise<RuntimeConfig> {
+  const cacheBust = `_fc=${Date.now()}`
+  const candidates = Array.from(
+    new Set([
+      RUNTIME_CONFIG_URL,
+      RUNTIME_CONFIG_PUBLIC_URL,
+      '/runtime-config.json',
+      '/public/runtime-config.json',
+      'runtime-config.json',
+      './runtime-config.json',
+    ]),
+  )
+
+  const mergedConfig: RuntimeConfig = {}
+  const diagnostics: string[] = []
+  let loadedAny = false
+
+  for (const candidate of candidates) {
+    try {
+      const candidateUrl = candidate.includes('?')
+        ? `${candidate}&${cacheBust}`
+        : `${candidate}?${cacheBust}`
+      const response = await fetch(candidateUrl, { cache: 'no-store' })
+      diagnostics.push(`${candidateUrl} => ${response.status}`)
+      if (!response.ok) continue
+
+      const rawText = await response.text()
+      const payload = parseJsonRecord(rawText)
+      if (!payload) {
+        diagnostics.push(`${candidateUrl} => invalid JSON`)
+        continue
+      }
+
+      loadedAny = true
+      mergeMissingRuntimeConfig(mergedConfig, readConfigFromSource(payload))
+
+      if (
+        mergedConfig.thirdPartyTtsApiUrl &&
+        mergedConfig.thirdPartyTtsVoiceprintListUrl &&
+        mergedConfig.thirdPartyTtsVoiceprintCreateUrl &&
+        mergedConfig.thirdPartyTtsVoiceprintDeleteUrl
+      ) {
+        break
+      }
+    } catch {
+      diagnostics.push(`${candidate} => fetch failed`)
+    }
+  }
+
+  const windowConfig = readWindowRuntimeConfig()
+  const localStorageConfig = readLocalStorageRuntimeConfig()
+  const hadWindowOverride =
+    !!windowConfig.thirdPartyTtsApiUrl ||
+    !!windowConfig.thirdPartyTtsVoiceprintListUrl ||
+    !!windowConfig.thirdPartyTtsVoiceprintCreateUrl ||
+    !!windowConfig.thirdPartyTtsVoiceprintDeleteUrl
+  const hadLocalStorageOverride =
+    !!localStorageConfig.thirdPartyTtsApiUrl ||
+    !!localStorageConfig.thirdPartyTtsVoiceprintListUrl ||
+    !!localStorageConfig.thirdPartyTtsVoiceprintCreateUrl ||
+    !!localStorageConfig.thirdPartyTtsVoiceprintDeleteUrl
+
+  mergeOverrideRuntimeConfig(mergedConfig, windowConfig)
+  mergeOverrideRuntimeConfig(mergedConfig, localStorageConfig)
+
+  lastRuntimeConfigDebugSummary = [
+    `candidates=[${candidates.join(', ')}]`,
+    diagnostics.length > 0 ? `results=[${diagnostics.join('; ')}]` : '',
+    `windowOverride=${hadWindowOverride ? 'yes' : 'no'}`,
+    `localStorageOverride=${hadLocalStorageOverride ? 'yes' : 'no'}`,
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  if (!loadedAny) {
+    logger.warn('Failed to load runtime-config.json for third-party TTS service', {
+      candidates,
+      diagnostics,
+    })
+  }
+
+  return mergedConfig
 }
 
 function normalizeVoiceOption(value: unknown): ThirdPartyTtsVoiceOption | null {
@@ -596,7 +762,7 @@ class ThirdPartyTtsService {
     )
     if (!endpoint) {
       throw new Error(
-        'Please configure thirdPartyTtsVoiceprintCreateUrl in public/runtime-config.json',
+        `Please configure thirdPartyTtsVoiceprintCreateUrl in public/runtime-config.json. ${lastRuntimeConfigDebugSummary}`,
       )
     }
     if (!this.isSupported()) {
@@ -657,7 +823,7 @@ class ThirdPartyTtsService {
     )
     if (!endpoint) {
       throw new Error(
-        'Please configure thirdPartyTtsVoiceprintDeleteUrl in public/runtime-config.json',
+        `Please configure thirdPartyTtsVoiceprintDeleteUrl in public/runtime-config.json. ${lastRuntimeConfigDebugSummary}`,
       )
     }
     if (!this.isSupported()) {
@@ -725,7 +891,9 @@ class ThirdPartyTtsService {
     const runtimeConfig = await loadRuntimeConfig()
     const endpoint = normalizeHttpUrl(apiUrl ?? runtimeConfig.thirdPartyTtsApiUrl ?? '')
     if (!endpoint) {
-      throw new Error('Please configure thirdPartyTtsApiUrl in public/runtime-config.json')
+      throw new Error(
+        `Please configure thirdPartyTtsApiUrl in public/runtime-config.json. ${lastRuntimeConfigDebugSummary}`,
+      )
     }
 
     if (!this.isSupported()) {
