@@ -656,7 +656,7 @@ export const TimelineItem = memo(
 
           const preferredUrl = item.type === 'video' ? item.src : ''
           const resolvedUrl = await resolveMediaUrl(mediaId)
-          const mediaUrl = preferredUrl || resolvedUrl
+          const mediaUrl = resolvedUrl || preferredUrl
           if (!mediaUrl) {
             throw new Error('无法解析视频源地址。')
           }
@@ -753,7 +753,7 @@ export const TimelineItem = memo(
             video.addEventListener('error', onSeekError)
             const timeoutId = window.setTimeout(
               () => finish(() => reject(new Error('关键帧加载超时，请稍后重试。'))),
-              2500,
+              5000,
             )
 
             if (Math.abs(video.currentTime - targetTime) < 0.001) {
