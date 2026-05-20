@@ -1,4 +1,4 @@
-﻿import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react'
+import { useCallback, useMemo, useRef, useEffect, memo, Activity } from 'react'
 import {
   ChevronDown,
   ChevronLeft,
@@ -61,6 +61,7 @@ import {
   type TextStylePresetLayout,
   type TextStylePreset,
 } from '@/shared/typography/text-style-presets'
+import { useTranslation } from 'react-i18next'
 import {
   EDITOR_LAYOUT_CSS_VALUES,
   clampLeftEditorSidebarWidth,
@@ -274,6 +275,7 @@ const TEXT_TEMPLATE_GROUPS: ReadonlyArray<{
 ]
 
 export const MediaSidebar = memo(function MediaSidebar() {
+  const { t } = useTranslation()
   const editorDensity = useSettingsStore((s) => s.editorDensity)
   const editorLayout = getEditorLayout(editorDensity)
   // Use granular selectors - Zustand v5 best practice
@@ -335,56 +337,60 @@ export const MediaSidebar = memo(function MediaSidebar() {
   // Read from store directly in callbacks using getState()
 
   // Add text item to timeline at the best available position
-  const handleAddText = useCallback((presetId?: (typeof TEXT_STYLE_PRESETS)[number]['id']) => {
-    // Read all needed state from stores directly to avoid subscriptions
-    const { tracks, items, fps, addItem } = useTimelineStore.getState()
-    const { activeTrackId, selectItems } = useSelectionStore.getState()
-    const currentProject = useProjectStore.getState().currentProject
+  const handleAddText = useCallback(
+    (presetId?: (typeof TEXT_STYLE_PRESETS)[number]['id']) => {
+      // Read all needed state from stores directly to avoid subscriptions
+      const { tracks, items, fps, addItem } = useTimelineStore.getState()
+      const { activeTrackId, selectItems } = useSelectionStore.getState()
+      const currentProject = useProjectStore.getState().currentProject
 
-    const targetTrack = findCompatibleTrackForItemType({
-      tracks,
-      items,
-      itemType: 'text',
-      preferredTrackId: activeTrackId,
-    })
+      const targetTrack = findCompatibleTrackForItemType({
+        tracks,
+        items,
+        itemType: 'text',
+        preferredTrackId: activeTrackId,
+      })
 
-    if (!targetTrack) {
-      logger.warn('No available track for text item')
-      return
-    }
+      if (!targetTrack) {
+        logger.warn('No available track for text item')
+        return
+      }
 
-    const durationInFrames = getDefaultGeneratedLayerDurationInFrames(fps)
+      const durationInFrames = getDefaultGeneratedLayerDurationInFrames(fps)
 
-    // Find the best position: start at playhead, find nearest available space
-    const proposedPosition = usePlaybackStore.getState().currentFrame
-    const finalPosition =
-      findNearestAvailableSpace(proposedPosition, durationInFrames, targetTrack.id, items) ??
-      proposedPosition // Fallback to proposed if no space found
+      // Find the best position: start at playhead, find nearest available space
+      const proposedPosition = usePlaybackStore.getState().currentFrame
+      const finalPosition =
+        findNearestAvailableSpace(proposedPosition, durationInFrames, targetTrack.id, items) ??
+        proposedPosition // Fallback to proposed if no space found
 
-    // Get canvas dimensions for initial transform
-    const canvasWidth = currentProject?.metadata.width ?? 1920
-    const canvasHeight = currentProject?.metadata.height ?? 1080
+      // Get canvas dimensions for initial transform
+      const canvasWidth = currentProject?.metadata.width ?? 1920
+      const canvasHeight = currentProject?.metadata.height ?? 1080
 
-    const textStylePreset = presetId
-      ? TEXT_STYLE_PRESETS.find((preset) => preset.id === presetId)
-      : undefined
-    const textItem: TextItem = createTextTemplateItem({
-      placement: {
-        trackId: targetTrack.id,
-        from: finalPosition,
-        durationInFrames,
-        canvasWidth,
-        canvasHeight,
-        fps,
-      },
-      label: textStylePreset?.label,
-      textStylePresetId: presetId,
-    })
+      const textStylePreset = presetId
+        ? TEXT_STYLE_PRESETS.find((preset) => preset.id === presetId)
+        : undefined
+      const textItem: TextItem = createTextTemplateItem({
+        placement: {
+          trackId: targetTrack.id,
+          from: finalPosition,
+          durationInFrames,
+          canvasWidth,
+          canvasHeight,
+          fps,
+        },
+        label: textStylePreset?.label,
+        text: t('editor.textSection.defaultText'),
+        textStylePresetId: presetId,
+      })
 
-    addItem(textItem)
-    // Select the new item
-    selectItems([textItem.id])
-  }, [])
+      addItem(textItem)
+      // Select the new item
+      selectItems([textItem.id])
+    },
+    [t],
+  )
 
   // Add shape item to timeline at the best available position
   const handleAddShape = useCallback((shapeType: ShapeType) => {
