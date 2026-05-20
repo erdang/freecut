@@ -26,7 +26,7 @@ Two tiers:
 - Format: `YYYY.MM.DD` where the date is the **Monday** that opens the week (Mon–Sun).
 - Rollup is manually triggered, typically on Monday morning.
 - Mid-week hotfix needing its own release: add `.N` suffix (`2026.04.13.2`). Rare.
-- `package.json` `version` field mirrors the most recent released week.
+- `package.json` `version` is pinned to `0.0.0` and ignored — the package is private, nothing reads it. The week version lives only in `changelog.json` and `CHANGELOG.md`.
 
 **No git tags.** The web app ships continuously via Vercel.
 
@@ -56,10 +56,14 @@ The user invokes one of these explicitly. Default to asking which mode if unclea
 
 The user asks "draft changelog bullets for this week" or similar. Produce bullets from commits — do **not** write files yet, just show the user the curated list to approve.
 
-1. `git log --first-parent main --pretty=format:"%H|%ad|%s" --date=short <range>` — range usually `<last-rollup>..HEAD` or a date range the user gives.
-2. Apply curation rules (below). Drop noise, rewrite dev-speak into user language, dedupe revisits.
-3. Group into Added / Fixed / Improved.
-4. Show the result. Wait for approval before touching files.
+1. Pick the branch to read from:
+   - For the **current rolling week** (drafting bullets for `current`), query the **active development branch** — typically `develop`, not `main`. PRs target `staging`/`develop` first, so commits from earlier today or this week may not be on `main` yet. Confirm the branch with `git branch --show-current` if unsure, or `git log <branch> --no-merges` to see what's actually there.
+   - For **closed weeks** (rollup, backfill), `main` is usually fine — the week's PRs have merged by then. But if you're rolling up early Monday and the Sunday PRs haven't been promoted yet, fall back to `develop`.
+2. `git log <branch> --no-merges --pretty=format:"%H|%ad|%s" --date=short --since=<week-start> --until=<week-end>` — `--no-merges` filters out PR merge commits, which carry no useful subject. Range is usually `<last-rollup>..HEAD` or explicit `--since`/`--until`.
+3. Sanity-check: if the user just mentioned a specific commit you don't see in the output, you're on the wrong branch. Re-query.
+4. Apply curation rules (below). Drop noise, rewrite dev-speak into user language, dedupe revisits.
+5. Group into Added / Fixed / Improved.
+6. Show the result. Wait for approval before touching files.
 
 ### Append mode
 
@@ -85,9 +89,8 @@ Triggered manually on Monday to close the previous week.
 1. Determine last week's Monday → version `YYYY.MM.DD`.
 2. Move `current` into `releases` with that version and the Monday date.
 3. Empty `current` (or seed with any commits landed since Monday).
-4. Bump `package.json` `version` to the new release.
-5. Update `CHANGELOG.md` with the new entry at the top.
-6. Print the commit/push commands for the operator to run manually.
+4. Update `CHANGELOG.md` with the new entry at the top.
+5. Print the commit/push commands for the operator to run manually.
 
 `npm run changelog:rollup` exists as a scripted shortcut.
 
@@ -119,6 +122,24 @@ A bullet fails if it only describes:
 - Anything the operator only knows happened because they read the diff
 
 When in doubt, drop it. The changelog is read by users browsing "what's new" — they will not appreciate a bullet they cannot perceive.
+
+## Frame the story: launch vs. increment
+
+Commit subjects are written from the inside — the author already knows the system exists, so each commit reads like an increment ("add Turkish locale coverage", "localize timeline labels", "fix tts locale strings"). From outside, a series of "increments" can actually be the **launch of an entirely new system** that didn't exist last week.
+
+Before writing bullets for a feature area, sanity-check the framing:
+
+1. Pick the directory or module the commits touch most (e.g. `src/i18n/`, `src/features/subtitles/`, `lib/gpu-transitions/`).
+2. Run `git log --diff-filter=A --since=<week-start> -- <path>` to see when files in that area first appeared.
+3. If most of the files were **born this week**, the area is a launch — write one top-line bullet describing the new capability, and treat the individual "add X" commits as facets of it, not separate bullets.
+4. If the area has older history, the commits are real increments — describe each that passes the user-facing test.
+
+The user once flagged this directly: an i18n week was drafted as "Turkish language support" + two localization fixes. The actual story was "UI is now translated, with 9 languages." The Turkish commit looked incremental because the operator was thinking from inside the feature; the user reading "What's New" had no prior context that translations existed at all.
+
+When you spot a launch:
+- Lead with the capability ("Translated UI in 9 languages — …", "Subtitle editing on the timeline", "Pen tool for masks").
+- List the supporting facets only if they're not obviously implied (a language picker is implied by "translated UI"; ASS subtitle support inside subtitle editing might be worth its own bullet).
+- Resist the urge to itemize every commit just because they're all in the Added group.
 
 ## Curation rules
 
