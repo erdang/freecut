@@ -86,6 +86,10 @@ export const EDITOR_DENSITY_OPTIONS = [
   label: string
 }>
 
+export function normalizeEditorDensityPreset(value: unknown): EditorDensityPresetName {
+  return value === 'default' || value === 'compact' ? value : DEFAULT_EDITOR_DENSITY_PRESET
+}
+
 export function getEditorLayout(
   preset: EditorDensityPresetName = DEFAULT_EDITOR_DENSITY_PRESET,
 ): EditorLayout {

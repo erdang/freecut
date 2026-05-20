@@ -1,1 +1,12 @@
-vp staged
+#!/usr/bin/env sh
+set -e
+
+if command -v vp >/dev/null 2>&1; then
+  vp staged
+elif [ -x "./node_modules/.bin/vp" ]; then
+  ./node_modules/.bin/vp staged
+elif command -v npx >/dev/null 2>&1; then
+  npx --no-install vp staged
+else
+  node ./node_modules/vite-plus/bin/vp staged
+fi
