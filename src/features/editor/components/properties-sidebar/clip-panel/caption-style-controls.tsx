@@ -1,4 +1,5 @@
 import { memo, useCallback, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/shared/ui/cn'
@@ -38,6 +39,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
   canvasWidth,
   canvasHeight,
 }: CaptionStyleControlsProps) {
+  const { t } = useTranslation()
   const updateItem = useTimelineStore((s) => s.updateItem)
 
   const applyPatch = useCallback(
@@ -101,7 +103,7 @@ export const CaptionStyleControls = memo(function CaptionStyleControls({
             <button
               key={preset.id}
               type="button"
-              title={preset.hint}
+              title={t(preset.hintKey)}
               onClick={() => applyPreset(preset)}
               className={cn(
                 'rounded border px-2 py-1.5 text-[11px] text-center transition-colors',
