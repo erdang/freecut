@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Eye, EyeOff, RotateCcw, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { GpuEffectDefinition } from '@/infrastructure/gpu/effects'
+import type { GpuEffectDefinition } from '@/infrastructure/gpu-effects'
 import { PropertyRow } from '@/shared/ui/property-controls'
 import { buildMonotoneCurveSvgPath } from '@/shared/utils/curve-spline'
 import {

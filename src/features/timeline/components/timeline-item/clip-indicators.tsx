@@ -1,7 +1,7 @@
 import { memo } from 'react'
 import { Link2Off, Diamond } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
-import { EDITOR_LAYOUT_CSS_VALUES } from '@/app/editor-layout'
+import { EDITOR_LAYOUT_CSS_VALUES } from '@/config/editor-layout'
 
 interface ClipIndicatorsProps {
   /** Whether the item has keyframe animations */
