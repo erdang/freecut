@@ -77,7 +77,7 @@ import {
   type MusicgenModelId,
 } from '../services/musicgen-service'
 
-const DEFAULT_PROMPT = '欢迎使用 freecut。这段语音在浏览器本地生成。'
+const DEFAULT_PROMPT = '欢迎使用本应用。这段语音在浏览器本地生成。'
 
 const MUSIC_PROMPT_PRESETS = [
   {

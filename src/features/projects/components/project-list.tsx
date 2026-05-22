@@ -449,7 +449,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       {/* Empty State - No Projects */}
       {isEmpty && (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h2 className="text-3xl font-semibold text-foreground mb-2">欢迎使用 FreeCut</h2>
+          <h2 className="text-3xl font-semibold text-foreground mb-2">欢迎使用视频编辑器</h2>
           <p className="text-muted-foreground max-w-md mb-6">
             从创建第一个视频项目开始。选择分辨率、帧率，然后开始编辑。
           </p>

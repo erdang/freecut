@@ -69,7 +69,7 @@ import {
   type ThirdPartyTtsVoiceprintType,
 } from '../services/third-party-tts-service'
 
-const DEFAULT_PROMPT = '欢迎使用 FreeCut。此语音将由你配置的第三方 TTS API 生成。'
+const DEFAULT_PROMPT = '欢迎使用本应用。此语音将由你配置的第三方 TTS API 生成。'
 
 interface AudioGeneration {
   id: string

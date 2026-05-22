@@ -15,12 +15,12 @@ export const Route = createFileRoute('/')({
 
 const faqItems = [
   {
-    question: 'FreeCut 真的是免费的吗？',
-    answer: '是的，FreeCut 基于 MIT 协议开源并永久免费。没有隐藏收费、没有订阅、也没有水印。',
+    question: '这个工具真的是免费的吗？',
+    answer: '是的，本应用基于 MIT 协议开源并永久免费。没有隐藏收费、没有订阅、也没有水印。',
   },
   {
     question: '需要安装软件吗？',
-    answer: '不需要安装。FreeCut 完全运行在浏览器中，打开网页即可开始编辑。',
+    answer: '不需要安装。本应用完全运行在浏览器中，打开网页即可开始编辑。',
   },
   {
     question: '我的视频会存在哪里？',
@@ -32,7 +32,7 @@ const faqItems = [
     answer: (
       <>
         <p className="mb-3">
-          FreeCut 目前在 Chrome 或 Edge 113+ 上体验最佳。由于依赖 WebGPU、WebCodecs、OPFS 和 File
+          本应用目前在 Chrome 或 Edge 113+ 上体验最佳。由于依赖 WebGPU、WebCodecs、OPFS 和 File
           System Access 等现代浏览器 API，完整流程目前以 Chromium 内核浏览器为主。
         </p>
         <p>
@@ -234,7 +234,7 @@ function LandingPage() {
           <div className="mb-10 text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">演示视频</h2>
             <p className="mx-auto max-w-2xl text-muted-foreground">
-              观看 FreeCut 的快速演示，直观了解编辑流程。
+              观看快速演示，直观了解编辑流程。
             </p>
           </div>
 
@@ -247,7 +247,7 @@ function LandingPage() {
             <div className="relative aspect-video w-full overflow-hidden bg-muted">
               <img
                 src="/assets/landing/timeline.png"
-                alt="FreeCut 演示预览"
+                alt="演示预览"
                 className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-black/30 transition-colors group-hover:bg-black/20" />
@@ -269,7 +269,7 @@ function LandingPage() {
         <div className="mx-auto max-w-3xl">
           <div className="mb-10 text-center">
             <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">常见问题</h2>
-            <p className="text-muted-foreground">关于 FreeCut，你想了解的都在这里。</p>
+            <p className="text-muted-foreground">关于本应用，你想了解的都在这里。</p>
           </div>
 
           <Accordion type="single" collapsible className="w-full">
@@ -311,7 +311,7 @@ function LandingPage() {
 
       <footer className="border-t border-border px-6 py-8">
         <div className="mx-auto max-w-5xl text-center text-sm text-muted-foreground">
-          MIT License © {new Date().getFullYear()} FreeCut
+          MIT License © {new Date().getFullYear()}
         </div>
       </footer>
     </div>

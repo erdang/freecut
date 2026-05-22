@@ -148,27 +148,27 @@ function getSubtitleExtractionErrorMessage(error: unknown, media: MediaMetadata)
   if (error instanceof FileAccessError) {
     if (error.type === 'permission_denied') {
       markSubtitleSourceUnreadable(media, 'permission_denied')
-      return `FreeCut 需要读取“${media.fileName}”的权限后才能提取字幕。`
+      return `本应用需要读取“${media.fileName}”的权限后才能提取字幕。`
     }
     if (error.type === 'file_missing') {
       markSubtitleSourceUnreadable(media, 'file_missing')
-      return `FreeCut 找不到“${media.fileName}”。请重新关联文件后重试。`
+      return `本应用找不到“${media.fileName}”。请重新关联文件后重试。`
     }
-    return `FreeCut 当前无法读取“${media.fileName}”。请关闭占用该文件的应用后重试。`
+    return `本应用当前无法读取“${media.fileName}”。请关闭占用该文件的应用后重试。`
   }
 
   const errorName = getErrorName(error)
   if (errorName) {
     if (errorName === 'NotAllowedError' || errorName === 'SecurityError') {
       markSubtitleSourceUnreadable(media, 'permission_denied')
-      return `FreeCut 需要读取“${media.fileName}”的权限后才能提取字幕。`
+      return `本应用需要读取“${media.fileName}”的权限后才能提取字幕。`
     }
     if (errorName === 'NotFoundError') {
       markSubtitleSourceUnreadable(media, 'file_missing')
-      return `FreeCut 找不到“${media.fileName}”。请重新关联文件后重试。`
+      return `本应用找不到“${media.fileName}”。请重新关联文件后重试。`
     }
     if (errorName === 'NotReadableError') {
-      return `FreeCut 当前无法读取“${media.fileName}”。请关闭占用该文件的应用后重试。`
+      return `本应用当前无法读取“${media.fileName}”。请关闭占用该文件的应用后重试。`
     }
   }
 
@@ -588,7 +588,7 @@ export const MediaCard = memo(function MediaCard({
           const hasPermission = await requestSubtitleSourcePermission(target)
           if (!hasPermission) {
             markSubtitleSourceUnreadable(target, 'permission_denied')
-            lastErrorMessage = `FreeCut 需要读取“${target.fileName}”的权限后才能提取字幕。`
+            lastErrorMessage = `本应用需要读取“${target.fileName}”的权限后才能提取字幕。`
             useSubtitleScanProgressStore.getState().markEntryStatus(i, 'error')
             continue
           }

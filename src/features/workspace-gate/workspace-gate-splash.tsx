@@ -33,7 +33,7 @@ export function WorkspaceGateSplash({ status, onPickFolder, onReconnect }: Props
               <span className="font-medium">浏览器不受支持</span>
             </div>
             <p className="text-sm text-muted-foreground">
-              FreeCut 需要基于 Chromium 的浏览器（Chrome、Edge、Brave、Arc）来支持工作区文件夹存储。
+              本应用需要基于 Chromium 的浏览器（Chrome、Edge、Brave、Arc）来支持工作区文件夹存储。
               Firefox 和 Safari 目前尚不支持 File System Access API。
             </p>
           </div>
@@ -44,7 +44,7 @@ export function WorkspaceGateSplash({ status, onPickFolder, onReconnect }: Props
             <div>
               <h1 className="text-2xl font-semibold mb-2">选择你的工作区文件夹</h1>
               <p className="text-sm text-muted-foreground">
-                FreeCut
+                本应用
                 会将项目、媒体和缓存以普通文件的形式保存在你指定的文件夹中。你可以选择任意磁盘目录作为工作区。
               </p>
             </div>
