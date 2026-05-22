@@ -535,10 +535,10 @@ const ChannelStrip = memo(function ChannelStrip({
                 : 'border border-transparent bg-muted/30 text-muted-foreground/45 hover:bg-sky-500/10 hover:text-sky-300'
             } ${!onEqToggle ? 'pointer-events-none opacity-50' : ''}`}
             onClick={handleEqClick}
-            aria-label={`EQ ${track.name}`}
+            aria-label={`均衡器 ${track.name}`}
             aria-pressed={eqActive}
           >
-            EQ
+            均衡
           </button>
         </div>
 
@@ -815,7 +815,7 @@ const BusMeter = memo(function BusMeter({
       <div className="flex flex-col items-center h-full w-full rounded-[3px] bg-black/30 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)] border border-border/20 px-1">
         {/* Label */}
         <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground/70 py-1 leading-tight font-mono whitespace-nowrap">
-          Bus 1
+          总线 1
         </div>
         <div className="flex justify-center py-0.5 shrink-0">
           <button
@@ -826,10 +826,10 @@ const BusMeter = memo(function BusMeter({
                 : 'border border-transparent bg-muted/30 text-muted-foreground/45 hover:bg-sky-500/10 hover:text-sky-300'
             } ${!onEqToggle ? 'pointer-events-none opacity-50' : ''}`}
             onClick={onEqToggle}
-            aria-label="EQ Bus 1"
+            aria-label="均衡器 总线 1"
             aria-pressed={eqActive}
           >
-            EQ
+            均衡
           </button>
         </div>
 

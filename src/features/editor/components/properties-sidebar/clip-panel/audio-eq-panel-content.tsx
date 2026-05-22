@@ -229,7 +229,7 @@ function roundOutputGainDb(value: number): number {
 }
 
 function formatOutputGainDb(value: number | 'mixed'): string {
-  if (value === 'mixed') return 'Mixed'
+  if (value === 'mixed') return '混合'
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}`
 }
 
@@ -437,8 +437,8 @@ function BandCard({
             compact ? 'h-4 w-4' : 'h-5 w-5',
           )}
           onClick={onReset}
-          aria-label={`Reset ${title}`}
-          title={`Reset ${title}`}
+          aria-label={`重置${title}`}
+          title={`重置${title}`}
         >
           <RotateCcw className={cn(compact ? 'h-2.5 w-2.5' : 'h-3 w-3')} />
         </button>
@@ -1264,10 +1264,10 @@ export function AudioEqPanelContent({
   )
 
   const eqPresetPlaceholder = hasMixedEqSettings
-    ? 'Mixed'
+    ? '混合'
     : selectedEqPresetId
-      ? (getAudioEqPresetById(selectedEqPresetId)?.label ?? 'Custom')
-      : 'Custom'
+      ? (getAudioEqPresetById(selectedEqPresetId)?.label ?? '自定义')
+      : '自定义'
 
   const previewThrottleRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingPreviewRef = useRef<AudioEqPatch | null>(null)
@@ -1402,7 +1402,7 @@ export function AudioEqPanelContent({
   if (!isTrackMode && audioItems.length === 0) {
     return (
       <div className="flex h-full items-center justify-center px-6 text-sm text-zinc-500">
-        No audio clips on {targetLabel}.
+        {targetLabel} 上没有音频片段。
       </div>
     )
   }
@@ -1416,16 +1416,16 @@ export function AudioEqPanelContent({
               checked={eqEnabled}
               onCheckedChange={onEnabledChange}
               className="h-5 w-9 shrink-0 shadow-none ring-offset-0"
-              aria-label={`Turn ${targetLabel} EQ ${eqEnabled ? 'off' : 'on'}`}
+              aria-label={`${eqEnabled ? '关闭' : '开启'}${targetLabel}均衡器`}
             />
           ) : (
             <div className="h-2.5 w-2.5 rounded-full bg-primary" />
           )}
           <div className="text-sm font-medium text-foreground">
-            Equalizer{targetLabel ? ` - ${targetLabel}` : ''}
+            均衡器{targetLabel ? ` - ${targetLabel}` : ''}
           </div>
           <div className="ml-auto flex min-w-0 items-center gap-2">
-            <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">Preset</div>
+            <div className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">预设</div>
             <Select
               value={selectedEqPresetId ?? undefined}
               onValueChange={handleEqPresetChange}
@@ -1457,7 +1457,7 @@ export function AudioEqPanelContent({
               onClick={() => handleEqPresetChange('flat')}
               disabled={!eqEnabled}
             >
-              Reset EQ
+              重置均衡器
             </Button>
           </div>
         </div>
@@ -1470,7 +1470,7 @@ export function AudioEqPanelContent({
               checked={clipEqEnabled}
               onCheckedChange={handleClipEqEnabledChange}
               className="shrink-0"
-              aria-label={`Turn clip EQ ${clipEqEnabled ? 'off' : 'on'}`}
+              aria-label={`${clipEqEnabled ? '关闭' : '开启'}片段均衡器`}
             />
             <Select
               value={selectedEqPresetId ?? undefined}
@@ -1499,7 +1499,7 @@ export function AudioEqPanelContent({
               )}
               onClick={() => handleEqPresetChange('flat')}
               disabled={!clipEqEnabled}
-              aria-label="Reset EQ"
+              aria-label="重置均衡器"
             >
               <RotateCcw className="h-3 w-3" />
             </Button>
@@ -1508,7 +1508,7 @@ export function AudioEqPanelContent({
         <div className={cn('relative', !isCompactLayout && 'border-b border-border')}>
           {!isTrackMode && !isCompactLayout ? (
             <div className="pointer-events-none absolute right-3 top-1 z-10 text-[10px] uppercase tracking-[0.16em] text-zinc-500">
-              {audioItems.length} {audioItems.length === 1 ? 'clip' : 'clips'}
+              {audioItems.length} {audioItems.length === 1 ? '个片段' : '个片段'}
             </div>
           ) : null}
           <div className="flex items-stretch gap-3 px-3 pb-3 pt-2">
@@ -1594,7 +1594,7 @@ export function AudioEqPanelContent({
                 )}
               >
                 <BandCard
-                  title="Band 1"
+                  title="频段 1"
                   filterType={eqBand1Type === 'mixed' ? 'high-pass' : eqBand1Type}
                   filterOptions={AUDIO_EQ_BAND1_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
@@ -1623,7 +1623,7 @@ export function AudioEqPanelContent({
                     })
                   }
                 >
-                  <div className="text-[10px] text-zinc-500">Frequency</div>
+                  <div className="text-[10px] text-zinc-500">频率</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput
                       value={eqBand1FrequencyHz}
@@ -1655,7 +1655,7 @@ export function AudioEqPanelContent({
                     />
                   ) : (
                     <>
-                      <div className="text-[10px] text-zinc-500">Gain</div>
+                      <div className="text-[10px] text-zinc-500">增益</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput
                           value={eqBand1GainDb}
@@ -1686,7 +1686,7 @@ export function AudioEqPanelContent({
                       </div>
                       {(eqBand1Type === 'mixed' ? 'high-pass' : eqBand1Type) === 'peaking' ? (
                         <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
+                          <div className="text-[10px] text-zinc-500">Q 值</div>
                           <div className="flex items-center gap-1.5">
                             <NumberInput
                               value={eqBand1Q}
@@ -1717,7 +1717,7 @@ export function AudioEqPanelContent({
                 </BandCard>
 
                 <BandCard
-                  title="Band 2"
+                  title="频段 2"
                   filterType={eqLowType === 'mixed' ? 'low-shelf' : eqLowType}
                   filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
@@ -1745,7 +1745,7 @@ export function AudioEqPanelContent({
                     })
                   }
                 >
-                  <div className="text-[10px] text-zinc-500">Frequency</div>
+                  <div className="text-[10px] text-zinc-500">频率</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput
                       value={eqLowFrequencyHz}
@@ -1783,7 +1783,7 @@ export function AudioEqPanelContent({
                           )
                         }
                       />
-                      <div className="text-[10px] text-zinc-500">Gain</div>
+                      <div className="text-[10px] text-zinc-500">增益</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput
                           value={eqLow}
@@ -1814,7 +1814,7 @@ export function AudioEqPanelContent({
                       </div>
                       {(eqLowType === 'mixed' ? 'low-shelf' : eqLowType) === 'peaking' ? (
                         <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
+                          <div className="text-[10px] text-zinc-500">Q 值</div>
                           <div className="flex items-center gap-1.5">
                             <NumberInput
                               value={eqLowQ}
@@ -1845,7 +1845,7 @@ export function AudioEqPanelContent({
                 </BandCard>
 
                 <BandCard
-                  title="Band 3"
+                  title="频段 3"
                   filterType={eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType}
                   filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
@@ -1873,7 +1873,7 @@ export function AudioEqPanelContent({
                     })
                   }
                 >
-                  <div className="text-[10px] text-zinc-500">Frequency</div>
+                  <div className="text-[10px] text-zinc-500">频率</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput
                       value={eqLowMidFrequencyHz}
@@ -1911,7 +1911,7 @@ export function AudioEqPanelContent({
                           )
                         }
                       />
-                      <div className="text-[10px] text-zinc-500">Gain</div>
+                      <div className="text-[10px] text-zinc-500">增益</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput
                           value={eqLowMid}
@@ -1942,7 +1942,7 @@ export function AudioEqPanelContent({
                       </div>
                       {(eqLowMidType === 'mixed' ? 'peaking' : eqLowMidType) === 'peaking' ? (
                         <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
+                          <div className="text-[10px] text-zinc-500">Q 值</div>
                           <div className="flex items-center gap-1.5">
                             <NumberInput
                               value={eqLowMidQ}
@@ -1973,7 +1973,7 @@ export function AudioEqPanelContent({
                 </BandCard>
 
                 <BandCard
-                  title="Band 4"
+                  title="频段 4"
                   filterType={eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType}
                   filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
@@ -2001,7 +2001,7 @@ export function AudioEqPanelContent({
                     })
                   }
                 >
-                  <div className="text-[10px] text-zinc-500">Frequency</div>
+                  <div className="text-[10px] text-zinc-500">频率</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput
                       value={eqHighMidFrequencyHz}
@@ -2043,7 +2043,7 @@ export function AudioEqPanelContent({
                           )
                         }
                       />
-                      <div className="text-[10px] text-zinc-500">Gain</div>
+                      <div className="text-[10px] text-zinc-500">增益</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput
                           value={eqHighMid}
@@ -2074,7 +2074,7 @@ export function AudioEqPanelContent({
                       </div>
                       {(eqHighMidType === 'mixed' ? 'peaking' : eqHighMidType) === 'peaking' ? (
                         <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
+                          <div className="text-[10px] text-zinc-500">Q 值</div>
                           <div className="flex items-center gap-1.5">
                             <NumberInput
                               value={eqHighMidQ}
@@ -2105,7 +2105,7 @@ export function AudioEqPanelContent({
                 </BandCard>
 
                 <BandCard
-                  title="Band 5"
+                  title="频段 5"
                   filterType={eqHighType === 'mixed' ? 'high-shelf' : eqHighType}
                   filterOptions={AUDIO_EQ_INNER_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
@@ -2133,7 +2133,7 @@ export function AudioEqPanelContent({
                     })
                   }
                 >
-                  <div className="text-[10px] text-zinc-500">Frequency</div>
+                  <div className="text-[10px] text-zinc-500">频率</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput
                       value={eqHighFrequencyHz}
@@ -2171,7 +2171,7 @@ export function AudioEqPanelContent({
                           )
                         }
                       />
-                      <div className="text-[10px] text-zinc-500">Gain</div>
+                      <div className="text-[10px] text-zinc-500">增益</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput
                           value={eqHigh}
@@ -2202,7 +2202,7 @@ export function AudioEqPanelContent({
                       </div>
                       {(eqHighType === 'mixed' ? 'high-shelf' : eqHighType) === 'peaking' ? (
                         <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
+                          <div className="text-[10px] text-zinc-500">Q 值</div>
                           <div className="flex items-center gap-1.5">
                             <NumberInput
                               value={eqHighQ}
@@ -2233,7 +2233,7 @@ export function AudioEqPanelContent({
                 </BandCard>
 
                 <BandCard
-                  title="Band 6"
+                  title="频段 6"
                   filterType={eqBand6Type === 'mixed' ? 'low-pass' : eqBand6Type}
                   filterOptions={AUDIO_EQ_BAND6_FILTER_OPTIONS}
                   onFilterTypeChange={(value) =>
@@ -2262,7 +2262,7 @@ export function AudioEqPanelContent({
                     })
                   }
                 >
-                  <div className="text-[10px] text-zinc-500">Frequency</div>
+                  <div className="text-[10px] text-zinc-500">频率</div>
                   <div className="flex items-center gap-1.5">
                     <NumberInput
                       value={eqBand6FrequencyHz}
@@ -2294,7 +2294,7 @@ export function AudioEqPanelContent({
                     />
                   ) : (
                     <>
-                      <div className="text-[10px] text-zinc-500">Gain</div>
+                      <div className="text-[10px] text-zinc-500">增益</div>
                       <div className="flex items-center gap-1.5">
                         <NumberInput
                           value={eqBand6GainDb}
@@ -2325,7 +2325,7 @@ export function AudioEqPanelContent({
                       </div>
                       {(eqBand6Type === 'mixed' ? 'low-pass' : eqBand6Type) === 'peaking' ? (
                         <>
-                          <div className="text-[10px] text-zinc-500">Q Factor</div>
+                          <div className="text-[10px] text-zinc-500">Q 值</div>
                           <div className="flex items-center gap-1.5">
                             <NumberInput
                               value={eqBand6Q}

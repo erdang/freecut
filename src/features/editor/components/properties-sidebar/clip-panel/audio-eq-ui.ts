@@ -36,12 +36,12 @@ export const AUDIO_EQ_FILTER_TYPE_PATHS: Readonly<Record<AudioEqFilterType, stri
 
 export const AUDIO_EQ_FILTER_TYPE_LABELS: Readonly<Record<AudioEqFilterType, string>> =
   Object.freeze({
-    'high-pass': 'High Pass',
-    'low-shelf': 'Low Shelf',
-    peaking: 'Peaking',
-    notch: 'Notch',
-    'high-shelf': 'High Shelf',
-    'low-pass': 'Low Pass',
+    'high-pass': '高通',
+    'low-shelf': '低架',
+    peaking: '峰值',
+    notch: '陷波',
+    'high-shelf': '高架',
+    'low-pass': '低通',
   })
 
 export const AUDIO_EQ_BAND1_FILTER_OPTIONS = Object.freeze([
