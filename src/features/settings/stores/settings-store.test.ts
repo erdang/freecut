@@ -5,6 +5,7 @@ const DEFAULT_SETTINGS = {
   snapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,
+  enableFilmstripExtraction: true,
   editorDensity: 'compact' as const,
   maxUndoHistory: 50,
   autoSaveInterval: 0,
@@ -23,6 +24,7 @@ describe('settings-store', () => {
     expect(state.snapEnabled).toBe(true)
     expect(state.showWaveforms).toBe(true)
     expect(state.showFilmstrips).toBe(true)
+    expect(state.enableFilmstripExtraction).toBe(true)
     expect(state.editorDensity).toBe('compact')
     expect(state.maxUndoHistory).toBe(50)
     expect(state.autoSaveInterval).toBe(0)
@@ -95,17 +97,27 @@ describe('settings-store', () => {
   })
 
   describe('replaceHotkeyOverrides', () => {
+    it('unassigns hotkeys with explicit blank overrides', () => {
+      useSettingsStore.getState().unbindHotkeyBinding('DELETE_SELECTED')
+
+      expect(useSettingsStore.getState().hotkeyOverrides).toEqual({
+        DELETE_SELECTED: '',
+      })
+    })
+
     it('replaces hotkey overrides with a sanitized imported preset', () => {
       useSettingsStore.getState().setHotkeyBinding('PLAY_PAUSE', 'shift+space')
 
       useSettingsStore.getState().replaceHotkeyOverrides({
         EXPORT: 'Ctrl+E',
         PLAY_PAUSE: 'space',
+        DELETE_SELECTED: '',
         UNKNOWN_COMMAND: 'q',
       } as never)
 
       expect(useSettingsStore.getState().hotkeyOverrides).toEqual({
         EXPORT: 'mod+e',
+        DELETE_SELECTED: '',
       })
     })
 

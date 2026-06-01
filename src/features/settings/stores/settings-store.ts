@@ -16,6 +16,7 @@ import {
   type HotkeyKey,
   type HotkeyOverrideMap,
 } from '@/config/hotkeys'
+import { CAPTION_STYLE_PRESETS } from '@/shared/typography/caption-style-presets'
 
 /**
  * App-wide settings stored in localStorage
@@ -27,6 +28,7 @@ interface AppSettings {
   canvasSnapEnabled: boolean
   showWaveforms: boolean
   showFilmstrips: boolean
+  enableFilmstripExtraction: boolean
 
   // Interface
   editorDensity: EditorDensityPresetName
@@ -50,6 +52,10 @@ interface AppSettings {
   // substring + fuzzy-prefix matching on caption text.
   captionSearchMode: CaptionSearchMode
 
+  // Caption style preset id applied automatically to captions generated from
+  // transcripts / AI captioning (when not inheriting an existing caption's style).
+  defaultCaptionStylePresetId: string
+
   // Keyboard shortcuts
   hotkeyOverrides: HotkeyOverrideMap
 }
@@ -58,6 +64,14 @@ export type CaptionSearchMode = 'keyword' | 'semantic'
 
 function normalizeCaptionSearchMode(value: unknown): CaptionSearchMode {
   return value === 'semantic' ? 'semantic' : 'keyword'
+}
+
+export const DEFAULT_CAPTION_STYLE_PRESET_ID = CAPTION_STYLE_PRESETS[0]?.id ?? 'netflix'
+
+function normalizeCaptionStylePresetId(value: unknown): string {
+  return typeof value === 'string' && CAPTION_STYLE_PRESETS.some((preset) => preset.id === value)
+    ? value
+    : DEFAULT_CAPTION_STYLE_PRESET_ID
 }
 
 export type CaptioningIntervalUnit = 'seconds' | 'frames'
@@ -98,6 +112,7 @@ export function resolveCaptioningIntervalSec(
 interface SettingsActions {
   setSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void
   setHotkeyBinding: (key: HotkeyKey, binding: string) => void
+  unbindHotkeyBinding: (key: HotkeyKey) => void
   replaceHotkeyOverrides: (overrides: HotkeyOverrideMap) => void
   resetHotkeyBinding: (key: HotkeyKey) => void
   resetHotkeys: () => void
@@ -123,6 +138,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   canvasSnapEnabled: true,
   showWaveforms: true,
   showFilmstrips: true,
+  enableFilmstripExtraction: true,
 
   // Interface
   editorDensity: DEFAULT_EDITOR_DENSITY_PRESET,
@@ -142,6 +158,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 
   // Scene Browser defaults
   captionSearchMode: 'keyword',
+
+  // Caption styling default
+  defaultCaptionStylePresetId: DEFAULT_CAPTION_STYLE_PRESET_ID,
 
   // Keyboard shortcuts
   hotkeyOverrides: {},
@@ -186,6 +205,9 @@ export const useSettingsStore = create<SettingsStore>()(
           if (key === 'editorDensity') {
             return { editorDensity: normalizeEditorDensityPreset(value) }
           }
+          if (key === 'defaultCaptionStylePresetId') {
+            return { defaultCaptionStylePresetId: normalizeCaptionStylePresetId(value) }
+          }
           return { [key]: value }
         }),
 
@@ -210,6 +232,20 @@ export const useSettingsStore = create<SettingsStore>()(
             hotkeyOverrides: {
               ...state.hotkeyOverrides,
               [key]: normalizedBinding,
+            },
+          }
+        }),
+
+      unbindHotkeyBinding: (key) =>
+        set((state) => {
+          if (state.hotkeyOverrides[key] === '') {
+            return state
+          }
+
+          return {
+            hotkeyOverrides: {
+              ...state.hotkeyOverrides,
+              [key]: '',
             },
           }
         }),
@@ -267,6 +303,9 @@ export const useSettingsStore = create<SettingsStore>()(
             captioningIntervalUnit,
           ),
           captionSearchMode: normalizeCaptionSearchMode(typedState.captionSearchMode),
+          defaultCaptionStylePresetId: normalizeCaptionStylePresetId(
+            typedState.defaultCaptionStylePresetId,
+          ),
         }
       },
     },

@@ -1,10 +1,13 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { toast } from 'sonner'
 import { i18n } from './i18n'
 import { App } from './app'
-import { initializeDebugUtils } from '@/app/debug'
 import { createLogger } from '@/shared/logging/logger'
+import {
+  getEditorProjectIdFromPathname,
+  getEditorProjectReloadPathWithCacheBust,
+  rememberLastEditorProjectId,
+} from '@/shared/projects/last-editor-project'
 import './index.css'
 
 const log = createLogger('App')
@@ -14,11 +17,18 @@ const ACCEPTED_APP_UPDATE_SIGNATURE_KEY = 'freecut-accepted-app-update-signature
 let updateToastVisible = false
 let currentBuildAssetSignature: string | null = null
 
-// Initialize debug utilities in development mode
-initializeDebugUtils()
+// Debug utilities are editor-heavy; keep them out of the production startup graph.
+if (import.meta.env.DEV) {
+  void import('@/app/debug').then(({ initializeDebugUtils }) => initializeDebugUtils())
+}
+
+const initialProjectId = getEditorProjectIdFromPathname(window.location.pathname)
+if (initialProjectId) {
+  rememberLastEditorProjectId(initialProjectId)
+}
 
 function getCurrentProjectId(): string | undefined {
-  return window.location.pathname.match(/\/editor\/([^/]+)/)?.[1]
+  return getEditorProjectIdFromPathname(window.location.pathname)
 }
 
 async function saveCurrentProjectBeforeReload() {
@@ -42,15 +52,29 @@ function rememberAcceptedAppUpdate(signature?: string) {
   }
 }
 
-function showUpdateAvailableToast(
+function reloadCurrentLocationWithUpdateCacheBust() {
+  window.location.assign(getEditorProjectReloadPathWithCacheBust())
+}
+
+async function showUpdateAvailableToast(
   applyUpdate: () => void = () => window.location.reload(),
   updateSignature?: string,
-) {
+): Promise<void> {
   if (updateToastVisible) {
     return
   }
 
   updateToastVisible = true
+  window.dispatchEvent(new Event('freecut:ensure-toaster'))
+  let toast: typeof import('sonner').toast
+  try {
+    ;({ toast } = await import('sonner'))
+  } catch (error) {
+    updateToastVisible = false
+    log.warn('Failed to load update notification toast:', error)
+    return
+  }
+
   toast.error(i18n.t('appShell.newVersionAvailable'), {
     duration: Infinity,
     action: {
@@ -118,9 +142,10 @@ async function checkForAppShellUpdate() {
       nextBuildAssetSignature !== currentBuildAssetSignature &&
       nextBuildAssetSignature !== acceptedUpdateSignature
     ) {
-      showUpdateAvailableToast(() => {
-        window.location.assign(`/?__freecut_updated=${Date.now()}`)
-      }, nextBuildAssetSignature)
+      await showUpdateAvailableToast(
+        reloadCurrentLocationWithUpdateCacheBust,
+        nextBuildAssetSignature,
+      )
     }
   } catch (error) {
     log.warn('App update check failed:', error)
@@ -149,7 +174,7 @@ function activateWaitingServiceWorker(registration: ServiceWorkerRegistration) {
 
 function watchForServiceWorkerUpdate(registration: ServiceWorkerRegistration) {
   if (registration.waiting && navigator.serviceWorker.controller) {
-    showUpdateAvailableToast(() => activateWaitingServiceWorker(registration))
+    void showUpdateAvailableToast(() => activateWaitingServiceWorker(registration))
   }
 
   registration.addEventListener('updatefound', () => {
@@ -161,7 +186,7 @@ function watchForServiceWorkerUpdate(registration: ServiceWorkerRegistration) {
 
     installingWorker.addEventListener('statechange', () => {
       if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-        showUpdateAvailableToast(() => activateWaitingServiceWorker(registration))
+        void showUpdateAvailableToast(() => activateWaitingServiceWorker(registration))
       }
     })
   })
@@ -180,7 +205,7 @@ window.addEventListener('error', (event) => {
 // When Vercel deploys a new version, old chunk hashes become 404s.
 // Prompt the user to save before reloading so they don't lose work.
 window.addEventListener('vite:preloadError', () => {
-  showUpdateAvailableToast()
+  void showUpdateAvailableToast()
 })
 
 // IMPORTANT: Intentionally do not dispose filmstrip cache on beforeunload.

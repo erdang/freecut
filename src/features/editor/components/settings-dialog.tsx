@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import type { MediaMetadata } from '@/types/storage'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -61,6 +62,7 @@ import {
   importWaveformCache,
 } from '@/features/editor/deps/timeline-cache'
 import { clearPreviewAudioCache } from '@/features/editor/deps/composition-runtime'
+import { CAPTION_STYLE_PRESETS } from '@/shared/typography/caption-style-presets'
 import { createLogger } from '@/shared/logging/logger'
 import { cn } from '@/shared/ui/cn'
 import { EDITOR_DENSITY_OPTIONS } from '@/app/editor-layout'
@@ -334,14 +336,17 @@ async function regenerateProjectThumbnails(
 }
 
 export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
+  const { t } = useTranslation()
   const snapEnabled = useSettingsStore((s) => s.snapEnabled)
   const editorDensity = useSettingsStore((s) => s.editorDensity)
   const showWaveforms = useSettingsStore((s) => s.showWaveforms)
   const showFilmstrips = useSettingsStore((s) => s.showFilmstrips)
+  const enableFilmstripExtraction = useSettingsStore((s) => s.enableFilmstripExtraction)
   const autoSaveInterval = useSettingsStore((s) => s.autoSaveInterval)
   const maxUndoHistory = useSettingsStore((s) => s.maxUndoHistory)
   const captioningIntervalUnit = useSettingsStore((s) => s.captioningIntervalUnit)
   const captioningIntervalValue = useSettingsStore((s) => s.captioningIntervalValue)
+  const defaultCaptionStylePresetId = useSettingsStore((s) => s.defaultCaptionStylePresetId)
   const setSetting = useSettingsStore((s) => s.setSetting)
   const resetToDefaults = useSettingsStore((s) => s.resetToDefaults)
 
@@ -662,6 +667,33 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                       间隔越小，场景切分越密集，但生成耗时更长。
                     </p>
                   </div>
+
+                  <div className="space-y-2">
+                    <div className="space-y-0.5">
+                      <Label className="text-sm">{t('settings.ai.defaultCaptionStyle')}</Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.ai.defaultCaptionStyleDescription')}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {CAPTION_STYLE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          title={t(preset.hintKey)}
+                          onClick={() => setSetting('defaultCaptionStylePresetId', preset.id)}
+                          className={cn(
+                            'rounded-md border px-2.5 py-1 text-xs transition-colors',
+                            defaultCaptionStylePresetId === preset.id
+                              ? 'border-primary bg-primary/15 text-primary'
+                              : 'border-border text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -691,6 +723,20 @@ export function SettingsDialog({ open, onOpenChange }: SettingsDialogProps) {
                     <Switch
                       checked={showFilmstrips}
                       onCheckedChange={(v) => setSetting('showFilmstrips', v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-sm">
+                        {t('settings.timeline.enableFilmstripExtraction')}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t('settings.timeline.enableFilmstripExtractionDescription')}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={enableFilmstripExtraction}
+                      onCheckedChange={(v) => setSetting('enableFilmstripExtraction', v)}
                     />
                   </div>
                 </div>
