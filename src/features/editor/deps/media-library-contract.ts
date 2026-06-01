@@ -3,7 +3,6 @@
  * Editor modules should import media-library stores/components/utils/services from here.
  */
 
-export { MediaLibrary } from '@/features/media-library/components/media-library'
 export { useMediaLibraryStore } from '@/features/media-library/stores/media-library-store'
 export { useEmbeddedSubtitlePickerStore } from '@/features/media-library/stores/embedded-subtitle-picker-store'
 export { useSubtitleScanProgressStore } from '@/features/media-library/stores/subtitle-scan-progress-store'
@@ -14,6 +13,7 @@ export {
   clearMediaDragData,
   setMediaDragData,
 } from '@/features/media-library/utils/drag-data-cache'
+export { MediaLibrary } from '@/features/media-library/components/media-library'
 
 export const importProxyService = () => import('@/features/media-library/services/proxy-service')
 export const importMediaLibraryService = () =>
@@ -24,3 +24,4 @@ export const importEmbeddedSubtitleTrackPickerHost = () =>
   import('@/features/media-library/components/embedded-subtitle-track-picker-host')
 export const importSubtitleScanProgressDialog = () =>
   import('@/features/media-library/components/subtitle-scan-progress-dialog')
+export const importMediaLibrary = () => import('@/features/media-library/components/media-library')

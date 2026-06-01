@@ -22,6 +22,7 @@ import {
 } from '@/features/timeline/deps/media-transcription-service'
 import { useTimelineStore } from '../../stores/timeline-store'
 import { useItemsStore } from '../../stores/items-store'
+import { selectReplaceableCaptionClipIds } from '../../stores/items-store-indexes'
 import { useCompositionNavigationStore } from '../../stores/composition-navigation-store'
 import {
   insertFreezeFrame,
@@ -40,8 +41,8 @@ import { useFillerRemovalDialogStore } from '../../stores/filler-removal-dialog-
 import { canJoinMultipleItems } from '../../utils/clip-utils'
 import { canLinkSelection, hasLinkedItems } from '../../utils/linked-items'
 import {
-  detectScenes,
   getSceneVerificationModelLabel,
+  importSceneDetection,
   type VerificationModel,
 } from '../../deps/analysis'
 import { resolveMediaUrl } from '../../deps/media-library-resolver'
@@ -346,7 +347,7 @@ export function useTimelineItemActions({
 
     const mediaId = item.mediaId
     const clipId = item.id
-    const replaceExisting = useItemsStore.getState().replaceableCaptionClipIds.has(clipId)
+    const replaceExisting = selectReplaceableCaptionClipIds(useItemsStore.getState()).has(clipId)
     const store = useMediaLibraryStore.getState()
 
     const run = async () => {
@@ -478,6 +479,7 @@ export function useTimelineItemActions({
           const currentFps = useTimelineStore.getState().fps
           const media = useMediaLibraryStore.getState().mediaById[mediaId]
           const mediaFps = media?.fps ?? currentFps
+          const { detectScenes } = await importSceneDetection()
           const cuts = await detectScenes(video, currentFps, {
             method,
             verificationModel,

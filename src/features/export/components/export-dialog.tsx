@@ -31,12 +31,38 @@ import {
   Music,
   Video,
   Scissors,
+  ListPlus,
+  ChevronDown,
 } from 'lucide-react'
-import type { ExportSettings, ExportMode } from '@/types/export'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { toast } from 'sonner'
+import type {
+  ExportSettings,
+  ExportMode,
+  ExtendedExportSettings,
+  CompositionInputProps,
+} from '@/types/export'
 import { useClientRender } from '../hooks/use-client-render'
+import {
+  buildRenderJob,
+  buildSegmentJobs,
+  rangesFromFixedDuration,
+  rangesFromMarkers,
+} from '../utils/build-render-job'
+import { useRenderQueueStore, type RenderJob } from '../stores/render-queue-store'
 import { useProjectStore } from '@/features/export/deps/projects'
+import { DEFAULT_PROJECT_HEIGHT, DEFAULT_PROJECT_WIDTH } from '@/shared/projects/defaults'
 import { useTimelineStore } from '@/features/export/deps/timeline'
 import { formatTimecode, framesToSeconds } from '@/shared/utils/time-utils'
+import type { ExportPreflightResult } from '../utils/export-preflight'
+import { assessExportPreflight, summarizePreflightSeverity } from '../utils/export-preflight'
 import {
   getCompatibleVideoCodecs,
   getDefaultVideoCodec,
@@ -50,6 +76,8 @@ import { ExportPreviewPlayer } from './export-preview-player'
 export interface ExportDialogProps {
   open: boolean
   onClose: () => void
+  /** Open the render queue panel (called after jobs are added to the queue). */
+  onOpenRenderQueue?: () => void
 }
 
 type DialogView = 'settings' | 'progress' | 'complete' | 'error' | 'cancelled'
@@ -96,6 +124,70 @@ function formatFileSize(bytes: number): string {
 }
 
 /**
+ * Scale a dimension and round to the nearest even number (encoders require
+ * even dimensions). Shared by the resolution dropdown and the quick presets so
+ * preset detection compares against identical values.
+ */
+function scaleDimension(value: number, scale: number): number {
+  const scaled = Math.round(value * scale)
+  return scaled % 2 === 0 ? scaled : scaled + 1
+}
+
+function scaledResolution(projectWidth: number, projectHeight: number, scale: number) {
+  return {
+    width: scaleDimension(projectWidth, scale),
+    height: scaleDimension(projectHeight, scale),
+  }
+}
+
+type ExportPreset = {
+  id: 'max' | 'recommended' | 'balanced' | 'small'
+  labelKey: string
+  container: ClientVideoContainer
+  codec: ExportSettings['codec']
+  quality: ExportSettings['quality']
+  scale: number
+}
+
+// One-click targets that bundle container/codec/quality/resolution. All keep the
+// project's aspect ratio (scale only) so output is never distorted; they vary the
+// quality/size tradeoff, which is the part users shouldn't need codec knowledge for.
+const EXPORT_PRESETS: ExportPreset[] = [
+  {
+    id: 'max',
+    labelKey: 'export.settings.presetMax',
+    container: 'mp4',
+    codec: 'h264',
+    quality: 'ultra',
+    scale: 1,
+  },
+  {
+    id: 'recommended',
+    labelKey: 'export.settings.presetRecommended',
+    container: 'mp4',
+    codec: 'h264',
+    quality: 'high',
+    scale: 1,
+  },
+  {
+    id: 'balanced',
+    labelKey: 'export.settings.presetBalanced',
+    container: 'mp4',
+    codec: 'h264',
+    quality: 'medium',
+    scale: 0.666,
+  },
+  {
+    id: 'small',
+    labelKey: 'export.settings.presetSmall',
+    container: 'mp4',
+    codec: 'h264',
+    quality: 'low',
+    scale: 0.5,
+  },
+]
+
+/**
  * Generate resolution options based on project dimensions.
  */
 function getResolutionOptions(
@@ -106,10 +198,7 @@ function getResolutionOptions(
   const scales = [1, 0.666, 0.5]
 
   return scales.map((scale) => {
-    const w = Math.round(projectWidth * scale)
-    const h = Math.round(projectHeight * scale)
-    const width = w % 2 === 0 ? w : w + 1
-    const height = h % 2 === 0 ? h : h + 1
+    const { width, height } = scaledResolution(projectWidth, projectHeight, scale)
 
     const label =
       scale === 1
@@ -124,15 +213,99 @@ function getDefaultCodecForFormat(format: 'mp4' | 'webm'): ExportSettings['codec
   return getDefaultVideoCodec(format)
 }
 
-export function ExportDialog({ open, onClose }: ExportDialogProps) {
+function preflightIconClass(severity: ReturnType<typeof summarizePreflightSeverity>): string {
+  switch (severity) {
+    case 'error':
+      return 'text-destructive'
+    case 'warning':
+      return 'text-amber-500'
+    case 'info':
+      return 'text-blue-500'
+    case 'ok':
+      return 'text-green-500'
+  }
+}
+
+function ExportPreflightPanel({ preflight }: { preflight: ExportPreflightResult | null }) {
   const { t } = useTranslation()
-  const projectWidth = useProjectStore((s) => s.currentProject?.metadata.width ?? 1920)
-  const projectHeight = useProjectStore((s) => s.currentProject?.metadata.height ?? 1080)
+
+  if (!preflight) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+        {t('export.preflight.checking')}
+      </div>
+    )
+  }
+
+  const summarySeverity = summarizePreflightSeverity(preflight.checks)
+  const visibleChecks = preflight.checks.filter((check) => check.severity !== 'ok').slice(0, 4)
+  const checksToRender = visibleChecks.length > 0 ? visibleChecks : preflight.checks.slice(0, 2)
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-muted/20 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {summarySeverity === 'ok' ? (
+            <CheckCircle2 className={`h-4 w-4 ${preflightIconClass(summarySeverity)}`} />
+          ) : (
+            <AlertCircle className={`h-4 w-4 ${preflightIconClass(summarySeverity)}`} />
+          )}
+          <span className="text-sm font-medium">{t('export.preflight.title')}</span>
+        </div>
+        <span className="text-xs text-muted-foreground">
+          {preflight.predictedRenderPath === 'worker'
+            ? t('export.preflight.workerPath')
+            : t('export.preflight.fallback')}
+        </span>
+      </div>
+      <div className="space-y-1.5">
+        {checksToRender.map((check) => (
+          <div key={check.id} className="text-xs leading-relaxed">
+            <span
+              className={
+                check.severity === 'error'
+                  ? 'text-destructive'
+                  : check.severity === 'warning'
+                    ? 'text-amber-500'
+                    : check.severity === 'info'
+                      ? 'text-blue-500'
+                      : 'text-green-500'
+              }
+            >
+              {t(check.titleKey, check.titleParams)}
+            </span>
+            <span className="text-muted-foreground">
+              {' '}
+              — {t(check.detailKey, check.detailParams)}
+            </span>
+            {check.fixKey && (
+              <span className="text-muted-foreground"> {t(check.fixKey, check.fixParams)}</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function ExportDialog({ open, onClose, onOpenRenderQueue }: ExportDialogProps) {
+  const { t } = useTranslation()
+  const projectWidth = useProjectStore(
+    (s) => s.currentProject?.metadata.width ?? DEFAULT_PROJECT_WIDTH,
+  )
+  const projectHeight = useProjectStore(
+    (s) => s.currentProject?.metadata.height ?? DEFAULT_PROJECT_HEIGHT,
+  )
   // Timeline state for in/out points and duration calculation
   const fps = useTimelineStore((s) => s.fps)
+  const tracks = useTimelineStore((s) => s.tracks ?? [])
   const items = useTimelineStore((s) => s.items)
+  const transitions = useTimelineStore((s) => s.transitions ?? [])
+  const keyframes = useTimelineStore((s) => s.keyframes ?? [])
   const inPoint = useTimelineStore((s) => s.inPoint)
   const outPoint = useTimelineStore((s) => s.outPoint)
+  const markers = useTimelineStore((s) => s.markers ?? [])
+  const enqueueJobs = useRenderQueueStore((s) => s.enqueueJobs)
 
   const [settings, setSettings] = useState<ExportSettings>({
     codec: getDefaultCodecForFormat('mp4'),
@@ -170,15 +343,59 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     if (renderWholeProject || !hasInOutPoints) {
       return { start: 0, end: timelineDurationFrames, duration: timelineDurationFrames }
     }
-    const start = inPoint ?? 0
-    const end = outPoint ?? timelineDurationFrames
-    return { start, end, duration: end - start }
-  }, [renderWholeProject, hasInOutPoints, inPoint, outPoint, timelineDurationFrames])
+    return { start: inPoint, end: outPoint, duration: outPoint - inPoint }
+  }, [hasInOutPoints, inPoint, outPoint, renderWholeProject, timelineDurationFrames])
+
+  const preflightComposition = useMemo<CompositionInputProps>(
+    () => ({
+      fps,
+      durationInFrames: exportRange.duration,
+      width: projectWidth,
+      height: projectHeight,
+      tracks,
+      transitions,
+      keyframes,
+    }),
+    [exportRange.duration, fps, keyframes, projectHeight, projectWidth, tracks, transitions],
+  )
 
   const resolutionOptions = useMemo(
     () => getResolutionOptions(projectWidth, projectHeight, t),
     [projectWidth, projectHeight, t],
   )
+
+  // Which preset (if any) the current settings exactly match. null = "Custom".
+  const activePresetId = useMemo(() => {
+    const match = EXPORT_PRESETS.find((preset) => {
+      const res = scaledResolution(projectWidth, projectHeight, preset.scale)
+      return (
+        videoContainer === preset.container &&
+        settings.codec === preset.codec &&
+        settings.quality === preset.quality &&
+        settings.resolution.width === res.width &&
+        settings.resolution.height === res.height
+      )
+    })
+    return match?.id ?? null
+  }, [
+    videoContainer,
+    settings.codec,
+    settings.quality,
+    settings.resolution.width,
+    settings.resolution.height,
+    projectWidth,
+    projectHeight,
+  ])
+
+  const applyPreset = (preset: ExportPreset) => {
+    setVideoContainer(preset.container)
+    setSettings((prev) => ({
+      ...prev,
+      codec: preset.codec,
+      quality: preset.quality,
+      resolution: scaledResolution(projectWidth, projectHeight, preset.scale),
+    }))
+  }
 
   // Sync resolution when project dimensions change
   useEffect(() => {
@@ -207,6 +424,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   const [supportedVideoCodecs, setSupportedVideoCodecs] = useState<ClientCodec[] | null>(null)
   const [isCheckingVideoSupport, setIsCheckingVideoSupport] = useState(false)
   const [videoSupportError, setVideoSupportError] = useState<string | null>(null)
+  const [preflight, setPreflight] = useState<ExportPreflightResult | null>(null)
 
   // Track elapsed time
   useEffect(() => {
@@ -248,19 +466,90 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     onClose()
   }
 
+  // Assemble the extended settings the render pipeline expects from the dialog
+  // state. Shared by "Export now" and the "Add to queue" actions.
+  const buildExtendedSettings = (): ExtendedExportSettings => ({
+    ...settings,
+    mode: exportMode,
+    videoContainer: exportMode === 'video' ? videoContainer : undefined,
+    audioContainer: exportMode === 'audio' ? audioContainer : undefined,
+    embedSubtitles:
+      exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
+        ? embedSubtitles
+        : false,
+    renderWholeProject,
+  })
+
   // Start export
   const handleStartExport = async () => {
     setView('progress')
-    // Create extended settings with export mode and container
-    const extendedSettings = {
-      ...settings,
-      mode: exportMode,
-      videoContainer: exportMode === 'video' ? videoContainer : undefined,
-      audioContainer: exportMode === 'audio' ? audioContainer : undefined,
-      embedSubtitles: exportMode === 'video' && hasTranscriptSubtitles ? embedSubtitles : false,
-      renderWholeProject,
+    await startExport(buildExtendedSettings())
+  }
+
+  // The active render range (whole project unless in/out points are set).
+  const queueRange = (): { inPoint: number | null; outPoint: number | null } =>
+    renderWholeProject || !hasInOutPoints
+      ? { inPoint: null, outPoint: null }
+      : { inPoint, outPoint }
+
+  // The frame window segment generators split over: the active range, or the
+  // whole timeline when no in/out points are set.
+  const segmentWindow = (): { start: number; end: number } => {
+    const range = queueRange()
+    return { start: range.inPoint ?? 0, end: range.outPoint ?? timelineDurationFrames }
+  }
+
+  // Close the export dialog and open the queue panel. Called BEFORE building
+  // jobs so picking an option gives instant feedback while the (single) codec
+  // probe + job assembly run.
+  const revealQueue = () => {
+    onClose()
+    onOpenRenderQueue?.()
+  }
+
+  // Capture settings synchronously (the dialog unmounts on reveal), reveal the
+  // queue, then build + enqueue. One codec probe covers the whole batch.
+  const enqueueAndReveal = async (
+    build: (settings: ExtendedExportSettings) => Promise<RenderJob[]>,
+  ) => {
+    const settings = buildExtendedSettings()
+    revealQueue()
+    try {
+      const jobs = await build(settings)
+      if (jobs.length === 0) return
+      enqueueJobs(jobs)
+      toast.success(t('export.renderQueue.addedToast', { count: jobs.length }))
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : t('export.renderQueue.buildFailed'))
     }
-    await startExport(extendedSettings)
+  }
+
+  const handleAddCurrentRange = () => {
+    void enqueueAndReveal(async (settings) => [await buildRenderJob({ settings, ...queueRange() })])
+  }
+
+  const handleAddMarkerSegments = () => {
+    const { start, end } = segmentWindow()
+    const ranges = rangesFromMarkers(markers, start, end)
+    if (ranges.length <= 1) {
+      toast.info(t('export.renderQueue.noMarkers'))
+      return
+    }
+    void enqueueAndReveal((settings) =>
+      buildSegmentJobs(settings, ranges, (i) => t('export.renderQueue.partLabel', { n: i + 1 })),
+    )
+  }
+
+  const handleSplitChunks = (seconds: number) => {
+    const { start, end } = segmentWindow()
+    const ranges = rangesFromFixedDuration(start, end, Math.max(1, Math.round(seconds * fps)))
+    if (ranges.length === 0) {
+      toast.info(t('export.renderQueue.nothingToRender'))
+      return
+    }
+    void enqueueAndReveal((settings) =>
+      buildSegmentJobs(settings, ranges, (i) => t('export.renderQueue.partLabel', { n: i + 1 })),
+    )
   }
 
   // Reset when dialog closes
@@ -278,6 +567,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
         resolution: { width: projectWidth, height: projectHeight },
       })
       resetState()
+      setPreflight(null)
       setStartTime(null)
       setElapsedSeconds(0)
     }
@@ -285,6 +575,7 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
     if (!open && wasOpenRef.current) {
       setView('settings')
       resetState()
+      setPreflight(null)
       setStartTime(null)
       setElapsedSeconds(0)
     }
@@ -363,12 +654,6 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
   const hasCapabilityData = supportedVideoCodecs !== null && !videoSupportError
   const hasSupportedVideoPath = videoContainerOptions.some((option) => option.supported)
-  const hasSubtitleExportConflict =
-    exportMode === 'video' &&
-    embedSubtitles &&
-    hasTranscriptSubtitles &&
-    !containerSupportsEmbeddedSubtitles
-
   useEffect(() => {
     if (exportMode !== 'video' || !hasCapabilityData) return
 
@@ -392,6 +677,67 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
       setSettings((prev) => ({ ...prev, codec: fallbackCodec as ExportSettings['codec'] }))
     }
   }, [codecOptions, settings.codec])
+
+  useEffect(() => {
+    if (!open || view !== 'settings') {
+      setPreflight(null)
+      return
+    }
+
+    if (exportMode === 'video' && supportedVideoCodecs === null && !videoSupportError) {
+      setPreflight(null)
+      return
+    }
+
+    let cancelled = false
+    const settingsForPreflight: ExtendedExportSettings = {
+      ...settings,
+      mode: exportMode,
+      videoContainer: exportMode === 'video' ? videoContainer : undefined,
+      audioContainer: exportMode === 'audio' ? audioContainer : undefined,
+      embedSubtitles:
+        exportMode === 'video' && hasTranscriptSubtitles && containerSupportsEmbeddedSubtitles
+          ? embedSubtitles
+          : false,
+      renderWholeProject,
+    }
+
+    void assessExportPreflight({
+      settings: settingsForPreflight,
+      fps,
+      composition: preflightComposition,
+      durationFrames: exportRange.duration,
+      supportedVideoCodecs: supportedVideoCodecs ?? [],
+    }).then((result) => {
+      if (!cancelled) setPreflight(result)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    audioContainer,
+    embedSubtitles,
+    exportMode,
+    exportRange.duration,
+    fps,
+    hasTranscriptSubtitles,
+    containerSupportsEmbeddedSubtitles,
+    open,
+    preflightComposition,
+    renderWholeProject,
+    settings,
+    supportedVideoCodecs,
+    videoContainer,
+    videoSupportError,
+    view,
+  ])
+
+  const preflightBlocksExport =
+    preflight?.checks.some((check) => check.severity === 'error') ?? false
+  const exportActionsDisabled =
+    (exportMode === 'video' && (!hasSupportedVideoPath || isCheckingVideoSupport)) ||
+    preflightBlocksExport
 
   const preventClose = view === 'progress' || view === 'complete'
   const fileSize = clientRender.result?.fileSize
@@ -466,7 +812,13 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
   return (
     <Dialog open={open} onOpenChange={handleClose} modal>
       <DialogContent
-        className={`overflow-hidden ${view === 'complete' && isVideoResult ? 'sm:max-w-[640px]' : 'sm:max-w-[500px]'}`}
+        className={`overflow-hidden ${
+          view === 'settings'
+            ? 'sm:max-w-[900px]'
+            : view === 'complete' && isVideoResult
+              ? 'sm:max-w-[640px]'
+              : 'sm:max-w-[500px]'
+        }`}
         hideCloseButton={preventClose}
         onPointerDownOutside={(e) => preventClose && e.preventDefault()}
         onEscapeKeyDown={(e) => preventClose && e.preventDefault()}
@@ -478,317 +830,395 @@ export function ExportDialog({ open, onClose }: ExportDialogProps) {
 
         {/* Settings View */}
         {view === 'settings' && (
-          <div className="space-y-6 py-4">
-            {/* Export Mode: Video or Audio Toggle Group */}
-            <div className="flex items-center justify-between">
-              <Label className="text-sm font-medium">{t('export.settings.exportType')}</Label>
-              <div className="flex rounded-md border border-border p-0.5 bg-muted/30">
-                <button
-                  type="button"
-                  onClick={() => setExportMode('video')}
-                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
-                    exportMode === 'video'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Video className="h-3.5 w-3.5" />
-                  {t('export.settings.video')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExportMode('audio')}
-                  className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
-                    exportMode === 'audio'
-                      ? 'bg-background text-foreground shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <Music className="h-3.5 w-3.5" />
-                  {t('export.settings.audio')}
-                </button>
-              </div>
-            </div>
-
-            {/* Export Range Section */}
-            <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/20">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Scissors className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-sm font-medium">{t('export.settings.exportRange')}</span>
+          <div className="py-4">
+            <div className="grid gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
+              <div className="space-y-4">
+                {/* Export Mode: Video or Audio Toggle Group */}
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium">{t('export.settings.exportType')}</Label>
+                  <div className="flex rounded-md border border-border p-0.5 bg-muted/30">
+                    <button
+                      type="button"
+                      onClick={() => setExportMode('video')}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
+                        exportMode === 'video'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Video className="h-3.5 w-3.5" />
+                      {t('export.settings.video')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExportMode('audio')}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded transition-colors ${
+                        exportMode === 'audio'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      <Music className="h-3.5 w-3.5" />
+                      {t('export.settings.audio')}
+                    </button>
+                  </div>
                 </div>
-                {hasInOutPoints && (
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="render-whole" className="text-xs text-muted-foreground">
-                      {t('export.settings.renderWholeProject')}
-                    </Label>
-                    <Switch
-                      id="render-whole"
-                      checked={renderWholeProject}
-                      onCheckedChange={setRenderWholeProject}
-                    />
+
+                {/* Export Range Section */}
+                <div className="space-y-3 p-3 rounded-lg border border-border bg-muted/20">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Scissors className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-sm font-medium">
+                        {t('export.settings.exportRange')}
+                      </span>
+                    </div>
+                    {hasInOutPoints && (
+                      <div className="flex items-center gap-2">
+                        <Label htmlFor="render-whole" className="text-xs text-muted-foreground">
+                          {t('export.settings.renderWholeProject')}
+                        </Label>
+                        <Switch
+                          id="render-whole"
+                          checked={renderWholeProject}
+                          onCheckedChange={setRenderWholeProject}
+                        />
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 text-sm">
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-0.5">
+                        {t('export.settings.in')}
+                      </div>
+                      <div className="font-mono text-foreground">
+                        {formatTimecode(exportRange.start, fps)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-0.5">
+                        {t('export.settings.out')}
+                      </div>
+                      <div className="font-mono text-foreground">
+                        {formatTimecode(exportRange.end, fps)}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground mb-0.5">
+                        {t('export.settings.duration')}
+                      </div>
+                      <div className="font-mono text-foreground">
+                        {formatTime(framesToSeconds(exportRange.duration, fps))}
+                      </div>
+                    </div>
+                  </div>
+                  {hasInOutPoints && !renderWholeProject && (
+                    <p className="text-xs text-muted-foreground">
+                      {t('export.settings.inOutRangeHint')}
+                    </p>
+                  )}
+                </div>
+
+                <ExportPreflightPanel preflight={preflight} />
+              </div>
+
+              <div className="space-y-5 min-w-0">
+                {/* Video Export Settings */}
+                {exportMode === 'video' && (
+                  <>
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>{t('export.settings.presetLabel')}</Label>
+                        {activePresetId === null && (
+                          <span className="text-xs text-muted-foreground">
+                            {t('export.settings.presetCustom')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {EXPORT_PRESETS.map((preset) => {
+                          const isActive = activePresetId === preset.id
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => applyPreset(preset)}
+                              aria-pressed={isActive}
+                              className={`rounded-md border px-3 py-2 text-left text-sm font-medium transition-colors ${
+                                isActive
+                                  ? 'border-primary bg-primary/10 text-foreground'
+                                  : 'border-border bg-muted/20 text-muted-foreground hover:border-primary/50 hover:text-foreground'
+                              }`}
+                            >
+                              {t(preset.labelKey)}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {!isCheckingVideoSupport && videoSupportError && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            {t('export.settings.codecSupportUnverified')}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {!isCheckingVideoSupport && !videoSupportError && !hasSupportedVideoPath && (
+                        <Alert>
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>
+                            {t('export.settings.cannotEncode', {
+                              width: settings.resolution.width,
+                              height: settings.resolution.height,
+                            })}
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div className="space-y-2">
+                          <Label htmlFor="container">{t('export.settings.format')}</Label>
+                          <Select
+                            value={videoContainer}
+                            onValueChange={(v) => setVideoContainer(v as ClientVideoContainer)}
+                          >
+                            <SelectTrigger id="container">
+                              <SelectValue placeholder={t('export.settings.selectFormat')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {videoContainerOptions.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                  disabled={!option.supported}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="codec">{t('export.settings.codec')}</Label>
+                          <Select
+                            value={settings.codec}
+                            onValueChange={(value) =>
+                              setSettings({ ...settings, codec: value as ExportSettings['codec'] })
+                            }
+                          >
+                            <SelectTrigger id="codec">
+                              <SelectValue placeholder={t('export.settings.selectCodec')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {codecOptions.map((option) => (
+                                <SelectItem
+                                  key={option.value}
+                                  value={option.value}
+                                  disabled={!option.supported}
+                                >
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="quality">{t('export.settings.quality')}</Label>
+                          <Select
+                            value={settings.quality}
+                            onValueChange={(value) =>
+                              setSettings({
+                                ...settings,
+                                quality: value as ExportSettings['quality'],
+                              })
+                            }
+                          >
+                            <SelectTrigger id="quality">
+                              <SelectValue placeholder={t('export.settings.selectQuality')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">{t('export.settings.qualityLow')}</SelectItem>
+                              <SelectItem value="medium">
+                                {t('export.settings.qualityMedium')}
+                              </SelectItem>
+                              <SelectItem value="high">
+                                {t('export.settings.qualityHigh')}
+                              </SelectItem>
+                              <SelectItem value="ultra">
+                                {t('export.settings.qualityUltra')}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label htmlFor="resolution">{t('export.settings.resolution')}</Label>
+                          <Select
+                            value={`${settings.resolution.width}x${settings.resolution.height}`}
+                            onValueChange={(value) => {
+                              const parts = value.split('x').map(Number)
+                              const width = parts[0] ?? projectWidth
+                              const height = parts[1] ?? projectHeight
+                              setSettings({ ...settings, resolution: { width, height } })
+                            }}
+                          >
+                            <SelectTrigger id="resolution">
+                              <SelectValue placeholder={t('export.settings.selectResolution')} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {resolutionOptions.map((option) => (
+                                <SelectItem key={option.value} value={option.value}>
+                                  {option.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="embed-subtitles" className="text-sm font-medium">
+                            {t('export.settings.embedSubtitles')}
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            {t('export.settings.embedSubtitlesDescription')}
+                          </p>
+                          {hasTranscriptSubtitles && !containerSupportsEmbeddedSubtitles && (
+                            <p className="text-xs text-muted-foreground">
+                              {t('export.settings.embedSubtitlesUnsupported', {
+                                container: videoContainer.toUpperCase(),
+                              })}
+                            </p>
+                          )}
+                          {embedSubtitles &&
+                            hasTranscriptSubtitles &&
+                            containerSupportsEmbeddedSubtitles &&
+                            videoContainer === 'mp4' && (
+                              <p className="text-xs text-muted-foreground">
+                                {t('export.settings.embedSubtitlesMp4Note')}
+                              </p>
+                            )}
+                          {!hasTranscriptSubtitles && (
+                            <p className="text-xs text-muted-foreground">
+                              {t('export.settings.noTranscriptSegments')}
+                            </p>
+                          )}
+                        </div>
+                        <Switch
+                          id="embed-subtitles"
+                          checked={embedSubtitles && containerSupportsEmbeddedSubtitles}
+                          disabled={!hasTranscriptSubtitles || !containerSupportsEmbeddedSubtitles}
+                          onCheckedChange={setEmbedSubtitles}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Audio Export Settings */}
+                {exportMode === 'audio' && (
+                  <div className="space-y-4">
+                    <Alert>
+                      <Music className="h-4 w-4" />
+                      <AlertDescription>{t('export.settings.audioOnlyNote')}</AlertDescription>
+                    </Alert>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="audio-format">{t('export.settings.format')}</Label>
+                      <Select
+                        value={audioContainer}
+                        onValueChange={(v) => setAudioContainer(v as ClientAudioContainer)}
+                      >
+                        <SelectTrigger id="audio-format">
+                          <SelectValue placeholder={t('export.settings.selectFormat')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAudioContainerOptions().map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              <span>{option.label}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">
+                                {option.description}
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="audio-quality">{t('export.settings.quality')}</Label>
+                      <Select
+                        value={settings.quality}
+                        onValueChange={(value) =>
+                          setSettings({ ...settings, quality: value as ExportSettings['quality'] })
+                        }
+                      >
+                        <SelectTrigger id="audio-quality">
+                          <SelectValue placeholder={t('export.settings.selectQuality')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">
+                            {t('export.settings.audioQualityLow')}
+                          </SelectItem>
+                          <SelectItem value="medium">
+                            {t('export.settings.audioQualityMedium')}
+                          </SelectItem>
+                          <SelectItem value="high">
+                            {t('export.settings.audioQualityHigh')}
+                          </SelectItem>
+                          <SelectItem value="ultra">
+                            {t('export.settings.audioQualityUltra')}
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3 text-sm">
-                <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">
-                    {t('export.settings.in')}
-                  </div>
-                  <div className="font-mono text-foreground">
-                    {formatTimecode(exportRange.start, fps)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">
-                    {t('export.settings.out')}
-                  </div>
-                  <div className="font-mono text-foreground">
-                    {formatTimecode(exportRange.end, fps)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-muted-foreground mb-0.5">
-                    {t('export.settings.duration')}
-                  </div>
-                  <div className="font-mono text-foreground">
-                    {formatTime(framesToSeconds(exportRange.duration, fps))}
-                  </div>
-                </div>
-              </div>
-              {hasInOutPoints && !renderWholeProject && (
-                <p className="text-xs text-muted-foreground">
-                  {t('export.settings.inOutRangeHint')}
-                </p>
-              )}
             </div>
 
-            {/* Video Export Settings */}
-            {exportMode === 'video' && (
-              <>
-                <div className="space-y-4">
-                  {!isCheckingVideoSupport && videoSupportError && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        {t('export.settings.codecSupportUnverified')}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  {!isCheckingVideoSupport && !videoSupportError && !hasSupportedVideoPath && (
-                    <Alert>
-                      <AlertCircle className="h-4 w-4" />
-                      <AlertDescription>
-                        {t('export.settings.cannotEncode', {
-                          width: settings.resolution.width,
-                          height: settings.resolution.height,
-                        })}
-                      </AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="space-y-2">
-                    <Label htmlFor="container">{t('export.settings.format')}</Label>
-                    <Select
-                      value={videoContainer}
-                      onValueChange={(v) => setVideoContainer(v as ClientVideoContainer)}
-                    >
-                      <SelectTrigger id="container">
-                        <SelectValue placeholder={t('export.settings.selectFormat')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {videoContainerOptions.map((option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            disabled={!option.supported}
-                          >
-                            <span>{option.label}</span>
-                            <span className="ml-2 text-xs text-muted-foreground">
-                              {option.description}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="codec">{t('export.settings.codec')}</Label>
-                    <Select
-                      value={settings.codec}
-                      onValueChange={(value) =>
-                        setSettings({ ...settings, codec: value as ExportSettings['codec'] })
-                      }
-                    >
-                      <SelectTrigger id="codec">
-                        <SelectValue placeholder={t('export.settings.selectCodec')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {codecOptions.map((option) => (
-                          <SelectItem
-                            key={option.value}
-                            value={option.value}
-                            disabled={!option.supported}
-                          >
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="quality">{t('export.settings.quality')}</Label>
-                    <Select
-                      value={settings.quality}
-                      onValueChange={(value) =>
-                        setSettings({ ...settings, quality: value as ExportSettings['quality'] })
-                      }
-                    >
-                      <SelectTrigger id="quality">
-                        <SelectValue placeholder={t('export.settings.selectQuality')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">{t('export.settings.qualityLow')}</SelectItem>
-                        <SelectItem value="medium">{t('export.settings.qualityMedium')}</SelectItem>
-                        <SelectItem value="high">{t('export.settings.qualityHigh')}</SelectItem>
-                        <SelectItem value="ultra">{t('export.settings.qualityUltra')}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="resolution">{t('export.settings.resolution')}</Label>
-                    <Select
-                      value={`${settings.resolution.width}x${settings.resolution.height}`}
-                      onValueChange={(value) => {
-                        const parts = value.split('x').map(Number)
-                        const width = parts[0] ?? projectWidth
-                        const height = parts[1] ?? projectHeight
-                        setSettings({ ...settings, resolution: { width, height } })
-                      }}
-                    >
-                      <SelectTrigger id="resolution">
-                        <SelectValue placeholder={t('export.settings.selectResolution')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {resolutionOptions.map((option) => (
-                          <SelectItem key={option.value} value={option.value}>
-                            {option.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/20 p-3">
-                    <div className="space-y-1">
-                      <Label htmlFor="embed-subtitles" className="text-sm font-medium">
-                        {t('export.settings.embedSubtitles')}
-                      </Label>
-                      <p className="text-xs text-muted-foreground">
-                        {t('export.settings.embedSubtitlesDescription')}
-                      </p>
-                      {embedSubtitles &&
-                        hasTranscriptSubtitles &&
-                        !containerSupportsEmbeddedSubtitles && (
-                          <p className="text-xs text-destructive">
-                            {t('export.settings.embedSubtitlesUnsupported', {
-                              container: videoContainer.toUpperCase(),
-                            })}
-                          </p>
-                        )}
-                      {embedSubtitles && hasTranscriptSubtitles && videoContainer === 'mp4' && (
-                        <p className="text-xs text-muted-foreground">
-                          {t('export.settings.embedSubtitlesMp4Note')}
-                        </p>
-                      )}
-                      {!hasTranscriptSubtitles && (
-                        <p className="text-xs text-muted-foreground">
-                          {t('export.settings.noTranscriptSegments')}
-                        </p>
-                      )}
-                    </div>
-                    <Switch
-                      id="embed-subtitles"
-                      checked={embedSubtitles}
-                      disabled={!hasTranscriptSubtitles}
-                      onCheckedChange={setEmbedSubtitles}
-                    />
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Audio Export Settings */}
-            {exportMode === 'audio' && (
-              <div className="space-y-4">
-                <Alert>
-                  <Music className="h-4 w-4" />
-                  <AlertDescription>{t('export.settings.audioOnlyNote')}</AlertDescription>
-                </Alert>
-
-                <div className="space-y-2">
-                  <Label htmlFor="audio-format">{t('export.settings.format')}</Label>
-                  <Select
-                    value={audioContainer}
-                    onValueChange={(v) => setAudioContainer(v as ClientAudioContainer)}
-                  >
-                    <SelectTrigger id="audio-format">
-                      <SelectValue placeholder={t('export.settings.selectFormat')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAudioContainerOptions().map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          <span>{option.label}</span>
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {option.description}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="audio-quality">{t('export.settings.quality')}</Label>
-                  <Select
-                    value={settings.quality}
-                    onValueChange={(value) =>
-                      setSettings({ ...settings, quality: value as ExportSettings['quality'] })
-                    }
-                  >
-                    <SelectTrigger id="audio-quality">
-                      <SelectValue placeholder={t('export.settings.selectQuality')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">{t('export.settings.audioQualityLow')}</SelectItem>
-                      <SelectItem value="medium">
-                        {t('export.settings.audioQualityMedium')}
-                      </SelectItem>
-                      <SelectItem value="high">{t('export.settings.audioQualityHigh')}</SelectItem>
-                      <SelectItem value="ultra">
-                        {t('export.settings.audioQualityUltra')}
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-end gap-2">
+            <div className="mt-6 flex justify-end gap-2 border-t border-border pt-4">
               <Button variant="outline" onClick={handleClose}>
                 {t('common.cancel')}
               </Button>
-              <Button
-                onClick={handleStartExport}
-                disabled={
-                  exportMode === 'video' &&
-                  (!hasSupportedVideoPath || isCheckingVideoSupport || hasSubtitleExportConflict)
-                }
-              >
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-1.5" disabled={exportActionsDisabled}>
+                    <ListPlus className="h-4 w-4" />
+                    {t('export.renderQueue.addToQueue')}
+                    <ChevronDown className="h-3 w-3" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleAddCurrentRange}>
+                    {t('export.renderQueue.addCurrentRange')}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs text-muted-foreground">
+                    {t('export.renderQueue.segmentsHeading')}
+                  </DropdownMenuLabel>
+                  <DropdownMenuItem onClick={handleAddMarkerSegments}>
+                    {t('export.renderQueue.perMarker')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSplitChunks(10)}>
+                    {t('export.renderQueue.splitChunks', { seconds: 10 })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSplitChunks(30)}>
+                    {t('export.renderQueue.splitChunks', { seconds: 30 })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleSplitChunks(60)}>
+                    {t('export.renderQueue.splitChunks', { seconds: 60 })}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button onClick={handleStartExport} disabled={exportActionsDisabled}>
                 {exportMode === 'audio'
                   ? t('export.settings.exportAudio')
                   : t('export.settings.exportVideo')}
