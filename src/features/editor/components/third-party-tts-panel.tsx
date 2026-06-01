@@ -69,7 +69,7 @@ import {
   type ThirdPartyTtsVoiceprintType,
 } from '../services/third-party-tts-service'
 
-const DEFAULT_PROMPT = '欢迎使用本应用。此语音将由你配置的第三方 TTS API 生成。'
+const DEFAULT_PROMPT = '欢迎使用本应用。此语音将由你配置的 TTS API 生成。'
 
 interface AudioGeneration {
   id: string
@@ -428,7 +428,7 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
 
     setError(null)
     setIsGenerating(true)
-    setProgress('正在请求第三方 TTS 服务...')
+    setProgress('正在请求 TTS 服务...')
 
     try {
       const { blob, file, duration } = await thirdPartyTtsService.generateSpeechFile({
@@ -462,8 +462,8 @@ export const ThirdPartyTtsPanel = memo(function ThirdPartyTtsPanel() {
         voiceTag,
         voiceprintType,
         emoControlMethod,
-        model: '第三方 API',
-        details: `${voiceLabel} / 声纹类型:${voiceprintType} / 情感控制:${emoControlMethod} / 情感权重:${emoWeight.toFixed(2)} / 第三方 API / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
+        model: 'API',
+        details: `${voiceLabel} / 声纹类型:${voiceprintType} / 情感控制:${emoControlMethod} / 情感权重:${emoWeight.toFixed(2)} / API / ${duration > 0 ? `${duration.toFixed(1)}s` : '-'} / ${formatBytes(blob.size)}`,
         tags: [
           'ai-generated',
           'third-party-tts',

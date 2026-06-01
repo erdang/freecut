@@ -366,7 +366,7 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
     setResult(null)
     setInserted(false)
     setIsGenerating(true)
-    setProgress('正在请求第三方 TTS 服务...')
+    setProgress('正在请求 TTS 服务...')
 
     const thisSession = sessionIdRef.current
 
@@ -499,10 +499,10 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
             <WandSparkles className="h-4 w-4" />
-            从文本生成音频（第三方 API）
+            从文本生成音频
           </DialogTitle>
           <DialogDescription className="text-xs">
-            通过第三方 TTS API 生成语音，并插入到文本片段位置。
+            通过TTS API 生成语音，并插入到文本片段位置。
           </DialogDescription>
         </DialogHeader>
 
@@ -794,7 +794,8 @@ export const ThirdPartyTtsGenerateDialog = memo(function ThirdPartyTtsGenerateDi
             >
               <p className="text-[11px] text-muted-foreground">
                 {result.voice} / 声纹类型:{result.voiceprintType} / 情感控制:
-                {result.emoControlMethod} / 情感权重:{result.emoWeight.toFixed(2)} / 第三方 API /
+                {result.emoControlMethod} / 情感权重:
+                {result.emoWeight.toFixed(2)}/
                 {result.duration > 0 ? result.duration.toFixed(1) + 's' : '-'}
               </p>
               <MiniAudioPlayer src={result.objectUrl} />

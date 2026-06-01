@@ -365,7 +365,7 @@ const ItemContextMenuFull = memo(function ItemContextMenuFull({
   const showSceneAndFillerMenus = false
   const generateAudioHandler = onGenerateAudioFromTextByThirdParty ?? onGenerateAudioFromText
   const generateAudioLabel = onGenerateAudioFromTextByThirdParty
-    ? '从文本生成音频（第三方 API）'
+    ? '从文本生成音频（ API）'
     : '从文本生成音频'
 
   const hasKeyframes = propertiesWithKeyframes.length > 0
