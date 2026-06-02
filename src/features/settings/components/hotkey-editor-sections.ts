@@ -1,4 +1,9 @@
-import type { HotkeyKey } from '@/config/hotkeys'
+import {
+  formatHotkeyBinding,
+  normalizeHotkeyBinding,
+  type HotkeyBindingMap,
+  type HotkeyKey,
+} from '@/config/hotkeys'
 
 export interface HotkeyEditorItem {
   label: string
@@ -9,6 +14,60 @@ export interface HotkeyEditorSection {
   title: string
   blurb: string
   items: readonly HotkeyEditorItem[]
+}
+
+export interface HotkeyEditorSearchResult {
+  section: HotkeyEditorSection
+  item: HotkeyEditorItem
+}
+
+interface HotkeyEditorSearchOptions {
+  query: string
+  sections: readonly HotkeyEditorSection[]
+  hotkeys: HotkeyBindingMap
+  translate?: (label: string) => string
+}
+
+export function getHotkeyBindingDisplayLabel(binding: string, unassignedLabel: string): string {
+  return binding ? formatHotkeyBinding(binding) : unassignedLabel
+}
+
+export function getHotkeyEditorSearchResults({
+  query,
+  sections,
+  hotkeys,
+  translate,
+}: HotkeyEditorSearchOptions): HotkeyEditorSearchResult[] {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  if (!normalizedQuery) {
+    return []
+  }
+
+  const normalizedBindingQuery = normalizeHotkeyBinding(normalizedQuery)
+  const translateLabel = translate ?? ((label: string) => label)
+
+  return sections.flatMap((section) => {
+    const sectionLabel = translateLabel(section.title).toLowerCase()
+
+    return section.items
+      .filter((item) => {
+        const itemLabel = translateLabel(item.label).toLowerCase()
+        const bindings = item.keys.map((key) => hotkeys[key].toLowerCase())
+
+        return (
+          itemLabel.includes(normalizedQuery) ||
+          sectionLabel.includes(normalizedQuery) ||
+          item.keys.some((key) => key.toLowerCase().includes(normalizedQuery)) ||
+          bindings.some(
+            (binding) =>
+              binding.includes(normalizedQuery) ||
+              (normalizedBindingQuery.length > 0 && binding === normalizedBindingQuery),
+          )
+        )
+      })
+      .map((item) => ({ section, item }))
+  })
 }
 
 export const HOTKEY_EDITOR_SECTIONS: readonly HotkeyEditorSection[] = [
