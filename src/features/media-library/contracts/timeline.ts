@@ -4,6 +4,7 @@
 
 export { useMediaLibraryStore } from '../stores/media-library-store'
 export { importMediaLibraryService } from '../services/media-library-service-loader'
+export { mediaLibraryService } from '../services/media-library-service'
 export { mediaProcessorService } from '../services/media-processor-service'
 export { mediaTranscriptionService } from '../services/media-transcription-service'
 export {
