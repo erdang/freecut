@@ -1,4 +1,4 @@
-﻿import { createLogger } from '@/shared/logging/logger'
+import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('ThirdPartyTtsService')
 const RUNTIME_CONFIG_URL = `${import.meta.env.BASE_URL}runtime-config.json`

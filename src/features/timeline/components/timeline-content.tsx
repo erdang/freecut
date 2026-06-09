@@ -1,4 +1,5 @@
 import { useMemo, useRef, useEffect, useLayoutEffect, useState, useCallback, memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 
 // Stores and selectors
@@ -15,6 +16,7 @@ import { useSelectionStore } from '@/shared/state/selection'
 // Hooks
 import { useMarqueeSelection } from '@/shared/marquee/use-marquee-selection'
 import { useWaveformPrefetch } from '../hooks/use-waveform-prefetch'
+import { useTimelineAudioSkimPreview } from '../hooks/use-timeline-audio-skim-preview'
 import { withPerfMeasure, perfMarkRender } from '@/shared/logging/perf-marks'
 
 // Constants
@@ -38,7 +40,7 @@ import { TimelinePreviewScrubber } from './timeline-preview-scrubber'
 import { TimelineTrack } from './timeline-track'
 import { TimelineGuidelines } from './timeline-guidelines'
 import { TimelineMediaDropZone } from './timeline-media-drop-zone'
-import { TrackRowFrame, TrackSectionDivider } from './track-row-frame'
+import { FirstTrackRowFrame, TrackRowFrame, TrackSectionDivider } from './track-row-frame'
 import { MarqueeOverlay } from '@/shared/marquee/marquee-overlay'
 
 // Group utilities
@@ -561,7 +563,7 @@ const TimelineTrackSectionsSurface = memo(function TimelineTrackSectionsSurface(
       height: number
       zoneHeight: number
       anchorTrackId: string | null
-      showTopDividerForFirstTrack: boolean
+      firstTrackFrame: 'with-top-divider' | 'regular'
       scrollRef?: React.RefObject<HTMLDivElement | null>
     },
   ) => (
@@ -583,14 +585,17 @@ const TimelineTrackSectionsSurface = memo(function TimelineTrackSectionsSurface(
           <div aria-hidden="true" style={{ height: `${options.zoneHeight}px` }} />
         )}
 
-        {sectionTracks.map((track, index) => (
-          <TrackRowFrame
-            key={track.id}
-            showTopDivider={options.showTopDividerForFirstTrack && index === 0}
-          >
-            <TimelineTrack track={track} />
-          </TrackRowFrame>
-        ))}
+        {sectionTracks.map((track, index) => {
+          const RowFrame =
+            options.firstTrackFrame === 'with-top-divider' && index === 0
+              ? FirstTrackRowFrame
+              : TrackRowFrame
+          return (
+            <RowFrame key={track.id}>
+              <TimelineTrack track={track} />
+            </RowFrame>
+          )
+        })}
 
         {options.section === 'audio' && options.anchorTrackId && (
           <TimelineMediaDropZone
@@ -628,7 +633,7 @@ const TimelineTrackSectionsSurface = memo(function TimelineTrackSectionsSurface(
             height: videoPaneHeight,
             zoneHeight: videoZoneHeight,
             anchorTrackId: topZoneAnchorTrackId,
-            showTopDividerForFirstTrack: true,
+            firstTrackFrame: 'with-top-divider',
             scrollRef: videoTracksScrollRef,
           })}
           <TrackSectionDivider onMouseDown={onSectionDividerMouseDown} />
@@ -637,7 +642,7 @@ const TimelineTrackSectionsSurface = memo(function TimelineTrackSectionsSurface(
             height: audioPaneHeight,
             zoneHeight: audioZoneHeight,
             anchorTrackId: bottomZoneAnchorTrackId,
-            showTopDividerForFirstTrack: false,
+            firstTrackFrame: 'regular',
             scrollRef: audioTracksScrollRef,
           })}
         </>
@@ -647,7 +652,7 @@ const TimelineTrackSectionsSurface = memo(function TimelineTrackSectionsSurface(
           height: singleSectionHeight,
           zoneHeight: singleSectionZoneHeight,
           anchorTrackId: singleSectionAnchorTrackId,
-          showTopDividerForFirstTrack: true,
+          firstTrackFrame: 'with-top-divider',
           scrollRef: allTracksScrollRef,
         })
       )}
@@ -684,6 +689,7 @@ export const TimelineContent = memo(function TimelineContent({
   void duration
 
   perfMarkRender('TimelineContent')
+  const { t } = useTranslation()
 
   // Prefetch waveforms for clips approaching the viewport
   useWaveformPrefetch()
@@ -759,6 +765,7 @@ export const TimelineContent = memo(function TimelineContent({
   const setPreviewFrameRef = useRef(setPreviewFrame)
   setPreviewFrameRef.current = setPreviewFrame
   const previewRafRef = useRef<number | null>(null)
+  useTimelineAudioSkimPreview()
 
   const pixelsToFrameRef = useRef(pixelsToFrame)
   pixelsToFrameRef.current = pixelsToFrame
@@ -1810,6 +1817,15 @@ export const TimelineContent = memo(function TimelineContent({
           onSelectionChange={handleMarqueeSelectionChange}
           onMarqueeActiveChange={handleMarqueeActiveChange}
         />
+
+        {itemIds.length === 0 && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[64px] z-20 flex items-center justify-center px-6">
+            <div className="rounded-xl border border-dashed border-border/80 bg-background/85 px-5 py-4 text-center shadow-lg backdrop-blur-sm">
+              <p className="text-sm font-semibold text-foreground">{t('timeline.emptyTitle')}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{t('timeline.emptyDescription')}</p>
+            </div>
+          </div>
+        )}
 
         <div
           className="relative z-30 shrink-0 timeline-ruler bg-background"

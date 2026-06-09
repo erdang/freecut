@@ -584,6 +584,7 @@ export const TimelineItem = memo(
     const [dewatermarkDownloading, setDewatermarkDownloading] = useState(false)
     const [dewatermarkRefreshToken, setDewatermarkRefreshToken] = useState(0)
     const dewatermarkTimelineFps = useTimelineStore((s) => s.fps)
+    const itemSourceUrl = item.type === 'video' ? item.src : ''
     const dewatermarkCanvasRef = useRef<HTMLCanvasElement | null>(null)
     const dewatermarkDragRef = useRef<{
       pointerId: number
@@ -654,7 +655,7 @@ export const TimelineItem = memo(
             throw new Error('画布尚未就绪。')
           }
 
-          const preferredUrl = item.type === 'video' ? item.src : ''
+          const preferredUrl = itemSourceUrl
           const resolvedUrl = await resolveMediaUrl(mediaId)
           const mediaUrl = resolvedUrl || preferredUrl
           if (!mediaUrl) {
@@ -807,6 +808,7 @@ export const TimelineItem = memo(
       item.sourceStart,
       item.speed,
       item.type,
+      itemSourceUrl,
       dewatermarkRefreshToken,
     ])
 
@@ -887,7 +889,7 @@ export const TimelineItem = memo(
         width: Math.round(rect.width * scaleX),
         height: Math.round(rect.height * scaleY),
       }
-    }, [activeDewatermarkRect, dewatermarkDialogOpen])
+    }, [activeDewatermarkRect])
 
     const handleSubmitDewatermarkTask = useCallback(async () => {
       if (item.type !== 'video' || !item.mediaId) {
@@ -1044,7 +1046,12 @@ export const TimelineItem = memo(
         }
         setDewatermarkPolling(false)
       }
-    }, [dewatermarkDialogOpen, dewatermarkTaskResult?.completion_url])
+    }, [
+      dewatermarkDialogOpen,
+      dewatermarkTaskResult?.completion_url,
+      dewatermarkTaskResult?.progress_url,
+      dewatermarkTaskResult?.status_url,
+    ])
 
     useEffect(() => {
       let disposed = false

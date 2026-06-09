@@ -337,13 +337,14 @@ function SourceMonitorInner({
     const sh = snappedSize.height
     const scaleX = sw / mediaWidth
     const scaleY = sh / mediaHeight
+    const layoutScale = mediaType === 'audio' ? 1 : scaleX
 
     const previousLayout = lastLayoutRef.current
     if (
       previousLayout &&
       previousLayout.scaledWidth === sw &&
       previousLayout.scaledHeight === sh &&
-      previousLayout.scale === scaleX
+      previousLayout.scale === layoutScale
     ) {
       return
     }
@@ -351,7 +352,7 @@ function SourceMonitorInner({
     lastLayoutRef.current = {
       scaledWidth: sw,
       scaledHeight: sh,
-      scale: scaleX,
+      scale: layoutScale,
     }
 
     host.style.width = `${sw}px`
@@ -359,10 +360,16 @@ function SourceMonitorInner({
     host.style.marginLeft = `${-sw / 2}px`
     host.style.marginTop = `${-sh / 2}px`
 
-    scaleDiv.style.width = `${mediaWidth}px`
-    scaleDiv.style.height = `${mediaHeight}px`
-    scaleDiv.style.transform = `scale(${scaleX}, ${scaleY})`
-  }, [editorLayout.previewPadding, mediaWidth, mediaHeight])
+    if (mediaType === 'audio') {
+      scaleDiv.style.width = `${sw}px`
+      scaleDiv.style.height = `${sh}px`
+      scaleDiv.style.transform = 'none'
+    } else {
+      scaleDiv.style.width = `${mediaWidth}px`
+      scaleDiv.style.height = `${mediaHeight}px`
+      scaleDiv.style.transform = `scale(${scaleX}, ${scaleY})`
+    }
+  }, [editorLayout.previewPadding, mediaHeight, mediaType, mediaWidth])
 
   useEffect(() => {
     const el = containerRef.current
@@ -507,12 +514,7 @@ function SourceMonitorInner({
             }}
           >
             <div ref={contentScaleRef} style={{ transformOrigin: 'top left' }}>
-              <SourceComposition
-                mediaId={mediaId}
-                src={src}
-                mediaType={mediaType}
-                fileName={fileName}
-              />
+              <SourceComposition mediaId={mediaId} src={src} mediaType={mediaType} />
             </div>
           </div>
         ) : (
@@ -1283,6 +1285,7 @@ function SourcePlaybackControls({
                   }}
                   disabled={inPoint === null && outPoint === null}
                   onClick={handleReplaySegment}
+                  aria-label="Play In to Out"
                 >
                   <Repeat className="w-3 h-3" />
                 </Button>
@@ -1299,6 +1302,7 @@ function SourcePlaybackControls({
                     height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                   }}
                   onClick={handleMarkIn}
+                  aria-label="Mark In (I)"
                 >
                   <ArrowLeftToLine className="w-3 h-3" />
                 </Button>
@@ -1315,6 +1319,7 @@ function SourcePlaybackControls({
                     height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                   }}
                   onClick={handleMarkOut}
+                  aria-label="Mark Out (O)"
                 >
                   <ArrowRightToLine className="w-3 h-3" />
                 </Button>
@@ -1331,6 +1336,7 @@ function SourcePlaybackControls({
                     height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                   }}
                   onClick={handleClearIO}
+                  aria-label="Clear In/Out (Alt+X)"
                 >
                   <XCircle className="w-3 h-3" />
                 </Button>
@@ -1354,7 +1360,7 @@ function SourcePlaybackControls({
           <span ref={currentTimeRef} className="text-primary font-semibold">
             {formatTime(clock.currentFrame)}
           </span>
-          <span className="text-muted-foreground/50">/</span>
+          <span className="text-muted-foreground">/</span>
           <span>{formatTime(lastFrame)}</span>
         </button>
         <span className="text-[11px] font-mono text-primary/70 shrink-0 hidden @min-[480px]:inline">
@@ -1372,6 +1378,7 @@ function SourcePlaybackControls({
                   height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                 }}
                 onClick={handleGoToStart}
+                aria-label="Go to start (Home)"
               >
                 <SkipBack className="w-3.5 h-3.5" />
               </Button>
@@ -1388,6 +1395,7 @@ function SourcePlaybackControls({
                   height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                 }}
                 onClick={handleStepBack}
+                aria-label="Previous frame (Left Arrow)"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </Button>
@@ -1403,6 +1411,7 @@ function SourcePlaybackControls({
                   height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                 }}
                 onClick={handleTogglePlayback}
+                aria-label={playing ? 'Pause (Space)' : 'Play (Space)'}
               >
                 {playing ? (
                   <Pause className="w-3.5 h-3.5" />
@@ -1423,6 +1432,7 @@ function SourcePlaybackControls({
                   height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                 }}
                 onClick={handleStepForward}
+                aria-label="Next frame (Right Arrow)"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </Button>
@@ -1439,6 +1449,7 @@ function SourcePlaybackControls({
                   height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                 }}
                 onClick={handleGoToEnd}
+                aria-label="Go to end (End)"
               >
                 <SkipForward className="w-3.5 h-3.5" />
               </Button>
@@ -1537,6 +1548,7 @@ function SourcePlaybackControls({
                     height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                   }}
                   onClick={() => performInsertEdit()}
+                  aria-label="Insert (,)"
                 >
                   <ArrowDownToLine className="w-3.5 h-3.5" />
                 </Button>
@@ -1553,6 +1565,7 @@ function SourcePlaybackControls({
                     height: EDITOR_LAYOUT_CSS_VALUES.toolbarButtonSize,
                   }}
                   onClick={() => performOverwriteEdit()}
+                  aria-label="Overwrite (.)"
                 >
                   <Replace className="w-3.5 h-3.5" />
                 </Button>

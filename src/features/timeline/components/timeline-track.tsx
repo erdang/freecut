@@ -162,6 +162,7 @@ const TrackDropGhostOverlay = memo(function TrackDropGhostOverlay({
   const previewsRef = useRef<TimelineDropGhostPreviewsHandle>(null)
 
   useEffect(() => {
+    const previews = previewsRef.current
     const unregister = registerTrackDropGhostOverlay(trackId, {
       sync: (ghostPreviews) => previewsRef.current?.sync(ghostPreviews),
       clear: () => previewsRef.current?.clear(),
@@ -169,7 +170,7 @@ const TrackDropGhostOverlay = memo(function TrackDropGhostOverlay({
 
     return () => {
       unregister()
-      previewsRef.current?.clear()
+      previews?.clear()
     }
   }, [trackId])
 

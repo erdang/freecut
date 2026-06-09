@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Keyframe Graph Panel Component
  *
  * Panel that shows the value graph editor for selected items.
@@ -6,6 +6,7 @@
  */
 
 import { memo, useState, useCallback, useMemo, useRef, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
@@ -13,7 +14,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { cn } from '@/shared/ui/cn'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ErrorBoundary } from '@/components/error-boundary'
+import { ErrorBoundary } from '@/app/error-boundary'
 import {
   Select,
   SelectContent,
@@ -50,7 +51,7 @@ import { useTimelineCommandStore } from '../stores/timeline-command-store'
 import { captureSnapshot } from '../stores/commands/snapshot'
 import type { TimelineSnapshot } from '../stores/commands/types'
 import { usePlaybackStore } from '@/shared/state/playback'
-import { useEditorStore } from '@/app/state/editor'
+import { useEditorStore } from '@/shared/state/editor'
 import { useTimelineSettingsStore } from '../stores/timeline-settings-store'
 import { DEFAULT_BEZIER_POINTS, DEFAULT_SPRING_PARAMS } from '@/types/keyframe'
 import type {
@@ -100,22 +101,47 @@ interface KeyframeGraphPanelProps {
 
 type KeyframeEditorMode = 'graph' | 'dopesheet'
 const KEYFRAME_EDITOR_MODE_STORAGE_KEY = 'timeline:keyframeEditorMode'
-const EASING_OPTIONS: Array<{ value: EasingType; label: string }> = [
-  { value: 'linear', label: '线性' },
-  { value: 'ease-in', label: '缓入' },
-  { value: 'ease-in-out', label: '缓入缓出' },
-  { value: 'ease-out', label: '缓出' },
-]
-const BEZIER_PRESETS = [
-  { value: 'soft', label: '柔和', points: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 } },
-  { value: 'ease-out', label: '缓出', points: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 } },
-  { value: 'ease-in', label: '缓入', points: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 } },
+const EASING_OPTIONS: Array<{ value: EasingType; labelKey: string; defaultLabel: string }> = [
+  { value: 'hold', labelKey: 'timeline.keyframeEditor.easing.hold', defaultLabel: 'Hold' },
+  { value: 'linear', labelKey: 'timeline.keyframeEditor.easing.linear', defaultLabel: 'Linear' },
+  { value: 'ease-in', labelKey: 'timeline.keyframeEditor.easing.easeIn', defaultLabel: 'Ease In' },
   {
     value: 'ease-in-out',
-    label: '缓入缓出',
+    labelKey: 'timeline.keyframeEditor.easing.easeInOut',
+    defaultLabel: 'Ease In/Out',
+  },
+  {
+    value: 'ease-out',
+    labelKey: 'timeline.keyframeEditor.easing.easeOut',
+    defaultLabel: 'Ease Out',
+  },
+]
+const BEZIER_PRESETS = [
+  {
+    value: 'soft',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.soft',
+    points: { x1: 0.42, y1: 0, x2: 0.58, y2: 1 },
+  },
+  {
+    value: 'ease-out',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.easeOut',
+    points: { x1: 0.215, y1: 0.61, x2: 0.355, y2: 1 },
+  },
+  {
+    value: 'ease-in',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.easeIn',
+    points: { x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19 },
+  },
+  {
+    value: 'ease-in-out',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.easeInOut',
     points: { x1: 0.645, y1: 0.045, x2: 0.355, y2: 1 },
   },
-  { value: 'overshoot', label: '回弹', points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 } },
+  {
+    value: 'overshoot',
+    labelKey: 'timeline.keyframeEditor.bezierPreset.overshoot',
+    points: { x1: 0.34, y1: 1.56, x2: 0.64, y2: 1 },
+  },
 ] as const
 const BEZIER_INPUT_KEYS = ['x1', 'y1', 'x2', 'y2'] as const
 const SPRING_INPUT_KEYS = ['tension', 'friction', 'mass'] as const
@@ -286,6 +312,7 @@ function AdvancedEasingControls({
   applyBezier,
   applySpring,
 }: AdvancedEasingControlsProps) {
+  const { t } = useTranslation()
   const [bezierDraft, setBezierDraft] = useState<Record<BezierInputKey, string>>(() =>
     selectedBezierPoints
       ? toBezierDraft(selectedBezierPoints)
@@ -388,19 +415,19 @@ function AdvancedEasingControls({
     >
       {selectedBezierPoints && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-medium text-foreground">贝塞尔</span>
+          <span className="font-medium text-foreground">{t('timeline.keyframeEditor.bezier')}</span>
           <Select value={selectedBezierPreset} onValueChange={handleBezierPresetChange}>
             <SelectTrigger className="h-7 w-[130px] text-xs focus:ring-0 focus:ring-offset-0">
-              <SelectValue placeholder="预设" />
+              <SelectValue placeholder={t('timeline.keyframeEditor.preset')} />
             </SelectTrigger>
             <SelectContent>
               {BEZIER_PRESETS.map((preset) => (
                 <SelectItem key={preset.value} value={preset.value} className="text-xs">
-                  {preset.label}
+                  {t(preset.labelKey)}
                 </SelectItem>
               ))}
               <SelectItem value="custom" className="text-xs">
-                自定义
+                {t('timeline.keyframeEditor.custom')}
               </SelectItem>
             </SelectContent>
           </Select>
@@ -423,16 +450,18 @@ function AdvancedEasingControls({
             className="h-7 px-2 text-[11px]"
             onClick={() => handleBezierPresetChange('soft')}
           >
-            重置
+            {t('common.reset')}
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            {hasMixedBezierConfig ? '已选关键帧包含不同曲线' : '可拖动图形控制点自定义曲线'}
+            {hasMixedBezierConfig
+              ? t('timeline.keyframeEditor.mixedCurves')
+              : t('timeline.keyframeEditor.dragHandlesHint')}
           </span>
         </div>
       )}
       {selectedSpringParameters && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-medium text-foreground">弹簧</span>
+          <span className="font-medium text-foreground">{t('timeline.keyframeEditor.spring')}</span>
           {SPRING_INPUT_KEYS.map((key) => (
             <label key={key} className="flex items-center gap-1 text-[11px] text-muted-foreground">
               <span className="capitalize">{key}</span>
@@ -455,10 +484,12 @@ function AdvancedEasingControls({
               applySpring({ ...DEFAULT_SPRING_PARAMS })
             }}
           >
-            重置
+            {t('common.reset')}
           </Button>
           <span className="text-[11px] text-muted-foreground">
-            {hasMixedSpringConfig ? '已选关键帧包含不同弹簧参数' : '降低阻尼会增加弹跳感'}
+            {hasMixedSpringConfig
+              ? t('timeline.keyframeEditor.mixedSpring')
+              : t('timeline.keyframeEditor.springHint')}
           </span>
         </div>
       )}
@@ -476,6 +507,15 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
   onClose,
   placement = 'bottom',
 }: KeyframeGraphPanelProps) {
+  const { t } = useTranslation()
+  const easingOptions = useMemo(
+    () =>
+      EASING_OPTIONS.map((option) => ({
+        value: option.value,
+        label: t(option.labelKey, { defaultValue: option.defaultLabel }),
+      })),
+    [t],
+  )
   const hotkeys = useResolvedHotkeys()
   // Ref to measure container width
   const containerRef = useRef<HTMLDivElement>(null)
@@ -1087,32 +1127,29 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       })
     })
 
-    if (isKeyframeClipboardCut && (skippedUnsupported > 0 || skippedBlocked > 0)) {
+    const buildSkipReasons = (): string[] => {
       const reasons: string[] = []
       if (skippedUnsupported > 0) {
-        reasons.push(`${skippedUnsupported} 个关键帧不受当前片段支持`)
+        reasons.push(t('timeline.keyframeEditor.reasonUnsupported', { count: skippedUnsupported }))
       }
       if (skippedBlocked > 0) {
-        reasons.push(`${skippedBlocked} 个关键帧位于转场区域，已被阻止`)
+        reasons.push(t('timeline.keyframeEditor.reasonBlocked', { count: skippedBlocked }))
       }
+      return reasons
+    }
 
-      toast.warning('无法在此处粘贴剪切的关键帧', {
-        description: `${reasons.join('。')}。剪切的关键帧会保留在剪贴板中。`,
+    if (isKeyframeClipboardCut && (skippedUnsupported > 0 || skippedBlocked > 0)) {
+      toast.warning(t('timeline.keyframeEditor.unableToPasteCut'), {
+        description: t('timeline.keyframeEditor.unableToPasteCutDescription', {
+          reasons: buildSkipReasons().join('. '),
+        }),
       })
       return
     }
 
     if (payloads.length === 0) {
-      const reasons: string[] = []
-      if (skippedUnsupported > 0) {
-        reasons.push(`${skippedUnsupported} 个关键帧不受当前片段支持`)
-      }
-      if (skippedBlocked > 0) {
-        reasons.push(`${skippedBlocked} 个关键帧位于转场区域，已被阻止`)
-      }
-
-      toast.warning('未粘贴任何关键帧', {
-        description: reasons.join('。'),
+      toast.warning(t('timeline.keyframeEditor.noKeyframesPasted'), {
+        description: buildSkipReasons().join('. '),
       })
       return
     }
@@ -1136,25 +1173,21 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
 
     const pastedCount = insertedRefs.length
     const skippedCount = skippedUnsupported + skippedBlocked
-    const actionLabel = isKeyframeClipboardCut ? '已移动 ' : '已粘贴 '
-    const keyframeLabel = `${pastedCount} 个关键帧`
+    const summaryText = isKeyframeClipboardCut
+      ? t('timeline.keyframeEditor.movedKeyframes', { count: pastedCount })
+      : t('timeline.keyframeEditor.pastedKeyframes', { count: pastedCount })
 
     if (skippedCount > 0) {
-      const reasons: string[] = []
-      if (skippedUnsupported > 0) {
-        reasons.push(`${skippedUnsupported} 个关键帧不受当前片段支持`)
-      }
-      if (skippedBlocked > 0) {
-        reasons.push(`${skippedBlocked} 个关键帧位于转场区域，已被阻止`)
-      }
-
-      toast.warning(`${actionLabel}${keyframeLabel}`, {
-        description: `${skippedCount} 个已跳过。${reasons.join('。')}`,
+      toast.warning(summaryText, {
+        description: t('timeline.keyframeEditor.skippedDescription', {
+          count: skippedCount,
+          reasons: buildSkipReasons().join('. '),
+        }),
       })
       return
     }
 
-    toast.success(`${actionLabel} ${keyframeLabel}`)
+    toast.success(summaryText)
   }, [
     availableProperties,
     clearKeyframeClipboard,
@@ -1165,6 +1198,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
     selectKeyframes,
     selectedItemForEditor,
     transitionBlockedRanges,
+    t,
   ])
 
   useHotkeys(
@@ -1484,7 +1518,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
       <div className="h-8 flex items-center justify-between px-3 bg-secondary/30 border-b border-border">
         <div className="flex items-center gap-2">
           <span className="text-xs font-medium text-muted-foreground">
-            关键帧编辑器
+            {t('timeline.keyframeEditor.title')}
             {selectedItemForEditor && (
               <span className="ml-2 text-foreground">
                 - {selectedItemForEditor.label || selectedItemForEditor.type}
@@ -1506,7 +1540,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               setEditorMode('graph')
             }}
           >
-            曲线
+            {t('timeline.keyframeEditor.graph')}
           </Button>
           <Button
             variant={editorMode === 'dopesheet' ? 'secondary' : 'ghost'}
@@ -1517,12 +1551,13 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
               setEditorMode('dopesheet')
             }}
           >
-            表格
+            {t('timeline.keyframeEditor.sheet')}
           </Button>
           <Button
             variant="ghost"
             size="icon"
             className="h-5 w-5 p-0"
+            aria-label={t('common.close')}
             onClick={(e) => {
               e.stopPropagation()
               onClose()
@@ -1583,7 +1618,7 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
                 hasKeyframeClipboard={Boolean(keyframeClipboard?.keyframes.length)}
                 isKeyframeClipboardCut={isKeyframeClipboardCut}
                 selectedInterpolation={selectedEditorEasing}
-                interpolationOptions={EASING_OPTIONS}
+                interpolationOptions={easingOptions}
                 onInterpolationChange={handleSelectedKeyframeEasingChange}
                 interpolationDisabled={selectedEditorKeyframes.length === 0}
                 onNavigateToKeyframe={handleNavigateToKeyframe}
@@ -1593,7 +1628,9 @@ export const KeyframeGraphPanel = memo(function KeyframeGraphPanel({
             </ErrorBoundary>
           ) : (
             <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
-              {selectedItemForEditor ? '加载中...' : '请选择一个片段以查看编辑器'}
+              {selectedItemForEditor
+                ? t('common.loading')
+                : t('timeline.keyframeEditor.selectItem')}
             </div>
           )}
         </div>

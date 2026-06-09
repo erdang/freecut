@@ -1,6 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { Search, ArrowUpDown, X, Trash2, AlertTriangle } from 'lucide-react'
+import { Search, ArrowUpDown, X, Trash2, AlertTriangle, Plus, Upload } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -44,6 +46,7 @@ import type { Project } from '@/types/project'
 
 interface ProjectListProps {
   onEditProject?: (project: Project) => void
+  onImportProject?: () => void
 }
 
 interface MarqueeRect {
@@ -55,7 +58,8 @@ interface MarqueeRect {
 
 const MARQUEE_DRAG_THRESHOLD = 4
 
-export function ProjectList({ onEditProject }: ProjectListProps) {
+export function ProjectList({ onEditProject, onImportProject }: ProjectListProps) {
+  const { t } = useTranslation()
   const [localSearchQuery, setLocalSearchQuery] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [anchorId, setAnchorId] = useState<string | null>(null)
@@ -306,13 +310,19 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
     clearSelection()
 
     if (failures.length === 0) {
-      toast.success(`已将 ${ids.length} 个项目移入回收站`)
+      toast.success(t('projects.list.movedToTrashCount', { count: ids.length }))
     } else if (failures.length < ids.length) {
-      toast.warning(`已移入 ${ids.length - failures.length} 个，失败 ${failures.length} 个`, {
-        description: failures[0]?.error,
-      })
+      toast.warning(
+        t('projects.list.movedToTrashPartial', {
+          moved: ids.length - failures.length,
+          failed: failures.length,
+        }),
+        {
+          description: failures[0]?.error,
+        },
+      )
     } else {
-      toast.error('删除选中项目失败', { description: failures[0]?.error })
+      toast.error(t('projects.list.deleteSelectedFailed'), { description: failures[0]?.error })
     }
   }
 
@@ -330,7 +340,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input
               type="text"
-              placeholder="搜索项目..."
+              placeholder={t('projects.list.searchPlaceholder')}
               value={localSearchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               className="pl-9 pr-9"
@@ -353,10 +363,10 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             onValueChange={(value) => setFilterResolution(value === 'all' ? undefined : value)}
           >
             <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="全部分辨率" />
+              <SelectValue placeholder={t('projects.list.allResolutions')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部分辨率</SelectItem>
+              <SelectItem value="all">{t('projects.list.allResolutions')}</SelectItem>
               {uniqueResolutions.map((res) => (
                 <SelectItem key={res} value={res}>
                   {res}
@@ -371,13 +381,13 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
             onValueChange={(value) => setFilterFps(value === 'all' ? undefined : Number(value))}
           >
             <SelectTrigger className="w-[140px]">
-              <SelectValue placeholder="全部帧率" />
+              <SelectValue placeholder={t('projects.list.allFps')} />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">全部帧率</SelectItem>
+              <SelectItem value="all">{t('projects.list.allFps')}</SelectItem>
               {uniqueFps.map((fps) => (
                 <SelectItem key={fps} value={fps.toString()}>
-                  {fps} fps
+                  {t('projects.list.fpsOption', { fps })}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -391,23 +401,29 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel>排序方式</DropdownMenuLabel>
+              <DropdownMenuLabel>{t('projects.list.sortBy')}</DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => setSortField('name')}>
-                名称 {sortField === 'name' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                {t('projects.list.sortName')}{' '}
+                {sortField === 'name' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSortField('updatedAt')}>
-                最近修改 {sortField === 'updatedAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                {t('projects.list.sortLastModified')}{' '}
+                {sortField === 'updatedAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSortField('createdAt')}>
-                创建时间 {sortField === 'createdAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                {t('projects.list.sortDateCreated')}{' '}
+                {sortField === 'createdAt' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setSortField('resolution')}>
-                分辨率 {sortField === 'resolution' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
+                {t('projects.list.sortResolution')}{' '}
+                {sortField === 'resolution' && `(${sortDirection === 'asc' ? '↑' : '↓'})`}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={toggleSortDirection}>
-                {sortDirection === 'asc' ? '升序' : '降序'}
+                {sortDirection === 'asc'
+                  ? t('projects.list.ascending')
+                  : t('projects.list.descending')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -416,7 +432,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           {hasActiveFilters && (
             <Button variant="ghost" size="sm" onClick={handleClearFilters}>
               <X className="w-4 h-4 mr-2" />
-              清除筛选
+              {t('projects.list.clearFilters')}
             </Button>
           )}
 
@@ -427,10 +443,10 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           {selectionCount > 0 && (
             <>
               <span className="text-sm text-muted-foreground whitespace-nowrap">
-                已选 {selectionCount} 项
+                {t('projects.list.selectedCount', { count: selectionCount })}
               </span>
               <Button variant="ghost" size="sm" onClick={clearSelection}>
-                清空
+                {t('projects.list.clearSelection')}
               </Button>
               <Button
                 variant="destructive"
@@ -439,7 +455,7 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
                 onClick={() => setShowBulkDeleteDialog(true)}
               >
                 <Trash2 className="w-4 h-4" />
-                删除 {selectionCount} 项
+                {t('projects.list.deleteN', { count: selectionCount })}
               </Button>
             </>
           )}
@@ -449,10 +465,26 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
       {/* Empty State - No Projects */}
       {isEmpty && (
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-          <h2 className="text-3xl font-semibold text-foreground mb-2">欢迎使用视频编辑器</h2>
+          <h2 className="text-3xl font-semibold text-foreground mb-2">
+            {t('projects.list.welcomeTitle')}
+          </h2>
           <p className="text-muted-foreground max-w-md mb-6">
-            从创建第一个视频项目开始。选择分辨率、帧率，然后开始编辑。
+            {t('projects.list.welcomeDescription')}
           </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Button size="lg" className="gap-2" asChild>
+              <Link to="/projects/new">
+                <Plus className="w-4 h-4" />
+                {t('projects.list.createFirstProject')}
+              </Link>
+            </Button>
+            {onImportProject && (
+              <Button variant="outline" size="lg" className="gap-2" onClick={onImportProject}>
+                <Upload className="w-4 h-4" />
+                {t('projects.list.importExistingProject')}
+              </Button>
+            )}
+          </div>
         </div>
       )}
 
@@ -462,12 +494,14 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mb-4">
             <Search className="w-8 h-8 text-muted-foreground" />
           </div>
-          <h3 className="text-xl font-semibold text-foreground mb-2">未找到项目</h3>
+          <h3 className="text-xl font-semibold text-foreground mb-2">
+            {t('projects.list.noResultsTitle')}
+          </h3>
           <p className="text-muted-foreground max-w-md mb-6">
-            没有匹配当前筛选条件的项目。请尝试调整筛选项或搜索关键词。
+            {t('projects.list.noResultsDescription')}
           </p>
           <Button variant="outline" onClick={handleClearFilters}>
-            清除筛选
+            {t('projects.list.clearFilters')}
           </Button>
         </div>
       )}
@@ -478,8 +512,11 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm text-muted-foreground">
               {filteredProjects.length === allProjects.length
-                ? `共 ${allProjects.length} 个项目`
-                : `显示 ${filteredProjects.length} / ${allProjects.length} 个项目`}
+                ? t('projects.list.projectCount', { count: allProjects.length })
+                : t('projects.list.projectCountFiltered', {
+                    shown: filteredProjects.length,
+                    total: allProjects.length,
+                  })}
             </p>
           </div>
 
@@ -518,20 +555,22 @@ export function ProjectList({ onEditProject }: ProjectListProps) {
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-destructive" />
-              删除所选的 {selectionCount} 个项目？
+              {t('projects.list.bulkDeleteTitle', { count: selectionCount })}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              这些项目会被移入回收站，在永久删除前可以从回收站恢复。
+              {t('projects.list.bulkDeleteDescription')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isBulkDeleting}>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={isBulkDeleting}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmBulkDelete}
               disabled={isBulkDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isBulkDeleting ? '删除中...' : `删除 ${selectionCount} 项`}
+              {isBulkDeleting
+                ? t('common.deleting')
+                : t('projects.list.deleteN', { count: selectionCount })}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

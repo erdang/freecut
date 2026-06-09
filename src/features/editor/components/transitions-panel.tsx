@@ -1,4 +1,4 @@
-﻿import { memo, useCallback, useMemo } from 'react'
+import { memo, useCallback, useMemo } from 'react'
 import { Blend, Info } from 'lucide-react'
 import { useTimelineStore } from '@/features/editor/deps/timeline-store'
 import { useSelectionStore } from '@/shared/state/selection'

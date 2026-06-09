@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Plus, Upload, FolderOpen, File, Github } from 'lucide-react'
 import { FreeCutLogo } from '@/components/brand/freecut-logo'
 import { ProjectList } from '@/features/projects/components/project-list'
-import { ProjectForm } from '@/features/projects/components/project-form'
+import { EditProjectForm } from '@/features/projects/components/project-form'
 import {
   Dialog,
   DialogContent,
@@ -331,7 +331,7 @@ function ProjectsIndex() {
         ) : (
           /* Projects List */
           <div className="max-w-[1920px] mx-auto px-6 py-8">
-            <ProjectList onEditProject={handleEditProject} />
+            <ProjectList onEditProject={handleEditProject} onImportProject={handleImportClick} />
             <TrashSection />
           </div>
         )}
@@ -345,7 +345,7 @@ function ProjectsIndex() {
             <DialogDescription>更新项目设置</DialogDescription>
           </DialogHeader>
           {editingProject && (
-            <ProjectForm
+            <EditProjectForm
               onSubmit={handleEditSubmit}
               onCancel={() => setEditingProject(null)}
               defaultValues={{
@@ -355,9 +355,7 @@ function ProjectsIndex() {
                 height: editingProject.metadata.height,
                 fps: editingProject.metadata.fps,
               }}
-              isEditing={true}
               isSubmitting={isSubmitting}
-              hideHeader
             />
           )}
         </DialogContent>

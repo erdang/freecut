@@ -1,9 +1,10 @@
 import { useState, useMemo, useRef, useEffect, useCallback, memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Loader2, Upload, AlertTriangle } from 'lucide-react'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaGrid')
-import { MediaCard } from './media-card'
+import { GridMediaCard, ListMediaCard } from './media-card'
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store'
 import type { MediaMetadata } from '@/types/storage'
 import {
@@ -24,23 +25,44 @@ import {
 } from '@/components/ui/alert-dialog'
 
 import { GRID_MIN_SIZE_PX, GRID_GAP_BY_SIZE } from './media-grid-constants'
-import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
+import {
+  showMediaFilePicker,
+  getSupportedMediaFormatLabels,
+} from '@/features/media-library/utils/media-file-picker'
 
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void
-  viewMode?: 'grid' | 'list'
   /** Grid item size (1 = largest, 5 = smallest) */
   itemSize?: number
+  /** Backward-compatible layout selector used by the media library shell. */
+  viewMode?: 'grid' | 'list'
   /** When provided, renders these items instead of pulling from the store */
   items?: MediaMetadata[]
 }
 
-export const MediaGrid = memo(function MediaGrid({
+interface MediaGridBaseProps extends Omit<MediaGridProps, 'viewMode'> {
+  layout: 'grid' | 'list'
+}
+
+export const GridMediaGrid = memo(function GridMediaGrid(props: MediaGridProps) {
+  return <MediaGridBase {...props} layout="grid" />
+})
+
+export const ListMediaGrid = memo(function ListMediaGrid(props: MediaGridProps) {
+  return <MediaGridBase {...props} layout="list" />
+})
+
+export const MediaGrid = memo(function MediaGrid({ viewMode = 'grid', ...props }: MediaGridProps) {
+  return <MediaGridBase {...props} layout={viewMode} />
+})
+
+const MediaGridBase = memo(function MediaGridBase({
   onMediaSelect,
-  viewMode = 'grid',
+  layout,
   itemSize = 3,
   items,
-}: MediaGridProps) {
+}: MediaGridBaseProps) {
+  const { t } = useTranslation()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [mediaIdsToDelete, setMediaIdsToDelete] = useState<string[]>([])
   const lastSelectedIdRef = useRef<string | null>(null)
@@ -217,59 +239,54 @@ export const MediaGrid = memo(function MediaGrid({
             </div>
             <div className="text-center">
               <p className="text-sm font-mono text-foreground tracking-wider mb-1">
-                正在加载媒体库
+                {t('media.grid.loadingTitle')}
               </p>
-              <p className="text-xs text-muted-foreground font-mono">正在初始化存储...</p>
+              <p className="text-xs text-muted-foreground font-mono">
+                {t('media.grid.loadingSubtitle')}
+              </p>
             </div>
           </div>
         </div>
       ) : !items && filteredItems.length === 0 ? (
         <div className="flex items-center justify-center py-24">
-          <div className="text-center max-w-md">
-            <div
-              className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary hover:border-primary/50 hover:bg-secondary/80 cursor-pointer transition-colors"
-              onClick={handleEmptyStateClick}
-            >
+          <button
+            type="button"
+            className="text-center max-w-md rounded-xl border border-dashed border-border/80 p-6 transition-colors hover:border-primary/60 hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={handleEmptyStateClick}
+          >
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary transition-colors">
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
-            <p className="text-base font-bold text-foreground mb-2 tracking-wide">暂无媒体文件</p>
-            <p className="text-sm text-muted-foreground font-light mb-3">
-              拖放文件到此处，或点击浏览导入
+            <p className="text-base font-bold text-foreground mb-2 tracking-wide">
+              {t('media.grid.emptyTitle')}
             </p>
+            <p className="text-sm text-muted-foreground font-light mb-4">
+              {t('media.grid.emptyHint')}
+            </p>
+            <span className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground mb-4">
+              {t('media.grid.importButton')}
+            </span>
             <div className="flex flex-wrap justify-center gap-2">
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MP4
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                WebM
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MOV
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MP3
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                WAV
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                JPG
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                PNG
-              </span>
+              {getSupportedMediaFormatLabels().map((label) => (
+                <span
+                  key={label}
+                  className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground"
+                >
+                  {label}
+                </span>
+              ))}
             </div>
-          </div>
+          </button>
         </div>
       ) : (
         <div
           className={
-            viewMode === 'grid'
+            layout === 'grid'
               ? `grid ${GRID_GAP_BY_SIZE[itemSize] ?? GRID_GAP_BY_SIZE[3]}`
               : 'space-y-1'
           }
           style={
-            viewMode === 'grid'
+            layout === 'grid'
               ? {
                   gridTemplateColumns: `repeat(auto-fill, minmax(min(${GRID_MIN_SIZE_PX[itemSize] ?? GRID_MIN_SIZE_PX[3]}px, 100%), 1fr))`,
                 }
@@ -278,10 +295,11 @@ export const MediaGrid = memo(function MediaGrid({
         >
           {filteredItems.map((media) => {
             const handlers = cardHandlersById.get(media.id)
+            const Card = layout === 'grid' ? GridMediaCard : ListMediaCard
 
             return (
               <div key={media.id} data-media-id={media.id}>
-                <MediaCard
+                <Card
                   media={media}
                   selected={selectedMediaIdSet.has(media.id)}
                   isBroken={brokenMediaIdSet.has(media.id)}
@@ -289,7 +307,6 @@ export const MediaGrid = memo(function MediaGrid({
                   onDoubleClick={handlers?.onDoubleClick}
                   onDelete={handlers?.onDelete}
                   onRelink={handlers?.onRelink}
-                  viewMode={viewMode}
                 />
               </div>
             )
@@ -303,24 +320,28 @@ export const MediaGrid = memo(function MediaGrid({
           <AlertDialogHeader>
             <AlertDialogTitle>
               {mediaIdsToDelete.length > 1
-                ? `删除 ${mediaIdsToDelete.length} 个媒体文件？`
-                : '删除此媒体文件？'}
+                ? t('media.deleteDialog.titleMultiple', { count: mediaIdsToDelete.length })
+                : t('media.deleteDialog.titleSingle')}
             </AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-3">
                 <p>
                   {mediaIdsToDelete.length > 1
-                    ? `确定要删除已选中的 ${mediaIdsToDelete.length} 个媒体文件吗？此操作不可撤销。`
-                    : `确定要删除“${filteredItems.find((m) => m.id === mediaIdsToDelete[0])?.fileName}”吗？此操作不可撤销。`}
+                    ? t('media.deleteDialog.bodyMultiple', { count: mediaIdsToDelete.length })
+                    : t('media.deleteDialog.bodySingle', {
+                        name:
+                          filteredItems.find((m) => m.id === mediaIdsToDelete[0])?.fileName ?? '',
+                      })}
                 </p>
                 {affectedMediaImpact.totalReferenceCount > 0 && (
                   <div className="flex items-start gap-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-md">
                     <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-yellow-600 dark:text-yellow-400">
-                      <p className="font-medium">时间线片段将被移除</p>
+                      <p className="font-medium">{t('media.deleteDialog.timelineClipsRemoved')}</p>
                       <p className="text-xs mt-1 text-yellow-600/80 dark:text-yellow-400/80">
-                        时间线和嵌套复合片段中共有 {affectedMediaImpact.totalReferenceCount}{' '}
-                        个片段引用了该媒体，也会一并删除。
+                        {t('media.deleteDialog.timelineClipsDetail', {
+                          count: affectedMediaImpact.totalReferenceCount,
+                        })}
                       </p>
                     </div>
                   </div>
@@ -329,15 +350,16 @@ export const MediaGrid = memo(function MediaGrid({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleCancelDelete}>取消</AlertDialogCancel>
+            <AlertDialogCancel onClick={handleCancelDelete}>{t('common.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              删除
               {affectedMediaImpact.totalReferenceCount > 0
-                ? ` + ${affectedMediaImpact.totalReferenceCount} 个片段`
-                : ''}
+                ? t('media.deleteDialog.confirmWithClips', {
+                    count: affectedMediaImpact.totalReferenceCount,
+                  })
+                : t('common.delete')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

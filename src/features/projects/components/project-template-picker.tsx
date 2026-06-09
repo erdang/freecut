@@ -1,19 +1,20 @@
+import { useTranslation } from 'react-i18next'
 import { Plus } from 'lucide-react'
 import { PROJECT_TEMPLATES, getAspectRatio, type ProjectTemplate } from '../utils/validation'
 
 interface ProjectTemplatePickerProps {
   onSelectTemplate: (template: ProjectTemplate) => void
-  selectedTemplateId?: string
+  selectedTemplateId?: string | 'custom'
   onSelectCustom?: () => void
-  isCustomSelected?: boolean
 }
 
 export function ProjectTemplatePicker({
   onSelectTemplate,
   selectedTemplateId,
   onSelectCustom,
-  isCustomSelected,
 }: ProjectTemplatePickerProps) {
+  const { t } = useTranslation()
+  const isCustomSelected = selectedTemplateId === 'custom'
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
       {PROJECT_TEMPLATES.map((template) => {
@@ -31,10 +32,12 @@ export function ProjectTemplatePicker({
               isSelected ? 'border-primary ring-2 ring-primary/30' : 'border-border'
             }`}
           >
+            {/* Silhouette Container */}
             <div
               className="relative h-24 bg-secondary/30 rounded overflow-hidden flex items-center justify-center"
               style={{ containerType: 'size' }}
             >
+              {/* Aspect Ratio Silhouette */}
               <div
                 className={`bg-primary/20 border-2 border-dashed rounded-sm ${
                   isSelected ? 'border-primary' : 'border-primary/40'
@@ -47,6 +50,7 @@ export function ProjectTemplatePicker({
               />
             </div>
 
+            {/* Template Info */}
             <div className="flex-1 text-left">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                 {template.platform}
@@ -56,7 +60,7 @@ export function ProjectTemplatePicker({
               </h3>
               <p className="text-xs text-muted-foreground mt-2">
                 {resolution}
-                <span className="mx-1">·</span>
+                <span className="mx-1">•</span>
                 {aspectRatio}
               </p>
             </div>
@@ -89,16 +93,18 @@ export function ProjectTemplatePicker({
           </div>
           <div className="flex-1 text-left">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              自定义
+              {t('projects.templatePicker.custom')}
             </p>
             <h3
               className={`font-medium text-sm transition-colors mt-1 ${
                 isCustomSelected ? 'text-primary' : 'text-foreground group-hover:text-primary'
               }`}
             >
-              自定义尺寸
+              {t('projects.templatePicker.customSize')}
             </h3>
-            <p className="text-xs text-muted-foreground mt-2">输入宽高尺寸</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {t('projects.templatePicker.enterDimensions')}
+            </p>
           </div>
         </button>
       )}

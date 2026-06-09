@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,7 @@ import {
 import { Separator } from '@/components/ui/separator'
 import { Link } from '@tanstack/react-router'
 import {
-  projectFormSchema,
+  createProjectFormSchema,
   type ProjectFormData,
   type ProjectTemplate,
   DEFAULT_PROJECT_VALUES,
@@ -21,23 +22,40 @@ import {
 import { getProjectFpsOptions } from '../utils/project-fps'
 import { ProjectTemplatePicker } from './project-template-picker'
 
-interface ProjectFormProps {
+interface ProjectFormBaseProps {
   onSubmit: (data: ProjectFormData) => Promise<void> | void
   onCancel?: () => void
   defaultValues?: Partial<ProjectFormData>
-  isEditing?: boolean
   isSubmitting?: boolean
-  hideHeader?: boolean
+  mode: 'create' | 'edit'
+  surface: 'page' | 'inline'
 }
 
-export function ProjectForm({
+type ProjectFormProps = Omit<ProjectFormBaseProps, 'mode' | 'surface'>
+
+export function CreateProjectForm(props: ProjectFormProps) {
+  return <ProjectFormBase {...props} mode="create" surface="page" />
+}
+
+export function InlineCreateProjectForm(props: ProjectFormProps) {
+  return <ProjectFormBase {...props} mode="create" surface="inline" />
+}
+
+export function EditProjectForm(props: ProjectFormProps) {
+  return <ProjectFormBase {...props} mode="edit" surface="inline" />
+}
+
+function ProjectFormBase({
   onSubmit,
   onCancel,
   defaultValues,
-  isEditing = false,
   isSubmitting = false,
-  hideHeader = false,
-}: ProjectFormProps) {
+  mode,
+  surface,
+}: ProjectFormBaseProps) {
+  const { t } = useTranslation()
+  const isEditing = mode === 'edit'
+  const isInlineSurface = surface === 'inline'
   const resolvedDefaultValues = useMemo(
     () => ({
       ...DEFAULT_PROJECT_VALUES,
@@ -45,6 +63,7 @@ export function ProjectForm({
     }),
     [defaultValues],
   )
+  const validationSchema = useMemo(() => createProjectFormSchema((key) => t(key)), [t])
 
   const {
     register,
@@ -54,7 +73,7 @@ export function ProjectForm({
     setValue,
     reset,
   } = useForm<ProjectFormData>({
-    resolver: zodResolver(projectFormSchema),
+    resolver: zodResolver(validationSchema),
     defaultValues: resolvedDefaultValues,
     mode: 'onChange',
   })
@@ -93,44 +112,46 @@ export function ProjectForm({
   return (
     <div className="bg-background">
       {/* Header */}
-      {!hideHeader && (
+      {!isInlineSurface && (
         <div className="panel-header border-b border-border">
           <div className="max-w-[1400px] mx-auto px-6 py-5">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground mb-1">
-              {isEditing ? '编辑项目' : '新建项目'}
+              {isEditing ? t('projects.form.editTitle') : t('projects.form.createTitle')}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {isEditing ? '更新项目设置' : '配置你的视频编辑工作区'}
+              {isEditing ? t('projects.form.editSubtitle') : t('projects.form.createSubtitle')}
             </p>
           </div>
         </div>
       )}
 
       {/* Form */}
-      <div className={hideHeader ? '' : 'max-w-[1400px] mx-auto px-6 py-8'}>
+      <div className={isInlineSurface ? '' : 'max-w-[1400px] mx-auto px-6 py-8'}>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(320px,420px)_1fr] gap-6 items-start">
             {/* Project Details */}
             <div
-              className={`panel-bg border border-border rounded-lg p-6 ${hideHeader ? '' : 'lg:sticky lg:top-6'}`}
+              className={`panel-bg border border-border rounded-lg p-6 ${isInlineSurface ? '' : 'lg:sticky lg:top-6'}`}
             >
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-8 w-1 bg-primary rounded-full" />
-                <h2 className="text-lg font-medium text-foreground">项目信息</h2>
+                <h2 className="text-lg font-medium text-foreground">
+                  {t('projects.form.projectDetails')}
+                </h2>
               </div>
 
               <div className="space-y-5">
                 {/* Project Name */}
                 <div>
                   <label htmlFor="name" className="block text-sm font-medium text-foreground mb-2">
-                    项目名称 <span className="text-destructive">*</span>
+                    {t('projects.form.projectName')} <span className="text-destructive">*</span>
                   </label>
                   <input
                     id="name"
                     type="text"
                     {...register('name')}
                     className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                    placeholder="请输入项目名称..."
+                    placeholder={t('projects.form.projectNamePlaceholder')}
                   />
                   {errors.name && (
                     <p className="mt-1.5 text-sm text-destructive">{errors.name.message}</p>
@@ -143,14 +164,14 @@ export function ProjectForm({
                     htmlFor="description"
                     className="block text-sm font-medium text-foreground mb-2"
                   >
-                    描述
+                    {t('projects.form.description')}
                   </label>
                   <textarea
                     id="description"
                     rows={4}
                     {...register('description')}
                     className="w-full px-3 py-2 bg-secondary border border-input rounded-md text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all resize-none"
-                    placeholder="输入项目简要描述..."
+                    placeholder={t('projects.form.descriptionPlaceholder')}
                   />
                   {errors.description && (
                     <p className="mt-1.5 text-sm text-destructive">{errors.description.message}</p>
@@ -160,7 +181,7 @@ export function ProjectForm({
                 {/* Frame Rate */}
                 <div>
                   <label htmlFor="fps" className="block text-sm font-medium text-foreground mb-2">
-                    帧率
+                    {t('projects.form.frameRate')}
                   </label>
                   <Select
                     value={fps.toString()}
@@ -190,16 +211,15 @@ export function ProjectForm({
             <div className="panel-bg border border-border rounded-lg p-6">
               <div className="flex items-center gap-3 mb-6">
                 <div className="h-8 w-1 bg-primary rounded-full" />
-                <h2 className="text-lg font-medium text-foreground">分辨率</h2>
+                <h2 className="text-lg font-medium text-foreground">
+                  {t('projects.form.resolution')}
+                </h2>
               </div>
 
               <ProjectTemplatePicker
-                selectedTemplateId={
-                  selectedTemplateId === 'custom' ? undefined : selectedTemplateId
-                }
+                selectedTemplateId={selectedTemplateId}
                 onSelectTemplate={handleSelectTemplate}
                 onSelectCustom={handleCustomSelect}
-                isCustomSelected={selectedTemplateId === 'custom'}
               />
               {selectedTemplateId === 'custom' && (
                 <div className="mt-5 flex items-center gap-3">
@@ -208,7 +228,7 @@ export function ProjectForm({
                       htmlFor="width"
                       className="block text-xs font-medium text-muted-foreground mb-1"
                     >
-                      宽度 (px)
+                      {t('projects.form.widthPx')}
                     </label>
                     <input
                       id="width"
@@ -228,7 +248,7 @@ export function ProjectForm({
                       htmlFor="height"
                       className="block text-xs font-medium text-muted-foreground mb-1"
                     >
-                      高度 (px)
+                      {t('projects.form.heightPx')}
                     </label>
                     <input
                       id="height"
@@ -259,12 +279,12 @@ export function ProjectForm({
                 disabled={isSubmitting}
                 onClick={onCancel}
               >
-                取消
+                {t('common.cancel')}
               </Button>
             ) : (
               <Link to="/projects">
                 <Button type="button" variant="outline" size="lg" disabled={isSubmitting}>
-                  取消
+                  {t('common.cancel')}
                 </Button>
               </Link>
             )}
@@ -274,7 +294,11 @@ export function ProjectForm({
               className="min-w-[160px]"
               disabled={!isValid || isSubmitting}
             >
-              {isSubmitting ? '保存中...' : isEditing ? '更新项目' : '创建项目'}
+              {isSubmitting
+                ? t('common.saving')
+                : isEditing
+                  ? t('projects.form.updateProject')
+                  : t('projects.form.createProject')}
             </Button>
           </div>
         </form>

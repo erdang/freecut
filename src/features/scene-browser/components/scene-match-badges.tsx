@@ -1,4 +1,5 @@
 import { memo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Eye, MessageSquareText, Palette, Sparkles, Type } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import type { SceneMatchSignals } from '../utils/rank'
@@ -34,14 +35,14 @@ function scoreTier(
   return null
 }
 
-function tierLabel(tier: Tier): string {
+function tierLabel(tier: Tier, t: (key: string) => string): string {
   switch (tier) {
     case 'strong':
-      return '强'
+      return t('sceneBrowser.matchTiers.strong')
     case 'good':
-      return '中'
+      return t('sceneBrowser.matchTiers.good')
     case 'fair':
-      return '弱'
+      return t('sceneBrowser.matchTiers.fair')
   }
 }
 
@@ -85,18 +86,19 @@ function imageFraction(score: number): number {
 interface SceneMatchBadgesProps {
   signals: SceneMatchSignals
   score: number
-  /** `true` for the first scene in the list — earns a "Top" label. */
-  isTop?: boolean
+  rank?: 'top' | 'default'
   className?: string
 }
 
 export const SceneMatchBadges = memo(function SceneMatchBadges({
   signals,
   score,
-  isTop,
+  rank = 'default',
   className,
 }: SceneMatchBadgesProps) {
+  const { t } = useTranslation()
   const chips: React.ReactNode[] = []
+  const isTopRank = rank === 'top'
 
   if (signals.ranker === 'keyword' && signals.keywordMatched) {
     chips.push(
@@ -104,8 +106,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
         key="keyword"
         tone="keyword"
         icon={<Type className="h-2.5 w-2.5" />}
-        label="关键词"
-        hint={`关键词匹配 · 余弦值 ${score.toFixed(2)}`}
+        label={t('sceneBrowser.match.keyword')}
+        hint={t('sceneBrowser.match.keywordHint', { score: score.toFixed(2) })}
       />,
     )
   }
@@ -136,8 +138,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-text"
           tone="text"
           icon={<MessageSquareText className="h-2.5 w-2.5" />}
-          label={`语义 · ${tierLabel(textTier)}`}
-          hint={`文本嵌入余弦值：${(textScore ?? 0).toFixed(3)}`}
+          label={t('sceneBrowser.match.meaningWithTier', { tier: tierLabel(textTier, t) })}
+          hint={t('sceneBrowser.match.textEmbeddingHint', { score: (textScore ?? 0).toFixed(3) })}
         />,
       )
     }
@@ -147,8 +149,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-image"
           tone="visual"
           icon={<Eye className="h-2.5 w-2.5" />}
-          label={`视觉 · ${tierLabel(imageTier)}`}
-          hint={`CLIP 余弦值：${(imageScore ?? 0).toFixed(3)}`}
+          label={t('sceneBrowser.match.visualWithTier', { tier: tierLabel(imageTier, t) })}
+          hint={t('sceneBrowser.match.clipHint', { score: (imageScore ?? 0).toFixed(3) })}
         />,
       )
     }
@@ -158,8 +160,8 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-color"
           tone="palette"
           icon={<Palette className="h-2.5 w-2.5" />}
-          label={`颜色 · ${signals.colorMatch}`}
-          hint={`${signals.colorMatch} 色板匹配（∆E 2000）`}
+          label={t('sceneBrowser.match.colorWithName', { color: signals.colorMatch })}
+          hint={t('sceneBrowser.match.paletteColorHint', { color: signals.colorMatch })}
         />,
       )
     }
@@ -169,8 +171,10 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="palette-similar"
           tone="palette"
           icon={<Palette className="h-2.5 w-2.5" />}
-          label={`色板 · ∆E ${signals.paletteDistance.toFixed(1)}`}
-          hint="与参考色板的加权平均 ∆E 2000"
+          label={t('sceneBrowser.match.paletteDistance', {
+            distance: signals.paletteDistance.toFixed(1),
+          })}
+          hint={t('sceneBrowser.match.paletteDistanceHint')}
         />,
       )
     }
@@ -183,23 +187,23 @@ export const SceneMatchBadges = memo(function SceneMatchBadges({
           key="semantic-weak"
           tone="text"
           icon={<Sparkles className="h-2.5 w-2.5" />}
-          label="低于阈值"
-          hint={`余弦值 ${score.toFixed(3)}`}
+          label={t('sceneBrowser.match.belowThreshold')}
+          hint={t('sceneBrowser.match.cosineHint', { score: score.toFixed(3) })}
         />,
       )
     }
   }
 
-  if (chips.length === 0 && !isTop) return null
+  if (chips.length === 0 && !isTopRank) return null
 
   return (
     <div className={cn('flex flex-wrap items-center gap-1', className)}>
-      {isTop && (
+      {isTopRank && (
         <Chip
           tone="top"
           icon={<Sparkles className="h-2.5 w-2.5" />}
-          label="最佳"
-          hint="当前得分最高的匹配"
+          label={t('sceneBrowser.match.top')}
+          hint={t('sceneBrowser.match.topHint')}
         />
       )}
       {chips}

@@ -1,4 +1,5 @@
 import { memo, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Film, Palette, Search } from 'lucide-react'
 import { cn } from '@/shared/ui/cn'
 import { formatDuration } from '../deps/media-library'
@@ -10,15 +11,20 @@ import { SceneMatchBadges, SceneMatchStrength } from './scene-match-badges'
 import { ScenePaletteSwatches } from './scene-palette-swatches'
 import type { ScoredScene } from '../utils/rank'
 
-interface SceneCardProps {
+interface SceneCardBaseProps {
   scene: ScoredScene
-  /** When true, render the source filename line — hidden in per-media scope. */
-  showMediaName: boolean
-  /** True when this card is the first result for the active query. */
-  isTop?: boolean
-  /** Only render match signal chrome when a query is active. */
-  showSignals?: boolean
+  mediaName: 'source' | 'hidden'
+  match?: SceneMatchState
 }
+
+interface SceneCardVariantProps {
+  scene: ScoredScene
+  /** Present while a search is active; toggling it preserves the fiber instead of remounting. */
+  match?: SceneMatchState
+}
+
+type SceneMatchRank = 'top' | 'default'
+type SceneMatchState = { rank: SceneMatchRank }
 
 function parseCaptionIndex(sceneId: string): number | null {
   const idx = sceneId.lastIndexOf(':')
@@ -27,12 +33,8 @@ function parseCaptionIndex(sceneId: string): number | null {
   return Number.isInteger(parsed) && parsed >= 0 ? parsed : null
 }
 
-export const SceneCard = memo(function SceneCard({
-  scene,
-  showMediaName,
-  isTop,
-  showSignals,
-}: SceneCardProps) {
+function SceneCardBase({ scene, mediaName, match }: SceneCardBaseProps) {
+  const { t } = useTranslation()
   const captionIndex = parseCaptionIndex(scene.id)
   const thumbUrl = useCaptionThumbnail(
     scene.thumbRelPath,
@@ -54,7 +56,7 @@ export const SceneCard = memo(function SceneCard({
       if (colorMode) {
         setReference({
           sceneId: `swatch-${Math.round(swatch.l)}-${Math.round(swatch.a)}-${Math.round(swatch.b)}`,
-          label: '已选色块',
+          label: t('sceneBrowser.palette.pickedSwatch'),
           palette: [{ l: swatch.l, a: swatch.a, b: swatch.b, weight: 1 }],
         })
         return
@@ -64,7 +66,7 @@ export const SceneCard = memo(function SceneCard({
       setReference(null)
       setQuery(family)
     },
-    [colorMode, setQuery, setReference],
+    [colorMode, setQuery, setReference, t],
   )
 
   const handleFindSimilarPalette = useCallback(
@@ -99,6 +101,9 @@ export const SceneCard = memo(function SceneCard({
 
   const timestampLabel = formatDuration(scene.timeSec)
   const hasPalette = !!scene.palette && scene.palette.length > 0
+  const isTopMatch = match?.rank === 'top'
+  const showSourceMediaName = mediaName === 'source'
+  const showMatchSignals = match !== undefined
 
   return (
     <button
@@ -111,9 +116,9 @@ export const SceneCard = memo(function SceneCard({
         'text-left transition-colors',
         'hover:border-border/60 hover:bg-foreground/5 focus-visible:outline-none',
         'focus-visible:border-primary/60 focus-visible:bg-primary/10',
-        showSignals && isTop && 'border-primary/40 bg-primary/5',
+        isTopMatch && 'border-primary/40 bg-primary/5',
       )}
-      title="点击在源监看器预览，拖拽可添加到时间线"
+      title={t('sceneBrowser.scene.previewAndDragHint')}
     >
       <div className="relative aspect-video max-h-32 w-full shrink-0 overflow-hidden rounded-md bg-secondary">
         {thumbUrl ? (
@@ -139,8 +144,8 @@ export const SceneCard = memo(function SceneCard({
           <span
             role="button"
             tabIndex={-1}
-            aria-label="查找相似色板场景"
-            title="查找相似色板场景"
+            aria-label={t('sceneBrowser.palette.findSimilar')}
+            title={t('sceneBrowser.palette.findSimilar')}
             className="absolute left-1 top-1 flex h-6 w-6 items-center justify-center rounded-md bg-black/60 text-white/90 opacity-0 transition-opacity hover:bg-black/80 group-hover:opacity-100"
             onClick={handleFindSimilarPalette}
           >
@@ -149,7 +154,7 @@ export const SceneCard = memo(function SceneCard({
         )}
       </div>
       <div className="min-w-0 space-y-1 px-1.5 py-1.5">
-        {showMediaName && (
+        {showSourceMediaName && (
           <div className="truncate text-[10px] text-muted-foreground" title={scene.mediaFileName}>
             {scene.mediaFileName}
           </div>
@@ -157,16 +162,20 @@ export const SceneCard = memo(function SceneCard({
         <div className="whitespace-normal break-words text-[11px] leading-snug text-foreground">
           {scene.text}
         </div>
-        {showSignals && <SceneMatchStrength signals={scene.signals} score={scene.score} />}
-        {(showSignals || (colorMode && hasPalette)) && (
+        {showMatchSignals && <SceneMatchStrength signals={scene.signals} score={scene.score} />}
+        {(showMatchSignals || (colorMode && hasPalette)) && (
           <div className="flex flex-wrap items-center gap-1">
-            {showSignals && (
-              <SceneMatchBadges signals={scene.signals} score={scene.score} isTop={isTop} />
+            {showMatchSignals && (
+              <SceneMatchBadges
+                signals={scene.signals}
+                score={scene.score}
+                rank={isTopMatch ? 'top' : 'default'}
+              />
             )}
-            {hasPalette && (colorMode || showSignals) && (
+            {hasPalette && (colorMode || showMatchSignals) && (
               <ScenePaletteSwatches
                 palette={scene.palette}
-                highlight={showSignals ? (scene.signals.colorMatch ?? null) : null}
+                highlight={showMatchSignals ? (scene.signals.colorMatch ?? null) : null}
                 onSwatchClick={handleSwatchClick}
               />
             )}
@@ -175,4 +184,18 @@ export const SceneCard = memo(function SceneCard({
       </div>
     </button>
   )
+}
+
+export const GlobalSceneCard = memo(function GlobalSceneCard({
+  scene,
+  match,
+}: SceneCardVariantProps) {
+  return <SceneCardBase scene={scene} mediaName="source" match={match} />
+})
+
+export const ScopedSceneCard = memo(function ScopedSceneCard({
+  scene,
+  match,
+}: SceneCardVariantProps) {
+  return <SceneCardBase scene={scene} mediaName="hidden" match={match} />
 })
