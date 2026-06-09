@@ -94,7 +94,7 @@ export interface CachedWaveformLevel {
   lastAccessed: number
 }
 
-export class AbortError extends Error {
+class AbortError extends Error {
   constructor(message = 'Aborted') {
     super(message)
     this.name = 'AbortError'

@@ -6,9 +6,18 @@ import { blobUrlManager } from '@/infrastructure/browser/blob-url-manager'
 import { useSelectionStore } from '@/shared/state/selection'
 import type { AudioItem, VideoItem } from '@/types/timeline'
 
+const waveformCacheMocks = vi.hoisted(() => ({
+  prefetch: vi.fn(),
+}))
+
+vi.mock('../services/waveform-cache', () => ({
+  waveformCache: {
+    prefetch: waveformCacheMocks.prefetch,
+  },
+}))
+
 import { useWaveformPrefetch } from './use-waveform-prefetch'
 import { _resetPreviewWorkBudgetForTest } from './preview-work-budget'
-import { waveformCache } from '../services/waveform-cache'
 import { useItemsStore } from '../stores/items-store'
 import { useRippleEditPreviewStore } from '../stores/ripple-edit-preview-store'
 import { useRollingEditPreviewStore } from '../stores/rolling-edit-preview-store'
@@ -49,6 +58,22 @@ function WaveformPrefetchProbe({ onRender }: { onRender: () => void }) {
   useWaveformPrefetch()
   onRender()
   return null
+}
+
+async function flushPrefetchTimers() {
+  // Three passes drain the full prefetch chain: each store update reschedules the
+  // schedulePreviewWork debounce timer (advanceTimersByTime), the fired callback awaits
+  // a dynamic import() of the waveform-cache module, and the resolved import then queues
+  // the prefetch calls. The two Promise.resolve() drains flush the import microtask before
+  // the next pass advances timers, so any work it re-scheduled is picked up.
+  for (let i = 0; i < 3; i += 1) {
+    await act(async () => {
+      vi.advanceTimersByTime(120)
+      vi.runOnlyPendingTimers()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+  }
 }
 
 /** Replicate the prefetch range calculation */
@@ -107,6 +132,7 @@ describe('waveform prefetch filtering', () => {
     useTrackPushPreviewStore.getState().clearPreview()
     useItemsStore.getState().setItems([])
     useItemsStore.getState().setTracks([])
+    waveformCacheMocks.prefetch.mockReset()
     useTimelineViewportStore.getState().setViewport({
       scrollLeft: 0,
       scrollTop: 0,
@@ -179,7 +205,7 @@ describe('waveform prefetch filtering', () => {
     expect(onRender).toHaveBeenCalledTimes(1)
   })
 
-  it('waits for active drag interactions before prefetching', () => {
+  it('waits for active drag interactions before prefetching', async () => {
     vi.useFakeTimers()
     let idleId = 0
     vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
@@ -198,7 +224,6 @@ describe('waveform prefetch filtering', () => {
       const item = makeVideoItem('ahead', 400, 100)
       useItemsStore.getState().setItems([item])
       vi.spyOn(blobUrlManager, 'get').mockReturnValue('blob:prefetch')
-      const prefetchSpy = vi.spyOn(waveformCache, 'prefetch').mockImplementation(() => {})
 
       useSelectionStore.getState().setDragState({
         isDragging: true,
@@ -212,7 +237,7 @@ describe('waveform prefetch filtering', () => {
         vi.runAllTimers()
       })
 
-      expect(prefetchSpy).not.toHaveBeenCalled()
+      expect(waveformCacheMocks.prefetch).not.toHaveBeenCalled()
 
       act(() => {
         useSelectionStore.getState().setDragState(null)
@@ -222,17 +247,16 @@ describe('waveform prefetch filtering', () => {
           viewportWidth: 1000,
           viewportHeight: 120,
         })
-        vi.advanceTimersByTime(120)
-        vi.runOnlyPendingTimers()
       })
+      await flushPrefetchTimers()
 
-      expect(prefetchSpy).toHaveBeenCalledWith(item.mediaId, 'blob:prefetch')
+      expect(waveformCacheMocks.prefetch).toHaveBeenCalledWith(item.mediaId, 'blob:prefetch')
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('prefetches storage-backed waveform cache even before a blob URL exists', () => {
+  it('prefetches storage-backed waveform cache even before a blob URL exists', async () => {
     vi.useFakeTimers()
     let idleId = 0
     vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
@@ -251,16 +275,12 @@ describe('waveform prefetch filtering', () => {
       const item = makeAudioItem('ahead', 400, 100)
       useItemsStore.getState().setItems([item])
       vi.spyOn(blobUrlManager, 'get').mockReturnValue(null)
-      const prefetchSpy = vi.spyOn(waveformCache, 'prefetch').mockImplementation(() => {})
 
       render(createElement(WaveformPrefetchProbe, { onRender: () => {} }))
 
-      act(() => {
-        vi.advanceTimersByTime(120)
-        vi.runOnlyPendingTimers()
-      })
+      await flushPrefetchTimers()
 
-      expect(prefetchSpy).toHaveBeenCalledWith(item.mediaId, null)
+      expect(waveformCacheMocks.prefetch).toHaveBeenCalledWith(item.mediaId, null)
     } finally {
       vi.useRealTimers()
     }

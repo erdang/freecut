@@ -200,7 +200,7 @@ export function CompositionsSection() {
           <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
             {t('media.compositions.sectionTitle')}
           </span>
-          <span className="text-[10px] tabular-nums text-muted-foreground/60">
+          <span className="text-[10px] tabular-nums text-muted-foreground">
             {compositions.length}
           </span>
         </CollapsibleTrigger>
@@ -222,12 +222,12 @@ export function CompositionsSection() {
           {compositions.map((comp) => {
             const handlers = cardHandlersById.get(comp.id)
             if (!handlers) return null
+            const Card = viewMode === 'grid' ? GridCompositionCard : ListCompositionCard
 
             return (
-              <CompositionCard
+              <Card
                 key={comp.id}
                 composition={comp}
-                viewMode={viewMode}
                 selected={selectedCompositionIdSet.has(comp.id)}
                 isTranscriptionDialogOpen={isTranscriptionDialogOpen}
                 dragDisabled={wouldCreateCompositionCycle({
@@ -293,7 +293,6 @@ export function CompositionsSection() {
 
 interface CompositionCardProps {
   composition: SubComposition
-  viewMode: 'grid' | 'list'
   selected: boolean
   isTranscriptionDialogOpen: boolean
   dragDisabled: boolean
@@ -308,9 +307,21 @@ interface CompositionCardProps {
   onCancelRename: () => void
 }
 
-const CompositionCard = memo(function CompositionCard({
+interface CompositionCardInternalProps extends CompositionCardProps {
+  layout: 'grid' | 'list'
+}
+
+const GridCompositionCard = memo(function GridCompositionCard(props: CompositionCardProps) {
+  return <CompositionCardInternal {...props} layout="grid" />
+})
+
+const ListCompositionCard = memo(function ListCompositionCard(props: CompositionCardProps) {
+  return <CompositionCardInternal {...props} layout="list" />
+})
+
+const CompositionCardInternal = memo(function CompositionCardInternal({
   composition,
-  viewMode,
+  layout,
   selected,
   isTranscriptionDialogOpen,
   dragDisabled,
@@ -323,7 +334,7 @@ const CompositionCard = memo(function CompositionCard({
   onStartRename,
   onCommitRename,
   onCancelRename,
-}: CompositionCardProps) {
+}: CompositionCardInternalProps) {
   const { t } = useTranslation()
   const inputRef = useRef<HTMLInputElement>(null)
   const thumbnailContainerRef = useRef<HTMLDivElement | null>(null)
@@ -462,7 +473,7 @@ const CompositionCard = memo(function CompositionCard({
       ? `${durationSecs.toFixed(1)}s`
       : `${Math.floor(durationSecs / 60)}:${String(Math.floor(durationSecs % 60)).padStart(2, '0')}`
 
-  if (viewMode === 'grid') {
+  if (layout === 'grid') {
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>

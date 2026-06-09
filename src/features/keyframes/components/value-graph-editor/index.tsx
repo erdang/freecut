@@ -47,7 +47,7 @@ import { getCombinedGraphValueRange } from './value-range-utils'
 
 const OVERLAY_COLORS = ['#6366f1', '#22d3ee', '#a3e635', '#f472b6', '#fb923c', '#a78bfa', '#34d399']
 
-interface ValueGraphEditorProps {
+interface ValueGraphEditorSharedProps {
   /** Shared time viewport when split mode needs synchronized frame zoom/pan */
   frameViewport?: { startFrame: number; endFrame: number }
   /** Callback when the shared time viewport changes */
@@ -106,33 +106,40 @@ interface ValueGraphEditorProps {
   transitionBlockedRanges?: BlockedFrameRange[]
   /** Controls whether snapping is enabled */
   snapEnabled?: boolean
-  /** Whether to render the internal toolbar */
-  showToolbar?: boolean
-  /** Whether to render the drag hint footer */
-  showKeyboardHints?: boolean
-  /** Whether to remove the default graph border/radius */
-  borderless?: boolean
-  /** Whether handles for all visible segments should be shown */
-  showAllHandles?: boolean
+  /** Which bezier handles should be visible */
+  handleVisibility?: 'selected' | 'all'
   /** How to render the time ruler */
   rulerUnit?: 'frames' | 'seconds'
   /** Automatically fit the Y range to the active curve values */
   autoZoomGraphHeight?: boolean
   /** Optional externally controlled Y zoom level (0-100) */
   externalValueZoomLevel?: number
-  /** Hide X-axis labels when an external ruler provides them */
-  hideXLabels?: boolean
   /** Whether the editor is disabled */
   disabled?: boolean
   /** Additional class name */
   className?: string
 }
 
+interface ValueGraphEditorBaseProps extends ValueGraphEditorSharedProps {
+  chrome: 'full' | 'embedded'
+}
+
+type ValueGraphEditorProps = ValueGraphEditorSharedProps
+type EmbeddedValueGraphEditorProps = ValueGraphEditorSharedProps
+
+export function EmbeddedValueGraphEditor(props: EmbeddedValueGraphEditorProps) {
+  return <ValueGraphEditorBase {...props} chrome="embedded" />
+}
+
 /**
  * Full-featured value graph editor for keyframe animation.
  * Shows keyframes as draggable points with interpolation curves.
  */
-export const ValueGraphEditor = memo(function ValueGraphEditor({
+export const ValueGraphEditor = memo(function ValueGraphEditor(props: ValueGraphEditorProps) {
+  return <ValueGraphEditorBase {...props} chrome="full" />
+})
+
+const ValueGraphEditorBase = memo(function ValueGraphEditorBase({
   frameViewport,
   onFrameViewportChange,
   itemId,
@@ -161,18 +168,20 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
   onNavigateToKeyframe,
   transitionBlockedRanges = [],
   snapEnabled: controlledSnapEnabled,
-  showToolbar = true,
-  showKeyboardHints = true,
-  borderless = false,
-  showAllHandles = false,
+  handleVisibility = 'selected',
   rulerUnit = 'frames',
   autoZoomGraphHeight = false,
   externalValueZoomLevel,
-  hideXLabels = false,
   disabled = false,
   className,
-}: ValueGraphEditorProps) {
+  chrome,
+}: ValueGraphEditorBaseProps) {
   const { t } = useTranslation()
+  const isEmbedded = chrome === 'embedded'
+  const showToolbar = !isEmbedded
+  const showKeyboardHints = !isEmbedded
+  const borderless = isEmbedded
+  const hideXLabels = isEmbedded
   const padding = useMemo(
     () => (hideXLabels ? { ...DEFAULT_GRAPH_PADDING, bottom: 8 } : DEFAULT_GRAPH_PADDING),
     [hideXLabels],
@@ -943,7 +952,11 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                   <ChevronLeft className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Previous keyframe</TooltipContent>
+              <TooltipContent side="bottom">
+                {t('timeline.keyframeEditor.previousKeyframe', {
+                  defaultValue: 'Previous keyframe',
+                })}
+              </TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -958,7 +971,11 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                   <ChevronRight className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Next keyframe</TooltipContent>
+              <TooltipContent side="bottom">
+                {t('timeline.keyframeEditor.nextKeyframe', {
+                  defaultValue: 'Next keyframe',
+                })}
+              </TooltipContent>
             </Tooltip>
 
             {/* Separator */}
@@ -981,8 +998,12 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 {hasKeyframeAtCurrentFrame
-                  ? 'Keyframe exists at current frame'
-                  : 'Add keyframe at current frame'}
+                  ? t('timeline.keyframeEditor.keyframeExistsAtCurrentFrame', {
+                      defaultValue: 'Keyframe exists at current frame',
+                    })
+                  : t('timeline.keyframeEditor.addKeyframeAtCurrentFrame', {
+                      defaultValue: 'Add keyframe at current frame',
+                    })}
               </TooltipContent>
             </Tooltip>
 
@@ -1000,8 +1021,16 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
               </TooltipTrigger>
               <TooltipContent side="bottom">
                 {selectedKeyframeIds.size > 0
-                  ? `Remove ${selectedKeyframeIds.size} selected keyframe${selectedKeyframeIds.size !== 1 ? 's' : ''}`
-                  : 'Remove selected keyframes'}
+                  ? t('timeline.keyframeEditor.removeSelectedKeyframesCount', {
+                      count: selectedKeyframeIds.size,
+                      defaultValue:
+                        selectedKeyframeIds.size === 1
+                          ? 'Remove {{count}} selected keyframe'
+                          : 'Remove {{count}} selected keyframes',
+                    })
+                  : t('timeline.keyframeEditor.removeSelectedKeyframes', {
+                      defaultValue: 'Remove selected keyframes',
+                    })}
               </TooltipContent>
             </Tooltip>
 
@@ -1057,7 +1086,9 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                   <ZoomOut className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Zoom out</TooltipContent>
+              <TooltipContent side="bottom">
+                {t('timeline.keyframeEditor.zoomOut', { defaultValue: 'Zoom out' })}
+              </TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -1072,7 +1103,9 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                   <ZoomIn className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Zoom in</TooltipContent>
+              <TooltipContent side="bottom">
+                {t('timeline.keyframeEditor.zoomIn', { defaultValue: 'Zoom in' })}
+              </TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -1087,7 +1120,9 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Fit to content</TooltipContent>
+              <TooltipContent side="bottom">
+                {t('timeline.keyframeEditor.fitToContent', { defaultValue: 'Fit to content' })}
+              </TooltipContent>
             </Tooltip>
 
             <Tooltip>
@@ -1102,7 +1137,9 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
                   <RotateCcw className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">Reset view</TooltipContent>
+              <TooltipContent side="bottom">
+                {t('timeline.keyframeEditor.resetView', { defaultValue: 'Reset view' })}
+              </TooltipContent>
             </Tooltip>
           </div>
         </div>
@@ -1146,7 +1183,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
           padding={padding}
           rulerUnit={rulerUnit}
           fps={fps}
-          showXLabels={!hideXLabels}
+          labelVisibility={hideXLabels ? 'y-only' : 'both'}
         />
 
         {/* Dedicated hit target for empty graph-space interactions */}
@@ -1201,7 +1238,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
             onScrubStart={handlePlayheadScrubStart}
             onScrubEnd={handlePlayheadScrubEnd}
             disabled={disabled}
-            showVisuals={false}
+            visuals="hidden"
           />
 
           {/* Bezier handles (for selected keyframes with cubic-bezier easing) */}
@@ -1211,7 +1248,7 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
             onHandlePointerDown={handleBezierPointerDown}
             draggingHandle={draggingHandle}
             previewBezierConfigs={previewBezierConfigs}
-            showAllHandles={showAllHandles}
+            handleVisibility={handleVisibility}
             disabled={disabled}
           />
 
@@ -1279,10 +1316,12 @@ export const ValueGraphEditor = memo(function ValueGraphEditor({
       {showKeyboardHints && isDragging && dragState?.type === 'keyframe' && (
         <div className="text-xs text-muted-foreground text-center space-x-3">
           <span>
-            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Shift</kbd> constrain axis
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Shift</kbd>{' '}
+            {t('timeline.keyframeEditor.constrainAxis', { defaultValue: 'constrain axis' })}
           </span>
           <span>
-            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Alt</kbd> fine adjust
+            <kbd className="px-1 py-0.5 bg-muted rounded text-[10px]">Alt</kbd>{' '}
+            {t('timeline.keyframeEditor.fineAdjust', { defaultValue: 'fine adjust' })}
           </span>
         </div>
       )}

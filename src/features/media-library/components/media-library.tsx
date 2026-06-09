@@ -77,20 +77,14 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { MarqueeOverlay } from '@/shared/marquee/marquee-overlay'
 import { cn } from '@/shared/ui/cn'
-import { MediaGrid } from './media-grid'
+import { GridMediaGrid, ListMediaGrid } from './media-grid'
 import { CompositionsSection } from './compositions-section'
 import { BackgroundTaskProgress } from './background-task-progress'
 import { MissingMediaDialog } from './missing-media-dialog'
 import { OrphanedClipsDialog } from './orphaned-clips-dialog'
 import { UnsupportedAudioCodecDialog } from './unsupported-audio-codec-dialog'
 import { useFilteredMediaItems, useMediaLibraryStore } from '../stores/media-library-store'
-import { useMediaPreparationStore } from '../stores/media-preparation-store'
 import {
-  deleteCompoundClips,
-  getCompoundClipDeletionImpact,
-  getMediaDeletionImpact,
-  removeProjectItems,
-  useTimelineStore,
   useCompositionsStore,
   useCompositionNavigationStore,
 } from '@/features/media-library/deps/timeline-stores'
@@ -99,20 +93,16 @@ import { proxyService } from '../services/proxy-service'
 import { importMediaLibraryService } from '../services/media-library-service-loader'
 import { mediaTranscriptionService } from '../services/media-transcription-service'
 import { importMediaAnalysisService } from '../services/media-analysis-service-loader'
-import { extractValidMediaFileEntriesFromDataTransfer } from '../utils/file-drop'
+import { getSupportedMediaFormatLabels } from '../utils/media-file-picker'
 import { getSharedProxyKey } from '../utils/proxy-key'
 import { getMediaType } from '../utils/validation'
 import { getProjectBrokenMediaIds } from '@/features/media-library/utils/broken-media'
-import {
-  getTranscriptionOverallProgress,
-  getTranscriptionStageLabel,
-} from '@/shared/utils/transcription-progress'
 import type { MediaMetadata } from '@/types/storage'
-import {
-  isMarqueeJustFinished,
-  useMarqueeSelection,
-  type MarqueeItem,
-} from '@/shared/marquee/use-marquee-selection'
+import { isMarqueeJustFinished } from '@/shared/marquee/use-marquee-selection'
+import { useMediaLibraryMarquee } from './use-media-library-marquee'
+import { useMediaLibraryDragDrop } from './use-media-library-drag-drop'
+import { useMediaTaskProgress } from './use-media-task-progress'
+import { useMediaLibraryDeletion } from './use-media-library-deletion'
 
 function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation()
@@ -161,11 +151,22 @@ interface MediaTypeGroupProps {
   isOpen: boolean
   onToggle: (key: string, open: boolean) => void
   onMediaSelect?: (mediaId: string) => void
-  viewMode: 'grid' | 'list'
   itemSize: number
 }
 
-const MediaTypeGroup = memo(function MediaTypeGroup({
+interface MediaTypeGroupBaseProps extends MediaTypeGroupProps {
+  Grid: typeof GridMediaGrid | typeof ListMediaGrid
+}
+
+const GridMediaTypeGroup = memo(function GridMediaTypeGroup(props: MediaTypeGroupProps) {
+  return <MediaTypeGroupBase {...props} Grid={GridMediaGrid} />
+})
+
+const ListMediaTypeGroup = memo(function ListMediaTypeGroup(props: MediaTypeGroupProps) {
+  return <MediaTypeGroupBase {...props} Grid={ListMediaGrid} />
+})
+
+const MediaTypeGroupBase = memo(function MediaTypeGroupBase({
   groupKey,
   label,
   icon,
@@ -173,9 +174,9 @@ const MediaTypeGroup = memo(function MediaTypeGroup({
   isOpen,
   onToggle,
   onMediaSelect,
-  viewMode,
   itemSize,
-}: MediaTypeGroupProps) {
+  Grid,
+}: MediaTypeGroupBaseProps) {
   const Icon = GROUP_ICONS[icon]
   return (
     <Collapsible open={isOpen} onOpenChange={(open) => onToggle(groupKey, open)}>
@@ -190,15 +191,10 @@ const MediaTypeGroup = memo(function MediaTypeGroup({
         <span className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
           {label}
         </span>
-        <span className="text-[10px] tabular-nums text-muted-foreground/60">{items.length}</span>
+        <span className="text-[10px] tabular-nums text-muted-foreground">{items.length}</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="pt-1 pb-2">
-        <MediaGrid
-          items={items}
-          onMediaSelect={onMediaSelect}
-          viewMode={viewMode}
-          itemSize={itemSize}
-        />
+        <Grid items={items} onMediaSelect={onMediaSelect} itemSize={itemSize} />
       </CollapsibleContent>
     </Collapsible>
   )
@@ -206,11 +202,6 @@ const MediaTypeGroup = memo(function MediaTypeGroup({
 
 interface MediaLibraryProps {
   onMediaSelect?: (mediaId: string) => void
-}
-
-interface PendingLibraryDeletion {
-  mediaIds: string[]
-  compositionIds: string[]
 }
 
 const MEDIA_HEADER_MAX_COMPACT_LEVEL = 4
@@ -223,17 +214,10 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const headerToolbarRef = useRef<HTMLDivElement>(null)
   const headerToolbarWidthRef = useRef(0)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const isFocusedRef = useRef(false)
   const [headerCompactLevel, setHeaderCompactLevel] = useState(0)
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
-  const [pendingDeletion, setPendingDeletion] = useState<PendingLibraryDeletion>({
-    mediaIds: [],
-    compositionIds: [],
-  })
   const [openGroups, setOpenGroups] = useState<Set<string>>(
     () => new Set(['video', 'audio', 'image', 'gif']),
   )
-  const [isDragging, setIsDragging] = useState(false)
   const [showImportUrlDialog, setShowImportUrlDialog] = useState(false)
   const [importUrlValue, setImportUrlValue] = useState('')
   const [isImportUrlSubmitting, setIsImportUrlSubmitting] = useState(false)
@@ -270,12 +254,11 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   const notification = useMediaLibraryStore((s) => s.notification)
   const clearNotification = useMediaLibraryStore((s) => s.clearNotification)
   const brokenMediaIds = useMediaLibraryStore((s) => s.brokenMediaIds)
+  const isScanningMediaHealth = useMediaLibraryStore((s) => s.isScanningMediaHealth)
   const openMissingMediaDialog = useMediaLibraryStore((s) => s.openMissingMediaDialog)
   const projectStoreProjectId = useProjectStore((s) => s.currentProject?.id ?? null)
   const proxyStatus = useMediaLibraryStore((s) => s.proxyStatus)
-  const proxyProgress = useMediaLibraryStore((s) => s.proxyProgress)
   const transcriptStatus = useMediaLibraryStore((s) => s.transcriptStatus)
-  const transcriptProgress = useMediaLibraryStore((s) => s.transcriptProgress)
   const filteredMediaItems = useFilteredMediaItems()
   const mediaGroups = useMemo(() => {
     const groups: {
@@ -324,6 +307,8 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     return groups
   }, [filteredMediaItems, t])
   const compositions = useCompositionsStore((s) => s.compositions)
+  const MediaTypeGroupView = viewMode === 'grid' ? GridMediaTypeGroup : ListMediaTypeGroup
+  const EmptyMediaGrid = viewMode === 'grid' ? GridMediaGrid : ListMediaGrid
 
   // Composition navigation — show banner when inside a sub-comp
   const activeCompositionId = useCompositionNavigationStore((s) => s.activeCompositionId)
@@ -347,175 +332,33 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
   }, [currentProjectId, loadMediaItems, projectStoreProjectId, setCurrentProject])
 
   const selectedAssetCount = selectedMediaIds.length + selectedCompositionIds.length
-  const deleteAssetCount = pendingDeletion.mediaIds.length + pendingDeletion.compositionIds.length
-  const isMediaOnlyDeletion =
-    pendingDeletion.mediaIds.length > 0 && pendingDeletion.compositionIds.length === 0
-  const previewAssetIdsRef = useRef<string[]>([])
-
-  const setPreviewAssetIds = useCallback((ids: string[]) => {
-    const container = scrollContainerRef.current
-    if (!container) {
-      previewAssetIdsRef.current = ids
-      return
-    }
-
-    const nextIds = new Set(ids)
-    for (const previousId of previewAssetIdsRef.current) {
-      if (nextIds.has(previousId)) {
-        continue
-      }
-
-      if (previousId.startsWith('media:')) {
-        container
-          .querySelector(`[data-media-id="${previousId.slice('media:'.length)}"]`)
-          ?.classList.remove('media-marquee-preview')
-      } else if (previousId.startsWith('composition:')) {
-        container
-          .querySelector(`[data-composition-id="${previousId.slice('composition:'.length)}"]`)
-          ?.classList.remove('composition-marquee-preview')
-      }
-    }
-
-    const previousIds = new Set(previewAssetIdsRef.current)
-    for (const id of ids) {
-      if (previousIds.has(id)) {
-        continue
-      }
-
-      if (id.startsWith('media:')) {
-        container
-          .querySelector(`[data-media-id="${id.slice('media:'.length)}"]`)
-          ?.classList.add('media-marquee-preview')
-      } else if (id.startsWith('composition:')) {
-        container
-          .querySelector(`[data-composition-id="${id.slice('composition:'.length)}"]`)
-          ?.classList.add('composition-marquee-preview')
-      }
-    }
-
-    previewAssetIdsRef.current = ids
-  }, [])
-
-  useEffect(() => {
-    return () => {
-      setPreviewAssetIds([])
-    }
-  }, [setPreviewAssetIds])
-
-  const marqueeItems: MarqueeItem[] = useMemo(
-    () => [
-      ...compositions.map((composition) => ({
-        id: `composition:${composition.id}`,
-        getBoundingRect: () => {
-          const element = scrollContainerRef.current?.querySelector(
-            `[data-composition-id="${composition.id}"]`,
-          )
-          if (!element) return null
-          const rect = element.getBoundingClientRect()
-          return {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-            width: rect.width,
-            height: rect.height,
-          }
-        },
-      })),
-      ...filteredMediaItems.map((media) => ({
-        id: `media:${media.id}`,
-        getBoundingRect: () => {
-          const element = scrollContainerRef.current?.querySelector(`[data-media-id="${media.id}"]`)
-          if (!element) return null
-          const rect = element.getBoundingClientRect()
-          return {
-            left: rect.left,
-            top: rect.top,
-            right: rect.right,
-            bottom: rect.bottom,
-            width: rect.width,
-            height: rect.height,
-          }
-        },
-      })),
-    ],
-    [compositions, filteredMediaItems],
-  )
-
-  const { marquee } = useMarqueeSelection({
-    containerRef: scrollContainerRef as React.RefObject<HTMLElement>,
-    items: marqueeItems,
-    enabled: marqueeItems.length > 0,
-    onPreviewSelectionChange: setPreviewAssetIds,
-    commitSelectionOnMouseUp: true,
-    liveCommitThrottleMs: 66,
-    onSelectionChange: (ids) => {
-      const nextMediaIds: string[] = []
-      const nextCompositionIds: string[] = []
-
-      for (const id of ids) {
-        if (id.startsWith('media:')) {
-          nextMediaIds.push(id.slice('media:'.length))
-        } else if (id.startsWith('composition:')) {
-          nextCompositionIds.push(id.slice('composition:'.length))
-        }
-      }
-
-      setSelection({ mediaIds: nextMediaIds, compositionIds: nextCompositionIds })
-    },
+  const { marquee } = useMediaLibraryMarquee({
+    compositions,
+    filteredMediaItems,
+    scrollContainerRef,
+    setSelection,
   })
 
-  // Track focus scope for the Delete hotkey. Selection itself is only cleared
-  // by explicit user action (empty-area click or marquee), never by focus
-  // changes — otherwise selection leaks away when the user clicks the timeline
-  // or another panel.
-  useEffect(() => {
-    const handleMouseDown = (event: MouseEvent) => {
-      isFocusedRef.current = !!containerRef.current?.contains(event.target as Node)
-    }
-
-    document.addEventListener('mousedown', handleMouseDown, true)
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown, true)
-    }
-  }, [])
-
-  // Handle Delete key to delete selected items
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Only handle Delete key
-      if (event.key !== 'Delete') return
-
-      // Don't trigger if media library is not focused
-      if (!isFocusedRef.current) return
-
-      // Don't trigger if no items selected
-      if (selectedAssetCount === 0) return
-
-      // Don't trigger if dialog is already open
-      if (showDeleteDialog) return
-
-      // Don't trigger if user is typing in an input or textarea
-      const target = event.target as HTMLElement
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-        return
-      }
-
-      // Prevent default behavior and trigger delete
-      event.preventDefault()
-      setPendingDeletion({
-        mediaIds: [...selectedMediaIds],
-        compositionIds: [...selectedCompositionIds],
-      })
-      setShowDeleteDialog(true)
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [selectedAssetCount, selectedCompositionIds, selectedMediaIds, showDeleteDialog])
+  const {
+    showDeleteDialog,
+    setShowDeleteDialog,
+    pendingDeletion,
+    setPendingDeletion,
+    deleteAssetCount,
+    isMediaOnlyDeletion,
+    deleteSummary,
+    affectedAssetInstanceCount,
+    handleDeleteSelected,
+    handleConfirmDelete,
+  } = useMediaLibraryDeletion({
+    containerRef,
+    selectedMediaIds,
+    selectedCompositionIds,
+    selectedAssetCount,
+    currentProjectId,
+    clearSelection,
+    deleteMediaBatch,
+  })
 
   // Import files using file picker (instant, no copy)
   const handleImport = async () => {
@@ -561,246 +404,30 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     [importHandles],
   )
 
-  // Panel-level drag/drop handlers so the drop zone covers the full panel height.
-  // Uses an enter/leave counter to avoid flicker when dragging over child elements.
-  const dragCounterRef = useRef(0)
-
-  const handleDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current++
-    if (dragCounterRef.current === 1 && !e.dataTransfer.types.includes('application/json')) {
-      setIsDragging(true)
-    }
-  }, [])
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'copy'
-  }, [])
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    dragCounterRef.current--
-    if (dragCounterRef.current <= 0) {
-      dragCounterRef.current = 0
-      setIsDragging(false)
-    }
-  }, [])
-
-  const handleDrop = useCallback(
-    async (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      dragCounterRef.current = 0
-      setIsDragging(false)
-
-      // Ignore media items being dragged from the grid itself
-      try {
-        const jsonData = e.dataTransfer.getData('application/json')
-        if (jsonData) {
-          const data = JSON.parse(jsonData)
-          if (
-            data.type === 'media-item' ||
-            data.type === 'media-items' ||
-            data.type === 'composition'
-          ) {
-            return
-          }
-        }
-      } catch {
-        // Not JSON data, continue with file handling
-      }
-
-      const { supported, entries, errors } = await extractValidMediaFileEntriesFromDataTransfer(
-        e.dataTransfer,
-      )
-      if (!supported) {
-        showNotification({
-          type: 'warning',
-          message: t('media.library.dragDropUnsupported'),
-        })
-        return
-      }
-
-      if (errors.length > 0) {
-        showNotification({
-          type: 'error',
-          message: t('media.library.filesRejected', { errors: errors.join(', ') }),
-        })
-      }
-      if (entries.length > 0) {
-        await handleImportHandles(entries.map((entry) => entry.handle))
-      }
-    },
-    [showNotification, handleImportHandles, t],
-  )
-
-  // Count of items currently generating proxies
-  const generatingCount = useMemo(() => {
-    let count = 0
-    for (const status of proxyStatus.values()) {
-      if (status === 'generating') count++
-    }
-    return count
-  }, [proxyStatus])
-
-  const analysisProgress = useMediaLibraryStore((s) => s.analysisProgress)
-  const analysisPercent =
-    analysisProgress && analysisProgress.total > 0
-      ? (analysisProgress.completed / analysisProgress.total) * 100
-      : 0
-  const preparationTasks = useMediaPreparationStore((s) => s.tasks)
-  const activePreparationTasks = useMemo(
-    () =>
-      [...preparationTasks.values()].filter(
-        (task) => task.type !== 'import' && (task.status === 'queued' || task.status === 'running'),
-      ),
-    [preparationTasks],
-  )
-
-  const transcribingCount = useMemo(() => {
-    let count = 0
-    for (const status of transcriptStatus.values()) {
-      if (status === 'queued' || status === 'transcribing') count++
-    }
-    return count
-  }, [transcriptStatus])
+  // Panel-level drag/drop handling so the drop zone covers the full panel height.
+  const { isDragging, handleDragEnter, handleDragOver, handleDragLeave, handleDrop } =
+    useMediaLibraryDragDrop({ showNotification, importHandles: handleImportHandles })
 
   const currentProjectBrokenMediaIds = useMemo(
     () => getProjectBrokenMediaIds(brokenMediaIds, mediaById),
     [brokenMediaIds, mediaById],
   )
 
-  // Average progress of all generating proxies
-  const generatingAvgProgress = useMemo(() => {
-    if (generatingCount === 0) return 0
-    let total = 0
-    let count = 0
-    for (const [id, status] of proxyStatus.entries()) {
-      if (status === 'generating') {
-        total += proxyProgress.get(id) ?? 0
-        count++
-      }
-    }
-    return count > 0 ? total / count : 0
-  }, [proxyStatus, proxyProgress, generatingCount])
-
-  const transcribingAvgProgress = useMemo(() => {
-    if (transcribingCount === 0) return 0
-    let total = 0
-    let count = 0
-    for (const [id, status] of transcriptStatus.entries()) {
-      if (status === 'queued' || status === 'transcribing') {
-        const progress = transcriptProgress.get(id)
-        total += progress ? getTranscriptionOverallProgress(progress) : 0
-        count++
-      }
-    }
-    return count > 0 ? total / count : 0
-  }, [transcriptStatus, transcriptProgress, transcribingCount])
-
-  const singleTranscriptionStageLabel = useMemo(() => {
-    if (transcribingCount !== 1) return null
-    for (const [id, status] of transcriptStatus.entries()) {
-      if (status === 'queued' || status === 'transcribing') {
-        const progress = transcriptProgress.get(id)
-        return progress ? getTranscriptionStageLabel(progress.stage) : null
-      }
-    }
-    return null
-  }, [transcriptStatus, transcriptProgress, transcribingCount])
-
-  // Per-item breakdowns shown when the aggregate progress bar is expanded.
-  const proxyItemRows = useMemo(() => {
-    const rows: Array<{ id: string; name: string; percent: number }> = []
-    for (const [id, status] of proxyStatus.entries()) {
-      if (status === 'generating') {
-        rows.push({
-          id,
-          name: mediaById[id]?.fileName ?? id,
-          percent: Math.round((proxyProgress.get(id) ?? 0) * 100),
-        })
-      }
-    }
-    return rows
-  }, [proxyStatus, proxyProgress, mediaById])
-
-  const transcriptionItemRows = useMemo(() => {
-    const rows: Array<{ id: string; name: string; percent: number; stage: string | null }> = []
-    for (const [id, status] of transcriptStatus.entries()) {
-      if (status === 'queued' || status === 'transcribing') {
-        const progress = transcriptProgress.get(id)
-        rows.push({
-          id,
-          name: mediaById[id]?.fileName ?? id,
-          percent: progress ? Math.round(getTranscriptionOverallProgress(progress) * 100) : 0,
-          stage: progress ? getTranscriptionStageLabel(progress.stage) : null,
-        })
-      }
-    }
-    return rows
-  }, [transcriptStatus, transcriptProgress, mediaById])
-
-  const preparationItemRows = useMemo(() => {
-    const groups = new Map<
-      string,
-      {
-        id: string
-        name: string
-        kinds: string[]
-        progress: number
-        status: 'queued' | 'running'
-        taskCount: number
-      }
-    >()
-
-    for (const task of activePreparationTasks) {
-      const kind =
-        task.type === 'import'
-          ? t('media.library.preparationType.import')
-          : task.type === 'filmstrip'
-            ? t('media.library.preparationType.filmstrip')
-            : t('media.library.preparationType.waveform')
-      const existing = groups.get(task.mediaId)
-      if (existing) {
-        existing.kinds.push(kind)
-        existing.progress += task.progress
-        existing.taskCount += 1
-        if (task.status === 'running') {
-          existing.status = 'running'
-        }
-        continue
-      }
-
-      groups.set(task.mediaId, {
-        id: task.mediaId,
-        name: mediaById[task.mediaId]?.fileName ?? task.mediaId,
-        kinds: [kind],
-        progress: task.progress,
-        status: task.status === 'running' ? 'running' : 'queued',
-        taskCount: 1,
-      })
-    }
-
-    return [...groups.values()].map((row) => ({
-      id: row.id,
-      name: row.name,
-      kind: row.kinds.join(' + '),
-      percent: Math.round((row.progress / row.taskCount) * 100),
-      progress: row.progress / row.taskCount,
-      status: row.status,
-    }))
-  }, [activePreparationTasks, mediaById, t])
-  const preparingCount = preparationItemRows.length
-  const preparingAvgProgress = useMemo(() => {
-    if (preparationItemRows.length === 0) return 0
-    const total = preparationItemRows.reduce((sum, row) => sum + row.progress, 0)
-    return total / preparationItemRows.length
-  }, [preparationItemRows])
-  const hasRunningPreparationTasks = preparationItemRows.some((row) => row.status === 'running')
+  const {
+    analysisProgress,
+    analysisPercent,
+    generatingCount,
+    generatingAvgProgress,
+    proxyItemRows,
+    transcribingCount,
+    transcribingAvgProgress,
+    singleTranscriptionStageLabel,
+    transcriptionItemRows,
+    preparationItemRows,
+    preparingCount,
+    preparingAvgProgress,
+    hasRunningPreparationTasks,
+  } = useMediaTaskProgress()
 
   const handleGenerateSelectedProxies = async () => {
     const selectedItems = selectedMediaIds
@@ -916,73 +543,6 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
     t,
   ])
 
-  const deleteSummary = useMemo(() => {
-    const parts: string[] = []
-    if (pendingDeletion.mediaIds.length > 0) {
-      parts.push(t('media.library.mediaItemsCount', { count: pendingDeletion.mediaIds.length }))
-    }
-    if (pendingDeletion.compositionIds.length > 0) {
-      parts.push(
-        t('media.library.compoundClipsCount', { count: pendingDeletion.compositionIds.length }),
-      )
-    }
-    return parts.join(t('media.library.andJoiner'))
-  }, [pendingDeletion.compositionIds.length, pendingDeletion.mediaIds.length, t])
-
-  const affectedMediaImpact = useMemo(
-    () =>
-      pendingDeletion.mediaIds.length > 0
-        ? getMediaDeletionImpact(pendingDeletion.mediaIds)
-        : { itemIds: [], rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 },
-    [pendingDeletion.mediaIds],
-  )
-  const compoundClipDeleteImpact = useMemo(
-    () =>
-      pendingDeletion.compositionIds.length > 0
-        ? getCompoundClipDeletionImpact(pendingDeletion.compositionIds)
-        : { rootReferenceCount: 0, nestedReferenceCount: 0, totalReferenceCount: 0 },
-    [pendingDeletion.compositionIds],
-  )
-  const affectedAssetInstanceCount =
-    affectedMediaImpact.totalReferenceCount + compoundClipDeleteImpact.totalReferenceCount
-
-  const handleDeleteSelected = () => {
-    if (selectedAssetCount === 0) return
-    // Capture the IDs BEFORE opening dialog (selection may be cleared by click outside)
-    setPendingDeletion({
-      mediaIds: [...selectedMediaIds],
-      compositionIds: [...selectedCompositionIds],
-    })
-    setShowDeleteDialog(true)
-  }
-
-  const handleConfirmDelete = async () => {
-    setShowDeleteDialog(false)
-    try {
-      // First remove timeline items that reference selected library assets
-      if (affectedMediaImpact.itemIds.length > 0) {
-        const removedTimelineReferences = removeProjectItems(affectedMediaImpact.itemIds)
-        if (removedTimelineReferences && currentProjectId) {
-          await useTimelineStore.getState().saveTimeline(currentProjectId)
-        }
-      }
-
-      if (pendingDeletion.mediaIds.length > 0) {
-        await deleteMediaBatch(pendingDeletion.mediaIds)
-      }
-
-      if (pendingDeletion.compositionIds.length > 0) {
-        deleteCompoundClips(pendingDeletion.compositionIds)
-      }
-
-      clearSelection()
-      setPendingDeletion({ mediaIds: [], compositionIds: [] })
-    } catch (error) {
-      logger.error('Delete failed:', error)
-      setPendingDeletion({ mediaIds: [], compositionIds: [] })
-    }
-  }
-
   const handleScrollContentClick = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
       if (isMarqueeJustFinished()) return
@@ -1038,6 +598,22 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 </span>
               </button>
             </HeaderActionTooltip>
+
+            {/* Workspace health scan indicator */}
+            {isScanningMediaHealth && (
+              <HeaderActionTooltip label={t('media.library.checkingWorkspaceHealth')}>
+                <div
+                  className="flex items-center gap-1.5 h-7 px-2.5 rounded-md shrink-0 border
+                    bg-secondary border-border text-muted-foreground"
+                  aria-live="polite"
+                >
+                  <ScanSearch className="w-3.5 h-3.5 animate-pulse" />
+                  <span className={headerCompactLevel >= 3 ? 'hidden' : 'hidden @[380px]:inline'}>
+                    {t('media.library.checkingWorkspaceHealthShort')}
+                  </span>
+                </div>
+              </HeaderActionTooltip>
+            )}
 
             {/* Missing media indicator */}
             {currentProjectBrokenMediaIds.length > 0 && (
@@ -1525,7 +1101,7 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
 
           {/* Media sections — grouped by type */}
           {mediaGroups.map((group) => (
-            <MediaTypeGroup
+            <MediaTypeGroupView
               key={group.key}
               groupKey={group.key}
               label={group.label}
@@ -1541,14 +1117,13 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 })
               }
               onMediaSelect={onMediaSelect}
-              viewMode={viewMode}
               itemSize={mediaItemSize}
             />
           ))}
 
           {/* Loading / empty state when no groups to show */}
           {mediaGroups.length === 0 && (
-            <MediaGrid onMediaSelect={onMediaSelect} viewMode={viewMode} itemSize={mediaItemSize} />
+            <EmptyMediaGrid onMediaSelect={onMediaSelect} itemSize={mediaItemSize} />
           )}
         </div>
 
@@ -1567,27 +1142,14 @@ export const MediaLibrary = memo(function MediaLibrary({ onMediaSelect }: MediaL
                 {t('media.library.dropFilesHere')}
               </p>
               <div className="flex flex-wrap justify-center gap-2 mt-2">
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  MP4
-                </span>
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  WebM
-                </span>
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  MOV
-                </span>
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  MP3
-                </span>
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  WAV
-                </span>
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  JPG
-                </span>
-                <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                  PNG
-                </span>
+                {getSupportedMediaFormatLabels().map((label) => (
+                  <span
+                    key={label}
+                    className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground"
+                  >
+                    {label}
+                  </span>
+                ))}
               </div>
             </div>
             <div className="absolute inset-0 overflow-hidden">

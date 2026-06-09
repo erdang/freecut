@@ -4,7 +4,7 @@ import { Loader2, Upload, AlertTriangle } from 'lucide-react'
 import { createLogger } from '@/shared/logging/logger'
 
 const logger = createLogger('MediaGrid')
-import { MediaCard } from './media-card'
+import { GridMediaCard, ListMediaCard } from './media-card'
 import { useMediaLibraryStore, useFilteredMediaItems } from '../stores/media-library-store'
 import type { MediaMetadata } from '@/types/storage'
 import {
@@ -25,23 +25,37 @@ import {
 } from '@/components/ui/alert-dialog'
 
 import { GRID_MIN_SIZE_PX, GRID_GAP_BY_SIZE } from './media-grid-constants'
-import { showMediaFilePicker } from '@/features/media-library/utils/media-file-picker'
+import {
+  showMediaFilePicker,
+  getSupportedMediaFormatLabels,
+} from '@/features/media-library/utils/media-file-picker'
 
 interface MediaGridProps {
   onMediaSelect?: (mediaId: string) => void
-  viewMode?: 'grid' | 'list'
   /** Grid item size (1 = largest, 5 = smallest) */
   itemSize?: number
   /** When provided, renders these items instead of pulling from the store */
   items?: MediaMetadata[]
 }
 
-export const MediaGrid = memo(function MediaGrid({
+interface MediaGridBaseProps extends MediaGridProps {
+  layout: 'grid' | 'list'
+}
+
+export const GridMediaGrid = memo(function GridMediaGrid(props: MediaGridProps) {
+  return <MediaGridBase {...props} layout="grid" />
+})
+
+export const ListMediaGrid = memo(function ListMediaGrid(props: MediaGridProps) {
+  return <MediaGridBase {...props} layout="list" />
+})
+
+const MediaGridBase = memo(function MediaGridBase({
   onMediaSelect,
-  viewMode = 'grid',
+  layout,
   itemSize = 3,
   items,
-}: MediaGridProps) {
+}: MediaGridBaseProps) {
   const { t } = useTranslation()
   const [showDeleteDialog, setShowDeleteDialog] = useState(false)
   const [mediaIdsToDelete, setMediaIdsToDelete] = useState<string[]>([])
@@ -229,53 +243,44 @@ export const MediaGrid = memo(function MediaGrid({
         </div>
       ) : !items && filteredItems.length === 0 ? (
         <div className="flex items-center justify-center py-24">
-          <div className="text-center max-w-md">
-            <div
-              className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary hover:border-primary/50 hover:bg-secondary/80 cursor-pointer transition-colors"
-              onClick={handleEmptyStateClick}
-            >
+          <button
+            type="button"
+            className="text-center max-w-md rounded-xl border border-dashed border-border/80 p-6 transition-colors hover:border-primary/60 hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            onClick={handleEmptyStateClick}
+          >
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-dashed border-border flex items-center justify-center bg-secondary transition-colors">
               <Upload className="w-10 h-10 text-muted-foreground" />
             </div>
             <p className="text-base font-bold text-foreground mb-2 tracking-wide">
               {t('media.grid.emptyTitle')}
             </p>
-            <p className="text-sm text-muted-foreground font-light mb-3">
+            <p className="text-sm text-muted-foreground font-light mb-4">
               {t('media.grid.emptyHint')}
             </p>
+            <span className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground mb-4">
+              {t('media.grid.importButton')}
+            </span>
             <div className="flex flex-wrap justify-center gap-2">
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MP4
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                WebM
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MOV
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                MP3
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                WAV
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                JPG
-              </span>
-              <span className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-                PNG
-              </span>
+              {getSupportedMediaFormatLabels().map((label) => (
+                <span
+                  key={label}
+                  className="px-2 py-0.5 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground"
+                >
+                  {label}
+                </span>
+              ))}
             </div>
-          </div>
+          </button>
         </div>
       ) : (
         <div
           className={
-            viewMode === 'grid'
+            layout === 'grid'
               ? `grid ${GRID_GAP_BY_SIZE[itemSize] ?? GRID_GAP_BY_SIZE[3]}`
               : 'space-y-1'
           }
           style={
-            viewMode === 'grid'
+            layout === 'grid'
               ? {
                   gridTemplateColumns: `repeat(auto-fill, minmax(min(${GRID_MIN_SIZE_PX[itemSize] ?? GRID_MIN_SIZE_PX[3]}px, 100%), 1fr))`,
                 }
@@ -284,10 +289,11 @@ export const MediaGrid = memo(function MediaGrid({
         >
           {filteredItems.map((media) => {
             const handlers = cardHandlersById.get(media.id)
+            const Card = layout === 'grid' ? GridMediaCard : ListMediaCard
 
             return (
               <div key={media.id} data-media-id={media.id}>
-                <MediaCard
+                <Card
                   media={media}
                   selected={selectedMediaIdSet.has(media.id)}
                   isBroken={brokenMediaIdSet.has(media.id)}
@@ -295,7 +301,6 @@ export const MediaGrid = memo(function MediaGrid({
                   onDoubleClick={handlers?.onDoubleClick}
                   onDelete={handlers?.onDelete}
                   onRelink={handlers?.onRelink}
-                  viewMode={viewMode}
                 />
               </div>
             )
